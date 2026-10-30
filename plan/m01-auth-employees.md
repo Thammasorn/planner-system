@@ -999,7 +999,7 @@ U-UNIT-06 no `parseFloat`/`Number(` with decimals in the implementation (code re
 ```ts
 export const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'   // no 0/O/1/l/I
 export function randomPassword(length = 12, rng: (buf: Uint32Array) => void = (b) => crypto.getRandomValues(b)): string
-// rejection sampling (limit = floor(2^32 / 56) * 56); retry until ≥1 upper, ≥1 lower, ≥1 digit
+// rejection sampling (limit = floor(2^32 / 57) * 57, alphabet length 57); retry until ≥1 upper, ≥1 lower, ≥1 digit
 ```
 U-PW-01 length 12; U-PW-02 1 000 samples: every char ∈ alphabet, each has upper/lower/digit; U-PW-03 never contains
 `0 O 1 l I`; U-PW-04 a deterministic `rng` that first yields only lowercase indices forces a retry and the result still

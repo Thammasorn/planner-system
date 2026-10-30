@@ -3,23 +3,28 @@
  * with the Thai shell, self-hosted font, collapsible sidebar, drawer on narrow screens and Thai 404.
  * Guards (CSP, external requests, page errors) and the browser clock come from the auto fixture.
  *
- * Determinism: M0 has no server business clock (M0-D6) — the /home date is the request-time date in
- * Asia/Bangkok, so its expectation is computed with the same helper at test time.
- * Forward note for M1: tests 1–7 and 9 must `loginAs(page, 'manager')` first; test 2's date becomes
- * `th.home.today(formatThaiDate('2026-09-30'))`; test 8 stays anonymous.
+ * Determinism: from M1 the /home placeholder renders serverToday(), which honours the webServer's APP_NOW (X45),
+ * so the expected date is the calendar date of `E2E.appNow` (2026-09-30), not the machine's clock.
+ * M1 (S4.13): every shell page is behind the proxy session gate, so tests 1–7 and 9 `loginAs(page, 'manager')`
+ * first; the health check stays anonymous. The DB is reset (golden seed) once per file.
  */
 import { th } from '../src/i18n/th'
 import { buildCsp } from '../src/lib/csp'
-import { formatThaiInstantDate } from '../src/lib/format'
+import { formatThaiDate } from '../src/lib/format'
 import { E2E } from './env'
-import { expect, test } from './fixtures'
+import { expect, loginAs, resetDb, test } from './fixtures'
 import { ShellPage } from './pages/shell'
 
 const HOME_URL = new URL('/home', E2E.baseUrl).href
 
+test.beforeAll(async () => {
+  await resetDb()
+})
+
 test.describe('m0 smoke', () => {
-  test('root redirects to /home', async ({ page, request }) => {
-    const res = await request.get('/', { maxRedirects: 0 })
+  test('root redirects to /home', async ({ page }) => {
+    await loginAs(page, 'manager')
+    const res = await page.request.get('/', { maxRedirects: 0 })
     expect(res.status()).toBe(307)
     expect(res.headers()['location']).toMatch(/\/home$/)
 
@@ -28,6 +33,7 @@ test.describe('m0 smoke', () => {
   })
 
   test('home renders the Thai shell', async ({ page }) => {
+    await loginAs(page, 'manager')
     const shell = new ShellPage(page)
     await shell.goto('/home')
 
@@ -38,7 +44,7 @@ test.describe('m0 smoke', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(th.home.title)
     await expect(page.getByText(th.home.greeting, { exact: true })).toBeVisible()
     await expect(
-      page.getByText(th.home.today(formatThaiInstantDate(new Date())), { exact: true }),
+      page.getByText(th.home.today(formatThaiDate(E2E.appNow.slice(0, 10))), { exact: true }),
     ).toBeVisible()
     await expect(page.getByText(th.home.placeholderTitle, { exact: true })).toBeVisible()
     await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
@@ -49,6 +55,7 @@ test.describe('m0 smoke', () => {
   })
 
   test('self-hosted Thai font is used', async ({ page }) => {
+    await loginAs(page, 'manager')
     const fonts: { url: string; status: number }[] = []
     page.on('response', (r) => {
       if (new URL(r.url()).pathname.endsWith('.woff2')) fonts.push({ url: r.url(), status: r.status() })
@@ -86,6 +93,7 @@ test.describe('m0 smoke', () => {
   })
 
   test('security headers and CSP nonce', async ({ page }) => {
+    await loginAs(page, 'manager')
     const res = await page.request.get('/home')
     expect(res.status()).toBe(200)
     const headers = res.headers()
@@ -118,6 +126,7 @@ test.describe('m0 smoke', () => {
   })
 
   test('sidebar collapses with the shortcut and the button', async ({ page }) => {
+    await loginAs(page, 'manager')
     const shell = new ShellPage(page)
     await shell.goto()
     await shell.expectCollapsed(false)
@@ -137,6 +146,7 @@ test.describe('m0 smoke', () => {
   })
 
   test('keyboard: skip link and focus', async ({ page }) => {
+    await loginAs(page, 'manager')
     const shell = new ShellPage(page)
     await shell.goto()
 
@@ -149,6 +159,7 @@ test.describe('m0 smoke', () => {
   })
 
   test('narrow screens use a temporary drawer', async ({ page }) => {
+    await loginAs(page, 'manager')
     await page.setViewportSize({ width: 800, height: 900 })
     const shell = new ShellPage(page)
     await shell.goto()
@@ -177,6 +188,7 @@ test.describe('m0 smoke', () => {
     test.use({ allowedConsoleErrors: [/status of 404/] })
 
     test('unknown page shows the Thai 404', async ({ page }) => {
+    await loginAs(page, 'manager')
       const res = await page.goto('/no-such-page')
       expect(res?.status()).toBe(404)
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(th.errors.notFoundPage.title)

@@ -67,4 +67,32 @@ export class ShellPage {
   async expectCollapsed(collapsed: boolean): Promise<void> {
     await expect(this.sidebar()).toHaveAttribute('data-collapsed', String(collapsed))
   }
+
+  // M1 (plan/m01-auth-employees.md S3.4): user menu at the sidebar bottom.
+  userMenuButton(): Locator {
+    return this.page.getByRole('button', { name: th.nav.userMenu })
+  }
+
+  async openUserMenu(): Promise<void> {
+    await this.userMenuButton().click()
+    await expect(this.page.getByRole('menu')).toBeVisible()
+  }
+
+  /** Opens the user menu and picks a theme (label from th.prefs.themes); items are `menuitemradio` (UserMenu.tsx). */
+  async chooseTheme(label: string): Promise<void> {
+    await this.openUserMenu()
+    await this.page.getByRole('menu').getByRole('menuitemradio', { name: label, exact: true }).click()
+    await expect(this.page.getByRole('menu')).toBeHidden()
+  }
+
+  /** User menu → ออกจากระบบ; resolves once the browser is on /login. */
+  async logout(): Promise<void> {
+    await this.openUserMenu()
+    await this.page.getByRole('menuitem', { name: th.nav.logout, exact: true }).click()
+    await this.page.waitForURL((u) => u.pathname === '/login')
+  }
+
+  async toggleSidebar(): Promise<void> {
+    await this.pressToggleShortcut()
+  }
 }

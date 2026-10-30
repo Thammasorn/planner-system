@@ -1,11 +1,25 @@
-import { fireEvent, screen, waitForElementToBeRemoved, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitForElementToBeRemoved, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { PreferencesProvider } from '@/components/providers/PreferencesProvider'
 import { th } from '@/i18n/th'
-import { renderWithProviders } from '../../../tests/helpers/render'
+import { DEFAULT_PREFERENCES, type PreferenceInput } from '@/lib/schemas/preferences'
+import { renderWithProviders as renderBase } from '../../../tests/helpers/render'
 import { AppShell } from './AppShell'
 
+const mocks = vi.hoisted(() => ({ setPreference: vi.fn<(i: PreferenceInput) => Promise<unknown>>() }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/home' }))
+vi.mock('@/server/actions/preferences', () => ({ setPreference: mocks.setPreference }))
+vi.mock('@/server/actions/auth', () => ({ logout: () => Promise.resolve({ ok: true, redirectTo: '/login' }) }))
+
+function renderWithProviders(ui: ReactElement, prefs = DEFAULT_PREFERENCES) {
+  return renderBase(
+    <PreferencesProvider initial={prefs} enabled>
+      {ui}
+    </PreferencesProvider>,
+  )
+}
 
 function sidebar(): HTMLElement {
   return screen.getByTestId('app-sidebar')
@@ -51,6 +65,21 @@ describe('AppShell', () => {
     expect(sidebar()).toHaveAttribute('data-collapsed', 'true')
     fireEvent.keyDown(document.body, { code: 'Backslash', key: '\\', metaKey: true })
     expect(sidebar()).toHaveAttribute('data-collapsed', 'false')
+  })
+
+  it('starts from the saved sidebar.collapsed preference and saves toggles (X33)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mocks.setPreference.mockResolvedValue({ ok: true })
+    renderWithProviders(<AppShell>x</AppShell>, { ...DEFAULT_PREFERENCES, 'sidebar.collapsed': true })
+    expect(sidebar()).toHaveAttribute('data-collapsed', 'true')
+    fireEvent.keyDown(document.body, { code: 'Backslash', key: '\\', ctrlKey: true })
+    expect(sidebar()).toHaveAttribute('data-collapsed', 'false')
+    await act(async () => {
+      vi.advanceTimersByTime(300)
+      await Promise.resolve()
+    })
+    expect(mocks.setPreference).toHaveBeenCalledWith({ key: 'sidebar.collapsed', value: false })
+    vi.useRealTimers()
   })
 
   it('ignores the shortcut while typing', () => {

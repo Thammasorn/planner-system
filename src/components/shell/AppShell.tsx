@@ -4,17 +4,19 @@ import Drawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
 import MenuIcon from '@mui/icons-material/Menu'
 import { useHotkeys } from '@/hooks/useHotkeys'
+import { usePreferences } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
 import { HOTKEYS } from '@/lib/keys'
 import { Sidebar } from './Sidebar'
 import styles from './AppShell.module.css'
 
 /** App chrome (SPEC §8.1, X33): skip link, collapsible sidebar (Cmd/Ctrl+\), a temporary Drawer under 900 px and
- *  the main landmark. Collapse state lives in memory in M0; M1 persists it in user_preferences. */
+ *  the main landmark. The collapsed state is the `sidebar.collapsed` preference (saved, debounced — X05). */
 export function AppShell({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const { prefs, setPreference } = usePreferences()
+  const collapsed = prefs['sidebar.collapsed']
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const toggle = () => setCollapsed((c) => !c)
+  const toggle = () => setPreference('sidebar.collapsed', !collapsed)
   useHotkeys([{ hotkey: HOTKEYS.toggleSidebar, handler: toggle }])
   return (
     <div className={styles.shell} data-collapsed={String(collapsed)}>

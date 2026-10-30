@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ERROR_STATUS, type ErrorCode } from '@/lib/action-result'
 import { th } from './th'
 
 type Leaf = { path: string; value: unknown }
@@ -11,8 +12,40 @@ function leaves(node: unknown, path = 'th'): Leaf[] {
 }
 
 describe('th', () => {
-  it('has the M0 namespaces', () => {
-    expect(Object.keys(th)).toEqual(expect.arrayContaining(['meta', 'common', 'nav', 'errors', 'home']))
+  it('has the M0 and M1 namespaces', () => {
+    expect(Object.keys(th)).toEqual(
+      expect.arrayContaining([
+        'meta',
+        'common',
+        'nav',
+        'errors',
+        'home',
+        'auth',
+        'account',
+        'employees',
+        'positions',
+        'users',
+        'prefs',
+        'undo',
+        'audit',
+      ]),
+    )
+  })
+
+  it('U-I18N-01 every ErrorCode has a non-empty th.errors entry', () => {
+    const codes = Object.keys(ERROR_STATUS) as ErrorCode[]
+    expect(codes.length).toBeGreaterThan(0)
+    for (const code of codes) {
+      const message: unknown = th.errors[code]
+      expect(typeof message, code).toBe('string')
+      expect((message as string).length, code).toBeGreaterThan(0)
+    }
+  })
+
+  it('auth messages are shared with the error codes', () => {
+    expect(th.auth.errors.LOGIN_LOCKED).toBe(th.errors.LOGIN_LOCKED)
+    expect(th.auth.errors.ACCOUNT_DEACTIVATED).toBe(th.errors.ACCOUNT_DEACTIVATED)
+    expect(th.auth.errors.INVALID_CREDENTIALS).toBe(th.errors.INVALID_CREDENTIALS)
   })
 
   it('has no empty or untrimmed strings', () => {

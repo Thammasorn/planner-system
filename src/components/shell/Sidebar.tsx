@@ -5,13 +5,16 @@ import Tooltip from '@mui/material/Tooltip'
 import HomeOutlined from '@mui/icons-material/HomeOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import MenuOpenIcon from '@mui/icons-material/MenuOpen'
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
 import Link from '@/components/Link'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { th } from '@/i18n/th'
-import { BOTTOM_NAV, PRIMARY_NAV, isActive, type NavIcon, type NavItem } from './nav'
+import { BOTTOM_NAV, PRIMARY_NAV, isActive, visibleNav, type NavIcon, type NavItem } from './nav'
+import { UserMenu } from './UserMenu'
 import styles from './Sidebar.module.css'
 
 /** Every milestone that widens `NavIcon` adds its entry here, so typecheck catches a missing icon. */
-const NAV_ICONS: Record<NavIcon, typeof HomeOutlined> = { home: HomeOutlined }
+const NAV_ICONS: Record<NavIcon, typeof HomeOutlined> = { home: HomeOutlined, settings: SettingsOutlined }
 
 function NavRow({
   item,
@@ -31,7 +34,7 @@ function NavRow({
         <Link
           className={styles.row}
           href={item.href}
-          aria-current={isActive(pathname, item.href) ? 'page' : undefined}
+          aria-current={isActive(pathname, item.activePrefix ?? item.href) ? 'page' : undefined}
           aria-label={collapsed ? item.label : undefined}
           data-nav-id={item.id}
           onClick={onNavigate}
@@ -56,6 +59,9 @@ export function Sidebar({
   onNavigate?: () => void
 }) {
   const pathname = usePathname()
+  const isManager = useCurrentUser()?.role === 'manager'
+  const primary = visibleNav(PRIMARY_NAV, isManager)
+  const bottom = visibleNav(BOTTOM_NAV, isManager)
   const toggleLabel = collapsed ? th.nav.expandSidebar : th.nav.collapseSidebar
   return (
     <div className={styles.root} data-collapsed={String(collapsed)}>
@@ -76,7 +82,7 @@ export function Sidebar({
       </div>
       <nav aria-label={th.nav.sidebarLabel} className={styles.nav}>
         <ul className={styles.list}>
-          {PRIMARY_NAV.map((item) => (
+          {primary.map((item) => (
             <NavRow
               key={item.id}
               item={item}
@@ -86,9 +92,9 @@ export function Sidebar({
             />
           ))}
         </ul>
-        {BOTTOM_NAV.length > 0 ? (
+        {bottom.length > 0 ? (
           <ul className={styles.list}>
-            {BOTTOM_NAV.map((item) => (
+            {bottom.map((item) => (
               <NavRow
                 key={item.id}
                 item={item}
@@ -100,6 +106,9 @@ export function Sidebar({
           </ul>
         ) : null}
       </nav>
+      <div className={styles.footer}>
+        <UserMenu collapsed={collapsed} />
+      </div>
     </div>
   )
 }

@@ -7,15 +7,13 @@
 //   client (see scripts/lib/migrate.ts) and must call closeDb() / end() before exiting.
 // - Never log a `DrizzleQueryError.message` for auth tables: its params contain password hashes and tokens.
 // - Nothing connects at import time; the pool is created on first use so `next build` works without DATABASE_URL.
-import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { getEnv } from '@/server/env'
 import * as schema from './schema'
+import type { Db } from './types'
 
-export type Schema = typeof schema
-export type Db = PostgresJsDatabase<Schema>
-export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
-export type DbOrTx = Db | Tx
+export type { Db, DbOrTx, Schema, Tx } from './types'
 
 type Holder = { sql?: postgres.Sql; db?: Db }
 // globalThis survives Next dev HMR, so one pool per process.

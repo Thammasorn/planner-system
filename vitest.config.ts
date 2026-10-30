@@ -50,6 +50,9 @@ export default defineConfig({
           setupFiles: ['./tests/setup/db-worker.ts'],
           testTimeout: 20_000,
           hookTimeout: 60_000,
+          // Better Auth's nextCookies() imports 'next/headers.js' itself; inlining better-auth lets the
+          // vi.mock('next/headers') in db-worker.ts reach it, so login/logout cookies land in the test jar.
+          server: { deps: { inline: [/better-auth/] } },
         },
       },
     ],

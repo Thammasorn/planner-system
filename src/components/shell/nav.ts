@@ -1,8 +1,8 @@
 import { th } from '@/i18n/th'
 
-/** A key of Sidebar's icon map — nav.ts stays data-only (no component imports). Later keys: M1 'settings',
+/** A key of Sidebar's icon map — nav.ts stays data-only (no component imports). Later keys:
  *  M2 'projects' | 'clients', M3 'my' | 'teamTasks', M5 'calendar', M9 'workload' | 'people'. */
-export type NavIcon = 'home'
+export type NavIcon = 'home' | 'settings'
 
 export interface NavItem {
   /** stable id used by tests and badges: 'home', 'my', 'tasks', 'workload', 'calendar', 'people', 'clients', 'settings' (X84) */
@@ -12,6 +12,8 @@ export interface NavItem {
   icon: NavIcon
   /** shown only to managers (M1+: settings) */
   managerOnly?: boolean
+  /** path prefix that marks the item active when it differs from `href` (settings: '/settings') */
+  activePrefix?: string
   // M3 adds `badge?: NavBadge` with `export type NavBadge = 'myTaskCount'`; M9 widens it to 'myTaskCount' | 'workloadOver' (X84).
 }
 
@@ -21,10 +23,18 @@ export const PRIMARY_NAV: readonly NavItem[] = [
   { id: 'home', href: '/home', label: th.nav.home, icon: 'home' },
 ]
 
-/** Bottom group (SPEC §8.1 "people, clients, settings"). Empty in M0 and not rendered while empty.
- *  Final order: people (M9), clients (M2), settings (M1, managerOnly) — M2 inserts clients before settings, M9 people before clients.
- *  The projects section header (M2) is a separate constant, never part of either group. */
-export const BOTTOM_NAV: readonly NavItem[] = []
+/** Bottom group (SPEC §8.1 "people, clients, settings"); not rendered while empty for the viewer.
+ *  Final order: people (M9), clients (M2), settings (M1, managerOnly) — settings stays last: M2 inserts clients
+ *  before it, M9 people before clients. The projects section header (M2) is a separate constant. */
+export const BOTTOM_NAV: readonly NavItem[] = [
+  { id: 'settings', href: '/settings/employees', label: th.nav.settings, icon: 'settings', managerOnly: true,
+    activePrefix: '/settings' },
+]
+
+/** Hides manager-only items from workers (a UI hint only; `/settings/*` pages 404 for workers on the server). */
+export function visibleNav(items: readonly NavItem[], isManager: boolean): readonly NavItem[] {
+  return isManager ? items : items.filter((i) => !i.managerOnly)
+}
 
 export function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`)

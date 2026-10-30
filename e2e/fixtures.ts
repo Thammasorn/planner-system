@@ -8,7 +8,12 @@
  * `allowedConsoleErrors` per `describe` only, as narrowly as the deliberate failure needs
  * (e.g. `test.use({ allowedConsoleErrors: [/status of 404/] })`) — never a catch-all pattern.
  */
-import { test as base, expect, type BrowserContext, type Page } from '@playwright/test'
+import { rmSync } from 'node:fs'
+import path from 'node:path'
+import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { createScriptDb, truncateAll } from '../scripts/lib/db'
+import { seedGolden, type FixtureId } from '../scripts/lib/fixtures'
+import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
 
 export type GuardLog = { csp: string[]; external: string[]; errors: string[] }
@@ -81,4 +86,84 @@ export const test = base.extend<Options & Guards>({
   ],
 })
 export { expect }
-// M1 adds resetDb(fixture?, opts?) and loginAs(page, who) (PLAN.md §4.5, X91).
+
+// ---------------------------------------------------------------------------------------------------------------
+// M1: database reset + API login (PLAN.md §4.5, X46, X91; plan/m01-auth-employees.md S4.11)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Later milestones add option fields only (M6 syntheticGrid, M7 dayExample, M8 milestones, M9 alsoFixtures). */
+export type ResetDbOptions = { extras?: (tx: Tx) => Promise<unknown> }
+
+/**
+ * Truncate every table + `seedGolden` (+ fixture from M5) + extras in ONE transaction against `planner_e2e`, then empty
+ * UPLOAD_DIR. Call as `test.beforeAll(async () => { await resetDb() })` — never `beforeAll(resetDb)` (Playwright
+ * would pass its fixtures object as `fixture`).
+ */
+export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): Promise<void> {
+  const { db, close } = createScriptDb(E2E.databaseUrl)
+  try {
+    await db.transaction(async (tx) => {
+      await truncateAll(tx)
+      await seedGolden(tx)
+      if (fixture !== undefined) throw new Error('fixtures arrive in M5 (applyFixture)')
+      await opts.extras?.(tx)
+    })
+  } finally {
+    await close()
+  }
+  rmSync(path.resolve(E2E.uploadDir), { recursive: true, force: true })
+}
+
+/** Golden users (docs/reference/golden-fixtures.json); all share the dev password. */
+export type GoldenLogin = 'manager' | 'cindy' | 'ivy' | 'peter' | 'jack' | 'mint'
+export const GOLDEN_PASSWORD = 'demo1234'
+export const goldenEmail = (who: GoldenLogin): string => `${who}@example.com`
+
+/** Signs in through Better Auth's HTTP endpoint with `page.request`, so the session cookie lands in the context. */
+export async function loginAs(page: Page, who: GoldenLogin): Promise<void> {
+  const res = await page.request.post('/api/auth/sign-in/email', {
+    data: { email: goldenEmail(who), password: GOLDEN_PASSWORD },
+    headers: { origin: E2E.baseUrl },
+  })
+  expect(res.ok(), `loginAs(${who}) → HTTP ${res.status()}`).toBe(true)
+}
+
+export interface GuardedPage {
+  page: Page
+  context: BrowserContext
+  /** Closes the context, then asserts its guards stayed clean. */
+  close: () => Promise<void>
+}
+
+/**
+ * A second browser context ("another device") with the same guards and pinned clock as the auto fixture.
+ * Options are passed explicitly so they never depend on config inheritance.
+ */
+export async function openGuardedPage(browser: Browser, allowedConsoleErrors: readonly RegExp[] = []): Promise<GuardedPage> {
+  const context = await browser.newContext({
+    baseURL: E2E.baseUrl,
+    locale: 'th-TH',
+    timezoneId: 'Asia/Bangkok',
+    permissions: ['clipboard-read', 'clipboard-write'],
+    viewport: { width: 1440, height: 900 },
+  })
+  const log = newGuardLog()
+  const page = await context.newPage()
+  await installCspGuard(page, log)
+  await installExternalRequestGuard(context, log)
+  installPageErrorGuard(page, log, allowedConsoleErrors)
+  await page.clock.setFixedTime(new Date(E2E.appNow))
+  return {
+    page,
+    context,
+    close: async () => {
+      await context.close()
+      expectGuardsClean(log)
+    },
+  }
+}
+
+/** Resolves when the next server-action POST (header `next-action`) has answered. Start it before the click. */
+export function waitForServerAction(page: Page) {
+  return page.waitForResponse((r) => r.request().method() === 'POST' && !!r.request().headers()['next-action'])
+}

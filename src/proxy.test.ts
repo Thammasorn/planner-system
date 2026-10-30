@@ -15,8 +15,8 @@ afterEach(() => {
 })
 
 describe('proxy', () => {
-  it('sets the CSP on the response and hands the nonce to the render', () => {
-    const res = proxy(new NextRequest('http://localhost:3100/home'))
+  it('sets the CSP on the response and hands the nonce to the render', async () => {
+    const res = await proxy(new NextRequest('http://localhost:3100/login'))
     const nonce = res.headers.get('x-middleware-request-x-nonce') // Next's request-override header
     expect(nonce).toMatch(/^[A-Za-z0-9+/]+=*$/)
     const csp = res.headers.get('content-security-policy')
@@ -24,12 +24,12 @@ describe('proxy', () => {
     // The same policy is forwarded to the render so Next stamps the nonce on its own scripts.
     expect(res.headers.get('x-middleware-request-content-security-policy')).toBe(csp)
     // Fresh per request.
-    const other = proxy(new NextRequest('http://localhost:3100/home'))
+    const other = await proxy(new NextRequest('http://localhost:3100/login'))
     expect(other.headers.get('x-middleware-request-x-nonce')).not.toBe(nonce)
   })
 
-  it('adds the static security headers', () => {
-    const res = proxy(new NextRequest('http://localhost:3100/home'))
+  it('adds the static security headers', async () => {
+    const res = await proxy(new NextRequest('http://localhost:3100/login'))
     expect(res.headers.get('x-content-type-options')).toBe('nosniff')
     expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin')
     expect(res.headers.get('permissions-policy')).toBe('camera=(), microphone=(), geolocation=()')
@@ -39,7 +39,7 @@ describe('proxy', () => {
 
     vi.stubEnv('SECURE_COOKIES', 'true')
     resetEnvCache()
-    const secure = proxy(new NextRequest('https://planner.company.local/home'))
+    const secure = await proxy(new NextRequest('https://planner.company.local/login'))
     expect(secure.headers.get('strict-transport-security')).toBe('max-age=31536000')
     expect(secure.headers.get('content-security-policy')?.endsWith('upgrade-insecure-requests')).toBe(true)
   })

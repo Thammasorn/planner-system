@@ -33,3 +33,19 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 export const HOTKEYS = {
   toggleSidebar: { code: 'Backslash', key: '\\', mod: true },
 } as const satisfies Record<string, Hotkey>
+
+type ModKeyEvent = Pick<KeyboardEvent, 'code' | 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>
+
+function isModZ(e: ModKeyEvent): boolean {
+  return (e.metaKey || e.ctrlKey) && !e.altKey && (e.code === 'KeyZ' || e.key === 'z' || e.key === 'Z')
+}
+
+/** Cmd/Ctrl+Z without Shift/Alt (SPEC §8.6). Matched by `code` first so the Thai layout ('ผ') works (X49). */
+export function isUndoKey(e: ModKeyEvent): boolean {
+  return isModZ(e) && !e.shiftKey
+}
+
+/** Cmd/Ctrl+Shift+Z (SPEC §8.6). */
+export function isRedoKey(e: ModKeyEvent): boolean {
+  return isModZ(e) && e.shiftKey
+}

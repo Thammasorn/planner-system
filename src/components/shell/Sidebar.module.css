@@ -100,3 +100,9 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* User menu at the bottom ("○ Cindy · ออกจากระบบ", SPEC §8.1). */
+.footer {
+  padding: 8px;
+  border-top: 1px solid var(--mui-palette-divider);
+}
