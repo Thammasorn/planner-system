@@ -1,0 +1,25 @@
+# Dev/test Postgres only (SPEC §10.1, PLAN.md §3.3, M0-D19). Production compose lives in docker-compose.yml (M11).
+name: planner-dev
+services:
+  db:
+    # Debian image: en_US.utf8 ctype is required for Thai trigram search (never alpine / C locale).
+    image: postgres:17
+    environment:
+      POSTGRES_DB: planner
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner
+    # Sessions in UTC (X52: never derive plan dates in SQL); no TZ env, which initdb would copy into postgresql.conf.
+    command: ['postgres', '-c', 'timezone=UTC', '-c', 'log_timezone=Asia/Bangkok']
+    ports:
+      - '127.0.0.1:54329:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # TCP, not the socket: the init-time server listens on the socket only.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U planner -d planner']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+volumes:
+  pgdata: {}

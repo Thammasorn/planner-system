@@ -1,0 +1,57 @@
+import { chromium } from '@playwright/test'
+const base = process.env.BASE ?? 'http://127.0.0.1:3917'
+const browser = await chromium.launch()
+const ctx = await browser.newContext()
+await ctx.addCookies([{ name: 'better-auth.session_token', value: 'abc', url: base }])
+const page = await ctx.newPage()
+const logs = []
+page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) logs.push(`[${m.type()}] ${m.text().slice(0, 300)}`) })
+page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message.slice(0, 300)}`))
+await page.exposeFunction('reportViolation', (v) => logs.push(`[CSP] ${v}`))
+await page.addInitScript(() => {
+  document.addEventListener('securitypolicyviolation', (e) => {
+    // @ts-ignore
+    window.reportViolation(`${e.violatedDirective} blocked=${e.blockedURI} src=${e.sourceFile}:${e.lineNumber}:${e.columnNumber}`)
+  })
+})
+await page.goto(base + '/')
+await page.waitForLoadState('networkidle')
+const font = await page.evaluate(() => getComputedStyle(document.querySelector('h5')).fontFamily)
+const fontsLoaded = await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'loaded').map(f => `${f.family}:${f.weight}`) })
+console.log('h5 font-family:', font)
+console.log('fonts loaded:', fontsLoaded)
+const cellBg = await page.evaluate(() => { const c = document.querySelector('[role=grid] > div'); return getComputedStyle(c).backgroundColor + ' / border ' + getComputedStyle(c).borderTopColor })
+console.log('cell0 (over) bg/border:', cellBg)
+// hover tooltip
+await page.getByRole('button', { name: /โหมด/ }).hover()
+await page.waitForTimeout(800)
+// toggle dark
+await page.getByRole('button', { name: /โหมด/ }).click()
+await page.waitForTimeout(300)
+console.log('html class after toggle:', await page.evaluate(() => document.documentElement.className))
+console.log('cell1 bg after dark:', await page.evaluate(() => getComputedStyle(document.querySelectorAll('[role=grid] > div')[1]).backgroundColor))
+// open date picker
+await page.getByRole('button', { name: /เลือกวันที่/ }).click()
+await page.waitForTimeout(600)
+const dialogText = await page.locator('[role=dialog], .MuiPickersPopper-root').first().innerText().catch(() => 'n/a')
+console.log('picker header text:', dialogText.split('\n').slice(0, 3).join(' | '))
+const fieldValue = await page.evaluate(() => document.querySelector('.MuiPickersInputBase-root, .MuiPickersSectionList-root')?.textContent)
+console.log('field text:', fieldValue)
+await page.keyboard.press('Escape')
+// server action with refresh()
+const before = await page.getByTestId('counter').innerText()
+await page.getByRole('button', { name: 'เพิ่ม' }).click()
+await page.waitForTimeout(800)
+const after = await page.getByTestId('counter').innerText()
+console.log('server action refresh(): before', before, 'after', after)
+// editor page
+await page.goto(base + '/editor')
+await page.waitForTimeout(1500)
+await page.locator('.bn-editor').click()
+await page.keyboard.type('/')
+await page.waitForTimeout(500)
+console.log('slash menu visible:', await page.locator('.bn-suggestion-menu, [role=listbox]').first().isVisible().catch(() => false))
+await page.keyboard.press('Escape')
+console.log('--- console/CSP logs ---')
+console.log(logs.join('\n') || '(none)')
+await browser.close()

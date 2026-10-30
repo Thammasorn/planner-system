@@ -1,0 +1,2259 @@
+{
+  "F1matrix": {
+    "Manager|2026-08-31": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-08-31": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Ivy|2026-08-31": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-08-31": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Jack|2026-08-31": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Mint|2026-08-31": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Manager|2026-09-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-09-07": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Ivy|2026-09-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-09-07": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Jack|2026-09-07": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Mint|2026-09-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Manager|2026-09-14": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-09-14": {
+      "totalCd": 375,
+      "committedCd": 375
+    },
+    "Ivy|2026-09-14": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Peter|2026-09-14": {
+      "totalCd": 375,
+      "committedCd": 375
+    },
+    "Jack|2026-09-14": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Mint|2026-09-14": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Manager|2026-09-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-09-21": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Ivy|2026-09-21": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Peter|2026-09-21": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Jack|2026-09-21": {
+      "totalCd": 375,
+      "committedCd": 375
+    },
+    "Mint|2026-09-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Manager|2026-09-28": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-09-28": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Ivy|2026-09-28": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Peter|2026-09-28": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Jack|2026-09-28": {
+      "totalCd": 375,
+      "committedCd": 375
+    },
+    "Mint|2026-09-28": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Manager|2026-10-05": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-10-05": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Ivy|2026-10-05": {
+      "totalCd": 125,
+      "committedCd": 125
+    },
+    "Peter|2026-10-05": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Jack|2026-10-05": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Mint|2026-10-05": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Manager|2026-10-12": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-10-12": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Ivy|2026-10-12": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Peter|2026-10-12": {
+      "totalCd": 375,
+      "committedCd": 375
+    },
+    "Jack|2026-10-12": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Mint|2026-10-12": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Manager|2026-10-19": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-10-19": {
+      "totalCd": 375,
+      "committedCd": 0
+    },
+    "Ivy|2026-10-19": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Peter|2026-10-19": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Jack|2026-10-19": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Mint|2026-10-19": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Manager|2026-10-26": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-10-26": {
+      "totalCd": 375,
+      "committedCd": 0
+    },
+    "Ivy|2026-10-26": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Peter|2026-10-26": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Jack|2026-10-26": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Mint|2026-10-26": {
+      "totalCd": 500,
+      "committedCd": 500
+    },
+    "Manager|2026-11-02": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-11-02": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Ivy|2026-11-02": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Peter|2026-11-02": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Jack|2026-11-02": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Mint|2026-11-02": {
+      "totalCd": 375,
+      "committedCd": 375
+    },
+    "Manager|2026-11-09": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-11-09": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-11-09": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-11-09": {
+      "totalCd": 375,
+      "committedCd": 0
+    },
+    "Jack|2026-11-09": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Mint|2026-11-09": {
+      "totalCd": 250,
+      "committedCd": 250
+    },
+    "Manager|2026-11-16": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-11-16": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-11-16": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-11-16": {
+      "totalCd": 500,
+      "committedCd": 0
+    },
+    "Jack|2026-11-16": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Mint|2026-11-16": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Manager|2026-11-23": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-11-23": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-11-23": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-11-23": {
+      "totalCd": 500,
+      "committedCd": 0
+    },
+    "Jack|2026-11-23": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Mint|2026-11-23": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Manager|2026-11-30": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-11-30": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-11-30": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-11-30": {
+      "totalCd": 375,
+      "committedCd": 0
+    },
+    "Jack|2026-11-30": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Mint|2026-11-30": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Manager|2026-12-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-12-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-12-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-12-07": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Jack|2026-12-07": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Mint|2026-12-07": {
+      "totalCd": 375,
+      "committedCd": 0
+    },
+    "Manager|2026-12-14": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-12-14": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-12-14": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-12-14": {
+      "totalCd": 250,
+      "committedCd": 0
+    },
+    "Jack|2026-12-14": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Mint|2026-12-14": {
+      "totalCd": 500,
+      "committedCd": 0
+    },
+    "Manager|2026-12-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-12-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-12-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-12-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Jack|2026-12-21": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Mint|2026-12-21": {
+      "totalCd": 500,
+      "committedCd": 0
+    },
+    "Manager|2026-12-28": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Cindy|2026-12-28": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Ivy|2026-12-28": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Peter|2026-12-28": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Jack|2026-12-28": {
+      "totalCd": 0,
+      "committedCd": 0
+    },
+    "Mint|2026-12-28": {
+      "totalCd": 250,
+      "committedCd": 0
+    }
+  },
+  "projectWeekly": {
+    "POS Upgrade": {
+      "2026-08-31": 500,
+      "2026-09-07": 500,
+      "2026-09-14": 625,
+      "2026-09-21": 500,
+      "2026-09-28": 500,
+      "2026-10-05": 125,
+      "2026-10-12": 0,
+      "2026-10-19": 0,
+      "2026-10-26": 0,
+      "2026-11-02": 0,
+      "2026-11-09": 0,
+      "2026-11-16": 0,
+      "2026-11-23": 0,
+      "2026-11-30": 250,
+      "2026-12-07": 375,
+      "2026-12-14": 500,
+      "2026-12-21": 500,
+      "2026-12-28": 250
+    },
+    "Data Warehouse": {
+      "2026-08-31": 250,
+      "2026-09-07": 250,
+      "2026-09-14": 375,
+      "2026-09-21": 500,
+      "2026-09-28": 500,
+      "2026-10-05": 500,
+      "2026-10-12": 375,
+      "2026-10-19": 250,
+      "2026-10-26": 0,
+      "2026-11-02": 0,
+      "2026-11-09": 0,
+      "2026-11-16": 0,
+      "2026-11-23": 0,
+      "2026-11-30": 0,
+      "2026-12-07": 0,
+      "2026-12-14": 0,
+      "2026-12-21": 0,
+      "2026-12-28": 0
+    },
+    "Mobile App Revamp": {
+      "2026-08-31": 0,
+      "2026-09-07": 250,
+      "2026-09-14": 250,
+      "2026-09-21": 375,
+      "2026-09-28": 625,
+      "2026-10-05": 1000,
+      "2026-10-12": 1000,
+      "2026-10-19": 1000,
+      "2026-10-26": 750,
+      "2026-11-02": 375,
+      "2026-11-09": 250,
+      "2026-11-16": 0,
+      "2026-11-23": 0,
+      "2026-11-30": 0,
+      "2026-12-07": 0,
+      "2026-12-14": 0,
+      "2026-12-21": 0,
+      "2026-12-28": 0
+    },
+    "CRM Migration": {
+      "2026-08-31": 0,
+      "2026-09-07": 0,
+      "2026-09-14": 0,
+      "2026-09-21": 0,
+      "2026-09-28": 0,
+      "2026-10-05": 250,
+      "2026-10-12": 500,
+      "2026-10-19": 625,
+      "2026-10-26": 625,
+      "2026-11-02": 500,
+      "2026-11-09": 0,
+      "2026-11-16": 0,
+      "2026-11-23": 0,
+      "2026-11-30": 0,
+      "2026-12-07": 0,
+      "2026-12-14": 0,
+      "2026-12-21": 0,
+      "2026-12-28": 0
+    },
+    "Store Analytics Dashboard": {
+      "2026-08-31": 0,
+      "2026-09-07": 0,
+      "2026-09-14": 0,
+      "2026-09-21": 0,
+      "2026-09-28": 0,
+      "2026-10-05": 0,
+      "2026-10-12": 0,
+      "2026-10-19": 0,
+      "2026-10-26": 0,
+      "2026-11-02": 250,
+      "2026-11-09": 625,
+      "2026-11-16": 750,
+      "2026-11-23": 750,
+      "2026-11-30": 625,
+      "2026-12-07": 250,
+      "2026-12-14": 250,
+      "2026-12-21": 0,
+      "2026-12-28": 0
+    }
+  },
+  "members": {
+    "POS Upgrade": {
+      "Cindy": "LEAD",
+      "Ivy": "MEMBER",
+      "Mint": "MEMBER"
+    },
+    "Data Warehouse": {
+      "Peter": "LEAD"
+    },
+    "Mobile App Revamp": {
+      "Jack": "LEAD",
+      "Mint": "MEMBER"
+    },
+    "CRM Migration": {
+      "Cindy": "LEAD",
+      "Ivy": "MEMBER"
+    },
+    "Store Analytics Dashboard": {
+      "Peter": "LEAD",
+      "Jack": "MEMBER"
+    }
+  },
+  "visibility": {
+    "Manager": {
+      "users": [
+        "Manager",
+        "Cindy",
+        "Ivy",
+        "Peter",
+        "Jack",
+        "Mint"
+      ],
+      "detailProjects": [
+        "POS Upgrade",
+        "Data Warehouse",
+        "Mobile App Revamp",
+        "CRM Migration",
+        "Store Analytics Dashboard"
+      ]
+    },
+    "Cindy": {
+      "users": [
+        "Manager",
+        "Cindy",
+        "Ivy",
+        "Peter",
+        "Jack",
+        "Mint"
+      ],
+      "detailProjects": [
+        "POS Upgrade",
+        "CRM Migration"
+      ]
+    },
+    "Ivy": {
+      "users": [
+        "Cindy",
+        "Ivy",
+        "Mint"
+      ],
+      "detailProjects": [
+        "POS Upgrade",
+        "CRM Migration"
+      ]
+    },
+    "Peter": {
+      "users": [
+        "Manager",
+        "Cindy",
+        "Ivy",
+        "Peter",
+        "Jack",
+        "Mint"
+      ],
+      "detailProjects": [
+        "Data Warehouse",
+        "Store Analytics Dashboard"
+      ]
+    },
+    "Jack": {
+      "users": [
+        "Manager",
+        "Cindy",
+        "Ivy",
+        "Peter",
+        "Jack",
+        "Mint"
+      ],
+      "detailProjects": [
+        "Mobile App Revamp",
+        "Store Analytics Dashboard"
+      ]
+    },
+    "Mint": {
+      "users": [
+        "Cindy",
+        "Ivy",
+        "Jack",
+        "Mint"
+      ],
+      "detailProjects": [
+        "POS Upgrade",
+        "Mobile App Revamp"
+      ]
+    }
+  },
+  "masking": [
+    {
+      "viewer": "Cindy",
+      "target": "Peter",
+      "byWeek": {
+        "2026-08-31": 250,
+        "2026-09-07": 250,
+        "2026-09-14": 375,
+        "2026-09-21": 500,
+        "2026-09-28": 500,
+        "2026-10-05": 500,
+        "2026-10-12": 375,
+        "2026-10-19": 250,
+        "2026-11-02": 250,
+        "2026-11-09": 375,
+        "2026-11-16": 500,
+        "2026-11-23": 500,
+        "2026-11-30": 375,
+        "2026-12-07": 250,
+        "2026-12-14": 250
+      },
+      "mustNotContain": [
+        "Data Warehouse",
+        "ย้าย pipeline ขึ้น BigQuery",
+        "Store Analytics Dashboard",
+        "ทำ dashboard ผู้บริหาร"
+      ]
+    },
+    {
+      "viewer": "Cindy",
+      "target": "Jack",
+      "byWeek": {
+        "2026-09-07": 250,
+        "2026-09-14": 250,
+        "2026-09-21": 375,
+        "2026-09-28": 375,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 250,
+        "2026-11-09": 250,
+        "2026-11-16": 250,
+        "2026-11-23": 250,
+        "2026-11-30": 250
+      },
+      "mustNotContain": [
+        "Mobile App Revamp",
+        "ออกแบบ flow ใหม่",
+        "Store Analytics Dashboard",
+        "เก็บ requirement + สรุป"
+      ]
+    },
+    {
+      "viewer": "Cindy",
+      "target": "Mint",
+      "byWeek": {
+        "2026-09-28": 250,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 500,
+        "2026-11-02": 375,
+        "2026-11-09": 250
+      },
+      "mustNotContain": [
+        "Mobile App Revamp",
+        "พัฒนา front-end"
+      ]
+    },
+    {
+      "viewer": "Ivy",
+      "target": "Mint",
+      "byWeek": {
+        "2026-09-28": 250,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 500,
+        "2026-11-02": 375,
+        "2026-11-09": 250
+      },
+      "mustNotContain": [
+        "Mobile App Revamp",
+        "พัฒนา front-end"
+      ]
+    },
+    {
+      "viewer": "Peter",
+      "target": "Cindy",
+      "byWeek": {
+        "2026-08-31": 500,
+        "2026-09-07": 500,
+        "2026-09-14": 375,
+        "2026-09-21": 250,
+        "2026-09-28": 250,
+        "2026-10-05": 250,
+        "2026-10-12": 250,
+        "2026-10-19": 375,
+        "2026-10-26": 375,
+        "2026-11-02": 250
+      },
+      "mustNotContain": [
+        "POS Upgrade",
+        "ปรับปรุงระบบ POS หน้าร้าน",
+        "CRM Migration",
+        "ย้ายข้อมูลลูกค้า"
+      ]
+    },
+    {
+      "viewer": "Peter",
+      "target": "Ivy",
+      "byWeek": {
+        "2026-09-14": 250,
+        "2026-09-21": 250,
+        "2026-09-28": 250,
+        "2026-10-05": 125,
+        "2026-10-12": 250,
+        "2026-10-19": 250,
+        "2026-10-26": 250,
+        "2026-11-02": 250
+      },
+      "mustNotContain": [
+        "POS Upgrade",
+        "ทำ UAT + คู่มือหน้าร้าน",
+        "CRM Migration",
+        "ตั้งค่า automation"
+      ]
+    },
+    {
+      "viewer": "Peter",
+      "target": "Jack",
+      "byWeek": {
+        "2026-09-07": 250,
+        "2026-09-14": 250,
+        "2026-09-21": 375,
+        "2026-09-28": 375,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 250
+      },
+      "mustNotContain": [
+        "Mobile App Revamp",
+        "ออกแบบ flow ใหม่"
+      ]
+    },
+    {
+      "viewer": "Peter",
+      "target": "Mint",
+      "byWeek": {
+        "2026-09-28": 250,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 500,
+        "2026-11-02": 375,
+        "2026-11-09": 250,
+        "2026-11-30": 250,
+        "2026-12-07": 375,
+        "2026-12-14": 500,
+        "2026-12-21": 500,
+        "2026-12-28": 250
+      },
+      "mustNotContain": [
+        "Mobile App Revamp",
+        "พัฒนา front-end",
+        "POS Upgrade",
+        "Rollout สาขา"
+      ]
+    },
+    {
+      "viewer": "Jack",
+      "target": "Cindy",
+      "byWeek": {
+        "2026-08-31": 500,
+        "2026-09-07": 500,
+        "2026-09-14": 375,
+        "2026-09-21": 250,
+        "2026-09-28": 250,
+        "2026-10-05": 250,
+        "2026-10-12": 250,
+        "2026-10-19": 375,
+        "2026-10-26": 375,
+        "2026-11-02": 250
+      },
+      "mustNotContain": [
+        "POS Upgrade",
+        "ปรับปรุงระบบ POS หน้าร้าน",
+        "CRM Migration",
+        "ย้ายข้อมูลลูกค้า"
+      ]
+    },
+    {
+      "viewer": "Jack",
+      "target": "Ivy",
+      "byWeek": {
+        "2026-09-14": 250,
+        "2026-09-21": 250,
+        "2026-09-28": 250,
+        "2026-10-05": 125,
+        "2026-10-12": 250,
+        "2026-10-19": 250,
+        "2026-10-26": 250,
+        "2026-11-02": 250
+      },
+      "mustNotContain": [
+        "POS Upgrade",
+        "ทำ UAT + คู่มือหน้าร้าน",
+        "CRM Migration",
+        "ตั้งค่า automation"
+      ]
+    },
+    {
+      "viewer": "Jack",
+      "target": "Peter",
+      "byWeek": {
+        "2026-08-31": 250,
+        "2026-09-07": 250,
+        "2026-09-14": 375,
+        "2026-09-21": 500,
+        "2026-09-28": 500,
+        "2026-10-05": 500,
+        "2026-10-12": 375,
+        "2026-10-19": 250
+      },
+      "mustNotContain": [
+        "Data Warehouse",
+        "ย้าย pipeline ขึ้น BigQuery"
+      ]
+    },
+    {
+      "viewer": "Jack",
+      "target": "Mint",
+      "byWeek": {
+        "2026-11-30": 250,
+        "2026-12-07": 375,
+        "2026-12-14": 500,
+        "2026-12-21": 500,
+        "2026-12-28": 250
+      },
+      "mustNotContain": [
+        "POS Upgrade",
+        "Rollout สาขา"
+      ]
+    },
+    {
+      "viewer": "Mint",
+      "target": "Cindy",
+      "byWeek": {
+        "2026-10-05": 250,
+        "2026-10-12": 250,
+        "2026-10-19": 375,
+        "2026-10-26": 375,
+        "2026-11-02": 250
+      },
+      "mustNotContain": [
+        "CRM Migration",
+        "ย้ายข้อมูลลูกค้า"
+      ]
+    },
+    {
+      "viewer": "Mint",
+      "target": "Ivy",
+      "byWeek": {
+        "2026-10-12": 250,
+        "2026-10-19": 250,
+        "2026-10-26": 250,
+        "2026-11-02": 250
+      },
+      "mustNotContain": [
+        "CRM Migration",
+        "ตั้งค่า automation"
+      ]
+    },
+    {
+      "viewer": "Mint",
+      "target": "Jack",
+      "byWeek": {
+        "2026-11-09": 250,
+        "2026-11-16": 250,
+        "2026-11-23": 250,
+        "2026-11-30": 250
+      },
+      "mustNotContain": [
+        "Store Analytics Dashboard",
+        "เก็บ requirement + สรุป"
+      ]
+    }
+  ],
+  "projectAccess": {
+    "Manager": {
+      "projects": [
+        "POS Upgrade",
+        "Data Warehouse",
+        "Mobile App Revamp",
+        "CRM Migration",
+        "Store Analytics Dashboard"
+      ],
+      "clients": [
+        "Coral",
+        "Bluebird",
+        "Sunrise",
+        "Internal"
+      ],
+      "notFound": []
+    },
+    "Cindy": {
+      "projects": [
+        "POS Upgrade",
+        "CRM Migration"
+      ],
+      "clients": [
+        "Coral",
+        "Sunrise"
+      ],
+      "notFound": [
+        "Data Warehouse",
+        "Mobile App Revamp",
+        "Store Analytics Dashboard"
+      ]
+    },
+    "Ivy": {
+      "projects": [
+        "POS Upgrade",
+        "CRM Migration"
+      ],
+      "clients": [
+        "Coral",
+        "Sunrise"
+      ],
+      "notFound": [
+        "Data Warehouse",
+        "Mobile App Revamp",
+        "Store Analytics Dashboard"
+      ]
+    },
+    "Peter": {
+      "projects": [
+        "Data Warehouse",
+        "Store Analytics Dashboard"
+      ],
+      "clients": [
+        "Coral",
+        "Internal"
+      ],
+      "notFound": [
+        "POS Upgrade",
+        "Mobile App Revamp",
+        "CRM Migration"
+      ]
+    },
+    "Jack": {
+      "projects": [
+        "Mobile App Revamp",
+        "Store Analytics Dashboard"
+      ],
+      "clients": [
+        "Bluebird",
+        "Internal"
+      ],
+      "notFound": [
+        "POS Upgrade",
+        "Data Warehouse",
+        "CRM Migration"
+      ]
+    },
+    "Mint": {
+      "projects": [
+        "POS Upgrade",
+        "Mobile App Revamp"
+      ],
+      "clients": [
+        "Coral",
+        "Bluebird"
+      ],
+      "notFound": [
+        "Data Warehouse",
+        "CRM Migration",
+        "Store Analytics Dashboard"
+      ]
+    }
+  },
+  "invisiblePairs": [
+    "Ivy→Manager",
+    "Ivy→Peter",
+    "Ivy→Jack",
+    "Mint→Manager",
+    "Mint→Peter"
+  ],
+  "today": {
+    "today": "2026-09-30",
+    "thisWeek": "2026-09-28",
+    "nextWeek": "2026-10-05",
+    "w12": [
+      "2026-09-28",
+      "2026-10-05",
+      "2026-10-12",
+      "2026-10-19",
+      "2026-10-26",
+      "2026-11-02",
+      "2026-11-09",
+      "2026-11-16",
+      "2026-11-23",
+      "2026-11-30",
+      "2026-12-07",
+      "2026-12-14"
+    ],
+    "w8": [
+      "2026-09-28",
+      "2026-10-05",
+      "2026-10-12",
+      "2026-10-19",
+      "2026-10-26",
+      "2026-11-02",
+      "2026-11-09",
+      "2026-11-16"
+    ],
+    "w4": [
+      "2026-09-28",
+      "2026-10-05",
+      "2026-10-12",
+      "2026-10-19"
+    ]
+  },
+  "colors": {
+    "F1": {
+      "total": {
+        "EMPTY": 51,
+        "GREEN": 16,
+        "YELLOW": 41
+      },
+      "committed": {
+        "EMPTY": 76,
+        "GREEN": 12,
+        "YELLOW": 20
+      },
+      "reds": [],
+      "greens": [
+        "Cindy 08-31",
+        "Cindy 09-07",
+        "Peter 09-21",
+        "Peter 09-28",
+        "Peter 10-05",
+        "Peter 11-16",
+        "Peter 11-23",
+        "Jack 10-05",
+        "Jack 10-12",
+        "Jack 10-19",
+        "Mint 10-05",
+        "Mint 10-12",
+        "Mint 10-19",
+        "Mint 10-26",
+        "Mint 12-14",
+        "Mint 12-21"
+      ]
+    },
+    "F2": {
+      "total": {
+        "EMPTY": 51,
+        "GREEN": 15,
+        "YELLOW": 40,
+        "RED": 2
+      },
+      "committed": {
+        "EMPTY": 76,
+        "GREEN": 10,
+        "YELLOW": 20,
+        "RED": 2
+      },
+      "reds": [
+        "Jack 10-19 (500/400, OVER)",
+        "Mint 10-19 (500/400, OVER)"
+      ],
+      "greens": [
+        "Cindy 08-31",
+        "Cindy 09-07",
+        "Cindy 10-19",
+        "Peter 09-21",
+        "Peter 09-28",
+        "Peter 10-05",
+        "Peter 11-16",
+        "Peter 11-23",
+        "Jack 10-05",
+        "Jack 10-12",
+        "Mint 10-05",
+        "Mint 10-12",
+        "Mint 10-26",
+        "Mint 12-14",
+        "Mint 12-21"
+      ]
+    },
+    "F3": {
+      "total": {
+        "EMPTY": 51,
+        "GREEN": 15,
+        "YELLOW": 41,
+        "RED": 1
+      },
+      "committed": {
+        "EMPTY": 76,
+        "GREEN": 11,
+        "YELLOW": 20,
+        "RED": 1
+      },
+      "reds": [
+        "Peter 10-05 (500/300, OVER)"
+      ],
+      "greens": [
+        "Cindy 08-31",
+        "Cindy 09-07",
+        "Peter 09-21",
+        "Peter 09-28",
+        "Peter 11-16",
+        "Peter 11-23",
+        "Jack 10-05",
+        "Jack 10-12",
+        "Jack 10-19",
+        "Mint 10-05",
+        "Mint 10-12",
+        "Mint 10-19",
+        "Mint 10-26",
+        "Mint 12-14",
+        "Mint 12-21"
+      ]
+    },
+    "F4": {
+      "total": {
+        "EMPTY": 51,
+        "GREEN": 16,
+        "YELLOW": 40,
+        "RED": 1
+      },
+      "committed": {
+        "EMPTY": 76,
+        "GREEN": 12,
+        "YELLOW": 20
+      },
+      "reds": [
+        "Cindy 10-12 (250/200, RISK)"
+      ],
+      "greens": [
+        "Cindy 08-31",
+        "Cindy 09-07",
+        "Peter 09-21",
+        "Peter 09-28",
+        "Peter 10-05",
+        "Peter 11-16",
+        "Peter 11-23",
+        "Jack 10-05",
+        "Jack 10-12",
+        "Jack 10-19",
+        "Mint 10-05",
+        "Mint 10-12",
+        "Mint 10-19",
+        "Mint 10-26",
+        "Mint 12-14",
+        "Mint 12-21"
+      ]
+    }
+  },
+  "dayLevel": {
+    "F1|Ivy|2026-09-28": [
+      {
+        "date": "2026-09-28",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 50,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-09-29",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 50,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-09-30",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 50,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-01",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 50,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-02",
+        "dow": "Fri",
+        "capCd": 100,
+        "derivedCd": 50,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-03",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-04",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F1|Peter|2026-10-12": [
+      {
+        "date": "2026-10-12",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 75,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-13",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 75,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-14",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 75,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-15",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 75,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-16",
+        "dow": "Fri",
+        "capCd": 100,
+        "derivedCd": 75,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-17",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-18",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F2|Jack|2026-10-19": [
+      {
+        "date": "2026-10-19",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-20",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-21",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-22",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-23",
+        "dow": "Fri",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-24",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-25",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F2|Mint|2026-10-19": [
+      {
+        "date": "2026-10-19",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-20",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-21",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-22",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "OVER",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-23",
+        "dow": "Fri",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-24",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-25",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F2|Peter|2026-10-19": [
+      {
+        "date": "2026-10-19",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 63,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-20",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 63,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-21",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 62,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-22",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 62,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-23",
+        "dow": "Fri",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-24",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-25",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F2|Cindy|2026-10-19": [
+      {
+        "date": "2026-10-19",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 94,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-20",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 94,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-21",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 94,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-22",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 93,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-23",
+        "dow": "Fri",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-24",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-25",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F2|Ivy|2026-10-19": [
+      {
+        "date": "2026-10-19",
+        "dow": "Mon",
+        "capCd": 100,
+        "derivedCd": 63,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-20",
+        "dow": "Tue",
+        "capCd": 100,
+        "derivedCd": 63,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-21",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 62,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-22",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 62,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-23",
+        "dow": "Fri",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-24",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-25",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F3|Peter|2026-10-05": [
+      {
+        "date": "2026-10-05",
+        "dow": "Mon",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-06",
+        "dow": "Tue",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-07",
+        "dow": "Wed",
+        "capCd": 100,
+        "derivedCd": 167,
+        "level": "OVER",
+        "excessCd": 67,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-08",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 167,
+        "level": "OVER",
+        "excessCd": 67,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-09",
+        "dow": "Fri",
+        "capCd": 100,
+        "derivedCd": 166,
+        "level": "OVER",
+        "excessCd": 66,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-10",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-11",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ],
+    "F4|Cindy|2026-10-12": [
+      {
+        "date": "2026-10-12",
+        "dow": "Mon",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-13",
+        "dow": "Tue",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-14",
+        "dow": "Wed",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-15",
+        "dow": "Thu",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "RISK",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-16",
+        "dow": "Fri",
+        "capCd": 100,
+        "derivedCd": 125,
+        "level": "RISK",
+        "excessCd": 25,
+        "cause": "WORKLOAD"
+      },
+      {
+        "date": "2026-10-17",
+        "dow": "Sat",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      },
+      {
+        "date": "2026-10-18",
+        "dow": "Sun",
+        "capCd": 0,
+        "derivedCd": 0,
+        "level": "OK",
+        "excessCd": 0,
+        "cause": null
+      }
+    ]
+  },
+  "deactivateCindy": [
+    {
+      "user": "Cindy",
+      "week": "2026-09-28",
+      "level": "OVER",
+      "excessCd": 50,
+      "cause": "CAPACITY",
+      "totalCd": 250,
+      "committedCd": 250,
+      "capacityCd": 200
+    },
+    {
+      "user": "Cindy",
+      "week": "2026-10-05",
+      "level": "RISK",
+      "excessCd": 250,
+      "cause": "CAPACITY",
+      "totalCd": 250,
+      "committedCd": 0,
+      "capacityCd": 0
+    },
+    {
+      "user": "Cindy",
+      "week": "2026-10-12",
+      "level": "RISK",
+      "excessCd": 250,
+      "cause": "CAPACITY",
+      "totalCd": 250,
+      "committedCd": 0,
+      "capacityCd": 0
+    },
+    {
+      "user": "Cindy",
+      "week": "2026-10-19",
+      "level": "RISK",
+      "excessCd": 375,
+      "cause": "CAPACITY",
+      "totalCd": 375,
+      "committedCd": 0,
+      "capacityCd": 0
+    },
+    {
+      "user": "Cindy",
+      "week": "2026-10-26",
+      "level": "RISK",
+      "excessCd": 375,
+      "cause": "CAPACITY",
+      "totalCd": 375,
+      "committedCd": 0,
+      "capacityCd": 0
+    },
+    {
+      "user": "Cindy",
+      "week": "2026-11-02",
+      "level": "RISK",
+      "excessCd": 250,
+      "cause": "CAPACITY",
+      "totalCd": 250,
+      "committedCd": 0,
+      "capacityCd": 0
+    }
+  ],
+  "combined": {
+    "F2+F3 (= §8.5 mock state)": {
+      "overloads": [
+        {
+          "user": "Peter",
+          "week": "2026-10-05",
+          "level": "OVER",
+          "excessCd": 200,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 300
+        },
+        {
+          "user": "Jack",
+          "week": "2026-10-19",
+          "level": "OVER",
+          "excessCd": 100,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 400
+        },
+        {
+          "user": "Mint",
+          "week": "2026-10-19",
+          "level": "OVER",
+          "excessCd": 100,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 400
+        }
+      ],
+      "totalCd": 19500,
+      "committedCd": 11625
+    },
+    "F2+F3+F4 (all at once)": {
+      "overloads": [
+        {
+          "user": "Peter",
+          "week": "2026-10-05",
+          "level": "OVER",
+          "excessCd": 200,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 300
+        },
+        {
+          "user": "Cindy",
+          "week": "2026-10-12",
+          "level": "RISK",
+          "excessCd": 50,
+          "cause": "CAPACITY",
+          "totalCd": 250,
+          "committedCd": 0,
+          "capacityCd": 200
+        },
+        {
+          "user": "Jack",
+          "week": "2026-10-19",
+          "level": "OVER",
+          "excessCd": 100,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 400
+        },
+        {
+          "user": "Mint",
+          "week": "2026-10-19",
+          "level": "OVER",
+          "excessCd": 100,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 400
+        }
+      ],
+      "totalCd": 19500,
+      "committedCd": 11625
+    },
+    "demo (A.2: Peter leave, no holiday) + Kickoff workshop DAY 09-07 Jack/Mint 50": {
+      "overloads": [
+        {
+          "user": "Peter",
+          "week": "2026-10-05",
+          "level": "OVER",
+          "excessCd": 200,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 300
+        }
+      ],
+      "totalCd": 19600,
+      "committedCd": 11725
+    }
+  },
+  "milestones": [
+    {
+      "p": "POS",
+      "name": "UAT sign-off",
+      "date": "2026-10-02",
+      "status": "DUE_SOON",
+      "week": "2026-09-28",
+      "dow": "Fri",
+      "daysFromToday": 2,
+      "within14": true,
+      "lateWeeks": [
+        "2026-10-05"
+      ]
+    },
+    {
+      "p": "POS",
+      "name": "Go-live สาขาแรก",
+      "date": "2026-12-21",
+      "status": "UPCOMING",
+      "week": "2026-12-21",
+      "dow": "Mon",
+      "daysFromToday": 82,
+      "within14": false,
+      "lateWeeks": null
+    },
+    {
+      "p": "DW",
+      "name": "Pipeline พร้อมใช้งาน",
+      "date": "2026-10-23",
+      "status": "UPCOMING",
+      "week": "2026-10-19",
+      "dow": "Fri",
+      "daysFromToday": 23,
+      "within14": false,
+      "lateWeeks": null
+    },
+    {
+      "p": "Mobile",
+      "name": "Design freeze",
+      "date": "2026-10-09",
+      "status": "UPCOMING",
+      "week": "2026-10-05",
+      "dow": "Fri",
+      "daysFromToday": 9,
+      "within14": true,
+      "lateWeeks": null
+    },
+    {
+      "p": "Mobile",
+      "name": "Beta release",
+      "date": "2026-11-13",
+      "status": "UPCOMING",
+      "week": "2026-11-09",
+      "dow": "Fri",
+      "daysFromToday": 44,
+      "within14": false,
+      "lateWeeks": null
+    },
+    {
+      "p": "CRM",
+      "name": "Data migration complete",
+      "date": "2026-11-06",
+      "status": "UPCOMING",
+      "week": "2026-11-02",
+      "dow": "Fri",
+      "daysFromToday": 37,
+      "within14": false,
+      "lateWeeks": null
+    },
+    {
+      "p": "Store",
+      "name": "Dashboard v1 review",
+      "date": "2026-12-11",
+      "status": "UPCOMING",
+      "week": "2026-12-07",
+      "dow": "Fri",
+      "daysFromToday": 72,
+      "within14": false,
+      "lateWeeks": null
+    }
+  ],
+  "badges": {
+    "F1": [
+      "Manager 0",
+      "Cindy 0",
+      "Ivy 0",
+      "Peter 0",
+      "Jack 0",
+      "Mint 0"
+    ],
+    "F2": [
+      "Manager 2",
+      "Cindy 2",
+      "Ivy 1",
+      "Peter 2",
+      "Jack 2",
+      "Mint 2"
+    ],
+    "F3": [
+      "Manager 1",
+      "Cindy 1",
+      "Ivy 0",
+      "Peter 1",
+      "Jack 1",
+      "Mint 0"
+    ],
+    "F4": [
+      "Manager 0",
+      "Cindy 0",
+      "Ivy 0",
+      "Peter 0",
+      "Jack 0",
+      "Mint 0"
+    ],
+    "F2+F3": [
+      "Manager 3",
+      "Cindy 3",
+      "Ivy 1",
+      "Peter 3",
+      "Jack 3",
+      "Mint 2"
+    ],
+    "demo": [
+      "Manager 1",
+      "Cindy 1",
+      "Ivy 0",
+      "Peter 1",
+      "Jack 1",
+      "Mint 0"
+    ]
+  },
+  "synthetic": [
+    {
+      "label": "WORKLOAD / OVER: F1 + 125 cd CONFIRMED extra for Jack 2026-10-05",
+      "totalCd": 625,
+      "committedCd": 625,
+      "capacityCd": 500,
+      "standardCd": 500,
+      "level": "OVER",
+      "excessCd": 125,
+      "cause": "WORKLOAD"
+    },
+    {
+      "label": "WORKLOAD / RISK: F1 + 250 cd TENTATIVE extra for Cindy 2026-10-19",
+      "totalCd": 625,
+      "committedCd": 0,
+      "capacityCd": 500,
+      "standardCd": 500,
+      "level": "RISK",
+      "excessCd": 125,
+      "cause": "WORKLOAD"
+    },
+    {
+      "label": "BOTH / OVER (committed < total): F2 + 125 cd TENTATIVE extra for Jack 2026-10-19",
+      "totalCd": 625,
+      "committedCd": 500,
+      "capacityCd": 400,
+      "standardCd": 500,
+      "level": "OVER",
+      "excessCd": 100,
+      "cause": "BOTH"
+    },
+    {
+      "label": "BOTH / RISK: F4 + 300 cd TENTATIVE extra for Cindy 2026-10-12",
+      "totalCd": 550,
+      "committedCd": 0,
+      "capacityCd": 200,
+      "standardCd": 500,
+      "level": "RISK",
+      "excessCd": 350,
+      "cause": "BOTH"
+    },
+    {
+      "label": "boundary load = cap → OK: F2 with Jack 2026-10-19 reduced to 400 (key \"f\")",
+      "totalCd": 400,
+      "committedCd": 400,
+      "capacityCd": 400,
+      "standardCd": 500,
+      "level": "OK"
+    }
+  ],
+  "distributeMismatch": {
+    "fullHalfDays": 0,
+    "random": {
+      "cases": 300000,
+      "mismatches": 346,
+      "examples": [
+        {
+          "t": 574,
+          "w": [
+            23,
+            25,
+            59,
+            98,
+            26,
+            74,
+            31
+          ],
+          "float": [
+            39,
+            43,
+            101,
+            167,
+            44,
+            127,
+            53
+          ],
+          "exact": [
+            39,
+            43,
+            101,
+            168,
+            44,
+            126,
+            53
+          ]
+        },
+        {
+          "t": 668,
+          "w": [
+            98,
+            4,
+            42,
+            38,
+            18,
+            90,
+            30
+          ],
+          "float": [
+            204,
+            8,
+            88,
+            79,
+            38,
+            188,
+            63
+          ],
+          "exact": [
+            205,
+            8,
+            88,
+            79,
+            37,
+            188,
+            63
+          ]
+        },
+        {
+          "t": 81,
+          "w": [
+            34,
+            3,
+            85,
+            64,
+            83,
+            92,
+            44
+          ],
+          "float": [
+            7,
+            0,
+            17,
+            13,
+            17,
+            18,
+            9
+          ],
+          "exact": [
+            7,
+            1,
+            17,
+            13,
+            16,
+            18,
+            9
+          ]
+        }
+      ]
+    },
+    "ex1": {
+      "float": [
+        3,
+        13,
+        34
+      ],
+      "exact": [
+        4,
+        13,
+        33
+      ]
+    },
+    "ex2": {
+      "float": [
+        8,
+        25,
+        34,
+        33
+      ],
+      "exact": [
+        9,
+        25,
+        33,
+        33
+      ]
+    }
+  }
+}

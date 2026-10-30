@@ -1,0 +1,8 @@
+node_modules
+.next
+*.log
+pw-browsers
+csp-check.mjs
+font-check.mjs
+AGENTS.md
+CLAUDE.md

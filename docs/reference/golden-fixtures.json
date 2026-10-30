@@ -1,0 +1,725 @@
+{
+  "$comment": "Golden fixture สำหรับ scripts/seed-golden.ts และ test — สร้างอัตโนมัติจาก Workload_Planner_Aug-Dec_2026_v2.xlsx (ชีต Setup + Plan) ห้ามแก้มือ ถ้าตัวเลขไม่ตรงกับ SPEC §11.3 ให้ถือ SPEC เป็นหลักแล้วแจ้งเจ้าของผลิตภัณฑ์",
+  "source": "docs/reference/Workload_Planner_Aug-Dec_2026_v2.xlsx",
+  "unit": "cd = centi-day (100 = 1 person-day). แปลงจาก Excel: สัดส่วนสัปดาห์ f → f × 500 cd (สัปดาห์มาตรฐาน 5 วัน)",
+  "weekStarts": [
+    "2026-08-31",
+    "2026-09-07",
+    "2026-09-14",
+    "2026-09-21",
+    "2026-09-28",
+    "2026-10-05",
+    "2026-10-12",
+    "2026-10-19",
+    "2026-10-26",
+    "2026-11-02",
+    "2026-11-09",
+    "2026-11-16",
+    "2026-11-23",
+    "2026-11-30",
+    "2026-12-07",
+    "2026-12-14",
+    "2026-12-21",
+    "2026-12-28"
+  ],
+  "positions": [
+    "Project Manager",
+    "Developer",
+    "Designer",
+    "QA",
+    "Data",
+    "Business Analyst"
+  ],
+  "users": [
+    {
+      "nickname": "Manager",
+      "name": "Demo Manager",
+      "email": "manager@example.com",
+      "position": "Project Manager",
+      "role": "manager",
+      "devPassword": "demo1234",
+      "scheduleCd": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      }
+    },
+    {
+      "nickname": "Cindy",
+      "name": "Cindy",
+      "email": "cindy@example.com",
+      "position": "Project Manager",
+      "role": "worker",
+      "devPassword": "demo1234",
+      "scheduleCd": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      }
+    },
+    {
+      "nickname": "Ivy",
+      "name": "Ivy",
+      "email": "ivy@example.com",
+      "position": "QA",
+      "role": "worker",
+      "devPassword": "demo1234",
+      "scheduleCd": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      }
+    },
+    {
+      "nickname": "Peter",
+      "name": "Peter",
+      "email": "peter@example.com",
+      "position": "Data",
+      "role": "worker",
+      "devPassword": "demo1234",
+      "scheduleCd": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      }
+    },
+    {
+      "nickname": "Jack",
+      "name": "Jack",
+      "email": "jack@example.com",
+      "position": "Designer",
+      "role": "worker",
+      "devPassword": "demo1234",
+      "scheduleCd": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      }
+    },
+    {
+      "nickname": "Mint",
+      "name": "Mint",
+      "email": "mint@example.com",
+      "position": "Developer",
+      "role": "worker",
+      "devPassword": "demo1234",
+      "scheduleCd": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      }
+    }
+  ],
+  "clients": [
+    "Coral",
+    "Bluebird",
+    "Sunrise",
+    "Internal"
+  ],
+  "projects": [
+    {
+      "name": "POS Upgrade",
+      "client": "Coral",
+      "certainty": "CONFIRMED",
+      "lead": "Cindy"
+    },
+    {
+      "name": "Data Warehouse",
+      "client": "Coral",
+      "certainty": "CONFIRMED",
+      "lead": "Peter"
+    },
+    {
+      "name": "Mobile App Revamp",
+      "client": "Bluebird",
+      "certainty": "CONFIRMED",
+      "lead": "Jack"
+    },
+    {
+      "name": "CRM Migration",
+      "client": "Sunrise",
+      "certainty": "TENTATIVE",
+      "lead": "Cindy"
+    },
+    {
+      "name": "Store Analytics Dashboard",
+      "client": "Internal",
+      "certainty": "TENTATIVE",
+      "lead": "Peter"
+    }
+  ],
+  "tasks": [
+    {
+      "project": "POS Upgrade",
+      "name": "ปรับปรุงระบบ POS หน้าร้าน",
+      "assignee": "Cindy",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-08-31": 500,
+        "2026-09-07": 500,
+        "2026-09-14": 375,
+        "2026-09-21": 250,
+        "2026-09-28": 250
+      }
+    },
+    {
+      "project": "POS Upgrade",
+      "name": "ทำ UAT + คู่มือหน้าร้าน",
+      "assignee": "Ivy",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-09-14": 250,
+        "2026-09-21": 250,
+        "2026-09-28": 250,
+        "2026-10-05": 125
+      }
+    },
+    {
+      "project": "Data Warehouse",
+      "name": "ย้าย pipeline ขึ้น BigQuery",
+      "assignee": "Peter",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-08-31": 250,
+        "2026-09-07": 250,
+        "2026-09-14": 375,
+        "2026-09-21": 500,
+        "2026-09-28": 500,
+        "2026-10-05": 500,
+        "2026-10-12": 375,
+        "2026-10-19": 250
+      }
+    },
+    {
+      "project": "Mobile App Revamp",
+      "name": "ออกแบบ flow ใหม่",
+      "assignee": "Jack",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-09-07": 250,
+        "2026-09-14": 250,
+        "2026-09-21": 375,
+        "2026-09-28": 375,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 250
+      }
+    },
+    {
+      "project": "Mobile App Revamp",
+      "name": "พัฒนา front-end",
+      "assignee": "Mint",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-09-28": 250,
+        "2026-10-05": 500,
+        "2026-10-12": 500,
+        "2026-10-19": 500,
+        "2026-10-26": 500,
+        "2026-11-02": 375,
+        "2026-11-09": 250
+      }
+    },
+    {
+      "project": "CRM Migration",
+      "name": "ย้ายข้อมูลลูกค้า",
+      "assignee": "Cindy",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-10-05": 250,
+        "2026-10-12": 250,
+        "2026-10-19": 375,
+        "2026-10-26": 375,
+        "2026-11-02": 250
+      }
+    },
+    {
+      "project": "CRM Migration",
+      "name": "ตั้งค่า automation",
+      "assignee": "Ivy",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-10-12": 250,
+        "2026-10-19": 250,
+        "2026-10-26": 250,
+        "2026-11-02": 250
+      }
+    },
+    {
+      "project": "Store Analytics Dashboard",
+      "name": "ทำ dashboard ผู้บริหาร",
+      "assignee": "Peter",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-11-02": 250,
+        "2026-11-09": 375,
+        "2026-11-16": 500,
+        "2026-11-23": 500,
+        "2026-11-30": 375,
+        "2026-12-07": 250,
+        "2026-12-14": 250
+      }
+    },
+    {
+      "project": "Store Analytics Dashboard",
+      "name": "เก็บ requirement + สรุป",
+      "assignee": "Jack",
+      "certaintyOverride": null,
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-11-09": 250,
+        "2026-11-16": 250,
+        "2026-11-23": 250,
+        "2026-11-30": 250
+      }
+    },
+    {
+      "project": "POS Upgrade",
+      "name": "Rollout สาขา",
+      "assignee": "Mint",
+      "certaintyOverride": "TENTATIVE",
+      "granularity": "WEEK",
+      "allocationsCd": {
+        "2026-11-30": 250,
+        "2026-12-07": 375,
+        "2026-12-14": 500,
+        "2026-12-21": 500,
+        "2026-12-28": 250
+      }
+    }
+  ],
+  "expected": {
+    "F1": {
+      "description": "ไม่มีวันหยุด ไม่มีวันลา",
+      "setup": {},
+      "totalCd": 19500,
+      "committedCd": 11625,
+      "byProject": {
+        "POS Upgrade": {
+          "totalCd": 4625,
+          "committedCd": 2750
+        },
+        "Data Warehouse": {
+          "totalCd": 3000,
+          "committedCd": 3000
+        },
+        "Mobile App Revamp": {
+          "totalCd": 5875,
+          "committedCd": 5875
+        },
+        "CRM Migration": {
+          "totalCd": 2500,
+          "committedCd": 0
+        },
+        "Store Analytics Dashboard": {
+          "totalCd": 3500,
+          "committedCd": 0
+        }
+      },
+      "byUserWeek": {
+        "Cindy": {
+          "2026-08-31": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-09-07": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-09-14": {
+            "totalCd": 375,
+            "committedCd": 375,
+            "capacityCd": 500
+          },
+          "2026-09-21": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-28": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-10-05": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-10-12": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-10-19": {
+            "totalCd": 375,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-10-26": {
+            "totalCd": 375,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-02": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          }
+        },
+        "Ivy": {
+          "2026-09-14": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-21": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-28": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-10-05": {
+            "totalCd": 125,
+            "committedCd": 125,
+            "capacityCd": 500
+          },
+          "2026-10-12": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-10-19": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-10-26": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-02": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          }
+        },
+        "Peter": {
+          "2026-08-31": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-07": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-14": {
+            "totalCd": 375,
+            "committedCd": 375,
+            "capacityCd": 500
+          },
+          "2026-09-21": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-09-28": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-05": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-12": {
+            "totalCd": 375,
+            "committedCd": 375,
+            "capacityCd": 500
+          },
+          "2026-10-19": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-11-02": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-09": {
+            "totalCd": 375,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-16": {
+            "totalCd": 500,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-23": {
+            "totalCd": 500,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-30": {
+            "totalCd": 375,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-12-07": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-12-14": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          }
+        },
+        "Jack": {
+          "2026-09-07": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-14": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-09-21": {
+            "totalCd": 375,
+            "committedCd": 375,
+            "capacityCd": 500
+          },
+          "2026-09-28": {
+            "totalCd": 375,
+            "committedCd": 375,
+            "capacityCd": 500
+          },
+          "2026-10-05": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-12": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-19": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-26": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-11-09": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-16": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-23": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-11-30": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          }
+        },
+        "Mint": {
+          "2026-09-28": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-10-05": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-12": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-19": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-10-26": {
+            "totalCd": 500,
+            "committedCd": 500,
+            "capacityCd": 500
+          },
+          "2026-11-02": {
+            "totalCd": 375,
+            "committedCd": 375,
+            "capacityCd": 500
+          },
+          "2026-11-09": {
+            "totalCd": 250,
+            "committedCd": 250,
+            "capacityCd": 500
+          },
+          "2026-11-30": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-12-07": {
+            "totalCd": 375,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-12-14": {
+            "totalCd": 500,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-12-21": {
+            "totalCd": 500,
+            "committedCd": 0,
+            "capacityCd": 500
+          },
+          "2026-12-28": {
+            "totalCd": 250,
+            "committedCd": 0,
+            "capacityCd": 500
+          }
+        }
+      },
+      "overloads": []
+    },
+    "F2": {
+      "description": "F1 + {\"holidays\": [{\"date\": \"2026-10-23\", \"name\": \"วันหยุดสมมติสำหรับทดสอบ\"}]}",
+      "setup": {
+        "holidays": [
+          {
+            "date": "2026-10-23",
+            "name": "วันหยุดสมมติสำหรับทดสอบ"
+          }
+        ]
+      },
+      "overloads": [
+        {
+          "user": "Jack",
+          "week": "2026-10-19",
+          "level": "OVER",
+          "excessCd": 100,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 400
+        },
+        {
+          "user": "Mint",
+          "week": "2026-10-19",
+          "level": "OVER",
+          "excessCd": 100,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 400
+        }
+      ]
+    },
+    "F3": {
+      "description": "F1 + {\"timeOff\": [{\"user\": \"Peter\", \"startDate\": \"2026-10-05\", \"endDate\": \"2026-10-06\", \"half\": null, \"type\": \"ลาพักร้อน\"}]}",
+      "setup": {
+        "timeOff": [
+          {
+            "user": "Peter",
+            "startDate": "2026-10-05",
+            "endDate": "2026-10-06",
+            "half": null,
+            "type": "ลาพักร้อน"
+          }
+        ]
+      },
+      "overloads": [
+        {
+          "user": "Peter",
+          "week": "2026-10-05",
+          "level": "OVER",
+          "excessCd": 200,
+          "cause": "CAPACITY",
+          "totalCd": 500,
+          "committedCd": 500,
+          "capacityCd": 300
+        }
+      ]
+    },
+    "F4": {
+      "description": "F1 + {\"timeOff\": [{\"user\": \"Cindy\", \"startDate\": \"2026-10-12\", \"endDate\": \"2026-10-14\", \"half\": null, \"type\": \"ลาพักร้อน\"}]}",
+      "setup": {
+        "timeOff": [
+          {
+            "user": "Cindy",
+            "startDate": "2026-10-12",
+            "endDate": "2026-10-14",
+            "half": null,
+            "type": "ลาพักร้อน"
+          }
+        ]
+      },
+      "overloads": [
+        {
+          "user": "Cindy",
+          "week": "2026-10-12",
+          "level": "RISK",
+          "excessCd": 50,
+          "cause": "CAPACITY",
+          "totalCd": 250,
+          "committedCd": 0,
+          "capacityCd": 200
+        }
+      ]
+    }
+  }
+}

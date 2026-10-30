@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+  sharp: false
+  unrs-resolver: false
+# Do not set minimumReleaseAge (it would become strict). Commit any minimumReleaseAgeExclude pnpm appends.

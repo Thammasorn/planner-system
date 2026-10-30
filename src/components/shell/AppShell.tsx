@@ -1,0 +1,51 @@
+'use client'
+import { useState, type ReactNode } from 'react'
+import Drawer from '@mui/material/Drawer'
+import IconButton from '@mui/material/IconButton'
+import MenuIcon from '@mui/icons-material/Menu'
+import { useHotkeys } from '@/hooks/useHotkeys'
+import { th } from '@/i18n/th'
+import { HOTKEYS } from '@/lib/keys'
+import { Sidebar } from './Sidebar'
+import styles from './AppShell.module.css'
+
+/** App chrome (SPEC §8.1, X33): skip link, collapsible sidebar (Cmd/Ctrl+\), a temporary Drawer under 900 px and
+ *  the main landmark. Collapse state lives in memory in M0; M1 persists it in user_preferences. */
+export function AppShell({ children }: { children: ReactNode }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const toggle = () => setCollapsed((c) => !c)
+  useHotkeys([{ hotkey: HOTKEYS.toggleSidebar, handler: toggle }])
+  return (
+    <div className={styles.shell} data-collapsed={String(collapsed)}>
+      <a className={styles.skipLink} href="#main">
+        {th.nav.skipToContent}
+      </a>
+      <aside
+        id="app-sidebar"
+        data-testid="app-sidebar"
+        data-collapsed={String(collapsed)}
+        className={styles.sidebar}
+      >
+        <Sidebar collapsed={collapsed} onToggle={toggle} />
+      </aside>
+      <header className={styles.mobileBar}>
+        <IconButton aria-label={th.nav.openMenu} onClick={() => setDrawerOpen(true)}>
+          <MenuIcon />
+        </IconButton>
+        <span className={styles.mobileTitle}>{th.meta.appName}</span>
+      </header>
+      <Drawer
+        variant="temporary"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        slotProps={{ paper: { 'aria-label': th.nav.sidebarLabel, sx: { width: 264 } } }}
+      >
+        <Sidebar collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+      </Drawer>
+      <main id="main" tabIndex={-1} className={styles.main}>
+        {children}
+      </main>
+    </div>
+  )
+}

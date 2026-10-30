@@ -1,0 +1,10 @@
+@layer reset, mui, app;
+
+:root {
+  --load-over-bg: #FFC7CE;  --load-over-fg: #9C0006;
+  --nonworking: #F1F5F9;
+}
+.dark {
+  --load-over-bg: #5c1a22;  --load-over-fg: #ffd9de;
+  --nonworking: #1e293b;
+}

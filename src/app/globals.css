@@ -1,0 +1,12 @@
+/* Global styles. Design tokens live in ./tokens.css; MUI's CssBaseline handles the reset. */
+
+html,
+body {
+  height: 100%;
+}
+
+/* Visible keyboard focus everywhere (SPEC §8.9). */
+:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}

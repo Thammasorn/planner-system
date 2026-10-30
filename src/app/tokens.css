@@ -1,0 +1,56 @@
+/* Design tokens (SPEC §8.7) as CSS variables. Light under :root, dark under .dark (matches the MUI theme's
+   colorSchemeSelector: 'class'). One `--name: #RRGGBB;` per line: src/lib/theme/contrast.test.ts parses this file.
+   Deviations (X51, M0-D22): --load-light-fg and --tentative-fg are #8F5C00 instead of #9C6500 (4.12:1 < 4.5:1);
+   --surface and --faded-fg are added; every token has a dark counterpart. */
+
+:root {
+  --brand-navy: #1f3864;
+  --brand-blue: #2f5597;
+  --brand-light: #d9e2f3;
+  --load-over-bg: #ffc7ce;
+  --load-over-fg: #9c0006;
+  --load-full-bg: #c6efce;
+  --load-full-fg: #006100;
+  --load-light-bg: #ffeb9c;
+  --load-light-fg: #8f5c00;
+  --heat-0: #ffffff;
+  --heat-50: #bdd7ee;
+  --heat-100: #2e75b6;
+  --certain-bg: #e2efda;
+  --certain-fg: #006100;
+  --tentative-bg: #ffeb9c;
+  --tentative-fg: #8f5c00;
+  --nonworking: #f1f5f9;
+  --holiday: #e2e8f0;
+  --timeoff: #cbd5e1;
+  --today: #ef4444;
+  --milestone: #7c3aed;
+  --surface: #ffffff;
+  --faded-fg: #5b6878;
+}
+
+.dark {
+  --brand-navy: #a9c1ea;
+  --brand-blue: #8faadc;
+  --brand-light: #1e2a44;
+  --load-over-bg: #5c1a22;
+  --load-over-fg: #ffd9de;
+  --load-full-bg: #133d1f;
+  --load-full-fg: #c6efce;
+  --load-light-bg: #4a3b00;
+  --load-light-fg: #ffeb9c;
+  --heat-0: #121212;
+  --heat-50: #1f3a56;
+  --heat-100: #5b9bd5;
+  --certain-bg: #1b3a1b;
+  --certain-fg: #c6efce;
+  --tentative-bg: #4a3b00;
+  --tentative-fg: #ffeb9c;
+  --nonworking: #1e293b;
+  --holiday: #273449;
+  --timeoff: #334155;
+  --today: #f87171;
+  --milestone: #a78bfa;
+  --surface: #121212;
+  --faded-fg: #94a3b8;
+}

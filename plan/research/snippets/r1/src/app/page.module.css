@@ -1,0 +1,20 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(10, 64px);
+  font-variant-numeric: tabular-nums;
+}
+.cell {
+  height: 28px;
+  border: 1px solid var(--mui-palette-divider);
+  color: var(--mui-palette-text-primary);
+  background: var(--mui-palette-background-paper);
+  text-align: right;
+  padding: 0 4px;
+}
+.cell[data-over='true'] {
+  background: var(--load-over-bg);
+  color: var(--load-over-fg);
+}
+.cell[data-nonworking='true'] {
+  background: var(--nonworking);
+}

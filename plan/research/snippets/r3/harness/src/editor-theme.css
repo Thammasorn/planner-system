@@ -1,0 +1,36 @@
+/* Simulated MUI CSS variables (in the app these come from MUI's CssVarsProvider, colorSchemeSelector: 'class') */
+:root {
+  --mui-palette-text-primary: rgba(0, 0, 0, 0.87);
+  --mui-palette-background-paper: #ffffff;
+  --mui-palette-action-hover: rgba(0, 0, 0, 0.04);
+  --mui-palette-divider: rgba(0, 0, 0, 0.12);
+  --mui-palette-primary-main: #2f5597;
+  --app-font-thai: "Noto Sans Thai Test", system-ui, sans-serif;
+}
+.dark {
+  --mui-palette-text-primary: #ffffff;
+  --mui-palette-background-paper: #121212;
+  --mui-palette-action-hover: rgba(255, 255, 255, 0.08);
+  --mui-palette-divider: rgba(255, 255, 255, 0.12);
+  --mui-palette-primary-main: #90caf9;
+}
+/* BlockNote theme bridge: .bn-root is set on the editor container AND on every portal root
+   (menus/toolbars) via applyThemedRoot, so these overrides reach floating UI too. */
+.bn-root.bn-root[data-color-scheme] { /* doubled class: (0,3,0) beats BlockNote's (0,2,0) regardless of CSS order */
+  --bn-ui-base-z-index: 1150; /* above MUI AppBar (1100), below MUI Modal (1300) */
+  --bn-font-family: var(--app-font-thai);
+  --bn-border-radius: 8px;
+  --bn-colors-editor-text: var(--mui-palette-text-primary);
+  --bn-colors-editor-background: var(--mui-palette-background-paper);
+  --bn-colors-menu-text: var(--mui-palette-text-primary);
+  --bn-colors-menu-background: var(--mui-palette-background-paper);
+  --bn-colors-hovered-background: var(--mui-palette-action-hover);
+  --bn-colors-border: var(--mui-palette-divider);
+  --bn-colors-selected-background: var(--mui-palette-primary-main);
+  --bn-colors-selected-text: #fff;
+}
+/* VERIFIED 0.55.0: editor CONTENT font is hard-coded in core's `.bn-default-styles` (Inter, ...),
+   NOT var(--bn-font-family) (that var only styles menus/toolbars). Override it explicitly. */
+.bn-root .bn-default-styles.bn-default-styles {
+  font-family: var(--bn-font-family);
+}
