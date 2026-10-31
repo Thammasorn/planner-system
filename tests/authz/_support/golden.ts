@@ -1,8 +1,10 @@
 // tests/authz/_support/golden.ts — lookups into the golden seed (docs/reference/golden-fixtures.json, r8 §4.2).
+import { readFileSync } from 'node:fs'
 import { eq } from 'drizzle-orm'
 import { narrowRole } from '@/server/authz'
 import { db } from '@/server/db/client'
 import { clients, projects, user } from '@/server/db/schema'
+import { GOLDEN_PATH } from '../../../scripts/lib/fixtures'
 import type { TestUser } from '../../helpers/factories'
 
 export const GOLDEN_VIEWERS = ['Manager', 'Cindy', 'Ivy', 'Peter', 'Jack', 'Mint'] as const
@@ -46,4 +48,11 @@ export async function goldenClientId(name: string): Promise<string> {
   const [c] = await db.select({ id: clients.id }).from(clients).where(eq(clients.name, name))
   if (!c) throw new Error(`golden client ${name} not seeded`)
   return c.id
+}
+
+/** Task names of the given golden projects, read from the JSON itself (never re-typed; M3 masking cases). */
+export function goldenTaskNames(projectNames: readonly GoldenProject[]): string[] {
+  const raw = JSON.parse(readFileSync(GOLDEN_PATH, 'utf8')) as { tasks: { project: string; name: string }[] }
+  const wanted = new Set<string>(projectNames)
+  return raw.tasks.filter((t) => wanted.has(t.project)).map((t) => t.name)
 }

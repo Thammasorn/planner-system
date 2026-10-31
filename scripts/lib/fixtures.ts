@@ -5,14 +5,16 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
 import { z } from 'zod'
+import { defaultStatus } from '@/domain/status'
 import type { DbOrTx } from '@/server/db/types'
 import * as repo from '@/server/repo'
 import * as services from '@/server/services'
 
 /** Seed stages in order; `upTo` stops after the named stage. M1 'users': positions + users + schedules ·
- *  M2 'projects': clients + projects + memberships. */
-export type GoldenStage = 'users' | 'projects'
-const STAGES: readonly GoldenStage[] = ['users', 'projects']
+ *  M2 'projects': clients + projects + memberships (+ M3's 5 default statuses per project, X70) ·
+ *  M3 'tasks': tasks + assignments (X11 M3 part, M3-D20). */
+export type GoldenStage = 'users' | 'projects' | 'tasks'
+const STAGES: readonly GoldenStage[] = ['users', 'projects', 'tasks']
 
 /** Placeholder for resetDb's first parameter (only `resetDb()` / `resetDb(undefined, { extras })` type-check in M1). */
 export type FixtureId = never
@@ -41,8 +43,15 @@ const GoldenUsers = z.object({
       lead: z.string().nullable(),
     }),
   ),
-  /** Only the fields the M2 stage needs (MEMBER rows = distinct assignees, X11); later stages widen this. */
-  tasks: z.array(z.object({ project: z.string(), assignee: z.string().nullable() })),
+  /** M2: MEMBER rows = distinct assignees (X11) · M3: name + certainty override (allocations come in M6). */
+  tasks: z.array(
+    z.object({
+      project: z.string(),
+      name: z.string(),
+      assignee: z.string().nullable(),
+      certaintyOverride: z.enum(['CONFIRMED', 'TENTATIVE']).nullable(),
+    }),
+  ),
 })
 export type Golden = z.infer<typeof GoldenUsers>
 
@@ -70,6 +79,9 @@ export async function seedGolden(db: DbOrTx, opts: { upTo?: GoldenStage } = {}):
   const ctx = await seedUsers(db)
   if (!reached(opts.upTo, 'projects')) return
   await seedClientsProjects(db, ctx)
+  await services.taskStatuses.ensureAllProjectStatuses(db) // X70: 5 defaults per project
+  if (!reached(opts.upTo, 'tasks')) return
+  await seedTasks(db, ctx)
 }
 
 async function seedUsers(db: DbOrTx): Promise<SeedCtx> {
@@ -143,6 +155,39 @@ export async function seedClientsProjects(db: DbOrTx, ctx: SeedCtx): Promise<voi
         role: m.role,
         addedBy: ctx.managerId,
       })
+    }
+  }
+}
+
+/**
+ * M3 (X11, M3-D20): per project, the JSON `tasks[]` of that project in file order — positions from
+ * generateNKeysBetween(null, null, n), all depth 0 on the project's default status (BR-81), created_by = the golden
+ * manager — and one assignment per task. No audit rows (seeding is not a user operation); no allocations (M6).
+ */
+export async function seedTasks(db: DbOrTx, ctx: SeedCtx): Promise<void> {
+  const g = loadGolden()
+  const projectIds = new Map((await repo.projects.listProjects(db, { ids: 'ALL' })).map((p) => [p.name, p.id]))
+  for (const p of g.projects) {
+    const projectId = projectIds.get(p.name)
+    if (!projectId) throw new Error(`golden project ${p.name} not found`)
+    const mine = g.tasks.filter((t) => t.project === p.name)
+    if (mine.length === 0) continue
+    const status = defaultStatus(await repo.statuses.listLiveStatuses(db, projectId))
+    const keys = repo.order.rekey(mine.length)
+    for (const [i, t] of mine.entries()) {
+      const task = await repo.tasks.insertTask(db, {
+        projectId,
+        name: t.name,
+        depth: 0,
+        position: keys[i]!,
+        certaintyOverride: t.certaintyOverride,
+        createdBy: ctx.managerId,
+        statusId: status.id,
+      })
+      if (!t.assignee) continue
+      const userId = ctx.userIds.get(t.assignee)
+      if (!userId) throw new Error(`golden user ${t.assignee} not found`)
+      await repo.assignments.insertAssignment(db, { taskId: task.id, userId })
     }
   }
 }

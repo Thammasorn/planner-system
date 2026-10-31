@@ -1,22 +1,26 @@
 // M2 S1.6 — project members (FR-403, FR-404 part, BR-62, M2-D05, M2-D06, M2-D19).
 import { randomUUID } from 'node:crypto'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import {
   addMember as addMemberAction,
   changeMemberRole as changeRoleAction,
   removeMember as removeAction,
+  removeMemberWithAssignments as removeWithAssignmentsAction,
+  restoreRemovedMember as restoreRemovedAction,
 } from '../actions/members'
+import { deleteTaskTree as deleteTaskAction, restoreTaskBatch as restoreTaskAction } from '../actions/tasks'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import { auditCount, auditRowsAfter } from '../../../tests/helpers/audit'
-import { makeUser } from '../../../tests/helpers/factories'
+import { makeAssignment, makeTask, makeUser } from '../../../tests/helpers/factories'
 import { testCache } from '../../../tests/helpers/request'
 import { createWorld, type World } from '../../../tests/helpers/world'
 import { db } from '../db/client'
-import { projectMembers } from '../db/schema'
+import { projectMembers, taskAssignments } from '../db/schema'
 import { ConflictError, NotFoundError } from '../errors'
 import { addMember, changeMemberRole, removeMember } from './members'
+import { countMyOpenTasks, listMyTasks } from './my-tasks'
 
 const S = toSessionUser
 
@@ -150,6 +154,7 @@ describe('BR-62', () => {
     await changeRoleAction({ projectId: w.P.id, userId: w.lead.id, role: 'LEAD' })
     expect(await removeAction({ projectId: w.P.id, userId: w.lead.id })).toEqual({
       ok: true,
+      removed: true,
       removedRole: 'LEAD',
       blockedByAssignments: 0,
       selfRemoved: false,
@@ -172,7 +177,7 @@ describe('BR-62', () => {
     const r = await db.transaction((tx) =>
       removeMember(tx, S(w.lead), { projectId: w.P.id, userId: gone.id }),
     )
-    expect(r.removedRole).toBe('LEAD')
+    expect(r).toMatchObject({ removed: true, removedRole: 'LEAD' })
   })
 
   it('race: two LEADs demoting themselves concurrently → exactly one succeeds', async () => {
@@ -208,7 +213,13 @@ describe('removeMember', () => {
     asUser(w.lead)
     const mark = await auditCount()
     const res = await removeAction({ projectId: w.P.id, userId: w.member.id })
-    expect(res).toEqual({ ok: true, removedRole: 'MEMBER', blockedByAssignments: 0, selfRemoved: false })
+    expect(res).toEqual({
+      ok: true,
+      removed: true,
+      removedRole: 'MEMBER',
+      blockedByAssignments: 0,
+      selfRemoved: false,
+    })
     expect(await roleOf(w.P.id, w.member.id)).toBeNull()
     expect(await auditRowsAfter(mark)).toEqual([
       expect.objectContaining({
@@ -243,6 +254,7 @@ describe('removeMember', () => {
     asUser(w.lead)
     expect(await removeAction({ projectId: w.P.id, userId: w.lead.id })).toEqual({
       ok: true,
+      removed: true,
       removedRole: 'LEAD',
       blockedByAssignments: 0,
       selfRemoved: true,
@@ -251,6 +263,141 @@ describe('removeMember', () => {
     asUser(w.member)
     expect(await removeAction({ projectId: w.P.id, userId: w.member.id })).toMatchObject({
       code: 'FORBIDDEN',
+    })
+  })
+})
+
+describe('FR-404', () => {
+  async function ivyWorld() {
+    const w = await createWorld({ with: ['tasks'] })
+    const ivy = await makeUser({ nickname: 'Ivy' })
+    await db.insert(projectMembers).values({ projectId: w.P.id, userId: ivy.id, role: 'MEMBER', addedBy: w.lead.id })
+    const live = await makeTask({ project: w.P, name: 'Ivy live', createdBy: w.manager })
+    const done = await makeTask({
+      project: w.P,
+      name: 'Ivy done',
+      createdBy: w.manager,
+      status: w.statuses.P.done,
+      completedOn: '2026-09-20',
+    })
+    const gone = await makeTask({
+      project: w.P,
+      name: 'Ivy gone',
+      createdBy: w.manager,
+      deleted: { batch: randomUUID(), daysAgo: 1 },
+    })
+    const assignments = [
+      await makeAssignment({ task: live, user: ivy }),
+      await makeAssignment({ task: done, user: ivy }),
+      await makeAssignment({ task: gone, user: ivy }),
+    ]
+    return { w, ivy, assignments }
+  }
+
+  it('removeMember with assignments on 2 live tasks (one completed) + 1 deleted → blocked 2, nothing written', async () => {
+    const { w, ivy } = await ivyWorld()
+    asUser(w.lead)
+    const mark = await auditCount()
+    expect(await removeAction({ projectId: w.P.id, userId: ivy.id })).toEqual({
+      ok: true,
+      removed: false,
+      blockedByAssignments: 2,
+      selfRemoved: false,
+    })
+    expect(await roleOf(w.P.id, ivy.id)).toBe('MEMBER')
+    expect(await auditRowsAfter(mark)).toEqual([])
+    expect(testCache.refresh).not.toHaveBeenCalled()
+  })
+
+  it('N = 0 removal also unassigns deleted tasks: restoring the task later leaks nothing to the former member', async () => {
+    const w = await createWorld({ with: ['tasks'] })
+    const ivy = await makeUser({ nickname: 'Ivy' })
+    await db.insert(projectMembers).values({ projectId: w.P.id, userId: ivy.id, role: 'MEMBER', addedBy: w.lead.id })
+    const t = await makeTask({ project: w.P, name: 'Ivy secret task', createdBy: w.manager })
+    const asg = await makeAssignment({ task: t, user: ivy })
+    asUser(w.lead)
+    const del = await deleteTaskAction({ taskIds: [t.id] })
+    if (!del.ok) throw new Error('delete failed')
+    expect(await removeAction({ projectId: w.P.id, userId: ivy.id })).toMatchObject({ ok: true, removed: true })
+    const [row] = await db.select().from(taskAssignments).where(eq(taskAssignments.id, asg.id))
+    expect(row!.deletedAt).not.toBeNull()
+    expect(await restoreTaskAction({ batch: del.batch })).toMatchObject({ ok: true })
+    const mine = await listMyTasks(db, S(ivy))
+    expect(mine.count).toBe(0)
+    expect(JSON.stringify(mine)).not.toContain('Ivy secret task')
+    expect(await countMyOpenTasks(db, ivy.id)).toBe(0)
+  })
+
+  it('/my never lists an assignment of a non-member, even a stray one (defence in depth, §3.3)', async () => {
+    const w = await createWorld({ with: ['tasks'] })
+    const stray = await makeUser({ nickname: 'Stray' })
+    const t = await makeTask({ project: w.P, name: 'Hidden task', createdBy: w.manager })
+    await db.insert(taskAssignments).values({ taskId: t.id, userId: stray.id })
+    expect((await listMyTasks(db, S(stray))).groups).toEqual([])
+    expect(await countMyOpenTasks(db, stray.id)).toBe(0)
+  })
+
+  it('removeMemberWithAssignments → row gone, 3 assignments share one batch; restoreRemovedMember → all back', async () => {
+    const { w, ivy, assignments } = await ivyWorld()
+    const before = await db
+      .select()
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, w.P.id), eq(projectMembers.userId, ivy.id)))
+    asUser(w.lead)
+    const mark = await auditCount()
+    const r = await removeWithAssignmentsAction({ projectId: w.P.id, userId: ivy.id })
+    if (!r.ok) throw new Error('failed')
+    expect(r).toMatchObject({ unassignedTaskCount: 2, member: { role: 'MEMBER', addedBy: w.lead.id } })
+    expect(await roleOf(w.P.id, ivy.id)).toBeNull()
+    const rows = await db
+      .select()
+      .from(taskAssignments)
+      .where(inArray(taskAssignments.id, assignments.map((a) => a.id)))
+    expect(new Set(rows.map((x) => x.deletedBatch))).toEqual(new Set([r.batch]))
+    expect(await auditRowsAfter(mark)).toEqual([
+      expect.objectContaining({
+        entity: 'project_member',
+        action: 'delete',
+        summary: th.audit.memberRemovedWithAssignments('Ivy', 2),
+        after: { batch: r.batch, unassignedTaskCount: 2 },
+      }),
+    ])
+    const mark2 = await auditCount()
+    expect(
+      await restoreRemovedAction({ projectId: w.P.id, userId: ivy.id, batch: r.batch, member: r.member }),
+    ).toEqual({ ok: true, restoredAssignments: 3, skipped: 0 })
+    expect(await auditRowsAfter(mark2)).toHaveLength(1)
+    const after = await db
+      .select()
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, w.P.id), eq(projectMembers.userId, ivy.id)))
+    expect(after).toEqual(before)
+    const back = await db
+      .select()
+      .from(taskAssignments)
+      .where(inArray(taskAssignments.id, assignments.map((a) => a.id)))
+    expect(back.every((x) => x.deletedAt === null)).toBe(true)
+  })
+
+  it('member → FORBIDDEN for both; no assignments → batch null', async () => {
+    const { w, ivy } = await ivyWorld()
+    asUser(w.member)
+    expect(await removeWithAssignmentsAction({ projectId: w.P.id, userId: ivy.id })).toMatchObject({ code: 'FORBIDDEN' })
+    expect(
+      await restoreRemovedAction({
+        projectId: w.P.id,
+        userId: ivy.id,
+        batch: null,
+        member: { role: 'MEMBER', addedBy: null, addedAt: '2026-09-01T09:00:00+07:00' },
+      }),
+    ).toMatchObject({ code: 'FORBIDDEN' })
+    const extra = await makeUser({ nickname: 'Extra' })
+    await db.insert(projectMembers).values({ projectId: w.P.id, userId: extra.id, role: 'MEMBER', addedBy: null })
+    asUser(w.lead)
+    expect(await removeWithAssignmentsAction({ projectId: w.P.id, userId: extra.id })).toMatchObject({
+      ok: true,
+      batch: null,
+      unassignedTaskCount: 0,
     })
   })
 })

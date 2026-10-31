@@ -6,6 +6,8 @@ export interface PersonOption {
   id: string
   name: string
   nickname: string | null
+  /** FR-665: the /tasks position filter lists the positions of the people directory. */
+  positionId: string | null
   positionName: string | null
   color: string | null
   active: boolean

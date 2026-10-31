@@ -2,9 +2,11 @@
 // Ids are real v4 UUIDs. Later milestones append makeTask, … here. Never through src/server/repo/** (M2-D13).
 import { randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword } from 'better-auth/crypto'
-import { asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
-import type { Certainty } from '@/domain/types'
+import { DEFAULT_STATUSES, type DefaultStatusKey } from '@/domain/status'
+import type { Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
+import { th } from '@/i18n/th'
 import { db } from '@/server/db/client'
 import {
   account,
@@ -13,11 +15,19 @@ import {
   projectMembers,
   projects,
   session,
+  taskAssignments,
+  taskBlockers,
+  taskStatuses,
+  tasks,
   user,
   workSchedules,
   type ClientRow,
   type ProjectRow,
 } from '@/server/db/schema'
+import type { TaskRow } from '@/server/repo/tasks'
+import type { AssignmentRow } from '@/server/repo/task-assignments'
+import type { TaskBlockerRow } from '@/server/repo/task-blockers'
+import type { TaskStatusRow } from '@/server/repo/task-statuses'
 
 /** Password of every factory user. Hashed once per worker (scrypt is slow). */
 export const TEST_PASSWORD = 'Test-pass-1234'
@@ -240,4 +250,237 @@ export async function makeProject(o: MakeProjectOptions = {}): Promise<ProjectRo
       .values(memberRows.map((m) => ({ projectId: project.id, ...m, addedBy: createdBy })))
   }
   return project
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M3 — task statuses, tasks, assignments, blockers (plain Drizzle, X59 / X91; plan/m03 S0.15). Every task gets a
+// status of its own project (X70); a DONE status ⇔ completedOn (BR-80 / R22 invariant).
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Soft delete `daysAgo` days before now (DB timestamps; the 30-day restore window, M3-D12) under `batch`. */
+export interface DeletedAs {
+  batch: string
+  daysAgo: number
+}
+
+const deletedAt = (d: DeletedAs | undefined): Date | null =>
+  d ? new Date(Date.now() - d.daysAgo * 24 * 60 * 60 * 1000) : null
+
+export type DefaultKey = DefaultStatusKey
+
+async function lastLiveStatusPosition(projectId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ position: taskStatuses.position })
+    .from(taskStatuses)
+    .where(and(eq(taskStatuses.projectId, projectId), isNull(taskStatuses.deletedAt)))
+    .orderBy(desc(taskStatuses.position), desc(taskStatuses.id))
+    .limit(1)
+  return row?.position ?? null
+}
+
+/** The 5 FR-621 defaults (DEFAULT_STATUSES + th names, or `rename`), appended after the project's live statuses. */
+export async function makeStatuses(o: {
+  project: { id: string }
+  rename?: Partial<Record<DefaultKey, string>>
+}): Promise<Record<DefaultKey, TaskStatusRow>> {
+  let last = await lastLiveStatusPosition(o.project.id)
+  const out: Partial<Record<DefaultKey, TaskStatusRow>> = {}
+  for (const d of DEFAULT_STATUSES) {
+    last = generateKeyBetween(last, null)
+    const [row] = await db
+      .insert(taskStatuses)
+      .values({
+        projectId: o.project.id,
+        name: o.rename?.[d.key] ?? th.tasks.status.defaults[d.key],
+        category: d.category,
+        color: d.color,
+        position: last,
+      })
+      .returning()
+    out[d.key] = row!
+  }
+  return out as Record<DefaultKey, TaskStatusRow>
+}
+
+/** One status: right after `afterId` (before its next live sibling) or appended at the end. */
+export async function makeStatus(o: {
+  project: { id: string }
+  name: string
+  category: TaskStatusCategory
+  color?: string
+  afterId?: string
+  deleted?: DeletedAs
+}): Promise<TaskStatusRow> {
+  let position: string
+  if (o.afterId) {
+    const [after] = await db
+      .select({ position: taskStatuses.position })
+      .from(taskStatuses)
+      .where(eq(taskStatuses.id, o.afterId))
+    if (!after) throw new Error(`makeStatus: afterId ${o.afterId} not found`)
+    const [next] = await db
+      .select({ position: taskStatuses.position })
+      .from(taskStatuses)
+      .where(
+        and(
+          eq(taskStatuses.projectId, o.project.id),
+          isNull(taskStatuses.deletedAt),
+          gt(taskStatuses.position, after.position),
+        ),
+      )
+      .orderBy(asc(taskStatuses.position), asc(taskStatuses.id))
+      .limit(1)
+    position = generateKeyBetween(after.position, next?.position ?? null)
+  } else {
+    position = generateKeyBetween(await lastLiveStatusPosition(o.project.id), null)
+  }
+  const [row] = await db
+    .insert(taskStatuses)
+    .values({
+      projectId: o.project.id,
+      name: o.name,
+      category: o.category,
+      color: o.color ?? '#94A3B8',
+      position,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+/** BR-81 / BR-82 for factories: the live status of `category` with the smallest position (makes defaults if none). */
+async function firstLiveStatus(projectId: string, category: 'TODO' | 'DONE'): Promise<TaskStatusRow> {
+  const pick = async () => {
+    const [row] = await db
+      .select()
+      .from(taskStatuses)
+      .where(
+        and(
+          eq(taskStatuses.projectId, projectId),
+          isNull(taskStatuses.deletedAt),
+          eq(taskStatuses.category, category),
+        ),
+      )
+      .orderBy(asc(taskStatuses.position), asc(taskStatuses.id))
+      .limit(1)
+    return row
+  }
+  const found = await pick()
+  if (found) return found
+  await makeStatuses({ project: { id: projectId } })
+  return (await pick())!
+}
+
+export interface MakeTaskOptions {
+  project: { id: string }
+  parent?: { id: string; depth: number } | null
+  /** Default 'Task <n>'. */
+  name?: string
+  createdBy: { id: string }
+  certaintyOverride?: Certainty | null
+  /** Requires a DONE status (default: the project's first DONE status). */
+  completedOn?: ISODate | null
+  startDate?: ISODate | null
+  dueDate?: ISODate | null
+  notes?: string | null
+  /** Default: the project's default TODO status (BR-81), or its first DONE status when completedOn is set. */
+  status?: { id: string }
+  deleted?: DeletedAs
+}
+
+let taskSeq = 0
+
+/** Appended after the last live sibling (generateKeyBetween(last, null)); depth = parent.depth + 1. */
+export async function makeTask(o: MakeTaskOptions): Promise<TaskRow> {
+  taskSeq += 1
+  const completedOn = o.completedOn ?? null
+  let statusId: string
+  if (o.status) {
+    const [s] = await db
+      .select({ category: taskStatuses.category, projectId: taskStatuses.projectId })
+      .from(taskStatuses)
+      .where(eq(taskStatuses.id, o.status.id))
+    if (!s) throw new Error(`makeTask: status ${o.status.id} not found`)
+    if ((s.category === 'DONE') !== (completedOn !== null)) {
+      throw new Error('makeTask: a DONE status requires completedOn and vice versa (BR-80)')
+    }
+    statusId = o.status.id
+  } else {
+    statusId = (await firstLiveStatus(o.project.id, completedOn ? 'DONE' : 'TODO')).id
+  }
+  const parentId = o.parent?.id ?? null
+  const [last] = await db
+    .select({ position: tasks.position })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.projectId, o.project.id),
+        parentId ? eq(tasks.parentId, parentId) : isNull(tasks.parentId),
+        isNull(tasks.deletedAt),
+      ),
+    )
+    .orderBy(desc(tasks.position), desc(tasks.id))
+    .limit(1)
+  const depth = o.parent ? o.parent.depth + 1 : 0
+  if (depth > 2) throw new Error('makeTask: depth > 2 (BR-30)')
+  const [row] = await db
+    .insert(tasks)
+    .values({
+      projectId: o.project.id,
+      parentId,
+      depth,
+      name: o.name ?? `Task ${taskSeq}`,
+      notes: o.notes ?? null,
+      startDate: o.startDate ?? null,
+      dueDate: o.dueDate ?? null,
+      certaintyOverride: o.certaintyOverride ?? null,
+      statusId,
+      completedOn,
+      completedBy: completedOn ? o.createdBy.id : null,
+      position: generateKeyBetween(last?.position ?? null, null),
+      createdBy: o.createdBy.id,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+export async function makeAssignment(o: {
+  task: { id: string }
+  user: { id: string }
+  deleted?: DeletedAs
+}): Promise<AssignmentRow> {
+  const [row] = await db
+    .insert(taskAssignments)
+    .values({
+      taskId: o.task.id,
+      userId: o.user.id,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+/** `task` is blocked by `blocker` (same project, FK-enforced). */
+export async function makeBlocker(o: {
+  task: { id: string; projectId: string }
+  blocker: { id: string }
+  createdBy: { id: string }
+  deleted?: DeletedAs
+}): Promise<TaskBlockerRow> {
+  const [row] = await db
+    .insert(taskBlockers)
+    .values({
+      projectId: o.task.projectId,
+      taskId: o.task.id,
+      blockerTaskId: o.blocker.id,
+      createdBy: o.createdBy.id,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
 }

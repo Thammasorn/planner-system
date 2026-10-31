@@ -1,0 +1,160 @@
+/* Dense outliner rows (PLAN §3.9): plain elements + CSS variables; state via aria/data attributes. */
+.list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--mui-palette-divider);
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 2px 8px 2px 4px;
+  border-bottom: 1px solid var(--mui-palette-divider);
+  background: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-primary);
+  outline: none;
+}
+
+.row:hover {
+  background: var(--mui-palette-action-hover);
+}
+
+/* Selection: background + a left bar (not colour only, SPEC §8.9). */
+.row[aria-selected='true'] {
+  background: var(--mui-palette-action-selected);
+  box-shadow: inset 3px 0 0 var(--mui-palette-primary-main);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.cell {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lead {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.iconButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mui-palette-text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--mui-palette-action-hover);
+}
+
+.handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.spacer {
+  display: inline-block;
+  flex: none;
+  width: 24px;
+}
+
+.name {
+  flex: 1 1 200px;
+  min-width: 120px;
+  overflow-wrap: anywhere;
+}
+
+.row[data-completed='true'] .name {
+  color: var(--mui-palette-text-secondary);
+  text-decoration: line-through;
+}
+
+.meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.muted {
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.path {
+  flex-basis: 100%;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.75rem;
+  order: 10;
+}
+
+/* Assignee chip: avatar + name (+ ×). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 2px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* "รอมอบหมาย" (FR-606): text in an outlined chip, never hidden. */
+.unassigned {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--mui-palette-text-secondary);
+  border-radius: 12px;
+  color: var(--mui-palette-text-primary);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.chipRemove {
+  width: 18px;
+  height: 18px;
+}
+
+.invalid {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mui-palette-error-main);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px 4px;
+  border-bottom: 1px solid var(--mui-palette-divider);
+  background: var(--mui-palette-background-default);
+  font-weight: 600;
+}

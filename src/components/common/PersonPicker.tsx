@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -36,6 +36,17 @@ export interface PersonPickerProps {
   placeholder?: string
   /** Browser id of the input (for e2e / label wiring). */
   id?: string
+  /** M3 assignees (BR-60): options outside this set show "จะถูกเพิ่มเป็นสมาชิก". Omit for no hint. */
+  memberIds?: ReadonlySet<string> | undefined
+  /** M3: stay open after a pick (input cleared) so several people can be added in a row. */
+  keepOpen?: boolean | undefined
+  /** Empty-list text (default th.members.pickerEmpty). */
+  noOptionsText?: string | undefined
+  /** Open the list on mount (popover pickers). */
+  autoFocus?: boolean | undefined
+  /** Popover pickers: one Escape closes the whole picker (MUI would otherwise swallow it to close its listbox,
+   *  which `keepOpen` keeps showing). */
+  onEscape?: (() => void) | undefined
 }
 
 /**
@@ -58,6 +69,11 @@ export function PersonPicker({
   onRetry,
   placeholder,
   id,
+  memberIds,
+  keepOpen,
+  noOptionsText,
+  autoFocus,
+  onEscape,
 }: PersonPickerProps) {
   const controlled = value !== undefined
   const [addInput, setAddInput] = useState('')
@@ -83,10 +99,22 @@ export function PersonPicker({
               setAddInput(reason === 'input' ? v : ''),
           })}
       disabled={disabled}
+      {...(keepOpen ? { disableCloseOnSelect: true } : {})}
+      {...(autoFocus ? { openOnFocus: true } : {})}
+      {...(onEscape
+        ? {
+            onKeyDown: (e: KeyboardEvent & { defaultMuiPrevented?: boolean }) => {
+              if (e.key !== 'Escape') return
+              e.defaultMuiPrevented = true
+              e.stopPropagation()
+              onEscape()
+            },
+          }
+        : {})}
       filterOptions={(opts, state) => filterPeople(opts, state.inputValue)}
       getOptionLabel={(o) => displayName(o)}
       isOptionEqualToValue={(a, b) => a.id === b.id}
-      noOptionsText={loadError ? th.members.pickerLoadError : th.members.pickerEmpty}
+      noOptionsText={loadError ? th.members.pickerLoadError : (noOptionsText ?? th.members.pickerEmpty)}
       loading={Boolean(loading)}
       loadingText={th.common.loading}
       autoHighlight
@@ -107,6 +135,16 @@ export function PersonPicker({
               >
                 {th.users.tooltip(option.name, option.positionName)}
               </Typography>
+              {memberIds && !memberIds.has(option.id) ? (
+                <Typography
+                  variant="caption"
+                  component="span"
+                  data-testid="will-become-member"
+                  sx={{ display: 'block', color: 'text.secondary', fontStyle: 'italic' }}
+                >
+                  {th.tasks.picker.willBecomeMember}
+                </Typography>
+              ) : null}
             </Box>
           </Box>
         )
@@ -116,6 +154,7 @@ export function PersonPicker({
           {...params}
           label={label}
           placeholder={placeholder}
+          autoFocus={autoFocus}
           error={error}
           helperText={
             loadError ? (

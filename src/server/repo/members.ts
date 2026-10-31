@@ -118,3 +118,16 @@ export async function membershipsOf(
     .where(and(eq(projectMembers.userId, userId), isNull(projects.deletedAt)))
   return rows.map((r) => ({ projectId: r.projectId, role: r.role, archived: r.archivedAt !== null }))
 }
+
+/** Re-inserts a removed member row as it was (FR-404 undo, M3-D14); an existing row is left untouched. */
+export async function insertMemberIfAbsent(
+  tx: DbOrTx,
+  v: { projectId: string; userId: string; role: ProjectRole; addedBy: string | null; addedAt: Date },
+): Promise<boolean> {
+  const rows = await tx
+    .insert(projectMembers)
+    .values(v)
+    .onConflictDoNothing()
+    .returning({ userId: projectMembers.userId })
+  return rows.length > 0
+}

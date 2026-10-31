@@ -1,14 +1,17 @@
 // src/server/authz.ts — every permission decision lives here (SPEC §3.4 AZ-1, PLAN.md §3.4.4).
 // Each milestone's S0 adds signatures; the backend stream writes the bodies. M1: role helpers · M2: project / client
 // access and the §3.3 visibility helpers. Not visible → NotFoundError (404); visible but not allowed → ForbiddenError.
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { th } from '@/i18n/th'
 import type { ProjectAccessRole } from '@/lib/contracts/projects'
 import { z } from '@/lib/z'
-import { clients, projectMembers, projects } from './db/schema'
+import { clients, projectMembers, projects, taskAssignments, taskStatuses, tasks } from './db/schema'
 import type { DbOrTx } from './db/types'
-import { ForbiddenError, NotFoundError, UnauthenticatedError } from './errors'
+import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors'
+import type { TaskRow } from './repo/tasks'
+import type { AssignmentRow } from './repo/task-assignments'
+import type { TaskStatusRow } from './repo/task-statuses'
 import type { SessionUser } from './session'
 
 export type SystemRole = 'manager' | 'worker'
@@ -169,4 +172,132 @@ export async function isLeadAnywhere(tx: DbOrTx, user: SessionUser): Promise<boo
     .where(and(eq(projectMembers.userId, user.id), eq(projectMembers.role, 'LEAD')))
     .limit(1)
   return hit !== undefined
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M3 — task / assignment / status access (plan/m03 S0.6, R-AUTHZ: multi-id helpers added to PLAN §3.4.4).
+// Signatures by S0; bodies by S2.1. Each resolves the owning project, then delegates to requireProject(need).
+// Malformed ids are a 404 like unknown ones (no 22P02 → 500, X86).
+// ---------------------------------------------------------------------------------------------------------------
+
+export type ProjectAccessInfo = ProjectAccess
+
+/** One project for a set of rows: any invisible project → 404 (checked before the multi-project rule, so nothing
+ *  leaks); more than one → VALIDATION sameProjectOnly (M3-D23); then requireProject(need). */
+async function requireOneProject(
+  tx: DbOrTx,
+  user: SessionUser,
+  projectIds: readonly string[],
+  need: Need,
+): Promise<{ projectId: string } & ProjectAccessInfo> {
+  const distinct = [...new Set(projectIds)]
+  if (distinct.length === 0) throw new NotFoundError()
+  for (const id of distinct) if (!(await projectAccess(tx, user, id))) throw new NotFoundError()
+  if (distinct.length > 1) {
+    throw new ValidationError({ taskIds: [th.tasks.errors.sameProjectOnly] }, th.tasks.errors.sameProjectOnly)
+  }
+  const projectId = distinct[0]!
+  const access = await requireProject(tx, user, projectId, need)
+  return { projectId, ...access }
+}
+
+/** Live task → its project → requireProject(need). Missing/deleted task or invisible project → NotFoundError. */
+export async function requireTask(
+  tx: DbOrTx,
+  user: SessionUser,
+  taskId: string,
+  need: Need,
+): Promise<{ task: TaskRow } & ProjectAccessInfo> {
+  requireUser(user)
+  if (!isUuid(taskId)) throw new NotFoundError()
+  const [task] = await tx
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), isNull(tasks.deletedAt)))
+  if (!task) throw new NotFoundError()
+  const access = await requireProject(tx, user, task.projectId, need)
+  return { task, ...access }
+}
+
+/** All live; any missing or invisible → 404; more than one project → ValidationError(th.tasks.errors.sameProjectOnly);
+ *  then requireProject(need). Rows come back in id order. */
+export async function requireTasks(
+  tx: DbOrTx,
+  user: SessionUser,
+  taskIds: readonly string[],
+  need: Need,
+): Promise<{ projectId: string; tasks: TaskRow[] } & ProjectAccessInfo> {
+  requireUser(user)
+  const ids = [...new Set(taskIds)]
+  if (ids.length === 0 || !ids.every(isUuid)) throw new NotFoundError()
+  const rows = await tx
+    .select()
+    .from(tasks)
+    .where(and(inArray(tasks.id, ids), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.id))
+  if (rows.length !== ids.length) throw new NotFoundError()
+  const access = await requireOneProject(
+    tx,
+    user,
+    rows.map((r) => r.projectId),
+    need,
+  )
+  return { ...access, tasks: rows }
+}
+
+/** Active or batch-deleted assignment rows → their live tasks (or any task with `includeDeletedTasks`, used by batch
+ *  restores whose rows may sit on a since-deleted task) → one project → requireProject(need). */
+export async function requireAssignments(
+  tx: DbOrTx,
+  user: SessionUser,
+  assignmentIds: readonly string[],
+  need: Need,
+  o?: { includeDeletedTasks?: boolean },
+): Promise<{ projectId: string; rows: AssignmentRow[] } & ProjectAccessInfo> {
+  requireUser(user)
+  const ids = [...new Set(assignmentIds)]
+  if (ids.length === 0 || !ids.every(isUuid)) throw new NotFoundError()
+  const found = await tx
+    .select({ row: taskAssignments, projectId: tasks.projectId })
+    .from(taskAssignments)
+    .innerJoin(
+      tasks,
+      o?.includeDeletedTasks
+        ? eq(tasks.id, taskAssignments.taskId)
+        : and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)),
+    )
+    .where(inArray(taskAssignments.id, ids))
+    .orderBy(asc(taskAssignments.id))
+  if (found.length !== ids.length) throw new NotFoundError()
+  const access = await requireOneProject(
+    tx,
+    user,
+    found.map((f) => f.projectId),
+    need,
+  )
+  return { ...access, rows: found.map((f) => f.row) }
+}
+
+/** v3.1: live status (or a batch-deleted one when includeDeleted) → its project → requireProject(need). Missing or
+ *  invisible → NotFoundError. PERM-23 callers pass 'manage' (X79). */
+export async function requireStatus(
+  tx: DbOrTx,
+  user: SessionUser,
+  statusId: string,
+  need: Need,
+  o?: { includeDeleted?: boolean },
+): Promise<{ status: TaskStatusRow } & ProjectAccessInfo> {
+  requireUser(user)
+  if (!isUuid(statusId)) throw new NotFoundError()
+  const [status] = await tx
+    .select()
+    .from(taskStatuses)
+    .where(
+      o?.includeDeleted
+        ? eq(taskStatuses.id, statusId)
+        : and(eq(taskStatuses.id, statusId), isNull(taskStatuses.deletedAt)),
+    )
+  if (!status) throw new NotFoundError()
+  const access = await requireProject(tx, user, status.projectId, need)
+  return { status, ...access }
 }

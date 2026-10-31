@@ -16,6 +16,13 @@ export interface InlineEditTextProps {
   variant?: TypographyVariant
   /** Element of the display text (e.g. 'h1' for a page title). */
   component?: ElementType
+  /** Tab order of the display text; -1 inside a roving-focus container (treegrid rows, M3-D22). */
+  tabIndex?: number
+  /**
+   * Called instead of focusing the display text when editing ends with Enter / Esc / a failed save — lets a
+   * roving-focus container take focus back (the display text is then not a tab stop).
+   */
+  onRefocus?: () => void
 }
 
 /**
@@ -31,6 +38,8 @@ export function InlineEditText({
   maxLength,
   variant = 'body1',
   component,
+  tabIndex = 0,
+  onRefocus,
 }: InlineEditTextProps) {
   // `shown` follows the prop, and holds a successful commit until the server's refresh() delivers it.
   const [prevValue, setPrevValue] = useState(value)
@@ -49,8 +58,9 @@ export function InlineEditText({
   useEffect(() => {
     if (editing || !refocus.current) return
     refocus.current = false
-    displayRef.current?.focus()
-  }, [editing])
+    if (onRefocus) onRefocus()
+    else displayRef.current?.focus()
+  }, [editing, onRefocus])
 
   const start = () => {
     if (disabled) return
@@ -137,7 +147,7 @@ export function InlineEditText({
         component="span"
         ref={displayRef}
         role="button"
-        tabIndex={0}
+        tabIndex={tabIndex}
         onClick={start}
         onKeyDown={onDisplayKeyDown}
         data-inline-edit=""

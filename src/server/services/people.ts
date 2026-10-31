@@ -13,6 +13,7 @@ export async function listPeopleOptions(tx: DbOrTx): Promise<PersonOption[]> {
       id: r.id,
       name: r.name,
       nickname: r.nickname,
+      positionId: r.positionId,
       positionName: r.positionName,
       color: r.color,
       active: r.active,

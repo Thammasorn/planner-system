@@ -5,7 +5,9 @@
 import { refresh } from 'next/cache'
 import type { ProjectRole } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { RemoveMemberWithAssignmentsResult, RestoreRemovedMemberResult } from '@/lib/contracts/tasks'
 import { addMemberSchema, changeMemberRoleSchema, removeMemberSchema } from '@/lib/schemas/members'
+import { removeMemberWithAssignmentsSchema, restoreRemovedMemberSchema } from '@/lib/schemas/tasks'
 import { action } from '../action'
 import * as audit from '../audit'
 import * as authz from '../authz'
@@ -69,22 +71,28 @@ export const changeMemberRole = action(
   },
 )
 
-/** FR-404 part (X16): `blockedByAssignments` is 0 until M3. Undo = addMember with `removedRole` (M2-D05). */
+/** FR-404 / BR-61 (M3-D14): a member with assignments is not removed — `{ removed: false, blockedByAssignments: N }`
+ *  without audit or refresh; the client then offers removeMemberWithAssignments. Undo = addMember with `removedRole`. */
 export const removeMember = action(
   removeMemberSchema,
   async (
     input,
     { user },
-  ): Promise<{
-    removedRole: ProjectRole
-    blockedByAssignments: 0
-    selfRemoved: boolean
-    warning?: 'NO_LEAD'
-  }> => {
+  ): Promise<
+    | { removed: false; blockedByAssignments: number; selfRemoved: false }
+    | {
+        removed: true
+        removedRole: ProjectRole
+        blockedByAssignments: 0
+        selfRemoved: boolean
+        warning?: 'NO_LEAD'
+      }
+  > => {
     const r = await db.transaction(async (tx) => {
       await authz.requireProject(tx, user, input.projectId, 'manage')
       const name = await projectName(tx, input.projectId)
       const res = await services.members.removeMember(tx, user, input)
+      if (!res.removed) return res
       await audit.log(tx, user, {
         entity: 'project_member',
         entityId: memberEntityId(input.projectId, input.userId),
@@ -95,14 +103,65 @@ export const removeMember = action(
       })
       return res
     })
+    if (!r.removed) return { removed: false, blockedByAssignments: r.blockedByAssignments, selfRemoved: false }
     // A manager keeps seeing the project after leaving it, so only a worker's self-removal navigates away.
     const selfRemoved = input.userId === user.id && !authz.isManager(user)
     if (!selfRemoved) refresh() // M2-D19: the client navigates to /projects instead
     return {
+      removed: true,
       removedRole: r.removedRole,
       blockedByAssignments: 0,
       selfRemoved,
       ...(r.warning ? { warning: r.warning } : {}),
     }
+  },
+)
+
+// ---------------------------------------------------------------------------------------------------------------
+// M3 — FR-404 combined op (X16, M3-D14; plan/m03 S2.9). Need: manage. One audit row per call (M3-D4).
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Soft-deletes all the user's active assignments in the project under one batch and removes the member row. */
+export const removeMemberWithAssignments = action(
+  removeMemberWithAssignmentsSchema,
+  async (input, { user }): Promise<RemoveMemberWithAssignmentsResult & { warning?: 'NO_LEAD' }> => {
+    const r = await db.transaction(async (tx) => {
+      await authz.requireProject(tx, user, input.projectId, 'manage')
+      const { personName, ...res } = await services.members.removeMemberWithAssignments(tx, user, input)
+      await audit.log(tx, user, {
+        entity: 'project_member',
+        entityId: memberEntityId(input.projectId, input.userId),
+        action: 'delete',
+        projectId: input.projectId,
+        summary: th.audit.memberRemovedWithAssignments(personName, res.unassignedTaskCount),
+        before: { userId: input.userId, role: res.member.role },
+        after: { batch: res.batch, unassignedTaskCount: res.unassignedTaskCount },
+      })
+      return res
+    })
+    if (!(input.userId === user.id && !authz.isManager(user))) refresh()
+    return r
+  },
+)
+
+/** Undo of removeMemberWithAssignments: re-inserts the member row (same role/added_by/added_at) + restores the batch. */
+export const restoreRemovedMember = action(
+  restoreRemovedMemberSchema,
+  async (input, { user }): Promise<RestoreRemovedMemberResult> => {
+    const r = await db.transaction(async (tx) => {
+      await authz.requireProject(tx, user, input.projectId, 'manage')
+      const { personName, ...res } = await services.members.restoreRemovedMember(tx, user, input)
+      await audit.log(tx, user, {
+        entity: 'project_member',
+        entityId: memberEntityId(input.projectId, input.userId),
+        action: 'restore',
+        projectId: input.projectId,
+        summary: th.audit.memberRestored(personName),
+        after: { role: input.member.role, batch: input.batch, restoredAssignments: res.restoredAssignments },
+      })
+      return res
+    })
+    refresh()
+    return r
   },
 )

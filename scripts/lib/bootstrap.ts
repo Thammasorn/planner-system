@@ -1,6 +1,7 @@
 // scripts/lib/bootstrap.ts — first-run setup (FR-102, SPEC §10.4 steps 1 + 3). Idempotent: creates the first
 // manager only when there are no users (never touches existing passwords) and the default positions only when there
-// are none. Never prints the password or its hash. M4 adds ensureProjectCharters(), M5 the 4 leave types.
+// are none; backfills the default task statuses of older projects (M3, X70). Never prints the password or its hash.
+// M4 adds ensureProjectCharters(), M5 the 4 leave types.
 import { hashPassword } from 'better-auth/crypto'
 import { createEmployeeInput } from '@/lib/schemas/employees'
 import type { Db } from '@/server/db/types'
@@ -19,6 +20,8 @@ export const DEFAULT_POSITIONS = [
 export interface BootstrapResult {
   createdManager: boolean
   seededPositions: number
+  /** Projects that got the FR-621 default statuses on this run (X70). */
+  backfilledStatusProjects: number
   warnings: string[]
   /** Set when the run must exit non-zero (e.g. INITIAL_MANAGER_* missing in production or invalid). */
   fatal?: string
@@ -27,7 +30,12 @@ export interface BootstrapResult {
 type Log = Pick<Console, 'info' | 'warn' | 'error'>
 
 export async function runBootstrap(db: Db, env: NodeJS.ProcessEnv, log: Log = console): Promise<BootstrapResult> {
-  const result: BootstrapResult = { createdManager: false, seededPositions: 0, warnings: [] }
+  const result: BootstrapResult = {
+    createdManager: false,
+    seededPositions: 0,
+    backfilledStatusProjects: 0,
+    warnings: [],
+  }
   const warn = (msg: string) => {
     result.warnings.push(msg)
     log.warn(`[bootstrap] ${msg}`)
@@ -82,6 +90,8 @@ export async function runBootstrap(db: Db, env: NodeJS.ProcessEnv, log: Log = co
       for (const name of DEFAULT_POSITIONS) await services.positions.createPosition(tx, null, { name })
       result.seededPositions = DEFAULT_POSITIONS.length
     }
+    // X70: projects created before M3 get the 5 default task statuses (idempotent).
+    result.backfilledStatusProjects = await services.taskStatuses.ensureAllProjectStatuses(tx)
   })
 
   if (userCount > 0) log.info('[bootstrap] users exist — skipped')

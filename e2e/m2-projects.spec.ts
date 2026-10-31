@@ -2,7 +2,8 @@
  * M2 — clients, projects, members, permissions (plan/m02-clients-projects-authz.md §7.3, SPEC §12 M2:
  * "worker ไม่เห็นโปรเจคที่ไม่ได้เป็นสมาชิก (ลิสต์ + URL ตรง = 404)").
  * Determinism (PLAN §4.5): every describe block resets planner_e2e in its own beforeAll (golden seed incl. the M2
- * memberships: POS Cindy(L) Ivy Mint · DW Peter(L) · Mobile Jack(L) Mint · CRM Cindy(L) Ivy · Store Peter(L) Jack),
+ * memberships: POS Cindy(L) Ivy Mint · DW Peter(L) · Mobile Jack(L) Mint · CRM Cindy(L) Ivy · Store Peter(L) Jack;
+ * from M3 also the golden tasks + assignments, so removing Ivy or Mint from POS hits FR-404 — see m3 E11),
  * the browser clock is pinned by the auto fixture, the server's APP_NOW comes from the webServer env, all UI strings
  * come from th, selectors live in page objects, and nothing sleeps — waits are on server-action responses or UI state.
  */
@@ -121,6 +122,8 @@ test.describe('E2 (FR-401, FR-409 part) the manager creates projects from the si
     await expect(project.memberRows()).toHaveCount(1)
     await project.expectRole(ivy, 'LEAD')
     await expect(project.noLeadWarning()).toHaveCount(0)
+    await expect(project.statuses.region()).toBeVisible() // M3: ภาพรวม › สถานะงาน (FR-621 defaults)
+    await project.statuses.expectNames(Object.values(th.tasks.status.defaults))
 
     await sidebar.newProjectButton().click()
     await expect(form.dialog()).toBeVisible()
@@ -258,12 +261,16 @@ test.describe('E4 (FR-403, FR-404 part, BR-62, AC-203 M2) members on POS as Cind
     await expect(project.memberRow(jack)).toBeVisible()
     await project.expectRole(jack, 'LEAD') // M2-D05: re-added with the removed role
 
-    await project.removeMember('Mint')
-    await expect(project.memberRow(mint)).toHaveCount(0)
+    // M3 (S5.3): Mint now has a POS assignment, so removing her shows the FR-404 choice instead (covered by m3 E11);
+    // the Cmd+Z path removes Jack again, who has none.
+    await project.removeMember('Jack')
+    await expect(project.memberRow(jack)).toHaveCount(0)
     await blurActive(page)
     const undoneByKey = waitForServerAction(page)
     await page.keyboard.press('ControlOrMeta+z')
     await undoneByKey
+    await expect(project.memberRow(jack)).toBeVisible()
+    await project.expectRole(jack, 'LEAD')
     await expect(project.memberRow(mint)).toBeVisible()
     await project.expectRole(mint, 'MEMBER')
 
@@ -411,16 +418,20 @@ test.describe('E8 (FR-408 part) project tabs', () => {
     await resetDb()
   })
 
-  test('/projects/<id> redirects to the overview; exactly one tab, selected, none disabled', async ({ page }) => {
+  // M3 (X15, S5.3): the งาน tab joins ภาพรวม; M4 (เอกสาร) and M6 (แผนงาน) update this list.
+  test('/projects/<id> redirects to the overview; only built tabs (ภาพรวม, งาน), overview selected, none disabled', async ({
+    page,
+  }) => {
     const mobile = await idOf('project', 'Mobile App Revamp')
     await loginAs(page, 'jack')
     const project = new ProjectPage(page)
     await page.goto(`/projects/${mobile}`)
     await onPath(page, `/projects/${mobile}/overview`)
     await project.shell.waitForHydration()
-    await expect(project.tabs()).toHaveCount(1)
-    await expect(project.tabs()).toHaveText([th.projects.tabs.overview])
-    await expect(project.tabs().first()).toHaveAttribute('aria-selected', 'true')
+    await expect(project.tabs()).toHaveText([th.projects.tabs.overview, th.projects.tabs.tasks])
+    await expect(project.tab('overview')).toHaveAttribute('aria-selected', 'true')
+    await expect(project.tab('tasks')).toHaveAttribute('aria-selected', 'false')
+    await expect(project.tab('tasks')).toHaveAttribute('href', `/projects/${mobile}/tasks`)
     await expect(project.tabList().getByRole('tab', { disabled: true })).toHaveCount(0)
   })
 })
@@ -449,6 +460,8 @@ test.describe('E9 (UI-02 part, X05) the sidebar remembers expanded projects', ()
     await sidebar.shell.waitForHydration()
     await expect(sidebar.collapseToggle('POS Upgrade')).toHaveAttribute('aria-expanded', 'true')
     await expect(sidebar.overviewSubLink(pos)).toBeVisible()
+    await expect(sidebar.tasksSubLink(pos)).toHaveAttribute('href', `/projects/${pos}/tasks`) // M3 tab sub-link
+    await sidebar.expectProjects(['Mobile App Revamp', 'POS Upgrade']) // sub-links are not project rows
     // eslint-disable-next-line no-restricted-globals -- reads (never writes) localStorage to prove it stays empty (X53)
     expect(await page.evaluate(() => localStorage.length)).toBe(0)
   })
@@ -460,7 +473,7 @@ test.describe('X33 nav entries for every golden role', () => {
   })
 
   for (const who of ['manager', 'cindy', 'ivy', 'peter', 'jack', 'mint'] as const) {
-    test(`${who}: the ${th.nav.projects} section header and the ${th.nav.clients} item are in the sidebar`, async ({
+    test(`${who}: the ${th.nav.projects} section header, ${th.nav.clients}, ${th.nav.my} and ${th.nav.teamTasks} are in the sidebar`, async ({
       page,
     }) => {
       await loginAs(page, who)
@@ -469,6 +482,10 @@ test.describe('X33 nav entries for every golden role', () => {
       await expect(shell.navLink(th.nav.projects)).toHaveAttribute('href', '/projects')
       await expect(shell.navLink(th.nav.clients)).toHaveAttribute('href', '/clients')
       await expect(shell.navLink(th.nav.home)).toBeVisible()
+      // M3 (X33, X84): งานของฉัน (with its count) and งานของทีม for every role
+      const sidebar = new SidebarPage(page)
+      await expect(sidebar.myTasksLink()).toHaveAttribute('href', '/my')
+      await expect(sidebar.teamTasksLink()).toHaveAttribute('href', '/tasks')
     })
   }
 })

@@ -1,8 +1,11 @@
 import { th } from '@/i18n/th'
 
 /** A key of Sidebar's icon map — nav.ts stays data-only (no component imports). Later keys:
- *  M3 'my' | 'teamTasks', M5 'calendar', M9 'workload' | 'people'. */
-export type NavIcon = 'home' | 'settings' | 'projects' | 'clients'
+ *  M5 'calendar', M9 'workload' | 'people'. */
+export type NavIcon = 'home' | 'settings' | 'projects' | 'clients' | 'my' | 'teamTasks'
+
+/** A count shown as text after the label (M3-D40); M9 widens it to 'myTaskCount' | 'workloadOver'. */
+export type NavBadge = 'myTaskCount'
 
 export interface NavItem {
   /** stable id used by tests and badges: 'home', 'my', 'tasks', 'workload', 'calendar', 'people', 'clients', 'settings' (X84) */
@@ -14,13 +17,16 @@ export interface NavItem {
   managerOnly?: boolean
   /** path prefix that marks the item active when it differs from `href` (settings: '/settings') */
   activePrefix?: string
-  // M3 adds `badge?: NavBadge` with `export type NavBadge = 'myTaskCount'`; M9 widens it to 'myTaskCount' | 'workloadOver' (X84).
+  /** count from the sidebar query, rendered as text (never a coloured dot) */
+  badge?: NavBadge
 }
 
 /** Top group. Only implemented areas appear (X33: no dead links). Final order (X84, SPEC §8.1):
  *  home, my, tasks, workload, calendar — M3 appends my + tasks, M5 appends calendar, M9 inserts workload before calendar. */
 export const PRIMARY_NAV: readonly NavItem[] = [
   { id: 'home', href: '/home', label: th.nav.home, icon: 'home' },
+  { id: 'my', href: '/my', label: th.nav.my, icon: 'my', badge: 'myTaskCount' },
+  { id: 'tasks', href: '/tasks', label: th.nav.teamTasks, icon: 'teamTasks' },
 ]
 
 /** Bottom group (SPEC §8.1 "people, clients, settings"); not rendered while empty for the viewer.
@@ -28,8 +34,14 @@ export const PRIMARY_NAV: readonly NavItem[] = [
  *  before it, M9 people before clients. The projects section header (M2) is a separate constant. */
 export const BOTTOM_NAV: readonly NavItem[] = [
   { id: 'clients', href: '/clients', label: th.nav.clients, icon: 'clients' },
-  { id: 'settings', href: '/settings/employees', label: th.nav.settings, icon: 'settings', managerOnly: true,
-    activePrefix: '/settings' },
+  {
+    id: 'settings',
+    href: '/settings/employees',
+    label: th.nav.settings,
+    icon: 'settings',
+    managerOnly: true,
+    activePrefix: '/settings',
+  },
 ]
 
 /** Header of the sidebar "โปรเจค" section (M2, X33): rendered above SidebarProjects; in neither PRIMARY_NAV nor

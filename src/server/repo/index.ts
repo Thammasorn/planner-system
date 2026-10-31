@@ -10,3 +10,8 @@ export * as preferences from './preferences'
 export * as projects from './projects'
 export * as sessions from './sessions'
 export * as users from './users'
+// M3 (M3-D39): pinned names used by M6/M7/M9
+export * as tasks from './tasks'
+export * as assignments from './task-assignments'
+export * as statuses from './task-statuses'
+export * as blockers from './task-blockers'

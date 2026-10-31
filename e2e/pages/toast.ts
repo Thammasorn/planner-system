@@ -12,3 +12,8 @@ export function toastWith(page: Page, text: string): Locator {
 export function undoButtonOf(page: Page, text: string): Locator {
   return toastWith(page, text).getByRole('button', { name: th.undo.undo, exact: true })
 }
+
+/** Every toast currently on screen. */
+export function allToasts(page: Page): Locator {
+  return page.locator('[data-sonner-toast]')
+}

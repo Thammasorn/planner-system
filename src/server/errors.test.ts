@@ -68,6 +68,17 @@ describe('mapDbError / pgErrorInfo', () => {
     expect(mapDbError('boom')).toBeNull()
   })
 
+  it('M3 constraint backstops: duplicate status name → VALIDATION(name), cross-project task FKs → NOT_FOUND', () => {
+    const dup = mapDbError({ cause: { code: '23505', constraint_name: 'task_statuses_name' } })
+    expect(dup?.code).toBe('VALIDATION')
+    expect(dup?.message).toBe(th.tasks.status.errors.duplicateName)
+    expect(dup?.extra.fieldErrors).toEqual({ name: [th.tasks.status.errors.duplicateName] })
+    for (const constraint of ['tasks_status_fk', 'task_blockers_task_fk', 'task_blockers_blocker_fk'])
+      expect(mapDbError({ cause: { code: '23503', constraint_name: constraint } })?.code, constraint).toBe('NOT_FOUND')
+    expect(mapDbError({ cause: { code: '23503', constraint_name: 'projects_client_id_fk' } })?.code).toBe('IN_USE')
+    expect(mapDbError({ cause: { code: '23505', constraint_name: 'task_assignments_active' } })?.code).toBe('CONFLICT')
+  })
+
   it('pgErrorInfo reads code and constraint from the cause first', () => {
     expect(pgErrorInfo({ cause: { code: '23505', constraint_name: 'positions_name_unique' } })).toEqual({
       code: '23505',

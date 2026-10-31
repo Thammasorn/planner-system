@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   addMember: vi.fn(),
   changeMemberRole: vi.fn(),
   removeMember: vi.fn(),
+  removeMemberWithAssignments: vi.fn(),
+  restoreRemovedMember: vi.fn(),
   push: vi.fn(),
   undoPush: vi.fn(),
   getJson: vi.fn(),
@@ -22,6 +24,8 @@ vi.mock('@/server/actions/members', () => ({
   addMember: mocks.addMember,
   changeMemberRole: mocks.changeMemberRole,
   removeMember: mocks.removeMember,
+  removeMemberWithAssignments: mocks.removeMemberWithAssignments,
+  restoreRemovedMember: mocks.restoreRemovedMember,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }) }))
 vi.mock('@/components/undo/useUndo', () => ({ useUndo: () => ({ push: mocks.undoPush }) }))
@@ -116,6 +120,47 @@ describe('MembersPanel', () => {
     expect(entry.label).toBe(th.members.toasts.removed('Ivy'))
     await entry.undo()
     expect(mocks.addMember).toHaveBeenCalledWith({ projectId: PID, userId: 'ivy', role: 'MEMBER' })
+  })
+
+  it('FR-404: a member with assignments is kept and offered the two-option toast', async () => {
+    const user = userEvent.setup()
+    mocks.removeMember.mockResolvedValue({
+      ok: true,
+      removed: false,
+      blockedByAssignments: 2,
+      selfRemoved: false,
+    })
+    const member = { role: 'MEMBER', addedBy: null, addedAt: '2026-09-01T00:00:00+07:00' }
+    const batch = '66666666-6666-4666-8666-666666666666'
+    mocks.removeMemberWithAssignments.mockResolvedValue({ ok: true, batch, member, unassignedTaskCount: 2 })
+    mocks.restoreRemovedMember.mockResolvedValue({ ok: true, restoredAssignments: 2, skipped: 0 })
+    renderPanel({ projectId: PID, members, canManage: true })
+    await user.click(screen.getByRole('button', { name: th.members.remove('Ivy') }))
+    expect(await screen.findByText(th.members.assignmentsBlock.message(2))).toBeInTheDocument()
+    expect(await screen.findByTestId('member-row-ivy')).toBeInTheDocument() // the optimistic removal reverts
+    expect(mocks.undoPush).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: th.members.assignmentsBlock.unassignAll }))
+    await waitFor(() => expect(mocks.undoPush).toHaveBeenCalledTimes(1))
+    expect(mocks.removeMemberWithAssignments).toHaveBeenCalledWith({ projectId: PID, userId: 'ivy' })
+    const [entry, opts] = mocks.undoPush.mock.calls[0] as [{ undo: () => Promise<void> }, { toast: string }]
+    expect(opts).toEqual({ toast: th.members.assignmentsBlock.removedWithAssignments('Ivy', 2) })
+    await entry.undo()
+    expect(mocks.restoreRemovedMember).toHaveBeenCalledWith({ projectId: PID, userId: 'ivy', member, batch })
+  })
+
+  it('FR-404: "ยกเลิกการนำออก" keeps the member and calls nothing else', async () => {
+    const user = userEvent.setup()
+    mocks.removeMember.mockResolvedValue({
+      ok: true,
+      removed: false,
+      blockedByAssignments: 1,
+      selfRemoved: false,
+    })
+    renderPanel({ projectId: PID, members, canManage: true })
+    await user.click(screen.getByRole('button', { name: th.members.remove('Ivy') }))
+    await user.click(await screen.findByRole('button', { name: th.members.assignmentsBlock.cancelRemove }))
+    expect(mocks.removeMemberWithAssignments).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('member-row-ivy')).toBeInTheDocument()
   })
 
   it('self-removal navigates to /projects without an undo entry', async () => {

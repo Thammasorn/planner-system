@@ -8,10 +8,12 @@ import { requirePageUser } from '@/server/session'
 
 export const metadata: Metadata = { title: th.projects.tabs.overview }
 
-/** ภาพรวม tab (FR-409 part): project info, members, warnings — no load figures until M9 (X15). Authz first. */
+/** ภาพรวม tab (FR-409 part): project info, progress, members, status set (M3) — no load figures until M9. Authz first. */
 export default async function ProjectOverviewPage(props: PageProps<'/projects/[id]/overview'>) {
   const user = await requirePageUser()
   const { id } = await props.params
   const data = await orNotFound(services.projects.getProjectOverview(db, user, id))
-  return <ProjectOverview data={data} />
+  // FR-409 progress (M3-D21); getProjectOverview above has already authorised the project
+  const progress = await services.projects.projectProgress(db, data.project.id)
+  return <ProjectOverview data={data} progress={progress} />
 }

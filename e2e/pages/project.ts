@@ -3,9 +3,11 @@ import type { ProjectRole } from '../../src/domain/types'
 import { th } from '../../src/i18n/th'
 import { waitForServerAction } from '../fixtures'
 import { ShellPage } from './shell'
+import { StatusSettingsPage } from './status-settings'
 import { exactName } from './text'
+import { toastWith } from './toast'
 
-export type ProjectTab = 'overview'
+export type ProjectTab = 'overview' | 'tasks'
 
 /**
  * Project shell + ภาพรวม tab (FR-408, FR-409 part; plan/m02-clients-projects-authz.md S2.3–S2.5 / S3.5).
@@ -14,13 +16,30 @@ export type ProjectTab = 'overview'
  */
 export class ProjectPage {
   readonly shell: ShellPage
+  /** M3: ภาพรวม › สถานะงาน. */
+  readonly statuses: StatusSettingsPage
 
   constructor(readonly page: Page) {
     this.shell = new ShellPage(page)
+    this.statuses = new StatusSettingsPage(page)
   }
 
   async goto(projectId: string, tab: ProjectTab = 'overview'): Promise<void> {
     await this.shell.goto(`/projects/${projectId}/${tab}`)
+  }
+
+  tab(tab: ProjectTab): Locator {
+    return this.tabList().getByRole('tab', { name: th.projects.tabs[tab], exact: true })
+  }
+  /** Client-side tab switch (keeps the undo stack and toasts of the tab, unlike goto). */
+  async openTab(tab: ProjectTab): Promise<void> {
+    await this.tab(tab).click()
+    await this.page.waitForURL((u) => u.pathname.endsWith(`/${tab}`))
+    await expect(this.tab(tab)).toHaveAttribute('aria-selected', 'true')
+  }
+  /** FR-409 "เสร็จ X/Y งาน" (M3-D21). */
+  progress(): Locator {
+    return this.page.getByTestId('project-progress')
   }
 
   main(): Locator {
@@ -111,6 +130,24 @@ export class ProjectPage {
     await this.removeButton(displayName).click()
     await answered
   }
+  /** FR-404 / BR-61 (X16): the toast offered when the removed member still has assignments. */
+  assignmentsBlockToast(n: number): Locator {
+    return toastWith(this.page, th.members.assignmentsBlock.message(n))
+  }
+  async cancelRemoval(n: number): Promise<void> {
+    await this.assignmentsBlockToast(n)
+      .getByRole('button', { name: th.members.assignmentsBlock.cancelRemove, exact: true })
+      .click()
+    await expect(this.assignmentsBlockToast(n)).toHaveCount(0)
+  }
+  async unassignAllAndRemove(n: number): Promise<void> {
+    const answered = waitForServerAction(this.page)
+    await this.assignmentsBlockToast(n)
+      .getByRole('button', { name: th.members.assignmentsBlock.unassignAll, exact: true })
+      .click()
+    await answered
+  }
+
   /** The "เพิ่มสมาชิก" person picker input. */
   pickerInput(): Locator {
     return this.membersPanel().getByRole('combobox', { name: exactName(th.members.add) })

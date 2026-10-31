@@ -4,6 +4,8 @@ import type { ClientRef } from '@/lib/contracts/clients'
 import type { MemberUser, ProjectMember } from '@/lib/contracts/projects'
 import { displayName } from '@/lib/display-name'
 import type { ClientRow } from '../db/schema'
+import type { DbOrTx } from '../db/types'
+import * as repo from '../repo'
 import type { MemberWithUser } from '../repo/members'
 
 /** Display-name order (compareThai), ties by id so the order is total and deterministic. */
@@ -39,4 +41,10 @@ export function toProjectMember(m: MemberWithUser): ProjectMember {
 export function compareMembers(a: ProjectMember, b: ProjectMember): number {
   if (a.role !== b.role) return a.role === 'LEAD' ? -1 : 1
   return compareByDisplayName(a, b)
+}
+
+/** Display name of a user for audit summaries and Thai messages (falls back to the id for unknown users). */
+export async function personDisplayName(tx: DbOrTx, userId: string): Promise<string> {
+  const p = await repo.people.getPerson(tx, userId)
+  return p ? displayName(p) : userId
 }

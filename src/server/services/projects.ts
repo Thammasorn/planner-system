@@ -22,6 +22,7 @@ import * as repo from '../repo'
 import type { ProjectPatch } from '../repo/projects'
 import type { SessionUser } from '../session'
 import { compareByDisplayName, compareMembers, toClientRef, toMemberUser, toProjectMember } from './shared'
+import { ensureProjectStatuses } from './taskStatuses'
 
 const fieldError = (field: string, message: string): ValidationError =>
   new ValidationError({ [field]: [message] }, message)
@@ -171,7 +172,13 @@ export async function createProject(
       addedBy: user.id,
     })
   }
+  await ensureProjectStatuses(tx, project.id) // FR-621 / X70: the 5 defaults in the same transaction
   return project
+}
+
+/** FR-409 progress (M3-D21): completed / all non-deleted tasks at every depth. Callers authorise the project first. */
+export function projectProgress(tx: DbOrTx, projectId: string): Promise<{ done: number; total: number }> {
+  return repo.tasks.progress(tx, projectId)
 }
 
 /** undefined = unchanged; null clears clientId / code / certaintyNote. Re-picking the current (even archived) client is

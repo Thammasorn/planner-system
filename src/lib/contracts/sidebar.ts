@@ -14,4 +14,6 @@ export interface SidebarResponse {
   /** The viewer can see at least one archived project (shows the "ดูโปรเจคที่ archive" link). */
   hasArchived: boolean
   canCreateProject: boolean
+  /** M3 (X22): number of tasks on /my (open assigned leaf tasks in non-archived projects); M9 redefines it. */
+  myTaskCount: number
 }

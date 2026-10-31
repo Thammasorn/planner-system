@@ -2,7 +2,8 @@
 import { asc, count, eq, inArray } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/server/db/client'
-import { auditLog, clients, projectMembers, projects, user } from '@/server/db/schema'
+import { th } from '@/i18n/th'
+import { auditLog, clients, projectMembers, projects, taskAssignments, taskStatuses, tasks, user } from '@/server/db/schema'
 import { seedGolden } from './fixtures'
 
 async function membership(): Promise<Record<string, Record<string, string>>> {
@@ -57,5 +58,50 @@ describe('seedGolden — M2 stage', () => {
     await seedGolden(db, { upTo: 'users' })
     expect(await db.select().from(clients)).toEqual([])
     expect(await db.select().from(projects)).toEqual([])
+  })
+})
+
+describe('seedGolden — M3 stage (X11, X70, M3-D20)', () => {
+  it('25 statuses (5 per project, FR-621 order), 10 tasks on ยังไม่เริ่ม, 10 assignments, one override; memberships unchanged', async () => {
+    await seedGolden(db)
+    const st = await db
+      .select({ projectId: taskStatuses.projectId, name: taskStatuses.name, category: taskStatuses.category })
+      .from(taskStatuses)
+      .orderBy(asc(taskStatuses.projectId), asc(taskStatuses.position), asc(taskStatuses.id))
+    expect(st).toHaveLength(25)
+    const perProject = new Map<string, string[]>()
+    for (const s of st) perProject.set(s.projectId, [...(perProject.get(s.projectId) ?? []), s.name])
+    const D = th.tasks.status.defaults
+    for (const names of perProject.values()) expect(names).toEqual([D.todo, D.doing, D.waitData, D.blocked, D.done])
+    const ts = await db
+      .select({ name: tasks.name, depth: tasks.depth, completedOn: tasks.completedOn, status: taskStatuses.name, o: tasks.certaintyOverride })
+      .from(tasks)
+      .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
+    expect(ts).toHaveLength(10)
+    for (const t of ts) expect(t).toMatchObject({ depth: 0, completedOn: null, status: D.todo })
+    expect(ts.filter((t) => t.o !== null)).toEqual([expect.objectContaining({ name: 'Rollout สาขา', o: 'TENTATIVE' })])
+    const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(taskAssignments)
+    expect(n).toBe(10)
+    const [{ m } = { m: 0 }] = await db.select({ m: count() }).from(projectMembers)
+    expect(m).toBe(10)
+    const pos = await db
+      .select({ name: tasks.name })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(eq(projects.name, 'POS Upgrade'))
+      .orderBy(asc(tasks.position), asc(tasks.id))
+    expect(pos.map((p) => p.name)).toEqual(['ปรับปรุงระบบ POS หน้าร้าน', 'ทำ UAT + คู่มือหน้าร้าน', 'Rollout สาขา'])
+    const audits = await db
+      .select({ entity: auditLog.entity })
+      .from(auditLog)
+      .where(inArray(auditLog.entity, ['task', 'task_assignment', 'task_status']))
+    expect(audits).toEqual([])
+  })
+
+  it("upTo: 'projects' seeds the statuses but no tasks", async () => {
+    await seedGolden(db, { upTo: 'projects' })
+    expect(await db.select().from(tasks)).toEqual([])
+    const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(taskStatuses)
+    expect(n).toBe(25)
   })
 })

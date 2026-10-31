@@ -6,7 +6,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { makeUser } from '../../../tests/helpers/factories'
 import { db } from './client'
-import { clients, projectMembers, projects } from './schema'
+import { clients, projectMembers, projects, taskStatuses, tasks } from './schema'
 
 describe('database harness and migrations', () => {
   let sql: postgres.Sql
@@ -121,5 +121,304 @@ describe('M2 schema (SPEC §6.2 clients / projects / project_members, §6.4)', (
     expect(m).toMatchObject({ role: 'MEMBER', addedBy: null })
     const [c] = await db.insert(clients).values({ name: 'SCB' }).returning()
     expect(c).toMatchObject({ code: null, color: null, note: null, archivedAt: null })
+  })
+})
+
+// ---------------------------------------------------------------------------------------------------------------
+// M3 — task statuses, tasks, assignments, blockers (plan/m03 S0.3, M3-D36, BR-30/31/80/83/85, R6, R20)
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('M3 schema (SPEC v3.1 §6.2 task_statuses / tasks / task_assignments / task_blockers)', () => {
+  let sql: postgres.Sql
+  const migrationSql = (): string => {
+    const journal = JSON.parse(
+      readFileSync(path.resolve(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as { entries: { tag: string }[] }
+    const tag = journal.entries.find((e) => e.tag.endsWith('_m3_tasks'))?.tag
+    if (!tag) throw new Error('m3_tasks migration missing from the journal')
+    return readFileSync(path.resolve(process.cwd(), `drizzle/${tag}.sql`), 'utf8')
+  }
+
+  /** Postgres error `{ code, constraint }` of a failing statement, or null when it succeeds. */
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string }
+      return { code: err.code, constraint: err.constraint_name }
+    }
+  }
+
+  async function seedProject(name = 'P'): Promise<{ projectId: string; userId: string }> {
+    const u = await makeUser({ role: 'manager' })
+    const [p] = await sql<{ id: string }[]>`
+      insert into projects (name, created_by) values (${name}, ${u.id}) returning id`
+    return { projectId: p!.id, userId: u.id }
+  }
+
+  async function seedStatus(
+    projectId: string,
+    name = 'ยังไม่เริ่ม',
+    category = 'TODO',
+    position = 'a0',
+  ): Promise<string> {
+    const [s] = await sql<{ id: string }[]>`
+      insert into task_statuses (project_id, name, category, position)
+      values (${projectId}, ${name}, ${category}, ${position}) returning id`
+    return s!.id
+  }
+
+  async function seedTask(o: {
+    projectId: string
+    userId: string
+    statusId: string
+    name?: string
+    parentId?: string | null
+  }): Promise<string> {
+    const [t] = await sql<{ id: string }[]>`
+      insert into tasks (project_id, parent_id, name, status_id, position, created_by)
+      values (${o.projectId}, ${o.parentId ?? null}, ${o.name ?? 'งาน'}, ${o.statusId}, 'a0', ${o.userId})
+      returning id`
+    return t!.id
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  describe('tasks', () => {
+    it('position is COLLATE "C"; tasks_name_trgm exists', async () => {
+      const [col] = await sql<{ collname: string }[]>`
+        select c.collname from pg_attribute a join pg_collation c on c.oid = a.attcollation
+        where a.attrelid = 'tasks'::regclass and a.attname = 'position'`
+      expect(col?.collname).toBe('C')
+      const [idx] = await sql<
+        { indexdef: string }[]
+      >`select indexdef from pg_indexes where indexname = 'tasks_name_trgm'`
+      expect(idx?.indexdef).toContain('gin_trgm_ops')
+    })
+
+    it('completed_week is the Monday of completed_on (generated, read-only — R6)', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const id = await seedTask({ projectId, userId, statusId })
+      const week = async (on: string | null) => {
+        await sql`update tasks set completed_on = ${on} where id = ${id}`
+        const [r] = await sql<
+          { w: string | null }[]
+        >`select completed_week::text as w from tasks where id = ${id}`
+        return r?.w ?? null
+      }
+      expect(await week('2026-10-04')).toBe('2026-09-28')
+      expect(await week('2027-01-01')).toBe('2026-12-28')
+      expect(await week('2026-09-28')).toBe('2026-09-28')
+      expect(await week(null)).toBeNull()
+      expect(
+        (await pgError(() => sql`update tasks set completed_week = '2026-09-28' where id = ${id}`))?.code,
+      ).toBe('428C9')
+    })
+
+    it('checks depth 0..2, non-blank names and due ≥ start (23514)', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const id = await seedTask({ projectId, userId, statusId })
+      expect(await pgError(() => sql`update tasks set depth = 2 where id = ${id}`)).toBeNull()
+      expect(await pgError(() => sql`update tasks set depth = 3 where id = ${id}`)).toMatchObject({
+        code: '23514',
+        constraint: 'tasks_depth_check',
+      })
+      expect(await pgError(() => sql`update tasks set name = '   ' where id = ${id}`)).toMatchObject({
+        code: '23514',
+        constraint: 'tasks_name_check',
+      })
+      expect(
+        await pgError(
+          () => sql`update tasks set start_date = '2026-10-05', due_date = '2026-10-01' where id = ${id}`,
+        ),
+      ).toMatchObject({ code: '23514', constraint: 'tasks_dates_check' })
+      expect(
+        await pgError(
+          () => sql`update tasks set start_date = '2026-10-01', due_date = '2026-10-01' where id = ${id}`,
+        ),
+      ).toBeNull()
+    })
+
+    it('Drizzle maps plan dates to ISO strings and omits the generated column on insert', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const [row] = await db
+        .insert(tasks)
+        .values({
+          projectId,
+          name: 'งาน',
+          statusId,
+          position: 'a0',
+          createdBy: userId,
+          startDate: '2026-09-28',
+          dueDate: '2026-10-02',
+          completedOn: '2026-10-01',
+        })
+        .returning()
+      expect(row).toMatchObject({
+        startDate: '2026-09-28',
+        dueDate: '2026-10-02',
+        completedOn: '2026-10-01',
+        completedWeek: '2026-09-28',
+        depth: 0,
+        parentId: null,
+        certaintyOverride: null,
+      })
+    })
+
+    it('parent delete cascades the subtree', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const parentId = await seedTask({ projectId, userId, statusId })
+      await seedTask({ projectId, userId, statusId, parentId })
+      await sql`delete from tasks where id = ${parentId}`
+      const [r] = await sql<
+        { n: number }[]
+      >`select count(*)::int as n from tasks where project_id = ${projectId}`
+      expect(r?.n).toBe(0)
+    })
+  })
+
+  describe('task_assignments', () => {
+    it('one active (task_id, user_id); allowed again after soft delete; cascades with the task', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const taskId = await seedTask({ projectId, userId, statusId })
+      const [first] = await sql<{ id: string; version: number }[]>`
+        insert into task_assignments (task_id, user_id) values (${taskId}, ${userId}) returning id, version`
+      expect(first?.version).toBe(1)
+      expect(
+        await pgError(
+          () => sql`insert into task_assignments (task_id, user_id) values (${taskId}, ${userId})`,
+        ),
+      ).toMatchObject({ code: '23505', constraint: 'task_assignments_active' })
+      await sql`update task_assignments set deleted_at = now() where id = ${first!.id}`
+      expect(
+        await pgError(
+          () => sql`insert into task_assignments (task_id, user_id) values (${taskId}, ${userId})`,
+        ),
+      ).toBeNull()
+      await sql`delete from tasks where id = ${taskId}`
+      const [r] = await sql<
+        { n: number }[]
+      >`select count(*)::int as n from task_assignments where task_id = ${taskId}`
+      expect(r?.n).toBe(0)
+    })
+  })
+
+  describe('task_statuses (v3.1)', () => {
+    it('the migration emits the enum, composite keys, the composite FK and the lower(name) index (M3-D36)', () => {
+      const text = migrationSql()
+      expect(text).toContain('CREATE TYPE "public"."task_status_category"')
+      expect(text).toMatch(/"task_statuses_project_id_id_key" UNIQUE\("project_id","id"\)/)
+      expect(text).toMatch(/"tasks_project_id_id_key" UNIQUE\("project_id","id"\)/)
+      expect(text).toMatch(
+        /"tasks_status_fk" FOREIGN KEY \("project_id","status_id"\) REFERENCES "public"\."task_statuses"\("project_id","id"\)/,
+      )
+      expect(text).toMatch(/CREATE UNIQUE INDEX "task_statuses_name" .*lower\("name"\).*deleted_at" is null/)
+    })
+
+    it('live names are unique per project case-insensitively (task_statuses_name)', async () => {
+      const { projectId } = await seedProject('P')
+      const { projectId: otherId } = await seedProject('Q')
+      const doneId = await seedStatus(projectId, 'Done', 'DONE', 'a1')
+      expect(await pgError(() => seedStatus(projectId, 'done', 'DONE', 'a2'))).toMatchObject({
+        code: '23505',
+        constraint: 'task_statuses_name',
+      })
+      expect(await pgError(() => seedStatus(otherId, 'done', 'DONE', 'a2'))).toBeNull()
+      await sql`update task_statuses set deleted_at = now() where id = ${doneId}`
+      expect(await pgError(() => seedStatus(projectId, 'done', 'DONE', 'a2'))).toBeNull()
+    })
+
+    it('rejects blank names (23514) and defaults the colour to #94A3B8', async () => {
+      const { projectId } = await seedProject()
+      expect(await pgError(() => seedStatus(projectId, '  '))).toMatchObject({
+        code: '23514',
+        constraint: 'task_statuses_name_check',
+      })
+      const id = await seedStatus(projectId)
+      const [row] = await db.select().from(taskStatuses).where(eq(taskStatuses.id, id))
+      expect(row).toMatchObject({ color: '#94A3B8', category: 'TODO', deletedAt: null, deletedBatch: null })
+    })
+
+    it('a task cannot use a status of another project (BR-83, 23503)', async () => {
+      const { projectId, userId } = await seedProject('P')
+      const { projectId: otherId } = await seedProject('Q')
+      await seedStatus(projectId)
+      const foreign = await seedStatus(otherId)
+      expect(await pgError(() => seedTask({ projectId, userId, statusId: foreign }))).toMatchObject({
+        code: '23503',
+        constraint: 'tasks_status_fk',
+      })
+    })
+
+    it('deleting the project removes statuses, tasks, assignments and edges in one statement', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const a = await seedTask({ projectId, userId, statusId, name: 'A' })
+      const b = await seedTask({ projectId, userId, statusId, name: 'B' })
+      await sql`insert into task_assignments (task_id, user_id) values (${a}, ${userId})`
+      await sql`insert into task_blockers (project_id, task_id, blocker_task_id, created_by)
+                values (${projectId}, ${b}, ${a}, ${userId})`
+      await sql`delete from projects where id = ${projectId}`
+      const [r] = await sql<{ s: number; t: number; a: number; b: number }[]>`
+        select (select count(*)::int from task_statuses) as s, (select count(*)::int from tasks) as t,
+               (select count(*)::int from task_assignments) as a, (select count(*)::int from task_blockers) as b`
+      expect(r).toEqual({ s: 0, t: 0, a: 0, b: 0 })
+    })
+  })
+
+  describe('task_blockers (v3.1)', () => {
+    it('rejects self edges (23514), cross-project edges (23503) and duplicate live edges (23505)', async () => {
+      const { projectId, userId } = await seedProject('P')
+      const { projectId: otherId, userId: otherUser } = await seedProject('Q')
+      const statusId = await seedStatus(projectId)
+      const otherStatus = await seedStatus(otherId)
+      const a = await seedTask({ projectId, userId, statusId, name: 'A' })
+      const b = await seedTask({ projectId, userId, statusId, name: 'B' })
+      const q = await seedTask({ projectId: otherId, userId: otherUser, statusId: otherStatus, name: 'Q' })
+      const edge = (p: string, t: string, blocker: string) =>
+        sql`insert into task_blockers (project_id, task_id, blocker_task_id, created_by)
+            values (${p}, ${t}, ${blocker}, ${userId}) returning id`
+      expect(await pgError(() => edge(projectId, a, a))).toMatchObject({
+        code: '23514',
+        constraint: 'task_blockers_not_self',
+      })
+      expect((await pgError(() => edge(projectId, a, q)))?.code).toBe('23503')
+      expect((await pgError(() => edge(otherId, a, q)))?.code).toBe('23503')
+      const [first] = (await edge(projectId, b, a)) as unknown as { id: string }[]
+      expect(await pgError(() => edge(projectId, b, a))).toMatchObject({
+        code: '23505',
+        constraint: 'task_blockers_active',
+      })
+      await sql`update task_blockers set deleted_at = now() where id = ${first!.id}`
+      expect(await pgError(() => edge(projectId, b, a))).toBeNull()
+    })
+
+    it('deleting either task cascades the edge', async () => {
+      const { projectId, userId } = await seedProject()
+      const statusId = await seedStatus(projectId)
+      const a = await seedTask({ projectId, userId, statusId, name: 'A' })
+      const b = await seedTask({ projectId, userId, statusId, name: 'B' })
+      const c = await seedTask({ projectId, userId, statusId, name: 'C' })
+      await sql`insert into task_blockers (project_id, task_id, blocker_task_id, created_by)
+                values (${projectId}, ${b}, ${a}, ${userId}), (${projectId}, ${c}, ${b}, ${userId})`
+      await sql`delete from tasks where id = ${a}`
+      await sql`delete from tasks where id = ${c}`
+      const [r] = await sql<{ n: number }[]>`select count(*)::int as n from task_blockers`
+      expect(r?.n).toBe(0)
+    })
   })
 })

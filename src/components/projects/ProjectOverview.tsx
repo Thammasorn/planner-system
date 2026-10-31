@@ -18,6 +18,7 @@ import { CertaintyToggle } from './CertaintyToggle'
 import { DeleteProjectButton } from './DeleteProjectButton'
 import { MembersPanel } from './MembersPanel'
 import { ProjectFormDialog } from './ProjectFormDialog'
+import { StatusSettings } from './StatusSettings'
 
 const EMPTY = '—'
 
@@ -135,13 +136,26 @@ function ProjectActions({ project }: { project: ProjectHeader }) {
  * M3 progress (+ status-set settings), M8 upcoming milestones, M9 per-member load + 12-week bars — always between
  * the info section and the footer.
  */
-export function ProjectOverview({ data }: { data: ProjectOverviewData }) {
+export function ProjectOverview({
+  data,
+  progress,
+}: {
+  data: ProjectOverviewData
+  /** M3 FR-409 progress (M3-D21); omitted → no line. */
+  progress?: { done: number; total: number } | undefined
+}) {
   const { project, members, warnings } = data
   return (
     <Stack spacing={3}>
       <ProjectInfoSection project={project} />
       {warnings.noLead ? <NoLeadWarning /> : null}
+      {progress ? (
+        <Typography data-testid="project-progress" sx={{ fontWeight: 500 }}>
+          {th.tasks.progress(progress.done, progress.total)}
+        </Typography>
+      ) : null}
       <MembersPanel projectId={project.id} members={members} canManage={project.can.manage} />
+      {progress ? <StatusSettings projectId={project.id} /> : null}
       <ProjectActions project={project} />
     </Stack>
   )

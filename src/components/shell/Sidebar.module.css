@@ -112,10 +112,24 @@
 }
 
 .label {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Nav count (M3 "งานของฉัน N"): text, not a coloured dot (SPEC §8.9). */
+.badge {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
 }
 
 /* User menu at the bottom ("○ Cindy · ออกจากระบบ", SPEC §8.1). */

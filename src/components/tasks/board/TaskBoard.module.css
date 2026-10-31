@@ -1,0 +1,124 @@
+/* Board layout (§8.10): columns scroll horizontally inside the board, never the page (NFR-07b). */
+.board {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  max-width: 100%;
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.column {
+  display: flex;
+  flex: 0 0 272px;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+  padding: 8px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 8px;
+  background: var(--mui-palette-background-default);
+}
+
+.column[data-over='true'] {
+  outline: 2px dashed var(--mui-palette-primary-main);
+  outline-offset: -2px;
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty {
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.slot {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.slot[data-dragging='true'] {
+  opacity: 0.4;
+}
+
+.slotBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.handle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mui-palette-text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.overlay {
+  width: 250px;
+  box-shadow: var(--mui-shadows-6);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 6px;
+  background: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-primary);
+  cursor: pointer;
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+.cardName {
+  font-size: 0.875rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.card[data-completed='true'] .cardName {
+  color: var(--mui-palette-text-secondary);
+  text-decoration: line-through;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.75rem;
+}

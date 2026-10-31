@@ -117,13 +117,27 @@ export function pgErrorInfo(e: unknown): { code?: string; constraint?: string } 
 /**
  * Maps Postgres errors in one place (X86). Never logs or copies `.message` (params may hold hashes).
  * 23505 → CONFLICT · 23503 → IN_USE · 23P01 → OVERLAP · 23514 → VALIDATION · P0001 → INTERNAL · otherwise null.
+ * Constraint-specific backstops (services catch these first): 23505 on task_statuses_name → VALIDATION (name) ·
+ * 23503 on a task/status composite FK → NOT_FOUND (the referenced row is in another project or gone — BR-83, D12).
  * (M6 adds a constraint-specific branch before OVERLAP: 23P01 on allocations_one_resolution_per_week → INTERNAL.)
  */
+const NOT_FOUND_FKS: ReadonlySet<string> = new Set([
+  'tasks_status_fk',
+  'task_blockers_task_fk',
+  'task_blockers_blocker_fk',
+])
+
 export function mapDbError(e: unknown): AppError | null {
-  switch (pgErrorInfo(e).code) {
+  const { code, constraint } = pgErrorInfo(e)
+  switch (code) {
     case '23505':
+      if (constraint === 'task_statuses_name') {
+        const msg = th.tasks.status.errors.duplicateName
+        return new ValidationError({ name: [msg] }, msg)
+      }
       return new ConflictError('CONFLICT')
     case '23503':
+      if (constraint !== undefined && NOT_FOUND_FKS.has(constraint)) return new NotFoundError()
       return new ConflictError('IN_USE')
     case '23P01':
       return new ConflictError('OVERLAP')

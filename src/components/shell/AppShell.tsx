@@ -7,6 +7,7 @@ import { useHotkeys } from '@/hooks/useHotkeys'
 import { usePreferences } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
 import { HOTKEYS } from '@/lib/keys'
+import { ShortcutHelp } from './ShortcutHelp'
 import { Sidebar } from './Sidebar'
 import styles from './AppShell.module.css'
 
@@ -48,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main" tabIndex={-1} className={styles.main}>
         {children}
       </main>
+      <ShortcutHelp />
     </div>
   )
 }

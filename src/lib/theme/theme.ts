@@ -1,6 +1,7 @@
 'use client'
 import { createTheme } from '@mui/material/styles'
 import { thTH } from '@mui/material/locale'
+import { thTH as pickersThTH } from '@mui/x-date-pickers/locales'
 
 export type ColorScheme = 'light' | 'dark'
 
@@ -19,5 +20,6 @@ export const theme = createTheme(
       MuiTextField: { defaultProps: { size: 'small' } },
     },
   },
-  thTH, // pickers' thTH is added with @mui/x-date-pickers (M0-D16)
+  thTH,
+  pickersThTH, // M0-D16; AppProviders also passes the same texts via LocalizationProvider localeText
 )

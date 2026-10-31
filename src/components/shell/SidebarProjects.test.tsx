@@ -27,6 +27,7 @@ const response = (over: Partial<SidebarResponse> = {}): SidebarResponse => ({
   ],
   hasArchived: true,
   canCreateProject: false,
+  myTaskCount: 0,
   ...over,
 })
 

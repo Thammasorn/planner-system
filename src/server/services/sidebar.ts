@@ -6,10 +6,10 @@ import type { SidebarResponse } from '@/lib/contracts/sidebar'
 import * as authz from '../authz'
 import type { DbOrTx } from '../db/types'
 import * as repo from '../repo'
+import { countMyOpenTasks } from './my-tasks'
 import type { SessionUser } from '../session'
 
-/** `today` (X90) comes from the route (`serverToday()`); unused in M2, M3's `countMyOpenTasks(tx, userId, today)`
- *  needs it. */
+/** `today` (X90) comes from the route (the server clock); unused until M9's count needs it (M9-D17). */
 export async function getSidebar(tx: DbOrTx, user: SessionUser, _today: ISODate): Promise<SidebarResponse> {
   const visible = await authz.visibleProjectIds(tx, user)
   const [rows, hasArchived] = await Promise.all([
@@ -20,5 +20,6 @@ export async function getSidebar(tx: DbOrTx, user: SessionUser, _today: ISODate)
     rows.map((p) => ({ id: p.id, name: p.name, color: p.color, certainty: p.certainty })),
     (p) => p.name,
   )
-  return { projects, hasArchived, canCreateProject: authz.isManager(user) }
+  const myTaskCount = await countMyOpenTasks(tx, user.id) // X22: the number of tasks on /my
+  return { projects, hasArchived, canCreateProject: authz.isManager(user), myTaskCount }
 }

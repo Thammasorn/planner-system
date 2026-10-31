@@ -10,7 +10,7 @@ import { createWorld } from '../../../tests/helpers/world'
 import { db } from '../db/client'
 import { listPeopleOptions } from './people'
 
-const KEYS = ['active', 'color', 'id', 'name', 'nickname', 'positionName']
+const KEYS = ['active', 'color', 'id', 'name', 'nickname', 'positionId', 'positionName']
 
 describe('listPeopleOptions', () => {
   it('every user incl. deactivated (active: false), exact keys, no email, sorted by display name', async () => {

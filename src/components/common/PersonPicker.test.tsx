@@ -16,6 +16,7 @@ const person = (
   id,
   name,
   nickname,
+  positionId: null,
   positionName,
   color: null,
   active,

@@ -15,3 +15,5 @@ export type FractionCd = 25 | 50 | 75 | 100
 export type Certainty = 'CONFIRMED' | 'TENTATIVE'
 /** Role inside a project (SPEC §3.1, `project_members.role`). */
 export type ProjectRole = 'LEAD' | 'MEMBER'
+/** Category of a per-project task status (SPEC v3.1 §4.6.1, BR-80): only `DONE` counts as completed. */
+export type TaskStatusCategory = 'TODO' | 'IN_PROGRESS' | 'WAITING' | 'DONE'

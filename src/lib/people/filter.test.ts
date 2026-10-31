@@ -7,6 +7,7 @@ const p = (id: string, name: string, nickname: string | null, positionName: stri
   id,
   name,
   nickname,
+  positionId: null,
   positionName,
   color: null,
   active: true,

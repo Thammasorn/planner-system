@@ -6,17 +6,15 @@ import Tooltip from '@mui/material/Tooltip'
 import Add from '@mui/icons-material/Add'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import ExpandMore from '@mui/icons-material/ExpandMore'
-import { useQuery } from '@tanstack/react-query'
 import Link from '@/components/Link'
 import { CertaintyBadge } from '@/components/common/CertaintyBadge'
 import { ProjectFormDialog } from '@/components/projects/ProjectFormDialog'
 import { projectTabHref, sortedProjectTabs } from '@/components/projects/project-tabs'
 import { usePreferences } from '@/hooks/usePreferences'
+import { useSidebar } from '@/hooks/useSidebar'
 import { th } from '@/i18n/th'
-import { getJson } from '@/lib/api'
 import { sortByThai } from '@/lib/collate'
-import type { SidebarProject, SidebarResponse } from '@/lib/contracts/sidebar'
-import { qk } from '@/lib/query-keys'
+import type { SidebarProject } from '@/lib/contracts/sidebar'
 import { PROJECTS_NAV } from './nav'
 import { NavRow } from './NavRow'
 import styles from './SidebarProjects.module.css'
@@ -24,13 +22,8 @@ import styles from './SidebarProjects.module.css'
 const PROJECT_KEY = 'project:'
 const nodeKey = (projectId: string) => `${PROJECT_KEY}${projectId}`
 
-/** Sidebar data (M2-D08): visible, non-archived projects; refreshed by `invalidateProjects` and on window focus. */
-export function useSidebar() {
-  return useQuery({
-    queryKey: qk.sidebar(),
-    queryFn: ({ signal }) => getJson<SidebarResponse>('/api/sidebar', { signal }),
-  })
-}
+/** Moved to src/hooks/useSidebar.ts (M3: the nav badge reads it too); re-exported for existing imports. */
+export { useSidebar }
 
 function ProjectNode({
   project,

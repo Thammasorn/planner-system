@@ -3,12 +3,15 @@
 // names snake_case (r2 §8.1). Schema changes only here + `pnpm db:generate` (owned by the milestone's S0 stream).
 import { sql } from 'drizzle-orm'
 import {
+  type AnyPgColumn,
   bigserial,
   boolean,
   check,
   customType,
   date,
+  foreignKey,
   index,
+  integer,
   jsonb,
   numeric,
   pgEnum,
@@ -17,6 +20,8 @@ import {
   smallint,
   text,
   timestamp,
+  unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 
@@ -255,9 +260,166 @@ export const projectMembers = pgTable(
   ],
 )
 
+// ---------------------------------------------------------------------------------------------------------------
+// M3 — task statuses, tasks, assignments, blockers (SPEC v3.1 §6.2 minus tasks.milestone_id; plan/m03 S0.2, X70,
+// X73, M3-D36). Positions are orderKey (X48); plan dates are date({ mode: 'string' }) (BR-04).
+// ---------------------------------------------------------------------------------------------------------------
+
+export const taskStatusCategory = pgEnum('task_status_category', ['TODO', 'IN_PROGRESS', 'WAITING', 'DONE'])
+
+/** FR-620–624: per-project status set (≥ 1 TODO and ≥ 1 DONE, BR-84). Soft delete under a batch (X72). */
+export const taskStatuses = pgTable(
+  'task_statuses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    color: text('color').notNull().default('#94A3B8'),
+    category: taskStatusCategory('category').notNull(),
+    position: orderKey('position').notNull(), // board column order (X48)
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('task_statuses_name_check', sql`length(trim(${t.name})) > 0`),
+    unique('task_statuses_project_id_id_key').on(t.projectId, t.id), // target of tasks_status_fk (BR-83)
+    uniqueIndex('task_statuses_name')
+      .on(t.projectId, sql`lower(${t.name})`)
+      .where(sql`${t.deletedAt} is null`),
+    index('task_statuses_project_id_position_idx')
+      .on(t.projectId, t.position)
+      .where(sql`${t.deletedAt} is null`),
+  ],
+)
+
+/** FR-601: depth 0..2 (BR-30); status of the same project (BR-83 composite FK); no milestone_id until M8 (X21). */
+export const tasks = pgTable(
+  'tasks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    parentId: uuid('parent_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
+    depth: smallint('depth').notNull().default(0),
+    name: text('name').notNull(),
+    notes: text('notes'),
+    startDate: date('start_date', { mode: 'string' }),
+    dueDate: date('due_date', { mode: 'string' }),
+    certaintyOverride: certainty('certainty_override'),
+    // milestone_id: added by M8 (X10/X21) — do not add here
+    statusId: uuid('status_id').notNull(), // composite FK tasks_status_fk below (BR-83, X70)
+    completedOn: date('completed_on', { mode: 'string' }), // set/cleared with the status category (BR-80)
+    completedWeek: date('completed_week', { mode: 'string' }).generatedAlwaysAs(
+      sql`(date_trunc('week', completed_on::timestamp)::date)`,
+    ), // never written (428C9)
+    completedBy: text('completed_by').references(() => user.id),
+    position: orderKey('position').notNull(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('tasks_depth_check', sql`${t.depth} between 0 and 2`),
+    check('tasks_name_check', sql`length(trim(${t.name})) > 0`),
+    check(
+      'tasks_dates_check',
+      sql`${t.dueDate} is null or ${t.startDate} is null or ${t.dueDate} >= ${t.startDate}`,
+    ),
+    index('tasks_project_id_parent_id_position_idx')
+      .on(t.projectId, t.parentId, t.position)
+      .where(sql`${t.deletedAt} is null`),
+    index('tasks_name_trgm').using('gin', t.name.op('gin_trgm_ops')),
+    index('tasks_status_id_idx')
+      .on(t.statusId)
+      .where(sql`${t.deletedAt} is null`),
+    unique('tasks_project_id_id_key').on(t.projectId, t.id), // target of the task_blockers composite FKs
+    // No ON DELETE action: statuses are only soft-deleted; a project delete removes both tables in one statement.
+    foreignKey({
+      name: 'tasks_status_fk',
+      columns: [t.projectId, t.statusId],
+      foreignColumns: [taskStatuses.projectId, taskStatuses.id],
+    }),
+  ],
+)
+
+/** FR-605: assignments only on leaves (BR-31); `version` is bumped by every allocation writer (BR-20b, M6). */
+export const taskAssignments = pgTable(
+  'task_assignments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id),
+    version: integer('version').notNull().default(1),
+    createdAt: createdAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    uniqueIndex('task_assignments_active')
+      .on(t.taskId, t.userId)
+      .where(sql`${t.deletedAt} is null`),
+    index('task_assignments_user_id_idx')
+      .on(t.userId)
+      .where(sql`${t.deletedAt} is null`),
+  ],
+)
+
+/** FR-640–645: `task_id` is blocked by `blocker_task_id`; both in the same project (composite FKs, D12). */
+export const taskBlockers = pgTable(
+  'task_blockers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id').notNull(),
+    taskId: uuid('task_id').notNull(), // the blocked task
+    blockerTaskId: uuid('blocker_task_id').notNull(), // the task that blocks it
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('task_blockers_not_self', sql`${t.taskId} <> ${t.blockerTaskId}`),
+    foreignKey({
+      name: 'task_blockers_task_fk',
+      columns: [t.projectId, t.taskId],
+      foreignColumns: [tasks.projectId, tasks.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'task_blockers_blocker_fk',
+      columns: [t.projectId, t.blockerTaskId],
+      foreignColumns: [tasks.projectId, tasks.id],
+    }).onDelete('cascade'),
+    uniqueIndex('task_blockers_active')
+      .on(t.taskId, t.blockerTaskId)
+      .where(sql`${t.deletedAt} is null`),
+    index('task_blockers_blocker_task_id_idx')
+      .on(t.blockerTaskId)
+      .where(sql`${t.deletedAt} is null`),
+  ],
+)
+
 export type ClientRow = typeof clients.$inferSelect
 export type NewClient = typeof clients.$inferInsert
 export type ProjectRow = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert
 export type ProjectMemberRow = typeof projectMembers.$inferSelect
 export type NewProjectMember = typeof projectMembers.$inferInsert
+export type TaskStatusDbRow = typeof taskStatuses.$inferSelect
+export type TaskDbRow = typeof tasks.$inferSelect
+export type TaskAssignmentDbRow = typeof taskAssignments.$inferSelect
+export type TaskBlockerDbRow = typeof taskBlockers.$inferSelect

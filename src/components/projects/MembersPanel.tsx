@@ -26,8 +26,14 @@ import { compareThai } from '@/lib/collate'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { ProjectMember } from '@/lib/contracts/projects'
 import { displayName } from '@/lib/display-name'
-import { invalidateProjects } from '@/lib/invalidate'
-import { addMember, changeMemberRole, removeMember } from '@/server/actions/members'
+import { invalidateLoad, invalidateProjects, invalidateTasks } from '@/lib/invalidate'
+import {
+  addMember,
+  changeMemberRole,
+  removeMember,
+  removeMemberWithAssignments,
+  restoreRemovedMember,
+} from '@/server/actions/members'
 import { errorMessage } from './errors'
 
 type Op =
@@ -162,6 +168,11 @@ export function MembersPanel({
       apply({ kind: 'remove', userId })
       try {
         const r = await unwrap(removeMember({ projectId, userId }))
+        if (r.removed === false) {
+          // FR-404 / BR-61 (X16): the member still has assignments — offer the combined op, nothing removed yet.
+          offerUnassignAll(m, r.blockedByAssignments)
+          return
+        }
         if (r.selfRemoved) {
           // M2-D19: the action skipped refresh(); this project is no longer visible to the viewer.
           await invalidateProjects(qc)
@@ -190,6 +201,53 @@ export function MembersPanel({
     })
   }
 
+  /** FR-404 two-option toast (X16, M3-D14): "ยกเลิกการมอบหมายทั้งหมด" runs the combined op (one undo entry);
+   *  "ยกเลิกการนำออก" keeps the member. */
+  const offerUnassignAll = (m: ProjectMember, n: number) => {
+    const name = displayName(m)
+    const userId = m.userId
+    const afterChange = async () => {
+      await Promise.all([invalidateProjects(qc), invalidateTasks(qc, projectId), invalidateLoad(qc)])
+    }
+    const runRemove = async () => {
+      const res = await unwrap(removeMemberWithAssignments({ projectId, userId }))
+      await afterChange()
+      return res
+    }
+    toast(th.members.assignmentsBlock.message(n), {
+      duration: 8000,
+      action: {
+        label: th.members.assignmentsBlock.unassignAll,
+        onClick: () =>
+          startTransition(async () => {
+            apply({ kind: 'remove', userId })
+            try {
+              let res = await runRemove()
+              const label = th.members.assignmentsBlock.removedWithAssignments(name, res.unassignedTaskCount)
+              undo.push(
+                {
+                  label,
+                  undo: async () => {
+                    await unwrap(
+                      restoreRemovedMember({ projectId, userId, member: res.member, batch: res.batch }),
+                    )
+                    await afterChange()
+                  },
+                  redo: async () => {
+                    res = await runRemove()
+                  },
+                },
+                { toast: label },
+              )
+            } catch (err) {
+              toast.error(errorMessage(err))
+            }
+          }),
+      },
+      cancel: { label: th.members.assignmentsBlock.cancelRemove, onClick: () => {} },
+    })
+  }
+
   return (
     <Paper
       variant="outlined"
@@ -198,14 +256,7 @@ export function MembersPanel({
       data-testid="members-panel"
       sx={{ p: 2 }}
     >
-      <Typography
-        id={headingId}
-        ref={headingRef}
-        tabIndex={-1}
-        variant="h6"
-        component="h2"
-        sx={{ mb: 1.5 }}
-      >
+      <Typography id={headingId} ref={headingRef} tabIndex={-1} variant="h6" component="h2" sx={{ mb: 1.5 }}>
         {th.members.heading}
       </Typography>
       <Box
