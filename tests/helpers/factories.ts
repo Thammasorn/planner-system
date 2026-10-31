@@ -1,11 +1,23 @@
 // tests/helpers/factories.ts — test data inserted with plain Drizzle through the schema (M1-D19, X59, X91).
-// Ids are real v4 UUIDs. Later milestones append makeProject, makeTask, … here.
+// Ids are real v4 UUIDs. Later milestones append makeTask, … here. Never through src/server/repo/** (M2-D13).
 import { randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword } from 'better-auth/crypto'
-import { desc, eq } from 'drizzle-orm'
+import { asc, desc, eq } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
+import type { Certainty } from '@/domain/types'
 import { db } from '@/server/db/client'
-import { account, positions, session, user, workSchedules } from '@/server/db/schema'
+import {
+  account,
+  clients,
+  positions,
+  projectMembers,
+  projects,
+  session,
+  user,
+  workSchedules,
+  type ClientRow,
+  type ProjectRow,
+} from '@/server/db/schema'
 
 /** Password of every factory user. Hashed once per worker (scrypt is slow). */
 export const TEST_PASSWORD = 'Test-pass-1234'
@@ -146,4 +158,86 @@ export async function makeSession(
     userAgent: 'vitest',
   })
   return { id, token }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M2 — clients, projects, members (plain Drizzle, M2-D13 / X91)
+// ---------------------------------------------------------------------------------------------------------------
+
+let clientSeq = 0
+let projectSeq = 0
+
+export interface MakeClientOptions {
+  /** Default 'Client <n>'. */
+  name?: string
+  code?: string
+  color?: string
+  /** archived_at = now() */
+  archived?: boolean
+}
+
+export async function makeClient(o: MakeClientOptions = {}): Promise<ClientRow> {
+  clientSeq += 1
+  const [row] = await db
+    .insert(clients)
+    .values({
+      name: o.name ?? `Client ${clientSeq}`,
+      code: o.code ?? null,
+      color: o.color ?? null,
+      archivedAt: o.archived ? new Date() : null,
+    })
+    .returning()
+  return row!
+}
+
+export interface MakeProjectOptions {
+  /** LEAD row (none when null / omitted). */
+  lead?: TestUser | null
+  /** MEMBER rows. */
+  members?: TestUser[]
+  client?: ClientRow | null
+  /** Default CONFIRMED (DB default). */
+  certainty?: Certainty
+  /** archived_at = now() */
+  archived?: boolean
+  /** Default 'Project <n>'. */
+  name?: string
+  /** Default: the first manager in the DB (oldest), else a new manager. Also `added_by` of the member rows. */
+  createdBy?: TestUser
+}
+
+async function defaultCreatorId(): Promise<string> {
+  const [m] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.role, 'manager'))
+    .orderBy(asc(user.createdAt), asc(user.id))
+    .limit(1)
+  return m?.id ?? (await makeUser({ role: 'manager' })).id
+}
+
+export async function makeProject(o: MakeProjectOptions = {}): Promise<ProjectRow> {
+  projectSeq += 1
+  const createdBy = o.createdBy?.id ?? (await defaultCreatorId())
+  const [row] = await db
+    .insert(projects)
+    .values({
+      name: o.name ?? `Project ${projectSeq}`,
+      clientId: o.client?.id ?? null,
+      ...(o.certainty ? { certainty: o.certainty } : {}),
+      archivedAt: o.archived ? new Date() : null,
+      createdBy,
+    })
+    .returning()
+  const project = row!
+  const memberRows = [
+    ...(o.lead ? [{ userId: o.lead.id, role: 'LEAD' as const }] : []),
+    ...(o.members ?? []).map((m) => ({ userId: m.id, role: 'MEMBER' as const })),
+  ]
+  if (memberRows.length > 0) {
+    await db
+      .insert(projectMembers)
+      .values(memberRows.map((m) => ({ projectId: project.id, ...m, addedBy: createdBy })))
+  }
+  return project
 }

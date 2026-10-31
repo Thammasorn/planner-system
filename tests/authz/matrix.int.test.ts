@@ -7,7 +7,7 @@ import { auditCount, auditRowsAfter } from '../helpers/audit'
 import { outcomeOf } from '../helpers/outcome'
 import { createWorld, type World } from '../helpers/world'
 import { rows } from './rows'
-import type { Role } from './types'
+import type { AuthzRow, Outcome, Role } from './types'
 
 const USER_OF: Record<Role, 'manager' | 'lead' | 'member' | 'outsider'> = {
   M: 'manager',
@@ -17,6 +17,10 @@ const USER_OF: Record<Role, 'manager' | 'lead' | 'member' | 'outsider'> = {
 }
 const ROLES = ['M', 'L', 'Me', 'W'] as const
 const isBetterAuthRow = (id: string) => id.startsWith('BA-')
+
+/** Loader rows (M2) already return an Outcome; action and route rows go through outcomeOf. */
+const outcomeOfRun = (r: Awaited<ReturnType<AuthzRow['run']>>): Outcome =>
+  typeof r === 'string' ? r : outcomeOf(r)
 
 /** Exported actions covered outside the matrix because they need real cookies (tests/integration/auth.int.test.ts,
  *  tests/integration/lockout.int.test.ts, src/server/actions/auth.int.test.ts). */
@@ -62,7 +66,7 @@ describe('authz matrix', () => {
       const ctx = row.setup ? await row.setup(w, actor) : undefined
       if (!isBetterAuthRow(row.id)) asUser(actor) // BA-* rows authenticate with real cookies
       const before = await auditCount()
-      const outcome = outcomeOf(await row.run(w, ctx, actor))
+      const outcome = outcomeOfRun(await row.run(w, ctx, actor))
       expect(outcome).toBe(row.expect[role])
       if (row.mutates && outcome === 'allow' && row.audit !== false) {
         const added = await auditRowsAfter(before)
@@ -81,7 +85,7 @@ describe('authz matrix', () => {
       const w = await createWorld({ with: row.with ?? [] })
       const ctx = row.setup ? await row.setup(w, w.manager) : undefined
       asNobody()
-      expect(outcomeOf(await row.run(w, ctx, w.manager))).toBe('401')
+      expect(outcomeOfRun(await row.run(w, ctx, w.manager))).toBe('401')
     })
 
     it.skipIf(isBetterAuthRow(row.id))('mustChangePassword → 403 unless allowed', async () => {
@@ -89,7 +93,7 @@ describe('authz matrix', () => {
       const ctx = row.setup ? await row.setup(w, w.manager) : undefined
       asUser(w.manager, { mustChangePassword: true })
       const expected = row.allowMustChange ? row.expect.M : '403'
-      expect(outcomeOf(await row.run(w, ctx, w.manager))).toBe(expected)
+      expect(outcomeOfRun(await row.run(w, ctx, w.manager))).toBe(expected)
     })
   })
 })

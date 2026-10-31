@@ -11,6 +11,7 @@ import {
   index,
   jsonb,
   numeric,
+  pgEnum,
   pgTable,
   primaryKey,
   smallint,
@@ -188,3 +189,75 @@ export const auditLog = pgTable(
     index('audit_log_entity_idx').on(t.entity, t.entityId),
   ],
 )
+
+// ---------------------------------------------------------------------------------------------------------------
+// M2 — clients, projects, members (SPEC §6.2, §6.4; plan/m02 S0.3)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const certainty = pgEnum('certainty', ['CONFIRMED', 'TENTATIVE'])
+export const projectRole = pgEnum('project_role', ['LEAD', 'MEMBER'])
+
+/** FR-301. Name unique including archived (M2-D07); no hard delete in the app (archive only). */
+export const clients = pgTable(
+  'clients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull().unique(), // clients_name_unique
+    code: text('code'),
+    color: text('color'),
+    note: text('note'),
+    archivedAt: timestamptz('archived_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('clients_name_trgm').using('gin', t.name.op('gin_trgm_ops'))],
+)
+
+/** FR-401. `deleted_at` is never set in the MVP (permanent delete = hard DELETE, M2-D11) but every query filters it. */
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    code: text('code'),
+    color: text('color').notNull().default('#2F5597'),
+    certainty: certainty('certainty').notNull().default('CONFIRMED'),
+    certaintyNote: text('certainty_note'),
+    archivedAt: timestamptz('archived_at'),
+    deletedAt: timestamptz('deleted_at'),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('projects_name_trgm').using('gin', t.name.op('gin_trgm_ops'))],
+)
+
+/** SPEC §3.1 / FR-403: membership + project role; cascades with the project and the user. */
+export const projectMembers = pgTable(
+  'project_members',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    role: projectRole('role').notNull().default('MEMBER'),
+    addedBy: text('added_by').references(() => user.id),
+    addedAt: timestamptz('added_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.userId] }),
+    index('project_members_user_id_idx').on(t.userId),
+  ],
+)
+
+export type ClientRow = typeof clients.$inferSelect
+export type NewClient = typeof clients.$inferInsert
+export type ProjectRow = typeof projects.$inferSelect
+export type NewProject = typeof projects.$inferInsert
+export type ProjectMemberRow = typeof projectMembers.$inferSelect
+export type NewProjectMember = typeof projectMembers.$inferInsert

@@ -2,50 +2,15 @@
 import { usePathname } from 'next/navigation'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import HomeOutlined from '@mui/icons-material/HomeOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import MenuOpenIcon from '@mui/icons-material/MenuOpen'
-import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
-import Link from '@/components/Link'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { th } from '@/i18n/th'
-import { BOTTOM_NAV, PRIMARY_NAV, isActive, visibleNav, type NavIcon, type NavItem } from './nav'
+import { BOTTOM_NAV, PRIMARY_NAV, visibleNav } from './nav'
+import { NavRow } from './NavRow'
+import { SidebarProjects } from './SidebarProjects'
 import { UserMenu } from './UserMenu'
 import styles from './Sidebar.module.css'
-
-/** Every milestone that widens `NavIcon` adds its entry here, so typecheck catches a missing icon. */
-const NAV_ICONS: Record<NavIcon, typeof HomeOutlined> = { home: HomeOutlined, settings: SettingsOutlined }
-
-function NavRow({
-  item,
-  pathname,
-  collapsed,
-  onNavigate,
-}: {
-  item: NavItem
-  pathname: string
-  collapsed: boolean
-  onNavigate: (() => void) | undefined
-}) {
-  const Icon = NAV_ICONS[item.icon]
-  return (
-    <li>
-      <Tooltip title={collapsed ? item.label : ''} placement="right">
-        <Link
-          className={styles.row}
-          href={item.href}
-          aria-current={isActive(pathname, item.activePrefix ?? item.href) ? 'page' : undefined}
-          aria-label={collapsed ? item.label : undefined}
-          data-nav-id={item.id}
-          onClick={onNavigate}
-        >
-          <Icon className={styles.icon} fontSize="inherit" />
-          {collapsed ? null : <span className={styles.label}>{item.label}</span>}
-        </Link>
-      </Tooltip>
-    </li>
-  )
-}
 
 /** Sidebar content (SPEC §8.1): used by the permanent <aside> and by the narrow-screen Drawer. Dense rows are plain
  *  elements + CSS Modules (PLAN.md §3.9); the active row has a background, bold text and a left bar (not colour only). */
@@ -81,17 +46,20 @@ export function Sidebar({
         ) : null}
       </div>
       <nav aria-label={th.nav.sidebarLabel} className={styles.nav}>
-        <ul className={styles.list}>
-          {primary.map((item) => (
-            <NavRow
-              key={item.id}
-              item={item}
-              pathname={pathname}
-              collapsed={collapsed}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </ul>
+        <div className={styles.top}>
+          <ul className={styles.list}>
+            {primary.map((item) => (
+              <NavRow
+                key={item.id}
+                item={item}
+                pathname={pathname}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </ul>
+          <SidebarProjects collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />
+        </div>
         {bottom.length > 0 ? (
           <ul className={styles.list}>
             {bottom.map((item) => (

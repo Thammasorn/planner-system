@@ -1,0 +1,178 @@
+/* Sidebar "โปรเจค" section (SPEC §8.1, M2 S2.2): dense rows are plain elements reading theme variables (PLAN §3.9). */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.projectRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 32px;
+  padding-right: 8px;
+  border-radius: 6px;
+}
+
+.projectRow:hover {
+  background: var(--mui-palette-action-hover);
+}
+
+.projectRow:has(.link[aria-current='page']) {
+  background: var(--brand-light);
+}
+
+/* Active project: background + bold + left bar, never colour only (SPEC §8.9). */
+.projectRow:has(.link[aria-current='page'])::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--brand-navy);
+  content: '';
+}
+
+.toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mui-palette-text-secondary);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--mui-palette-action-selected);
+}
+
+.toggle:focus-visible,
+.link:focus-visible,
+.subLink:focus-visible,
+.footerLink:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--mui-palette-primary-main);
+  outline-offset: 1px;
+}
+
+.link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--mui-palette-text-primary);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.link[aria-current='page'] {
+  color: var(--brand-navy);
+  font-weight: 600;
+}
+
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sub {
+  margin: 0 0 2px;
+  padding: 0 0 0 48px;
+  list-style: none;
+}
+
+.subLink {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+
+.subLink:hover {
+  background: var(--mui-palette-action-hover);
+  color: var(--mui-palette-text-primary);
+}
+
+.subLink[aria-current='true'] {
+  color: var(--brand-navy);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.status {
+  padding: 4px 12px 4px 40px;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.skeleton {
+  padding: 6px 12px 6px 32px;
+}
+
+.retry {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mui-palette-primary-main);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.footerLink {
+  display: block;
+  margin-top: 2px;
+  padding: 4px 12px 4px 40px;
+  border-radius: 4px;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  background: var(--mui-palette-action-hover);
+  color: var(--mui-palette-text-primary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

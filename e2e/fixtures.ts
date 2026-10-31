@@ -11,8 +11,10 @@
 import { rmSync } from 'node:fs'
 import path from 'node:path'
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { eq } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
 import { seedGolden, type FixtureId } from '../scripts/lib/fixtures'
+import { clients, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
 
@@ -166,4 +168,27 @@ export async function openGuardedPage(browser: Browser, allowedConsoleErrors: re
 /** Resolves when the next server-action POST (header `next-action`) has answered. Start it before the click. */
 export function waitForServerAction(page: Page) {
   return page.waitForResponse((r) => r.request().method() === 'POST' && !!r.request().headers()['next-action'])
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M2: id lookups in planner_e2e (plan/m02-clients-projects-authz.md S3.5)
+// ---------------------------------------------------------------------------------------------------------------
+
+export type IdKind = 'project' | 'client' | 'user'
+
+/** Id of a seeded row in `planner_e2e`: projects/clients by `name`, users by `nickname`. Throws when absent. */
+export async function idOf(kind: IdKind, name: string): Promise<string> {
+  const { db, close } = createScriptDb(E2E.databaseUrl)
+  try {
+    const rows =
+      kind === 'project'
+        ? await db.select({ id: projects.id }).from(projects).where(eq(projects.name, name))
+        : kind === 'client'
+          ? await db.select({ id: clients.id }).from(clients).where(eq(clients.name, name))
+          : await db.select({ id: user.id }).from(user).where(eq(user.nickname, name))
+    if (rows.length !== 1) throw new Error(`idOf(${kind}, ${name}): ${rows.length} rows in ${E2E.dbName}`)
+    return rows[0]!.id
+  } finally {
+    await close()
+  }
 }

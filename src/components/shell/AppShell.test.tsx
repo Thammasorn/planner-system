@@ -11,7 +11,13 @@ import { AppShell } from './AppShell'
 const mocks = vi.hoisted(() => ({ setPreference: vi.fn<(i: PreferenceInput) => Promise<unknown>>() }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/home' }))
 vi.mock('@/server/actions/preferences', () => ({ setPreference: mocks.setPreference }))
-vi.mock('@/server/actions/auth', () => ({ logout: () => Promise.resolve({ ok: true, redirectTo: '/login' }) }))
+vi.mock('@/server/actions/auth', () => ({
+  logout: () => Promise.resolve({ ok: true, redirectTo: '/login' }),
+}))
+// GET /api/sidebar (M2): an empty project list
+vi.mock('@/lib/api', () => ({
+  getJson: () => Promise.resolve({ projects: [], hasArchived: false, canCreateProject: false }),
+}))
 
 function renderWithProviders(ui: ReactElement, prefs = DEFAULT_PREFERENCES) {
   return renderBase(
@@ -42,6 +48,14 @@ describe('AppShell', () => {
     expect(within(main).getByText('content')).toBeInTheDocument()
     expect(sidebar()).toHaveAttribute('id', 'app-sidebar')
     expect(sidebar()).toHaveAttribute('data-collapsed', 'false')
+  })
+
+  it('M2: shows the projects section header and the clients item (X33)', async () => {
+    renderWithProviders(<AppShell>x</AppShell>)
+    const nav = screen.getByRole('navigation', { name: th.nav.sidebarLabel })
+    expect(within(nav).getByRole('link', { name: th.nav.projects })).toHaveAttribute('href', '/projects')
+    expect(within(nav).getByRole('link', { name: th.nav.clients })).toHaveAttribute('href', '/clients')
+    expect(await within(nav).findByText(th.sidebar.noProjects)).toBeInTheDocument()
   })
 
   it('collapses with the toggle button and keeps accessible names', async () => {

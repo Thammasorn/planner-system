@@ -1111,18 +1111,18 @@ All blocks: `resetDb()` in `beforeAll` (golden seed incl. M2 memberships), clock
 
 ## 8. Definition of done
 
-- [ ] SPEC §12 M2 delivered: §4.3, §4.4 minus FR-402 and the FR-409/FR-303 load parts; `authz.requireProject`; masking helper; real sidebar projects; `/projects` + overview.
-- [ ] §12 M2 e2e: worker cannot see non-member projects (sidebar + list) and direct URLs answer **404** with the Thai not-found UI (E1).
-- [ ] Every §3.2 client / project / member line has matrix rows (PERM-03…PERM-10, §7.2) incl. archived and last-LEAD variants; every mutating allow case asserts one audit row; unauthenticated → 401.
-- [ ] `visibleProjectIds`, `visibleUserIds`, `canSeeUserDetails`, `isLeadAnywhere`, `requireClient` implemented and tested (world + golden).
-- [ ] `tests/authz/masking.int.test.ts` exists and passes for sidebar, project list, client list/detail, people options.
-- [ ] `pnpm check` green (typecheck, lint, unit, ui, integration incl. authz + masking + golden visibility; domain coverage ≥ 95 % unaffected).
-- [ ] `pnpm test:e2e` green: `m0-smoke`, `m1-auth`, `m2-projects` (no CSP violations).
-- [ ] `pnpm db:generate` → "No schema changes"; one new journaled migration; no hand edits.
-- [ ] No Thai literals outside `src/i18n/**` (lint); no `any`, `@ts-ignore` or `eslint-disable` without a reason; no `localStorage`; no `router.refresh()`; no `revalidateTag`.
-- [ ] Only `DeleteProjectDialog` has a confirm step; archive / member removal / client archive use the 8 s undo toast + Cmd+Z.
-- [ ] Every M2 query on `projects` filters `deleted_at is null`; no allocations / plan-date code introduced.
-- [ ] `PROGRESS.md` updated (status, Decisions X-rows + M2-D01…D22, Known issues); commit + tag `m2`.
+- [x] SPEC §12 M2 delivered: §4.3, §4.4 minus FR-402 and the FR-409/FR-303 load parts; `authz.requireProject`; masking helper; real sidebar projects; `/projects` + overview.
+- [x] §12 M2 e2e: worker cannot see non-member projects (sidebar + list) and direct URLs answer **404** with the Thai not-found UI (E1).
+- [x] Every §3.2 client / project / member line has matrix rows (PERM-03…PERM-10, §7.2) incl. archived and last-LEAD variants; every mutating allow case asserts one audit row; unauthenticated → 401.
+- [x] `visibleProjectIds`, `visibleUserIds`, `canSeeUserDetails`, `isLeadAnywhere`, `requireClient` implemented and tested (world + golden).
+- [x] `tests/authz/masking.int.test.ts` exists and passes for sidebar, project list, client list/detail, people options.
+- [x] `pnpm check` green (typecheck, lint, unit, ui, integration incl. authz + masking + golden visibility; domain coverage ≥ 95 % unaffected).
+- [x] `pnpm test:e2e` green: `m0-smoke`, `m1-auth`, `m2-projects` (no CSP violations).
+- [x] `pnpm db:generate` → "No schema changes"; one new journaled migration; no hand edits.
+- [x] No Thai literals outside `src/i18n/**` (lint); no `any`, `@ts-ignore` or `eslint-disable` without a reason; no `localStorage`; no `router.refresh()`; no `revalidateTag`.
+- [x] Only `DeleteProjectDialog` has a confirm step; archive / member removal / client archive use the 8 s undo toast + Cmd+Z.
+- [x] Every M2 query on `projects` filters `deleted_at is null`; no allocations / plan-date code introduced.
+- [x] `PROGRESS.md` updated (status, Decisions X-rows + M2-D01…D22, Known issues); commit + tag `m2`.
 
 ---
 

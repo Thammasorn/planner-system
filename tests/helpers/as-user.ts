@@ -36,3 +36,10 @@ export function asNobody(): void {
 export function currentTestUser(): SessionUser | null {
   return g.__testSessionUser ?? null
 }
+
+/** The user set by asUser() — lets matrix rows call page loaders (`getProjectOverview(db, await currentUser(), …)`). */
+export async function currentUser(): Promise<SessionUser> {
+  const u = currentTestUser()
+  if (!u) throw new Error('currentUser(): no user set — call asUser() first')
+  return u
+}

@@ -11,3 +11,7 @@ export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type Schedule = Partial<Record<Weekday, Cd>>
 /** Allowed per-day fractions of a work schedule (X60). */
 export type FractionCd = 25 | 50 | 75 | 100
+/** Project certainty (SPEC §5.5 BR-35..BR-37): TENTATIVE load counts as `atRisk`, not `committed`. */
+export type Certainty = 'CONFIRMED' | 'TENTATIVE'
+/** Role inside a project (SPEC §3.1, `project_members.role`). */
+export type ProjectRole = 'LEAD' | 'MEMBER'

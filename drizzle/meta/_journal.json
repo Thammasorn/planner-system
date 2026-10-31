@@ -15,6 +15,13 @@
       "when": 1793356547556,
       "tag": "0001_m1_auth_employees",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793449740704,
+      "tag": "0002_m2_clients_projects",
+      "breakpoints": true
     }
   ]
 }

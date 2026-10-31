@@ -6,7 +6,7 @@ import type { DbOrTx } from './db/types'
 
 /** Grows to exactly the X93 list: M2 client, project, project_member · M3 task, task_assignment, task_status,
  *  task_blocker · M4 page, file · M5 holiday, leave_type, time_off · M6 allocation · M8 milestone. */
-export type AuditEntity = 'user' | 'position'
+export type AuditEntity = 'user' | 'position' | 'client' | 'project' | 'project_member'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
 export interface AuditInput {

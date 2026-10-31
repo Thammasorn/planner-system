@@ -1,7 +1,9 @@
 // tests/helpers/world.ts — the standard permission world (PLAN.md §4.3, X91).
-// M1: four users; M2 adds projects P/Q/A (lead = LEAD of P, member = MEMBER of P, outsider = MEMBER of Q only).
+// M1: four users; M2 adds clients C1/C2/C3 and projects P/Q/A (lead = LEAD of P, member = MEMBER of P, outsider =
+// MEMBER of Q only; A = archived, P's team; Q has no LEAD; C3 archived without projects). Always built.
 // The four role users stay top-level; extra users added by later parts live under `w.users.<name>`.
-import { makeUser, type TestUser } from './factories'
+import type { ClientRow, ProjectRow } from '@/server/db/schema'
+import { makeClient, makeProject, makeUser, type TestUser } from './factories'
 
 /** Pinned part list (X91); each milestone adds the builder for its part(s).
  *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M7 dayAllocations · M8 milestones */
@@ -30,6 +32,18 @@ export interface World {
   outsider: TestUser
   /** Extra users added by later parts (M3 former, M5 coworker/pOnly). */
   users: Record<string, TestUser>
+  /** Client of P and A. */
+  C1: ClientRow
+  /** Client of Q. */
+  C2: ClientRow
+  /** Archived client without projects. */
+  C3: ClientRow
+  /** 'World P' · C1 · LEAD lead · MEMBER member. */
+  P: ProjectRow
+  /** 'World Q' · C2 · MEMBER outsider · no LEAD. */
+  Q: ProjectRow
+  /** 'World A' · C1 · LEAD lead · MEMBER member · archived. */
+  A: ProjectRow
 }
 
 type PartBuilder = (w: World) => Promise<void>
@@ -56,7 +70,20 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
   const lead = await makeUser({ role: 'worker', name: 'World Lead', nickname: 'Lead' })
   const member = await makeUser({ role: 'worker', name: 'World Member', nickname: 'Member' })
   const outsider = await makeUser({ role: 'worker', name: 'World Outsider', nickname: 'Outsider' })
-  const w: World = { manager, lead, member, outsider, users: {} }
+  const C1 = await makeClient({ name: 'World C1' })
+  const C2 = await makeClient({ name: 'World C2' })
+  const C3 = await makeClient({ name: 'World C3', archived: true })
+  const P = await makeProject({ name: 'World P', client: C1, lead, members: [member], createdBy: manager })
+  const Q = await makeProject({ name: 'World Q', client: C2, members: [outsider], createdBy: manager })
+  const A = await makeProject({
+    name: 'World A',
+    client: C1,
+    lead,
+    members: [member],
+    archived: true,
+    createdBy: manager,
+  })
+  const w: World = { manager, lead, member, outsider, users: {}, C1, C2, C3, P, Q, A }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w
 }

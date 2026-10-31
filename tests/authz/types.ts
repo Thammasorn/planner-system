@@ -24,7 +24,9 @@ export interface AuthzRow<C = unknown> {
   with?: readonly WorldPart[]
   expect: Record<Role, Outcome>
   setup?: (w: World, actor: TestUser) => Promise<C>
-  run: (w: World, ctx: C, actor: TestUser) => Promise<ActionResult<object> | Response>
+  /** Action rows return the action result, route rows the Response; loader rows (M2) return an Outcome computed with
+   *  `loaderOutcome()` (tests/authz/_support/loader.ts → outcomeOfCall behind the page session gate). */
+  run: (w: World, ctx: C, actor: TestUser) => Promise<ActionResult<object> | Response | Outcome>
 }
 
 /**
