@@ -12,8 +12,10 @@ import Tooltip from '@mui/material/Tooltip'
 import { useColorScheme } from '@mui/material/styles'
 import AccountCircleOutlined from '@mui/icons-material/AccountCircleOutlined'
 import Check from '@mui/icons-material/Check'
+import EventBusyOutlined from '@mui/icons-material/EventBusyOutlined'
 import Logout from '@mui/icons-material/Logout'
 import { useLogout } from '@/components/account/useLogout'
+import { useOptionalLeaveDialog } from '@/components/calendar/LeaveDialogProvider'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import Link from '@/components/Link'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -22,14 +24,16 @@ import { th } from '@/i18n/th'
 import { THEMES, type Theme } from '@/lib/schemas/preferences'
 
 /**
- * Bottom of the sidebar (SPEC §8.1, X33): avatar + display name opening a menu with บัญชีของฉัน, the theme choice
- * (saved to user_preferences, applied at once through MUI's colour scheme) and ออกจากระบบ.
+ * Bottom of the sidebar (SPEC §8.1, X33): avatar + display name opening a menu with บัญชีของฉัน, แจ้งลา (M5-D14: the
+ * leave dialog from any page), the theme choice (saved to user_preferences, applied at once through MUI's colour
+ * scheme) and ออกจากระบบ.
  */
 export function UserMenu({ collapsed }: { collapsed: boolean }) {
   const user = useCurrentUser()
   const { prefs, setPreference } = usePreferences()
   const { setMode } = useColorScheme()
   const { logout, pending } = useLogout()
+  const leaveDialog = useOptionalLeaveDialog()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const menuId = useId()
   if (!user) return null
@@ -86,6 +90,19 @@ export function UserMenu({ collapsed }: { collapsed: boolean }) {
           </ListItemIcon>
           <ListItemText>{th.nav.account}</ListItemText>
         </MenuItem>
+        {leaveDialog ? (
+          <MenuItem
+            onClick={() => {
+              close()
+              leaveDialog.open({ mode: 'create' })
+            }}
+          >
+            <ListItemIcon>
+              <EventBusyOutlined fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{th.nav.reportLeave}</ListItemText>
+          </MenuItem>
+        ) : null}
         <Divider />
         <ListSubheader disableSticky sx={{ lineHeight: '32px' }}>
           {th.prefs.theme}

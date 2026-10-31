@@ -4,10 +4,11 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
-import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
+import { addDays } from '@/domain/dates'
 import { DEFAULT_STATUSES, type DefaultStatusKey } from '@/domain/status'
-import type { Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
+import type { Certainty, HalfDay, ISODate, TaskStatusCategory } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { PageSpace } from '@/lib/contracts/pages'
 import { extractContentText } from '@/lib/editor/content-text'
@@ -16,6 +17,8 @@ import {
   account,
   clients,
   files,
+  holidays,
+  leaveTypes,
   pages,
   positions,
   projectMembers,
@@ -25,12 +28,17 @@ import {
   taskBlockers,
   taskStatuses,
   tasks,
+  timeOff,
   user,
   workSchedules,
   type ClientRow,
   type FileRow,
+  type HolidayRow,
+  type LeaveTypeRow,
   type PageRow,
   type ProjectRow,
+  type ProjectMemberRow,
+  type TimeOffRow,
 } from '@/server/db/schema'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
@@ -604,6 +612,97 @@ export async function makeFile(o: MakeFileOptions): Promise<FileRow> {
       pageId: o.page.id,
       projectId: o.page.projectId,
       uploadedBy: o.uploadedBy.id,
+    })
+    .returning()
+  return row!
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M5 — holidays, leave types, leave, extra memberships (plain Drizzle, X59 / X91; plan/m05 S0.15). Never through
+// src/server/repo/**.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** One more project_members row for an existing project (world parts that add people to P / Q). */
+export async function makeMembership(o: {
+  project: { id: string }
+  user: { id: string }
+  role?: 'LEAD' | 'MEMBER'
+  addedBy: { id: string }
+}): Promise<ProjectMemberRow> {
+  const [row] = await db
+    .insert(projectMembers)
+    .values({ projectId: o.project.id, userId: o.user.id, role: o.role ?? 'MEMBER', addedBy: o.addedBy.id })
+    .returning()
+  return row!
+}
+
+let holidaySeq = 0
+
+/** Default date 2027-01-01 + (n − 1) days, name 'วันหยุดทดสอบ n'. */
+export async function makeHoliday(o: { date?: ISODate; name?: string } = {}): Promise<HolidayRow> {
+  holidaySeq += 1
+  const [row] = await db
+    .insert(holidays)
+    .values({
+      date: o.date ?? addDays('2027-01-01', holidaySeq - 1),
+      name: o.name ?? `วันหยุดทดสอบ ${holidaySeq}`,
+    })
+    .returning()
+  return row!
+}
+
+let leaveTypeSeq = 0
+
+/** Appended after the last type (generateKeyBetween(last by position, id, null)); `archived` → archived_at = now(). */
+export async function makeLeaveType(
+  o: { name?: string; color?: string; archived?: boolean } = {},
+): Promise<LeaveTypeRow> {
+  leaveTypeSeq += 1
+  const [last] = await db
+    .select({ position: leaveTypes.position })
+    .from(leaveTypes)
+    .orderBy(desc(leaveTypes.position), desc(leaveTypes.id))
+    .limit(1)
+  const [row] = await db
+    .insert(leaveTypes)
+    .values({
+      name: o.name ?? `ประเภทลาทดสอบ ${leaveTypeSeq}`,
+      color: o.color ?? '#94A3B8',
+      position: generateKeyBetween(last?.position ?? null, null),
+      archivedAt: o.archived ? new Date() : null,
+    })
+    .returning()
+  return row!
+}
+
+export interface MakeTimeOffOptions {
+  user: { id: string }
+  leaveType: { id: string }
+  startDate: ISODate
+  /** Default startDate. */
+  endDate?: ISODate
+  /** Default null (full day). */
+  half?: HalfDay | null
+  note?: string | null
+  /** Default the owner (self-recorded). */
+  createdBy?: { id: string }
+  /** deleted_at = now() − daysAgo days (DB clock, the 30-day restore window), deleted_batch = batch. */
+  deleted?: DeletedAs
+}
+
+export async function makeTimeOff(o: MakeTimeOffOptions): Promise<TimeOffRow> {
+  const [row] = await db
+    .insert(timeOff)
+    .values({
+      userId: o.user.id,
+      leaveTypeId: o.leaveType.id,
+      startDate: o.startDate,
+      endDate: o.endDate ?? o.startDate,
+      half: o.half ?? null,
+      note: o.note ?? null,
+      createdBy: (o.createdBy ?? o.user).id,
+      deletedAt: o.deleted ? sql`now() - make_interval(days => ${o.deleted.daysAgo})` : null,
+      deletedBatch: o.deleted?.batch ?? null,
     })
     .returning()
   return row!

@@ -4,9 +4,12 @@ import type { AuthzRow } from '../types'
 import { rows as account } from './account'
 import { rows as assignments } from './assignments'
 import { rows as authEndpoints } from './auth-endpoints'
+import { rows as calendar } from './calendar'
 import { rows as clients } from './clients'
 import { rows as employees } from './employees'
 import { rows as files } from './files'
+import { rows as holidays } from './holidays'
+import { rows as leaveTypes } from './leave-types'
 import { rows as members } from './members'
 import { rows as pages } from './pages'
 import { rows as positions } from './positions'
@@ -16,6 +19,7 @@ import { rows as search } from './search'
 import { rows as taskBlockers } from './task-blockers'
 import { rows as taskStatuses } from './task-statuses'
 import { rows as tasks } from './tasks'
+import { rows as timeOff } from './time-off'
 import { rows as wiki } from './wiki'
 
 // Rows are generic over their setup context; the matrix treats the context as opaque.
@@ -39,4 +43,9 @@ export const rows: AuthzRow[] = [
   ...wiki,
   ...files,
   ...search,
+  // M5
+  ...holidays,
+  ...leaveTypes,
+  ...timeOff,
+  ...calendar,
 ]

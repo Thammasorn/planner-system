@@ -17,3 +17,11 @@ export type Certainty = 'CONFIRMED' | 'TENTATIVE'
 export type ProjectRole = 'LEAD' | 'MEMBER'
 /** Category of a per-project task status (SPEC v3.1 §4.6.1, BR-80): only `DONE` counts as completed. */
 export type TaskStatusCategory = 'TODO' | 'IN_PROGRESS' | 'WAITING' | 'DONE'
+/** Half-day leave (SPEC §6.2 `half_day`): AM = ครึ่งวันเช้า, PM = ครึ่งวันบ่าย; null elsewhere = full day. */
+export type HalfDay = 'AM' | 'PM'
+/** One live leave entry reduced to what capacity needs (BR-10). fractionCd: 100 = full day, 50 = half day. */
+export interface TimeOffSpan {
+  startDate: ISODate
+  endDate: ISODate
+  fractionCd: 50 | 100
+}

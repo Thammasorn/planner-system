@@ -34,6 +34,7 @@
     "db:reset": "tsx --env-file-if-exists=.env scripts/db-reset.ts",
     "bootstrap": "tsx --env-file-if-exists=.env scripts/bootstrap.ts",
     "seed:golden": "tsx --env-file-if-exists=.env scripts/seed-golden.ts",
+    "import:holidays": "tsx --env-file-if-exists=.env scripts/import-holidays.ts",
     "auth:check": "auth check schema --config src/server/auth.ts"
   },
   "dependencies": {

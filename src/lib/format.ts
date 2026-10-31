@@ -1,5 +1,7 @@
 /** Display formatting (SPEC §8.8, PLAN.md §3.6). Thai dates use the Buddhist era ("30 ก.ย. 2569"). M1 narrows the
- *  date parameters to `ISODate` (M0-D23) and adds `formatWeekday`; M4 adds `formatRelative`. */
+ *  date parameters to `ISODate` (M0-D23) and adds `formatWeekday`; M4 adds `formatRelative`; M5 adds date ranges. */
+import type { HalfDay, ISODate } from '@/domain/types'
+import { th } from '@/i18n/th'
 
 export type ThaiDateStyle = 'medium' | 'long'
 
@@ -52,4 +54,16 @@ export function formatWeekHeader(weekStart: string): string {
 /** An instant (timestamp) shown as a Thai date in Asia/Bangkok. Not for plan dates. */
 export function formatThaiInstantDate(instant: Date, style: ThaiDateStyle = 'medium'): string {
   return instantDateFormat[style].format(instant)
+}
+
+/** "5 ต.ค. 2569 – 6 ต.ค. 2569", or "5 ต.ค. 2569" when start = end (M5). RangeError on invalid dates. */
+export function formatThaiDateRange(start: ISODate, end: ISODate): string {
+  const a = formatThaiDate(start)
+  return start === end ? a : `${a} – ${formatThaiDate(end)}`
+}
+
+/** Leave label used in messages and toasts: the range + " (ครึ่งวันเช้า|ครึ่งวันบ่าย)" for half days. */
+export function formatLeaveRange(start: ISODate, end: ISODate, half: HalfDay | null): string {
+  const range = formatThaiDateRange(start, end)
+  return half ? `${range} (${th.timeOff.halfLong[half]})` : range
 }

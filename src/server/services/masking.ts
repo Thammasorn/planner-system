@@ -1,7 +1,9 @@
 // src/server/services/masking.ts — the only place that turns hidden projects into masked aggregates (SPEC §3.3,
-// PLAN.md §3.4.4, X30). Pure: no DB import. M2 = skeleton; M5 adds leave labels (th.masking.leave), M9 completes it.
+// PLAN.md §3.4.4, X30). Pure: no DB import. M2 = skeleton; M5 adds leave labels (maskTimeOff, th.masking.leave), M9 completes it.
 // Services import this module directly (not through the services barrel).
+import type { HalfDay, ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { CalendarTimeOff } from '@/lib/contracts/calendar'
 
 /** Result of authz.visibleProjectIds / visibleUserIds. */
 export type Visible = 'ALL' | ReadonlySet<string>
@@ -36,5 +38,50 @@ export function maskHidden<T extends { projectId: string }, V>(
   return {
     visible: parts.visible,
     masked: { kind: 'masked', label: th.masking.otherProjects, value: combine(parts.hidden) },
+  }
+}
+
+/** A live leave entry joined with its type (M5 calendar loader; M6 grid `people[u].timeOff`). */
+export interface TimeOffWithType {
+  id: string
+  userId: string
+  startDate: ISODate
+  endDate: ISODate
+  half: HalfDay | null
+  note: string | null
+  leaveTypeId: string
+  leaveTypeName: string
+  leaveTypeColor: string
+  leaveTypeArchived: boolean
+}
+
+/**
+ * §3.3 leave masking (MASK-5, M5-D7). `canSeeDetails` = authz.canSeeLeaveDetails(viewer, row.userId). Hidden entries
+ * keep only who / when / half and the label th.masking.leave — no entry id, type id/name, colour or note. Built as an
+ * explicit object literal (never a spread of `row`), so a new column can never leak by accident.
+ */
+export function maskTimeOff(row: TimeOffWithType, canSeeDetails: boolean): CalendarTimeOff {
+  if (canSeeDetails) {
+    return {
+      kind: 'full',
+      id: row.id,
+      userId: row.userId,
+      startDate: row.startDate,
+      endDate: row.endDate,
+      half: row.half,
+      leaveTypeId: row.leaveTypeId,
+      leaveTypeName: row.leaveTypeName,
+      leaveTypeColor: row.leaveTypeColor,
+      leaveTypeArchived: row.leaveTypeArchived,
+      note: row.note,
+    }
+  }
+  return {
+    kind: 'masked',
+    userId: row.userId,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    half: row.half,
+    label: th.masking.leave,
   }
 }

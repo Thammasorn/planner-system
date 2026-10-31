@@ -1,6 +1,7 @@
 // src/lib/query-keys.ts — the only place TanStack Query keys are built (PLAN.md §3.5). Each milestone registers its
 // queries here (M2: sidebar, people options, client options · M3: tasks, statuses, team tasks) and its invalidation
 // groups in src/lib/invalidate.ts.
+import type { ISODate } from '@/domain/types'
 import type { PageSpace } from '@/lib/contracts/pages'
 import type { TeamTasksQuery } from '@/lib/schemas/tasks'
 
@@ -32,6 +33,10 @@ export const qk = {
   pageTitles: (ids: readonly string[]) => ['pages', 'titles', [...ids].sort()] as const,
   /** GET /api/search (M4 pages; M10 adds categories, X82). `scope: 'title'` = titleOnly (mention menu). */
   search: (q: string, scope: 'all' | 'title' = 'all') => ['search', q, scope] as const,
+  /** GET /api/calendar?from&to — Mondays, `to` exclusive (M5-D8). */
+  calendar: (from: ISODate, to: ISODate) => ['calendar', from, to] as const,
+  /** GET /api/leave-types — active types for the leave dialog (M5-D9). */
+  leaveTypes: () => ['leaveTypes'] as const,
 }
 
 /** Prefixes for views that arrive later (M6 grid, M9 workload, M10 home). Invalidating an unused prefix is a no-op,
@@ -47,4 +52,7 @@ export const qkPrefix = {
   pageTitles: ['pages', 'titles'] as const,
   /** Every search query, incl. M10's qk.searchIndex() = ['search', 'index'] (X82). */
   search: ['search'] as const,
+  /** Every calendar range (M5). */
+  calendar: ['calendar'] as const,
+  leaveTypes: ['leaveTypes'] as const,
 }

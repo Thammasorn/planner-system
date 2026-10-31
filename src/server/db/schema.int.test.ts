@@ -590,3 +590,144 @@ describe('pages / files / page_locks', () => {
     ).toMatchObject({ code: '23505' })
   })
 })
+
+describe('M5 schema (SPEC §6.2 holidays / leave_types / time_off + time_off_no_overlap)', () => {
+  let sql: postgres.Sql
+
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string }
+      return { code: err.code, constraint: err.constraint_name }
+    }
+  }
+
+  let typeSeq = 0
+  async function seedLeaveType(name?: string): Promise<string> {
+    typeSeq += 1
+    const [t] = await sql<{ id: string }[]>`
+      insert into leave_types (name, position) values (${name ?? `ประเภท ${typeSeq}`}, ${`a${typeSeq}`}) returning id`
+    return t!.id
+  }
+
+  function insertLeave(o: {
+    userId: string
+    typeId: string
+    start: string
+    end?: string
+    half?: 'AM' | 'PM' | null
+  }) {
+    return sql<{ id: string }[]>`
+      insert into time_off (user_id, leave_type_id, start_date, end_date, half, created_by)
+      values (${o.userId}, ${o.typeId}, ${o.start}, ${o.end ?? o.start}, ${o.half ?? null}, ${o.userId})
+      returning id`
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  it('pins the exclusion constraint', async () => {
+    const rows = await sql<{ conname: string; contype: string }[]>`
+      select conname, contype from pg_constraint where conname = 'time_off_no_overlap'`
+    expect(rows).toEqual([{ conname: 'time_off_no_overlap', contype: 'x' }])
+  })
+
+  it('rejects overlapping live leave of the same user only', async () => {
+    const a = await makeUser()
+    const b = await makeUser()
+    const typeId = await seedLeaveType()
+    await insertLeave({ userId: a.id, typeId, start: '2026-10-05', end: '2026-10-06' })
+    expect(
+      await pgError(() => insertLeave({ userId: a.id, typeId, start: '2026-10-06', end: '2026-10-08' })),
+    ).toEqual({ code: '23P01', constraint: 'time_off_no_overlap' })
+    expect(
+      await pgError(() => insertLeave({ userId: b.id, typeId, start: '2026-10-05', end: '2026-10-06' })),
+    ).toBeNull()
+  })
+
+  it('rejects AM + PM on the same date (r2 T3)', async () => {
+    const a = await makeUser()
+    const typeId = await seedLeaveType()
+    await insertLeave({ userId: a.id, typeId, start: '2026-10-20', half: 'AM' })
+    expect(
+      await pgError(() => insertLeave({ userId: a.id, typeId, start: '2026-10-20', half: 'PM' })),
+    ).toEqual({
+      code: '23P01',
+      constraint: 'time_off_no_overlap',
+    })
+  })
+
+  it('ignores soft-deleted rows; clearing deleted_at again conflicts (r2 T2b)', async () => {
+    const a = await makeUser()
+    const typeId = await seedLeaveType()
+    const [first] = await insertLeave({ userId: a.id, typeId, start: '2026-10-12', end: '2026-10-13' })
+    await sql`update time_off set deleted_at = now(), deleted_batch = gen_random_uuid() where id = ${first!.id}`
+    expect(
+      await pgError(() => insertLeave({ userId: a.id, typeId, start: '2026-10-13', end: '2026-10-14' })),
+    ).toBeNull()
+    expect(
+      await pgError(
+        () => sql`update time_off set deleted_at = null, deleted_batch = null where id = ${first!.id}`,
+      ),
+    ).toEqual({ code: '23P01', constraint: 'time_off_no_overlap' })
+  })
+
+  it('checks: half only on a single date; end >= start', async () => {
+    const a = await makeUser()
+    const typeId = await seedLeaveType()
+    expect(
+      await pgError(() =>
+        insertLeave({ userId: a.id, typeId, start: '2026-10-05', end: '2026-10-06', half: 'AM' }),
+      ),
+    ).toEqual({ code: '23514', constraint: 'time_off_half_check' })
+    expect(
+      await pgError(() => insertLeave({ userId: a.id, typeId, start: '2026-10-06', end: '2026-10-05' })),
+    ).toEqual({ code: '23514', constraint: 'time_off_range_check' })
+  })
+
+  it('unique holiday date / leave type name (archived included)', async () => {
+    await sql`insert into holidays (date, name) values ('2026-10-23', 'วันปิยมหาราช')`
+    expect(await pgError(() => sql`insert into holidays (date, name) values ('2026-10-23', 'ซ้ำ')`)).toEqual({
+      code: '23505',
+      constraint: 'holidays_date_unique',
+    })
+    await sql`insert into leave_types (name, position, archived_at) values ('ลาเก่า', 'b0', now())`
+    expect(
+      await pgError(() => sql`insert into leave_types (name, position) values ('ลาเก่า', 'b1')`),
+    ).toEqual({ code: '23505', constraint: 'leave_types_name_unique' })
+  })
+
+  it('leave_types defaults; position uses collation C', async () => {
+    const [col] = await sql<{ collation_name: string | null }[]>`
+      select collation_name from information_schema.columns
+      where table_name = 'leave_types' and column_name = 'position'`
+    expect(col?.collation_name).toBe('C')
+    const [t] = await sql<{ color: string; archived_at: Date | null }[]>`
+      insert into leave_types (name, position) values ('สีเริ่มต้น', 'c0') returning color, archived_at`
+    expect(t).toEqual({ color: '#94A3B8', archived_at: null })
+  })
+
+  it('a leave type in use cannot be deleted (23503); deleting the user cascades its leave', async () => {
+    const a = await makeUser()
+    const recorder = await makeUser({ role: 'manager' })
+    const typeId = await seedLeaveType()
+    const [leave] = await insertLeave({ userId: a.id, typeId, start: '2026-11-02' })
+    expect(await pgError(() => sql`delete from leave_types where id = ${typeId}`)).toMatchObject({
+      code: '23503',
+    })
+    // created_by has no cascade: recorded by someone else so only the owner's ON DELETE cascade is exercised
+    await sql`update time_off set created_by = ${recorder.id} where id = ${leave!.id}`
+    await sql`delete from "user" where id = ${a.id}`
+    const [r] = await sql<{ n: number }[]>`select count(*)::int as n from time_off where id = ${leave!.id}`
+    expect(r?.n).toBe(0)
+  })
+})

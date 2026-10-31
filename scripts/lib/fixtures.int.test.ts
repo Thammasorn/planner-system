@@ -7,15 +7,18 @@ import { displayName } from '@/lib/display-name'
 import {
   auditLog,
   clients,
+  holidays,
+  leaveTypes,
   pages,
   projectMembers,
   projects,
   taskAssignments,
   taskStatuses,
   tasks,
+  timeOff,
   user,
 } from '@/server/db/schema'
-import { loadGolden, seedGolden } from './fixtures'
+import { applyFixture, loadGolden, parseFixtureArg, seedGolden } from './fixtures'
 
 async function membership(): Promise<Record<string, Record<string, string>>> {
   const rows = await db
@@ -172,5 +175,68 @@ describe('seedGolden — M4 stage (X11, X25, FR-402)', () => {
   it("upTo: 'tasks' seeds no pages", async () => {
     await seedGolden(db, { upTo: 'tasks' })
     expect(await db.select().from(pages)).toEqual([])
+  })
+})
+
+describe('M5 — seedGolden leave types + applyFixture F2/F3/F4 (X11, M5-D12; plan/m05 S2.10)', () => {
+  const leaveRows = () =>
+    db
+      .select({
+        nickname: user.nickname,
+        startDate: timeOff.startDate,
+        endDate: timeOff.endDate,
+        half: timeOff.half,
+        type: leaveTypes.name,
+        createdBy: timeOff.createdBy,
+        userId: timeOff.userId,
+      })
+      .from(timeOff)
+      .innerJoin(user, eq(user.id, timeOff.userId))
+      .innerJoin(leaveTypes, eq(leaveTypes.id, timeOff.leaveTypeId))
+
+  it('seedGolden → the 4 default leave types in th order; no holiday and no leave (F1)', async () => {
+    await seedGolden(db)
+    const types = await db.select().from(leaveTypes).orderBy(asc(leaveTypes.position), asc(leaveTypes.id))
+    expect(types.map((t) => t.name)).toEqual(th.leaveTypes.defaults.map((d) => d.name))
+    expect(await db.select().from(holidays)).toEqual([])
+    expect(await db.select().from(timeOff)).toEqual([])
+  })
+
+  it("applyFixture('F2') → the 2026-10-23 holiday only", async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F2')
+    expect((await db.select().from(holidays)).map((h) => [h.date, h.name])).toEqual([
+      ['2026-10-23', 'วันหยุดสมมติสำหรับทดสอบ'],
+    ])
+    expect(await db.select().from(timeOff)).toEqual([])
+  })
+
+  it("applyFixture('F3') → Peter 2026-10-05..06 ลาพักร้อน, self-recorded; no holiday (not cumulative)", async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F3')
+    const rows = await leaveRows()
+    expect(rows.map(({ createdBy: _c, userId: _u, ...r }) => r)).toEqual([
+      { nickname: 'Peter', startDate: '2026-10-05', endDate: '2026-10-06', half: null, type: 'ลาพักร้อน' },
+    ])
+    expect(rows[0]!.createdBy).toBe(rows[0]!.userId)
+    expect(await db.select().from(holidays)).toEqual([])
+    const audits = await db.select().from(auditLog).where(eq(auditLog.entity, 'time_off'))
+    expect(audits.map((a) => a.actorId)).toEqual([null])
+  })
+
+  it("applyFixture('F4') → Cindy 2026-10-12..14 ลาพักร้อน", async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F4')
+    expect((await leaveRows()).map((r) => [r.nickname, r.startDate, r.endDate, r.type])).toEqual([
+      ['Cindy', '2026-10-12', '2026-10-14', 'ลาพักร้อน'],
+    ])
+  })
+
+  it('parseFixtureArg: --fixture=F3 · --fixture F4 · absent → null · unknown → throws', () => {
+    expect(parseFixtureArg(['--fixture=F3'])).toBe('F3')
+    expect(parseFixtureArg(['x', '--fixture', 'F4'])).toBe('F4')
+    expect(parseFixtureArg([])).toBeNull()
+    expect(() => parseFixtureArg(['--fixture=F9'])).toThrow()
+    expect(() => parseFixtureArg(['--fixture'])).toThrow()
   })
 })

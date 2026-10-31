@@ -497,6 +497,70 @@ export const files = pgTable(
   ],
 )
 
+// ---------------------------------------------------------------------------------------------------------------
+// M5 — holidays, leave_types, time_off (SPEC §6.2, X10, X48; plan/m05 S0.3). The EXCLUDE constraint
+// "time_off_no_overlap" has no Drizzle API: it lives in the custom migration `time_off_no_overlap` (needs btree_gist
+// from 0000_extensions); its name is pinned for error mapping and tests.
+// ---------------------------------------------------------------------------------------------------------------
+
+export const halfDay = pgEnum('half_day', ['AM', 'PM'])
+
+/** FR-901: company holidays (one per date). Hard delete; undo re-inserts the same id (X64). */
+export const holidays = pgTable('holidays', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  date: date('date', { mode: 'string' }).notNull().unique(), // holidays_date_unique
+  name: text('name').notNull(),
+})
+
+/** FR-902: leave types, ordered by `position` (X48). Names unique incl. archived; in use → archive, not delete. */
+export const leaveTypes = pgTable('leave_types', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(), // leave_types_name_unique
+  color: text('color').notNull().default('#94A3B8'),
+  position: orderKey('position').notNull(), // text COLLATE "C" (X48)
+  archivedAt: timestamptz('archived_at'),
+})
+
+/** FR-903…909: leave entries (full day or half day on a single date); soft delete by batch (FR-909). */
+export const timeOff = pgTable(
+  'time_off',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    leaveTypeId: uuid('leave_type_id')
+      .notNull()
+      .references(() => leaveTypes.id), // RESTRICT (default)
+    startDate: date('start_date', { mode: 'string' }).notNull(),
+    endDate: date('end_date', { mode: 'string' }).notNull(),
+    half: halfDay('half'), // null = full day
+    note: text('note'),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('time_off_range_check', sql`${t.endDate} >= ${t.startDate}`),
+    check('time_off_half_check', sql`${t.half} is null or ${t.startDate} = ${t.endDate}`),
+    index('time_off_user_id_start_date_end_date_idx')
+      .on(t.userId, t.startDate, t.endDate)
+      .where(sql`${t.deletedAt} is null`),
+    // EXCLUDE "time_off_no_overlap": custom migration (no Drizzle API, r2 §9.2)
+  ],
+)
+
+export type HolidayRow = typeof holidays.$inferSelect
+export type NewHoliday = typeof holidays.$inferInsert
+export type LeaveTypeRow = typeof leaveTypes.$inferSelect
+export type NewLeaveType = typeof leaveTypes.$inferInsert
+export type TimeOffRow = typeof timeOff.$inferSelect
+export type NewTimeOff = typeof timeOff.$inferInsert
+
 export type PageRow = typeof pages.$inferSelect
 export type NewPage = typeof pages.$inferInsert
 export type PageLockRow = typeof pageLocks.$inferSelect

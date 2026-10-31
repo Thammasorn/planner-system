@@ -5,7 +5,15 @@
 import { randomUUID } from 'node:crypto'
 import type { ISODate } from '@/domain/types'
 import type { RemovedMemberSnapshot } from '@/lib/contracts/tasks'
-import type { ClientRow, FileRow, PageRow, ProjectRow } from '@/server/db/schema'
+import type {
+  ClientRow,
+  FileRow,
+  HolidayRow,
+  LeaveTypeRow,
+  PageRow,
+  ProjectRow,
+  TimeOffRow,
+} from '@/server/db/schema'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
 import type { TaskBlockerRow } from '@/server/repo/task-blockers'
@@ -16,11 +24,15 @@ import {
   makeBlocker,
   makeClient,
   makeFile,
+  makeHoliday,
+  makeLeaveType,
+  makeMembership,
   makePage,
   makeProject,
   makeStatus,
   makeStatuses,
   makeTask,
+  makeTimeOff,
   makeUser,
   type DefaultKey,
   type TestUser,
@@ -152,6 +164,32 @@ export interface WorldFiles {
   }
 }
 
+/** Part 'timeOff' (M5, plan/m05 S0.15). Distinctive strings for leak greps; adds w.users.coworker / pOnly. */
+export interface WorldTimeOff {
+  leaveTypes: {
+    /** 'ลาพักร้อน-โลก' #0369A1, first by position. */
+    vacation: LeaveTypeRow
+    /** 'ลาป่วย-โลก' #B91C1C. */
+    sick: LeaveTypeRow
+    /** 'อบรม-โลก' #7E22CE (only the member's own entry uses it). */
+    training: LeaveTypeRow
+    /** 'ลาเก่า-โลก', archived. */
+    archived: LeaveTypeRow
+  }
+  timeOff: {
+    /** coworker · vacation · 2026-11-09..2026-11-10 · note 'โน้ตลับ-โลก-01'. */
+    coworker: TimeOffRow
+    /** pOnly · sick · 2026-11-16 PM · note 'โน้ตลับ-โลก-02'. */
+    pOnly: TimeOffRow
+    /** member · training · 2026-11-02 · note 'โน้ตของ member'. */
+    member: TimeOffRow
+  }
+  holidays: {
+    /** 2026-11-20 'วันหยุดโลก'. */
+    h1: HolidayRow
+  }
+}
+
 /** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
 export type WorldBatches = WorldTasks['batches'] & {
   /** P root 'ลบแล้ว P', deleted 1 day ago. */
@@ -162,15 +200,18 @@ export type WorldBatches = WorldTasks['batches'] & {
   wikiDeletedPage: string
   /** P root deleted 31 days ago (outside the restore window). */
   pOldDeletedPage: string
+  /** coworker · sick · 2026-11-23, soft-deleted 1 day ago (restoreTimeOff input). */
+  coworkerDeletedTimeOff: string
 }
 
-export interface World extends Omit<WorldTasks, 'batches'>, WorldPages, WorldFiles {
+export interface World extends Omit<WorldTasks, 'batches'>, WorldPages, WorldFiles, WorldTimeOff {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
   member: TestUser
   outsider: TestUser
-  /** Extra users added by later parts (M3 `former`, M5 coworker/pOnly). */
+  /** Extra users added by later parts (M3 `former`; M5 `coworker` = MEMBER of P and Q, visible to everyone in the
+   *  world; `pOnly` = MEMBER of P only, invisible to the outsider). */
   users: Record<string, TestUser>
   /** Client of P and A. */
   C1: ClientRow
@@ -211,6 +252,7 @@ const BATCH_PART: Record<keyof WorldBatches, WorldPart> = {
   aDeletedPage: 'pages',
   wikiDeletedPage: 'pages',
   pOldDeletedPage: 'pages',
+  coworkerDeletedTimeOff: 'timeOff',
 }
 
 /** w.batches: builders Object.assign their keys; reading a key of an unbuilt part throws like notBuilt. */
@@ -435,11 +477,63 @@ async function buildFiles(w: World): Promise<void> {
   }
 }
 
+/** M5 'timeOff' part (plan/m05 S0.15): leave types, two extra workers, leave entries, one holiday. */
+async function buildTimeOff(w: World): Promise<void> {
+  const { manager, member, P, Q } = w
+  const vacation = await makeLeaveType({ name: 'ลาพักร้อน-โลก', color: '#0369A1' })
+  const sick = await makeLeaveType({ name: 'ลาป่วย-โลก', color: '#B91C1C' })
+  const training = await makeLeaveType({ name: 'อบรม-โลก', color: '#7E22CE' })
+  const archived = await makeLeaveType({ name: 'ลาเก่า-โลก', archived: true })
+
+  const coworker = await makeUser({ role: 'worker', name: 'World Coworker', nickname: 'Coworker' })
+  const pOnly = await makeUser({ role: 'worker', name: 'World POnly', nickname: 'POnly' })
+  await makeMembership({ project: P, user: coworker, addedBy: manager })
+  await makeMembership({ project: Q, user: coworker, addedBy: manager })
+  await makeMembership({ project: P, user: pOnly, addedBy: manager })
+
+  const coworkerEntry = await makeTimeOff({
+    user: coworker,
+    leaveType: vacation,
+    startDate: '2026-11-09',
+    endDate: '2026-11-10',
+    note: 'โน้ตลับ-โลก-01',
+  })
+  const pOnlyEntry = await makeTimeOff({
+    user: pOnly,
+    leaveType: sick,
+    startDate: '2026-11-16',
+    half: 'PM',
+    note: 'โน้ตลับ-โลก-02',
+  })
+  const memberEntry = await makeTimeOff({
+    user: member,
+    leaveType: training,
+    startDate: '2026-11-02',
+    note: 'โน้ตของ member',
+  })
+  const coworkerDeletedTimeOff = randomUUID()
+  await makeTimeOff({
+    user: coworker,
+    leaveType: sick,
+    startDate: '2026-11-23',
+    deleted: { batch: coworkerDeletedTimeOff, ...DAY_AGO },
+  })
+  const h1 = await makeHoliday({ date: '2026-11-20', name: 'วันหยุดโลก' })
+
+  w.users.coworker = coworker
+  w.users.pOnly = pOnly
+  w.leaveTypes = { vacation, sick, training, archived }
+  w.timeOff = { coworker: coworkerEntry, pOnly: pOnlyEntry, member: memberEntry }
+  w.holidays = { h1 }
+  Object.assign(w.batches, { coworkerDeletedTimeOff })
+}
+
 /** Builders by part; each milestone adds its own. */
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
   pages: buildPages,
   files: buildFiles,
+  timeOff: buildTimeOff,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -497,6 +591,9 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     pages: notBuilt('pages', 'pages'),
     deletedPages: notBuilt('pages', 'deletedPages'),
     files: notBuilt('files', 'files'),
+    leaveTypes: notBuilt('timeOff', 'leaveTypes'),
+    timeOff: notBuilt('timeOff', 'timeOff'),
+    holidays: notBuilt('timeOff', 'holidays'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w

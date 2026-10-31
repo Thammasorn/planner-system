@@ -8,6 +8,9 @@ import { th } from '@/i18n/th'
 const TABS = [
   { href: '/settings/employees', label: th.nav.employees },
   { href: '/settings/positions', label: th.nav.positions },
+  // M5 (M5-D15)
+  { href: '/settings/holidays', label: th.nav.holidays },
+  { href: '/settings/leave-types', label: th.nav.leaveTypes },
 ] as const
 
 /** Link tabs of /settings (M1-D21); the current one carries aria-current + the MUI indicator. */

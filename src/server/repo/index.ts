@@ -19,3 +19,7 @@ export * as blockers from './task-blockers'
 export * as files from './files'
 export * as pageLocks from './page-locks'
 export * as pages from './pages'
+// M5 (X80/X87)
+export * as holidays from './holidays'
+export * as leaveTypes from './leave-types'
+export * as timeOff from './time-off'

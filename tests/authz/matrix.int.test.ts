@@ -70,6 +70,22 @@ describe('authz matrix', () => {
     }
   })
 
+  it('M5 meta (plan/m05 §7.2): PERM-02f…02p, PERM-20a…e, PERM-21a…g and PERM-22a exist; M5 rows need the timeOff world', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...'fghijklmnop'.split('').map((c) => `PERM-02${c}`),
+      ...'abcde'.split('').map((c) => `PERM-20${c}`),
+      ...'abcdefg'.split('').map((c) => `PERM-21${c}`),
+      'PERM-22a',
+      'LT-READ',
+      'TO-400',
+      'CAL-400',
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M5 rows').toEqual([])
+    const m5 = rows.filter((r) => /^(PERM-02[f-p]|PERM-2[0-2][a-z]|LT-|TO-|CAL-)/.test(r.id))
+    for (const r of m5) expect(r.with ?? [], `${r.id} needs the timeOff world`).toContain('timeOff')
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })

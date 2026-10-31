@@ -4,8 +4,10 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { defaultStatus } from '@/domain/status'
+import { user } from '@/server/db/schema'
 import type { DbOrTx } from '@/server/db/types'
 import * as repo from '@/server/repo'
 import * as services from '@/server/services'
@@ -18,10 +20,28 @@ import { ensureProjectCharters } from '@/server/services/charters'
 export type GoldenStage = 'users' | 'projects' | 'tasks' | 'pages'
 const STAGES: readonly GoldenStage[] = ['users', 'projects', 'tasks', 'pages']
 
-/** Placeholder for resetDb's first parameter (only `resetDb()` / `resetDb(undefined, { extras })` type-check in M1). */
-export type FixtureId = never
+/** SPEC §11.3 fixtures beyond F1 (X11, X91): each = the golden seed (F1) + its own setup only (not cumulative).
+ *  resetDb(fixture) in e2e and `pnpm seed:golden --fixture=F3` take one of these. */
+export type FixtureId = 'F2' | 'F3' | 'F4'
 
 const FractionCd = z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(100)])
+
+const FixtureSetup = z.object({
+  setup: z.object({
+    holidays: z.array(z.object({ date: z.iso.date(), name: z.string() })).optional(),
+    timeOff: z
+      .array(
+        z.object({
+          user: z.string(),
+          startDate: z.iso.date(),
+          endDate: z.iso.date(),
+          half: z.enum(['AM', 'PM']).nullable(),
+          type: z.string(),
+        }),
+      )
+      .optional(),
+  }),
+})
 
 const GoldenUsers = z.object({
   positions: z.array(z.string()),
@@ -54,6 +74,8 @@ const GoldenUsers = z.object({
       certaintyOverride: z.enum(['CONFIRMED', 'TENTATIVE']).nullable(),
     }),
   ),
+  /** M5 (X11): the own setup of each §11.3 fixture beyond F1 (`expected.<id>.setup`). */
+  expected: z.object({ F2: FixtureSetup, F3: FixtureSetup, F4: FixtureSetup }),
 })
 export type Golden = z.infer<typeof GoldenUsers>
 
@@ -95,6 +117,8 @@ async function seedUsers(db: DbOrTx): Promise<SeedCtx> {
     const { id } = await services.positions.createPosition(db, null, { name })
     positionIds.set(name, id)
   }
+  // M5-D12: the 4 default leave types right after positions (actor-null audit rows), so applyFixture finds them.
+  await services.leaveTypes.ensureDefaultLeaveTypes(db, null)
   const hashes = new Map<string, string>()
   for (const pw of new Set(g.users.map((u) => u.devPassword))) hashes.set(pw, await hashPassword(pw))
   const userIds = new Map<string, string>()
@@ -170,7 +194,9 @@ export async function seedClientsProjects(db: DbOrTx, ctx: SeedCtx): Promise<voi
  */
 export async function seedTasks(db: DbOrTx, ctx: SeedCtx): Promise<void> {
   const g = loadGolden()
-  const projectIds = new Map((await repo.projects.listProjects(db, { ids: 'ALL' })).map((p) => [p.name, p.id]))
+  const projectIds = new Map(
+    (await repo.projects.listProjects(db, { ids: 'ALL' })).map((p) => [p.name, p.id]),
+  )
   for (const p of g.projects) {
     const projectId = projectIds.get(p.name)
     if (!projectId) throw new Error(`golden project ${p.name} not found`)
@@ -194,4 +220,50 @@ export async function seedTasks(db: DbOrTx, ctx: SeedCtx): Promise<void> {
       await repo.assignments.insertAssignment(db, { taskId: task.id, userId })
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M5 — §11.3 F2/F3/F4 setups (X11, plan/m05 S2.10)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Applies `id`'s own setup on top of an already seeded F1 (golden-fixtures.json `expected.<id>.setup`) through the
+ *  real services (actor null → one audit row each; leave is self-recorded). Not cumulative: F3 never adds F2's
+ *  holiday. Runs in one transaction (a savepoint when `db` already is one). */
+export async function applyFixture(db: DbOrTx, id: FixtureId): Promise<void> {
+  const { setup } = loadGolden().expected[id]
+  await db.transaction(async (tx) => {
+    for (const h of setup.holidays ?? []) await services.holidays.createHoliday(tx, null, h)
+    for (const t of setup.timeOff ?? []) {
+      const [u] = await tx.select({ id: user.id }).from(user).where(eq(user.nickname, t.user))
+      if (!u) throw new Error(`golden user ${t.user} not found`)
+      const leaveTypeId = await repo.leaveTypes.findIdByName(tx, t.type)
+      if (!leaveTypeId) throw new Error(`leave type ${t.type} not found (seedGolden first)`)
+      await services.timeOff.createTimeOff(tx, null, {
+        userId: u.id,
+        leaveTypeId,
+        startDate: t.startDate,
+        endDate: t.endDate,
+        half: t.half,
+        note: null,
+      })
+    }
+  })
+}
+
+const FIXTURE_IDS: readonly FixtureId[] = ['F2', 'F3', 'F4']
+
+function toFixtureId(v: string | undefined): FixtureId {
+  const hit = FIXTURE_IDS.find((f) => f === v)
+  if (!hit)
+    throw new Error(`--fixture must be one of ${FIXTURE_IDS.join(', ')} (got ${JSON.stringify(v ?? '')})`)
+  return hit
+}
+
+/** `--fixture=F3` (or `--fixture F3`) from argv → 'F3'; absent → null; an unknown or missing id throws. */
+export function parseFixtureArg(argv: readonly string[]): FixtureId | null {
+  for (const [i, a] of argv.entries()) {
+    if (a.startsWith('--fixture=')) return toFixtureId(a.slice('--fixture='.length))
+    if (a === '--fixture') return toFixtureId(argv[i + 1])
+  }
+  return null
 }

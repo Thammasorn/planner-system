@@ -1,6 +1,6 @@
 // src/server/repo/users.ts — typed queries on Better Auth's `user` table + app columns, and work_schedules.
 // numeric(3,2) ↔ cd conversion happens only here (BR-02, X02). "Active" = banned IS NOT TRUE (M1-D2).
-import { and, asc, count, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import type { Cd, Schedule, Weekday } from '@/domain/types'
 import { cdToNumeric, numericToCd } from '@/domain/units'
 import type { EmployeeRow, ScheduleDayDTO } from '@/lib/contracts/users'
@@ -137,6 +137,40 @@ export async function getSchedule(tx: DbOrTx, userId: string): Promise<Schedule>
   return out
 }
 
+/** Batched `getSchedule` for the capacity loader (M5 S2.5): every id that has schedule rows → its schedule in cd.
+ *  Ids without rows are absent (an empty schedule). */
+export async function listSchedules(tx: DbOrTx, ids: readonly string[]): Promise<Map<string, Schedule>> {
+  const out = new Map<string, Schedule>()
+  if (ids.length === 0) return out
+  const rows = await tx
+    .select({
+      userId: workSchedules.userId,
+      weekday: workSchedules.weekday,
+      fraction: workSchedules.fraction,
+    })
+    .from(workSchedules)
+    .where(inArray(workSchedules.userId, [...ids]))
+  for (const r of rows) {
+    const s = out.get(r.userId) ?? {}
+    s[toWeekday(r.weekday)] = numericToCd(r.fraction)
+    out.set(r.userId, s)
+  }
+  return out
+}
+
+/** `deactivated_on` of each existing user among `ids` (unknown ids are absent). */
+export async function listDeactivatedOn(
+  tx: DbOrTx,
+  ids: readonly string[],
+): Promise<Map<string, string | null>> {
+  if (ids.length === 0) return new Map()
+  const rows = await tx
+    .select({ id: user.id, deactivatedOn: user.deactivatedOn })
+    .from(user)
+    .where(inArray(user.id, [...ids]))
+  return new Map(rows.map((r) => [r.id, r.deactivatedOn]))
+}
+
 /** The schedule as an ordered day list (weekday ascending). */
 export async function getScheduleDays(tx: DbOrTx, userId: string): Promise<ScheduleDayDTO[]> {
   return scheduleToDays(await getSchedule(tx, userId))
@@ -173,7 +207,11 @@ export async function listEmployeeRows(tx: DbOrTx): Promise<EmployeeRow[]> {
     .from(user)
     .leftJoin(positions, eq(positions.id, user.positionId))
   const schedules = await tx
-    .select({ userId: workSchedules.userId, weekday: workSchedules.weekday, fraction: workSchedules.fraction })
+    .select({
+      userId: workSchedules.userId,
+      weekday: workSchedules.weekday,
+      fraction: workSchedules.fraction,
+    })
     .from(workSchedules)
     .orderBy(asc(workSchedules.userId), asc(workSchedules.weekday))
   const byUser = new Map<string, ScheduleDayDTO[]>()
@@ -223,4 +261,31 @@ export async function listActiveUsers(tx: DbOrTx): Promise<AssignableUserRow[]> 
     .from(user)
     .leftJoin(positions, eq(positions.id, user.positionId))
     .where(activeUser)
+}
+
+export interface CalendarPersonRow {
+  id: string
+  name: string
+  nickname: string | null
+  positionName: string | null
+  color: string | null
+  active: boolean
+}
+
+/** M5 calendar `people` (FR-907): the users whose leave is shown, active and deactivated alike; unordered. No email.
+ *  `active` = the M2-D16 people flag (not banned and no deactivated_on). */
+export async function listCalendarPeople(tx: DbOrTx, ids: readonly string[]): Promise<CalendarPersonRow[]> {
+  if (ids.length === 0) return []
+  return tx
+    .select({
+      id: user.id,
+      name: user.name,
+      nickname: user.nickname,
+      positionName: positions.name,
+      color: user.color,
+      active: sql<boolean>`(${user.banned} is not true and ${user.deactivatedOn} is null)`,
+    })
+    .from(user)
+    .leftJoin(positions, eq(positions.id, user.positionId))
+    .where(inArray(user.id, [...ids]))
 }

@@ -2,6 +2,8 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LeaveDialogProvider } from '@/components/calendar/LeaveDialogProvider'
+import { renderCalendarUi } from '@/components/calendar/render.test.helper'
 import { CurrentUserProvider } from '@/components/providers/CurrentUserProvider'
 import { PreferencesContext, type PreferencesApi } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
@@ -22,6 +24,13 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/home', useRouter: () =>
 // M4: the Sidebar's Wiki ทีม section imports the page actions; its tree stays loading (no fetch result)
 vi.mock('@/server/actions/pages', () => ({ createPage: vi.fn(), movePage: vi.fn() }))
 vi.mock('@/lib/api', () => ({ getJson: () => new Promise<never>(() => {}) }))
+// M5: the user menu opens the leave dialog (loaded on first open)
+vi.mock('@/server/actions/time-off', () => ({
+  createTimeOff: vi.fn(),
+  updateTimeOff: vi.fn(),
+  deleteTimeOff: vi.fn(),
+  restoreTimeOff: vi.fn(),
+}))
 
 const manager: CurrentUserDTO = {
   id: '6f1c2c38-5a8e-4a6c-9a0e-1b2c3d4e5f60',
@@ -47,7 +56,9 @@ function wrap(
 ) {
   return renderWithProviders(
     <PreferencesContext value={{ prefs: DEFAULT_PREFERENCES, setPreference }}>
-      <CurrentUserProvider user={user}>{children}</CurrentUserProvider>
+      <CurrentUserProvider user={user}>
+        <LeaveDialogProvider>{children}</LeaveDialogProvider>
+      </CurrentUserProvider>
     </PreferencesContext>,
   )
 }
@@ -59,7 +70,7 @@ beforeEach(() => {
 })
 
 describe('UserMenu', () => {
-  it('U-MENU-01 lists account, theme and logout; choosing dark saves the theme preference', async () => {
+  it('U-MENU-01 lists account, แจ้งลา, theme and logout; choosing dark saves the theme preference', async () => {
     const user = userEvent.setup()
     const setPreference = vi.fn()
     wrap(manager, <UserMenu collapsed={false} />, setPreference)
@@ -71,7 +82,13 @@ describe('UserMenu', () => {
       'href',
       '/account/password',
     )
+    expect(within(menu).getByRole('menuitem', { name: th.nav.reportLeave })).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: th.nav.logout })).toBeInTheDocument()
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((i) => i.textContent),
+    ).toEqual([th.nav.account, th.nav.reportLeave, th.nav.logout])
     for (const t of ['light', 'dark', 'system'] as const) {
       expect(within(menu).getByRole('menuitemradio', { name: th.prefs.themes[t] })).toBeInTheDocument()
     }
@@ -103,5 +120,19 @@ describe('UserMenu', () => {
     wrap(worker, <Sidebar collapsed={false} />)
     const nav2 = screen.getByRole('navigation', { name: th.nav.sidebarLabel })
     expect(within(nav2).queryByRole('link', { name: th.nav.settings })).not.toBeInTheDocument()
+  })
+
+  it('U-MENU-03 แจ้งลา closes the menu and opens the leave dialog (M5-D14)', async () => {
+    const user = userEvent.setup()
+    renderCalendarUi(
+      <PreferencesContext value={{ prefs: DEFAULT_PREFERENCES, setPreference: vi.fn() }}>
+        <UserMenu collapsed={false} />
+      </PreferencesContext>,
+      { user: worker },
+    )
+    await user.click(screen.getByRole('button', { name: th.nav.userMenu }))
+    await user.click(await screen.findByRole('menuitem', { name: th.nav.reportLeave }))
+    expect(await screen.findByRole('dialog', { name: th.timeOff.dialog.titleCreate })).toBeInTheDocument()
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 })

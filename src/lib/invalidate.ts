@@ -55,3 +55,14 @@ export function invalidatePages(
 export function invalidatePage(qc: QueryClient, pageId: string): Promise<void> {
   return invalidateAll(qc, [qk.page(pageId), qkPrefix.pageTitles])
 }
+
+/** After any leave or holiday write (M5): every calendar range. M6/M9 views that show capacity are refreshed by the
+ *  caller with invalidateLoad as well once they exist. */
+export function invalidateCalendar(qc: QueryClient): Promise<void> {
+  return invalidateAll(qc, [qkPrefix.calendar])
+}
+
+/** After any leave-type write (M5): the dialog's options and every calendar range (names / colours of entries). */
+export function invalidateLeaveTypes(qc: QueryClient): Promise<void> {
+  return invalidateAll(qc, [qkPrefix.leaveTypes, qkPrefix.calendar])
+}

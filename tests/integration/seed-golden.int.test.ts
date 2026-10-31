@@ -1,11 +1,22 @@
 // X11 / SEED-A1 (M1 stage) — seedGolden inserts docs/reference/golden-fixtures.json positions, users and schedules
-// through the services. plan/m01-auth-employees.md §5.S4 (S4.9, second part) and §7.4.
+// through the services. plan/m01-auth-employees.md §5.S4 (S4.9, second part) and §7.4. M5 (plan/m05 S4.6, M5-D12):
+// the 4 default leave types right after positions (so applyFixture finds "ลาพักร้อน"); audit counts stay relative.
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { asc, count, countDistinct, eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/server/db/client'
-import { account, auditLog, positions, user, workSchedules } from '@/server/db/schema'
+import { th } from '@/i18n/th'
+import {
+  account,
+  auditLog,
+  holidays,
+  leaveTypes,
+  positions,
+  timeOff,
+  user,
+  workSchedules,
+} from '@/server/db/schema'
 import { truncateAll } from '../../scripts/lib/db'
 import { seedGolden } from '../../scripts/lib/fixtures'
 import { signInApi } from '../helpers/auth-http'
@@ -104,5 +115,53 @@ describe('seedGolden — M1 stage (X11)', () => {
       sql`select count(*)::int as n from audit_log where position(${hash!.p!} in coalesce(after::text, '')) > 0`,
     )
     expect(hit?.n).toBe(0)
+  })
+})
+
+describe('seedGolden — M5 leave types (X11, M5-D12)', () => {
+  const auditByEntity = async () =>
+    new Map(
+      (
+        await db
+          .select({ entity: auditLog.entity, n: count() })
+          .from(auditLog)
+          .groupBy(auditLog.entity)
+      ).map((r) => [r.entity, Number(r.n)]),
+    )
+  const typeNames = async () =>
+    (
+      await db
+        .select({ name: leaveTypes.name, color: leaveTypes.color })
+        .from(leaveTypes)
+        .orderBy(asc(leaveTypes.position), asc(leaveTypes.id))
+    ).map(({ name, color }) => ({ name, color }))
+
+  it('T-SEED-M5-01 the 4 default leave types (th order), 4 actor-null leave_type audit rows; no holiday, no leave (F1)', async () => {
+    await seedGolden(db)
+    expect(await typeNames()).toEqual(th.leaveTypes.defaults.map(({ name, color }) => ({ name, color })))
+    const audits = await db
+      .select({ action: auditLog.action, actorId: auditLog.actorId })
+      .from(auditLog)
+      .where(eq(auditLog.entity, 'leave_type'))
+    expect(audits).toHaveLength(4)
+    for (const a of audits) expect(a).toEqual({ action: 'create', actorId: null })
+    const byEntity = await auditByEntity()
+    expect(byEntity.get('holiday') ?? 0).toBe(0)
+    expect(byEntity.get('time_off') ?? 0).toBe(0)
+    for (const t of [holidays, timeOff]) expect(Number((await db.select({ n: count() }).from(t))[0]?.n ?? 0)).toBe(0)
+  })
+
+  it('T-SEED-M5-02 the leave types exist after the users stage already (seeded right after positions)', async () => {
+    await seedGolden(db, { upTo: 'users' })
+    expect(await typeNames()).toHaveLength(4)
+  })
+
+  it('T-SEED-M5-03 M5 adds exactly 4 audit rows over the previous stage (relative count, C3/C23)', async () => {
+    await seedGolden(db)
+    const byEntity = await auditByEntity()
+    const total = Number((await db.select({ n: count() }).from(auditLog))[0]?.n ?? 0)
+    const previousStage = [...byEntity].filter(([e]) => e !== 'leave_type').reduce((a, [, k]) => a + k, 0)
+    expect(total).toBe(previousStage + 4)
+    expect(byEntity.get('user')).toBe(golden.users.length)
   })
 })

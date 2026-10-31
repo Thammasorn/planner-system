@@ -1,14 +1,17 @@
 // src/lib/shortcuts.ts — the data-driven `?` shortcut-help registry (X07, SPEC §8.6). Static; later milestones append
-// scopes and entries (M4 'palette'/'editor' + Cmd+K, M6 'grid'). Matching itself lives in useHotkeys (e.code, X49).
+// scopes and entries (M4 'palette'/'editor' + Cmd+K, M5 'calendar', M6 'grid'). Matching itself lives in useHotkeys /
+// the widgets' own key handlers (e.code, X49).
 import { th } from '@/i18n/th'
 
-export type ShortcutScope = 'global' | 'taskList'
+export type ShortcutScope = 'global' | 'taskList' | 'calendar'
 export type KeyToken =
   | 'Mod'
   | 'Shift'
   | 'Alt'
   | 'ArrowUp'
   | 'ArrowDown'
+  | 'ArrowLeft'
+  | 'ArrowRight'
   | 'F10'
   | 'Enter'
   | 'Tab'
@@ -31,7 +34,21 @@ export interface ShortcutDef {
   label: string
 }
 
-export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList']
+export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList', 'calendar']
+
+/** Section heading of each scope in the `?` help (M5: the calendar heading lives in its own namespace). */
+export const SHORTCUT_SCOPE_LABELS: Readonly<Record<ShortcutScope, string>> = {
+  global: th.shortcuts.scopes.global,
+  taskList: th.shortcuts.scopes.taskList,
+  calendar: th.calendar.shortcuts.scope,
+}
+
+/** Key caption of every token ('Mod' = Ctrl here; the help shows ⌘ on Apple platforms). */
+export const SHORTCUT_KEY_LABELS: Readonly<Record<KeyToken, string>> = {
+  ...th.shortcuts.keys,
+  ArrowLeft: th.calendar.shortcuts.keys.ArrowLeft,
+  ArrowRight: th.calendar.shortcuts.keys.ArrowRight,
+}
 
 export const SHORTCUTS: readonly ShortcutDef[] = [
   {
@@ -84,4 +101,29 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     label: th.shortcuts.items.listMove,
   },
   { id: 'list.menu', scope: 'taskList', combos: [['Shift', 'F10']], label: th.shortcuts.items.listMenu },
+  // M5 calendar month grid (FR-908, X49/X58): roving focus, Shift extends the range, Enter/Space opens the leave dialog
+  {
+    id: 'calendar.move',
+    scope: 'calendar',
+    combos: [['ArrowLeft'], ['ArrowRight'], ['ArrowUp'], ['ArrowDown']],
+    label: th.calendar.shortcuts.moveDay,
+  },
+  {
+    id: 'calendar.extend',
+    scope: 'calendar',
+    combos: [
+      ['Shift', 'ArrowLeft'],
+      ['Shift', 'ArrowRight'],
+      ['Shift', 'ArrowUp'],
+      ['Shift', 'ArrowDown'],
+    ],
+    label: th.calendar.shortcuts.extend,
+  },
+  {
+    id: 'calendar.open',
+    scope: 'calendar',
+    combos: [['Enter'], ['Space']],
+    label: th.calendar.shortcuts.open,
+  },
+  { id: 'calendar.clear', scope: 'calendar', combos: [['Esc']], label: th.calendar.shortcuts.clear },
 ]

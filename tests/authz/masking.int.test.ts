@@ -5,6 +5,7 @@
 // M3 (plan/m03 S4.3): project tasks, project statuses, /api/tasks/my, team tasks /api/tasks, sidebar count, and the
 // error body of a cross-project blocker. Later milestones append describe blocks (M5 calendar, M6 grid, M9
 // workload/person, M10 search/home). plan/m02-clients-projects-authz.md S3.4.
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { GET as getClientOptions } from '@/app/api/clients/options/route'
 import { GET as getPeopleOptions } from '@/app/api/people/options/route'
@@ -13,8 +14,13 @@ import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
 import { GET as getTeamTasks } from '@/app/api/tasks/route'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { th } from '@/i18n/th'
+import type {
+  CalendarResponse,
+  CalendarTimeOffFull,
+  CalendarTimeOffMasked,
+} from '@/lib/contracts/calendar'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
 import type { SearchResponse } from '@/lib/contracts/search'
@@ -22,9 +28,15 @@ import type { MyTasksResponse, ProjectTasksResponse, TeamTasksResponse } from '@
 import { createPage, movePage } from '@/server/actions/pages'
 import { addTaskBlocker } from '@/server/actions/task-blockers'
 import { db } from '@/server/db/client'
-import { pageLocks, type PageRow } from '@/server/db/schema'
+import {
+  pageLocks,
+  timeOff,
+  type LeaveTypeRow,
+  type PageRow,
+  type TimeOffRow,
+} from '@/server/db/schema'
 import * as services from '@/server/services'
-import { seedGolden } from '../../scripts/lib/fixtures'
+import { applyFixture, GOLDEN_PATH, seedGolden } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
 import { makeBlocker, makePage, type TestUser } from '../helpers/factories'
 import { outcomeOf } from '../helpers/outcome'
@@ -33,6 +45,7 @@ import { goldenProjectId, goldenTaskNames, goldenUser, type GoldenProject } from
 import { callRoute, okJson } from './_support/http'
 import { assertContains, assertNoLeak } from './_support/leak'
 import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './rows/_m4'
+import { calendarGet } from './rows/_m5'
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -611,6 +624,205 @@ describe('masking — pages (M4, plan/m04 S4.6, K1–K14)', () => {
       assertNoLeak(body, forbiddenP(w))
       expect(body.pages.map((h) => h.id)).toContain(page.id)
       for (const hit of body.pages) expect(hit.title, `hit for ${ch}`).toContain(ch)
+    }
+  })
+})
+
+// ── M5 calendar (plan/m05 S4.3, MASK-5 / MASK-7, X43, M5-D7) ──────────────────────────────────────────────────────
+// GET /api/calendar returns only the leave of visibleUserIds(viewer); other people's entries are
+// `{ kind:'masked', userId, startDate, endDate, half, label:'ลา' }` — no entry id, type id/name, colour or note.
+
+type LeaveSecrets = Record<'coworker' | 'pOnly' | 'member', string[]>
+
+/** Per live world entry: its note, type name, type colour, entry id and type id (none may reach a masked viewer). */
+function leaveSecrets(w: World): LeaveSecrets {
+  return {
+    coworker: ['โน้ตลับ-โลก-01', 'ลาพักร้อน-โลก', '#0369A1', w.timeOff.coworker.id, w.leaveTypes.vacation.id],
+    pOnly: ['โน้ตลับ-โลก-02', 'ลาป่วย-โลก', '#B91C1C', w.timeOff.pOnly.id, w.leaveTypes.sick.id],
+    member: ['โน้ตของ member', 'อบรม-โลก', '#7E22CE', w.timeOff.member.id, w.leaveTypes.training.id],
+  }
+}
+
+const maskedLeave = (
+  userId: string,
+  startDate: string,
+  endDate: string,
+  half: 'AM' | 'PM' | null,
+): CalendarTimeOffMasked => ({ kind: 'masked', userId, startDate, endDate, half, label: th.masking.leave })
+
+const fullLeave = (e: TimeOffRow, t: LeaveTypeRow): CalendarTimeOffFull => ({
+  kind: 'full',
+  id: e.id,
+  userId: e.userId,
+  startDate: e.startDate,
+  endDate: e.endDate,
+  half: e.half,
+  leaveTypeId: t.id,
+  leaveTypeName: t.name,
+  leaveTypeColor: t.color,
+  leaveTypeArchived: t.archivedAt !== null,
+  note: e.note,
+})
+
+const leaveOf = (body: CalendarResponse, userId: string) => body.timeOff.filter((e) => e.userId === userId)
+
+describe('masking — calendar (M5, plan/m05 S4.3)', () => {
+  const FROM = '2026-11-02'
+  const TO = '2026-11-30'
+
+  async function calendarAs(u: TestUser): Promise<CalendarResponse> {
+    asUser(u)
+    return okJson<CalendarResponse>(await calendarGet(FROM, TO))
+  }
+
+  /** Every viewer: the holiday, no soft-deleted entry (coworker · 2026-11-23), people = users with entries only. */
+  function common(body: CalendarResponse, viewer: TestUser, canEditOthers: boolean): void {
+    expect(body).toMatchObject({ from: FROM, to: TO, viewer: { userId: viewer.id, canEditOthers } })
+    expect(body.holidays).toEqual([{ date: '2026-11-20', name: 'วันหยุดโลก' }])
+    expect(body.timeOff.filter((e) => e.startDate === '2026-11-23'), 'soft-deleted leave').toEqual([])
+    expect(Object.keys(body.people).sort()).toEqual([...new Set(body.timeOff.map((e) => e.userId))].sort())
+    expect(
+      body.timeOff.map((e) => e.startDate),
+      'sorted by startDate',
+    ).toEqual([...body.timeOff.map((e) => e.startDate)].sort())
+  }
+
+  it('member: coworker and pOnly masked (half kept), own entry in full; no other note, type, colour or id', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const { coworker, pOnly } = w.users
+    const s = leaveSecrets(w)
+    const body = await calendarAs(w.member)
+    common(body, w.member, false)
+    expect(leaveOf(body, coworker!.id)).toStrictEqual([
+      maskedLeave(coworker!.id, '2026-11-09', '2026-11-10', null),
+    ])
+    expect(leaveOf(body, pOnly!.id)).toStrictEqual([maskedLeave(pOnly!.id, '2026-11-16', '2026-11-16', 'PM')])
+    expect(leaveOf(body, w.member.id)).toStrictEqual([fullLeave(w.timeOff.member, w.leaveTypes.training)])
+    expect(body.timeOff).toHaveLength(3)
+    assertNoLeak(body, [...s.coworker, ...s.pOnly])
+    assertContains(body, ['อบรม-โลก', 'โน้ตของ member'])
+  })
+
+  it('outsider: coworker masked; pOnly and member (no shared project) absent entirely', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const { coworker, pOnly } = w.users
+    const s = leaveSecrets(w)
+    const body = await calendarAs(w.outsider)
+    common(body, w.outsider, false)
+    expect(body.timeOff).toStrictEqual([maskedLeave(coworker!.id, '2026-11-09', '2026-11-10', null)])
+    expect(Object.keys(body.people)).toEqual([coworker!.id])
+    const hiddenPeople = [pOnly!, w.member].flatMap((u) => [u.id, u.name, ...(u.nickname ? [u.nickname] : [])])
+    assertNoLeak(body, [...s.coworker, ...s.pOnly, ...s.member, ...hiddenPeople])
+  })
+
+  it('lead (LEAD of P → everyone visible): every entry masked, none of the details', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const { coworker, pOnly } = w.users
+    const s = leaveSecrets(w)
+    const body = await calendarAs(w.lead)
+    common(body, w.lead, false)
+    expect(body.timeOff).toStrictEqual([
+      maskedLeave(w.member.id, '2026-11-02', '2026-11-02', null),
+      maskedLeave(coworker!.id, '2026-11-09', '2026-11-10', null),
+      maskedLeave(pOnly!.id, '2026-11-16', '2026-11-16', 'PM'),
+    ])
+    assertNoLeak(body, [...s.coworker, ...s.pOnly, ...s.member])
+  })
+
+  it('manager: every entry in full, including notes', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const { coworker, pOnly } = w.users
+    const body = await calendarAs(w.manager)
+    common(body, w.manager, true)
+    expect(leaveOf(body, w.member.id)).toStrictEqual([fullLeave(w.timeOff.member, w.leaveTypes.training)])
+    expect(leaveOf(body, coworker!.id)).toStrictEqual([fullLeave(w.timeOff.coworker, w.leaveTypes.vacation)])
+    expect(leaveOf(body, pOnly!.id)).toStrictEqual([fullLeave(w.timeOff.pOnly, w.leaveTypes.sick)])
+    expect(body.people[pOnly!.id]).toMatchObject({ id: pOnly!.id, active: true })
+  })
+
+  it('coworker: own entry in full, others masked; the own soft-deleted entry stays out', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const { coworker, pOnly } = w.users
+    const s = leaveSecrets(w)
+    const body = await calendarAs(coworker!)
+    common(body, coworker!, false)
+    expect(leaveOf(body, coworker!.id)).toStrictEqual([fullLeave(w.timeOff.coworker, w.leaveTypes.vacation)])
+    expect(leaveOf(body, pOnly!.id)).toStrictEqual([maskedLeave(pOnly!.id, '2026-11-16', '2026-11-16', 'PM')])
+    expect(leaveOf(body, w.member.id)).toStrictEqual([maskedLeave(w.member.id, '2026-11-02', '2026-11-02', null)])
+    assertNoLeak(body, [...s.pOnly, ...s.member])
+  })
+})
+
+describe('masking — calendar golden (M5, plan/m05 S4.3, r8 §4.3)', () => {
+  // The October 2026 month view: 6 Monday-first weeks from weekStart('2026-10-01') (M5-D8).
+  const FROM = '2026-09-28'
+  const TO = '2026-11-09'
+  /** th.leaveTypes.defaults[0] — the type every golden fixture's leave uses (M5-D12). */
+  const VACATION = th.leaveTypes.defaults[0]
+  /** expected.F2.setup.holidays of the golden JSON (never re-typed). */
+  const F2_HOLIDAYS = (
+    JSON.parse(readFileSync(GOLDEN_PATH, 'utf8')) as {
+      expected: { F2: { setup: { holidays: { date: string; name: string }[] } } }
+    }
+  ).expected.F2.setup.holidays
+
+  async function goldenCalendar(nickname: Parameters<typeof goldenUser>[0]): Promise<CalendarResponse> {
+    asUser(await goldenUser(nickname))
+    return okJson<CalendarResponse>(await calendarGet(FROM, TO))
+  }
+
+  async function entryIdsOf(userId: string): Promise<string[]> {
+    return (await db.select({ id: timeOff.id }).from(timeOff).where(eq(timeOff.userId, userId))).map((r) => r.id)
+  }
+
+  it('F4: Ivy sees Cindy’s leave only as "ลา" (no type, colour or id); Cindy and the manager see ลาพักร้อน', async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F4')
+    const cindy = await goldenUser('Cindy')
+    const ids = await entryIdsOf(cindy.id)
+    expect(ids).toHaveLength(1)
+
+    const ivy = await goldenCalendar('Ivy')
+    expect(ivy.timeOff).toStrictEqual([maskedLeave(cindy.id, '2026-10-12', '2026-10-14', null)])
+    assertNoLeak(ivy, [VACATION.name, VACATION.color, ...ids])
+
+    for (const viewer of ['Cindy', 'Manager'] as const) {
+      const body = await goldenCalendar(viewer)
+      expect(body.timeOff, viewer).toMatchObject([
+        { kind: 'full', id: ids[0], userId: cindy.id, startDate: '2026-10-12', endDate: '2026-10-14', half: null },
+      ])
+      assertContains(body, [VACATION.name])
+    }
+  })
+
+  it('F3: Ivy and Mint get no trace of Peter; Jack (LEAD of his project) sees him masked; Peter sees ลาพักร้อน', async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F3')
+    const peter = await goldenUser('Peter')
+    const ids = await entryIdsOf(peter.id)
+    expect(ids).toHaveLength(1)
+
+    for (const viewer of ['Ivy', 'Mint'] as const) {
+      const body = await goldenCalendar(viewer)
+      expect(body.timeOff, viewer).toEqual([])
+      assertNoLeak(body, ['Peter', peter.id, VACATION.name, ...ids])
+    }
+
+    const jack = await goldenCalendar('Jack')
+    expect(jack.timeOff).toStrictEqual([maskedLeave(peter.id, '2026-10-05', '2026-10-06', null)])
+    assertNoLeak(jack, [VACATION.name, VACATION.color, ...ids])
+
+    const own = await goldenCalendar('Peter')
+    expect(own.timeOff).toMatchObject([{ kind: 'full', id: ids[0], leaveTypeName: VACATION.name }])
+  })
+
+  it('F2: the holiday reaches every viewer; no leave at all', async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F2')
+    for (const viewer of ['Ivy', 'Peter', 'Manager'] as const) {
+      const body = await goldenCalendar(viewer)
+      expect(body.holidays, viewer).toEqual(F2_HOLIDAYS)
+      expect(body.timeOff, viewer).toEqual([])
     }
   })
 })

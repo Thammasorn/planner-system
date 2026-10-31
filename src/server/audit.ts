@@ -18,6 +18,9 @@ export type AuditEntity =
   | 'task_blocker'
   | 'page'
   | 'file'
+  | 'holiday'
+  | 'leave_type'
+  | 'time_off'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
 export interface AuditInput {

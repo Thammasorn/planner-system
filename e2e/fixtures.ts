@@ -13,7 +13,7 @@ import path from 'node:path'
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
-import { seedGolden, type FixtureId } from '../scripts/lib/fixtures'
+import { applyFixture, seedGolden, type FixtureId } from '../scripts/lib/fixtures'
 import { clients, pages, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
@@ -97,7 +97,7 @@ export { expect }
 export type ResetDbOptions = { extras?: (tx: Tx) => Promise<unknown> }
 
 /**
- * Truncate every table + `seedGolden` (+ fixture from M5) + extras in ONE transaction against `planner_e2e`, then empty
+ * Truncate every table + `seedGolden` (+ `applyFixture` for F2/F3/F4, M5) + extras in ONE transaction against `planner_e2e`, then empty
  * UPLOAD_DIR. Call as `test.beforeAll(async () => { await resetDb() })` — never `beforeAll(resetDb)` (Playwright
  * would pass its fixtures object as `fixture`).
  */
@@ -107,7 +107,7 @@ export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): P
     await db.transaction(async (tx) => {
       await truncateAll(tx)
       await seedGolden(tx)
-      if (fixture !== undefined) throw new Error('fixtures arrive in M5 (applyFixture)')
+      if (fixture !== undefined) await applyFixture(tx, fixture) // M5 (X11): F1 + that fixture's own setup only
       await opts.extras?.(tx)
     })
   } finally {

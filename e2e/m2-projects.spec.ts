@@ -480,7 +480,7 @@ test.describe('X33 nav entries for every golden role', () => {
   })
 
   for (const who of ['manager', 'cindy', 'ivy', 'peter', 'jack', 'mint'] as const) {
-    test(`${who}: the ${th.nav.projects} section header, ${th.nav.clients}, ${th.nav.my} and ${th.nav.teamTasks} are in the sidebar`, async ({
+    test(`${who}: the ${th.nav.projects} section header, ${th.nav.clients}, ${th.nav.my}, ${th.nav.teamTasks} and ${th.nav.calendar} are in the sidebar`, async ({
       page,
     }) => {
       await loginAs(page, who)
@@ -493,6 +493,8 @@ test.describe('X33 nav entries for every golden role', () => {
       const sidebar = new SidebarPage(page)
       await expect(sidebar.myTasksLink()).toHaveAttribute('href', '/my')
       await expect(sidebar.teamTasksLink()).toHaveAttribute('href', '/tasks')
+      // M5 (X84): ปฏิทินทีม for every role
+      await expect(sidebar.calendarLink()).toHaveAttribute('href', '/calendar')
     })
   }
 })

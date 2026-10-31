@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ForbiddenError, UnauthenticatedError } from './errors'
-import { isManager, narrowRole, requireManager, requireUser } from './authz'
+import { canSeeLeaveDetails, isManager, narrowRole, requireManager, requireUser } from './authz'
 import type { SessionUser } from './session'
 
 const base: SessionUser = {
@@ -35,5 +35,15 @@ describe('authz (M1 functions)', () => {
     expect(() => requireUser(null)).toThrow(UnauthenticatedError)
     expect(() => requireUser(undefined)).toThrow(UnauthenticatedError)
     expect(() => requireUser(base)).not.toThrow()
+  })
+})
+
+describe('authz (M5 functions)', () => {
+  it('canSeeLeaveDetails: manager → everyone, owner → own, other worker → never (§3.3)', () => {
+    const manager = { id: 'm1', role: 'manager' as const }
+    expect(canSeeLeaveDetails(manager, 'u2')).toBe(true)
+    expect(canSeeLeaveDetails(manager, 'm1')).toBe(true)
+    expect(canSeeLeaveDetails(base, 'u1')).toBe(true)
+    expect(canSeeLeaveDetails(base, 'u2')).toBe(false)
   })
 })

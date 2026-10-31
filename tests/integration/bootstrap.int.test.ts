@@ -1,12 +1,14 @@
 // FR-102, SPEC §10.4 steps 1 + 3 — first manager from INITIAL_MANAGER_* and default positions; idempotent; never
-// prints the password. plan/m01-auth-employees.md §5.S4 (S4.9).
+// prints the password. plan/m01-auth-employees.md §5.S4 (S4.9). M5 (plan/m05 S4.6, DEP-09 / DEP-11, M5-D12): step 2
+// seeds the 4 default leave types only when the table is empty; step 4 never seeds holidays.
 import { asc, count, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { db } from '@/server/db/client'
-import { account, positions, user, workSchedules } from '@/server/db/schema'
+import { th } from '@/i18n/th'
+import { account, auditLog, holidays, leaveTypes, positions, user, workSchedules } from '@/server/db/schema'
 import { DEFAULT_POSITIONS, runBootstrap } from '../../scripts/lib/bootstrap'
 import { signInApi } from '../helpers/auth-http'
-import { makeUser } from '../helpers/factories'
+import { makeLeaveType, makeUser } from '../helpers/factories'
 
 const PASSWORD = 'Initial-pass-1'
 const ENV = {
@@ -40,7 +42,9 @@ afterEach(() => {
 })
 
 const run = (env: NodeJS.ProcessEnv) => runBootstrap(db, env, log as unknown as Log)
-const n = async (table: typeof user | typeof positions | typeof account) =>
+const n = async (
+  table: typeof user | typeof positions | typeof account | typeof leaveTypes | typeof holidays,
+) =>
   Number((await db.select({ n: count() }).from(table))[0]?.n ?? 0)
 
 describe('bootstrap (FR-102, §10.4)', () => {
@@ -114,5 +118,53 @@ describe('bootstrap (FR-102, §10.4)', () => {
     expect(res.fatal).not.toContain(bad)
     expect(res.createdManager).toBe(false)
     expect(await n(user)).toBe(0)
+  })
+})
+
+describe('bootstrap — M5 leave types and holidays (§10.4 steps 2 + 4, M5-D12)', () => {
+  const orderedTypes = () =>
+    db
+      .select({ name: leaveTypes.name, color: leaveTypes.color, position: leaveTypes.position, archivedAt: leaveTypes.archivedAt })
+      .from(leaveTypes)
+      .orderBy(asc(leaveTypes.position), asc(leaveTypes.id))
+
+  it('T-BOOT-LT-01 empty DB → the 4 default leave types in order (names/colours from th), audited by nobody', async () => {
+    const res = await run({ ...ENV })
+    expect(res.fatal).toBeUndefined()
+    expect(res).toMatchObject({ seededLeaveTypes: 4 })
+    const types = await orderedTypes()
+    expect(types.map(({ name, color }) => ({ name, color }))).toEqual(
+      th.leaveTypes.defaults.map(({ name, color }) => ({ name, color })),
+    )
+    for (const t of types) expect(t.archivedAt).toBeNull()
+    for (let i = 1; i < types.length; i++) expect(types[i - 1]!.position < types[i]!.position).toBe(true)
+    const audits = await db
+      .select({ action: auditLog.action, actorId: auditLog.actorId, projectId: auditLog.projectId })
+      .from(auditLog)
+      .where(eq(auditLog.entity, 'leave_type'))
+    expect(audits).toHaveLength(4)
+    for (const a of audits) expect(a).toEqual({ action: 'create', actorId: null, projectId: null })
+  })
+
+  it('T-BOOT-LT-02 a second run adds no leave type (idempotent)', async () => {
+    await run({ ...ENV })
+    const second = await run({ ...ENV })
+    expect(second.fatal).toBeUndefined()
+    expect(second).toMatchObject({ seededLeaveTypes: 0 })
+    expect(await n(leaveTypes)).toBe(4)
+  })
+
+  it('T-BOOT-LT-03 a DB that already has one custom leave type gets nothing added', async () => {
+    const custom = await makeLeaveType({ name: 'ลาบวช', color: '#0F766E' })
+    const res = await run({ ...ENV })
+    expect(res).toMatchObject({ seededLeaveTypes: 0 })
+    expect(await db.select({ id: leaveTypes.id }).from(leaveTypes)).toEqual([{ id: custom.id }])
+  })
+
+  it('T-BOOT-HOL-01 bootstrap never seeds holidays (DEP-11: official Thai holidays are imported, X64)', async () => {
+    await run({ ...ENV })
+    expect(await n(holidays)).toBe(0)
+    await run({ ...ENV })
+    expect(await n(holidays)).toBe(0)
   })
 })

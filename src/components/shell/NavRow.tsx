@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react'
 import Tooltip from '@mui/material/Tooltip'
 import BusinessOutlined from '@mui/icons-material/BusinessOutlined'
+import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
 import CheckBoxOutlined from '@mui/icons-material/CheckBoxOutlined'
 import FolderOutlined from '@mui/icons-material/FolderOutlined'
 import HomeOutlined from '@mui/icons-material/HomeOutlined'
@@ -20,6 +21,7 @@ export const NAV_ICONS: Record<NavIcon, typeof HomeOutlined> = {
   clients: BusinessOutlined,
   my: CheckBoxOutlined,
   teamTasks: ViewKanbanOutlined,
+  calendar: CalendarMonthOutlined,
 }
 
 /** The badge's number, or null while loading / when there is none. */

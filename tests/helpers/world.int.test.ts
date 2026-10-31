@@ -6,14 +6,19 @@ import { th } from '@/i18n/th'
 import { db } from '@/server/db/client'
 import {
   files,
+  holidays,
+  leaveTypes,
   pages,
   projectMembers,
   taskAssignments,
   taskBlockers,
   taskStatuses,
   tasks,
+  timeOff,
 } from '@/server/db/schema'
+import { visibleUserIds } from '@/server/authz'
 import { assertCompletionInvariant } from './invariants'
+import { toSessionUser } from './as-user'
 import { createWorld, expandParts } from './world'
 
 describe('world fixture (X91)', () => {
@@ -50,13 +55,18 @@ describe('world fixture (X91)', () => {
   })
 
   it('parts without a builder throw; part fields of an unbuilt part throw on access', async () => {
-    await expect(createWorld({ with: ['timeOff'] })).rejects.toThrow('world part timeOff has no builder yet')
+    await expect(createWorld({ with: ['allocations'] })).rejects.toThrow(
+      'world part allocations has no builder yet',
+    )
     const w = await createWorld()
     expect(() => w.tasks.pLeaf).toThrow("needs createWorld({ with: ['tasks'] })")
     expect(() => w.batches.pDeletedTask).toThrow("needs createWorld({ with: ['tasks'] })")
     expect(() => w.batches.pDeletedPage).toThrow("needs createWorld({ with: ['pages'] })")
     expect(() => w.pages.wiki).toThrow("needs createWorld({ with: ['pages'] })")
     expect(() => w.files.pImage).toThrow("needs createWorld({ with: ['files'] })")
+    expect(() => w.leaveTypes.vacation).toThrow("needs createWorld({ with: ['timeOff'] })")
+    expect(() => w.timeOff.coworker).toThrow("needs createWorld({ with: ['timeOff'] })")
+    expect(() => w.batches.coworkerDeletedTimeOff).toThrow("needs createWorld({ with: ['timeOff'] })")
   })
 
   it('M3 with tasks: tree shape, statuses, assignments, batches, blockers (plan/m03 S0.15)', async () => {
@@ -223,5 +233,71 @@ describe('world fixture (X91)', () => {
     }
     const [n] = await db.select({ n: count() }).from(files)
     expect(n?.n).toBe(5)
+  })
+
+  it('M5 with timeOff: leave types, coworker / pOnly visibility, entries, holiday (plan/m05 S0.15)', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const lt = w.leaveTypes
+    expect([lt.vacation.name, lt.sick.name, lt.training.name, lt.archived.name]).toEqual([
+      'ลาพักร้อน-โลก',
+      'ลาป่วย-โลก',
+      'อบรม-โลก',
+      'ลาเก่า-โลก',
+    ])
+    expect([lt.vacation.color, lt.sick.color, lt.training.color]).toEqual(['#0369A1', '#B91C1C', '#7E22CE'])
+    const ordered = await db.select().from(leaveTypes).orderBy(asc(leaveTypes.position), asc(leaveTypes.id))
+    expect(ordered.map((t) => t.id)).toEqual([lt.vacation.id, lt.sick.id, lt.training.id, lt.archived.id])
+    expect(w.leaveTypes.archived.archivedAt).not.toBeNull()
+    expect(lt.vacation.archivedAt).toBeNull()
+
+    const { coworker, pOnly } = w.users
+    expect(coworker!.role).toBe('worker')
+    expect(pOnly!.role).toBe('worker')
+    const outsiderSees = await visibleUserIds(db, toSessionUser(w.outsider))
+    expect(outsiderSees).not.toBe('ALL')
+    const seen = outsiderSees as Set<string>
+    expect(seen.has(coworker!.id)).toBe(true)
+    expect(seen.has(pOnly!.id)).toBe(false)
+    const memberSees = (await visibleUserIds(db, toSessionUser(w.member))) as Set<string>
+    expect(memberSees.has(coworker!.id) && memberSees.has(pOnly!.id)).toBe(true)
+    expect(await visibleUserIds(db, toSessionUser(w.lead))).toBe('ALL')
+
+    const t = w.timeOff
+    expect(t.coworker).toMatchObject({
+      userId: coworker!.id,
+      leaveTypeId: lt.vacation.id,
+      startDate: '2026-11-09',
+      endDate: '2026-11-10',
+      half: null,
+      note: 'โน้ตลับ-โลก-01',
+      deletedAt: null,
+    })
+    expect(t.pOnly).toMatchObject({
+      userId: pOnly!.id,
+      leaveTypeId: lt.sick.id,
+      startDate: '2026-11-16',
+      endDate: '2026-11-16',
+      half: 'PM',
+      note: 'โน้ตลับ-โลก-02',
+    })
+    expect(t.member).toMatchObject({
+      userId: w.member.id,
+      leaveTypeId: lt.training.id,
+      startDate: '2026-11-02',
+    })
+
+    const [deleted] = await db
+      .select()
+      .from(timeOff)
+      .where(eq(timeOff.deletedBatch, w.batches.coworkerDeletedTimeOff))
+    expect(deleted).toMatchObject({ userId: coworker!.id, leaveTypeId: lt.sick.id, startDate: '2026-11-23' })
+    const age = (Date.now() - deleted!.deletedAt!.getTime()) / 86_400_000
+    expect(age).toBeCloseTo(1, 1)
+    const [live] = await db.select({ n: count() }).from(timeOff).where(isNull(timeOff.deletedAt))
+    expect(live?.n).toBe(3)
+
+    expect(w.holidays.h1).toMatchObject({ date: '2026-11-20', name: 'วันหยุดโลก' })
+    const [h] = await db.select({ n: count() }).from(holidays)
+    expect(h?.n).toBe(1)
   })
 })

@@ -11,6 +11,7 @@ import {
   projectAccess,
   requireClient,
   requireProject,
+  requireTimeOffEdit,
   visibleProjectIds,
   visibleUserIds,
 } from './authz'
@@ -183,5 +184,33 @@ describe('visibleUserIds / canSeeUserDetails', () => {
     expect(await canSeeUserDetails(db, S(w.member), w.lead.id)).toBe(true)
     expect(await canSeeUserDetails(db, S(w.member), w.member.id)).toBe(true)
     expect(await canSeeUserDetails(db, S(w.manager), w.outsider.id)).toBe(true)
+  })
+})
+
+describe('requireTimeOffEdit (M5-D3, PERM-20/21)', () => {
+  const outcome = async (p: Promise<void>): Promise<'ok' | '404' | '403'> => {
+    try {
+      await p
+      return 'ok'
+    } catch (e) {
+      if (e instanceof NotFoundError) return '404'
+      if (e instanceof ForbiddenError) return '403'
+      throw e
+    }
+  }
+
+  it('self → ok; manager → ok for an existing user, 404 otherwise; worker → 404 when invisible, else 403', async () => {
+    const w = await createWorld({ with: ['timeOff'] })
+    const coworker = w.users.coworker!
+    const pOnly = w.users.pOnly!
+    expect(await outcome(requireTimeOffEdit(db, S(w.manager), coworker.id))).toBe('ok')
+    expect(await outcome(requireTimeOffEdit(db, S(w.manager), 'nope'))).toBe('404')
+    expect(await outcome(requireTimeOffEdit(db, S(w.member), w.member.id))).toBe('ok')
+    expect(await outcome(requireTimeOffEdit(db, S(w.member), coworker.id))).toBe('403')
+    expect(await outcome(requireTimeOffEdit(db, S(w.outsider), pOnly.id))).toBe('404')
+    expect(await outcome(requireTimeOffEdit(db, S(w.outsider), coworker.id))).toBe('403')
+    expect(await outcome(requireTimeOffEdit(db, S(w.lead), pOnly.id))).toBe('403')
+    expect(await outcome(requireTimeOffEdit(db, S(w.lead), 'nope'))).toBe('404')
+    expect(await outcome(requireTimeOffEdit(db, S(w.member), randomUUID()))).toBe('404')
   })
 })

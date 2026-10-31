@@ -36,6 +36,20 @@
       "when": 1793465979822,
       "tag": "0004_m4_pages_files",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793476358675,
+      "tag": "0005_m5_calendar_leave",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793476368845,
+      "tag": "0006_time_off_no_overlap",
+      "breakpoints": true
     }
   ]
 }

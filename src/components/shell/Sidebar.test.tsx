@@ -10,6 +10,7 @@ import { PaletteProvider } from '@/components/palette/PaletteProvider'
 import { CurrentUserContext } from '@/hooks/useCurrentUser'
 import { renderTasks } from '../tasks/render.test.helper'
 import { WORKER } from '../pages/render.test.helper'
+import { PRIMARY_NAV } from './nav'
 import { Sidebar } from './Sidebar'
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }))
@@ -61,6 +62,17 @@ describe('Sidebar M3 nav (X33, M3-D40)', () => {
   it('no count while loading', () => {
     const nav = renderSidebar(false, false)
     expect(within(nav).getByRole('link', { name: th.nav.my })).toBeInTheDocument()
+  })
+})
+
+describe('Sidebar M5 nav (X84)', () => {
+  it('primary order is home, my, tasks, calendar; ปฏิทินทีม links to /calendar right after งานของทีม', () => {
+    expect(PRIMARY_NAV.map((i) => i.id)).toEqual(['home', 'my', 'tasks', 'calendar'])
+    const nav = renderSidebar()
+    const links = within(nav).getAllByRole('link')
+    const calendar = within(nav).getByRole('link', { name: th.nav.calendar })
+    expect(calendar).toHaveAttribute('href', '/calendar')
+    expect(links[links.indexOf(calendar) - 1]).toHaveAttribute('href', '/tasks')
   })
 })
 

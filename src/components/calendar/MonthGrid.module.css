@@ -1,0 +1,219 @@
+/* /calendar month view (FR-907, M5-D13, PLAN §3.9): plain elements + CSS variables; state via aria/data attributes.
+   Never colour alone (A11Y-1): leave = stripes + text, holiday = background + 🎌 + name, today = ring + "วันนี้",
+   selection = aria-selected + inset ring + overlay. */
+.grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.columnheader {
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--mui-palette-text-secondary);
+  border-bottom: 1px solid var(--mui-palette-divider);
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 4px;
+  border-inline-end: 1px solid var(--mui-palette-divider);
+  border-bottom: 1px solid var(--mui-palette-divider);
+  outline: none;
+  cursor: cell;
+}
+
+.row:last-child .cell {
+  border-bottom: 0;
+}
+
+.cell:last-child {
+  border-inline-end: 0;
+}
+
+.cell[data-weekend] {
+  background: var(--nonworking);
+}
+
+.cell[data-holiday] {
+  background: var(--holiday);
+}
+
+.cell[aria-selected='true'] {
+  background-image: linear-gradient(var(--mui-palette-action-selected), var(--mui-palette-action-selected));
+  box-shadow: inset 0 0 0 2px var(--mui-palette-primary-main);
+}
+
+.cell:focus-visible {
+  outline: 3px solid var(--brand-blue);
+  outline-offset: -3px;
+}
+
+.dayHead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.dayNum {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.cell[data-outside] .dayNum {
+  color: var(--faded-fg);
+  font-weight: 400;
+}
+
+.cell[aria-current='date'] .dayNum {
+  box-shadow: inset 0 0 0 2px var(--today);
+}
+
+.todayTag {
+  padding: 0 6px;
+  border: 1px solid var(--today);
+  border-radius: 10px;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.holiday {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chip {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 1px 4px;
+  border: 0;
+  border-inline-start: 4px solid var(--timeoff);
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, var(--timeoff) 0 4px, transparent 4px 8px);
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+button.chip {
+  cursor: pointer;
+}
+
+button.chip:hover {
+  text-decoration: underline;
+}
+
+button.chip:focus-visible,
+.more:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.more {
+  align-self: flex-start;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--brand-blue);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.popoverList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+  max-width: 320px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Agenda list (< 600 px, NFR-07b) */
+.agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agendaDay {
+  padding: 8px 12px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 8px;
+  background: var(--mui-palette-background-paper);
+}
+
+.agendaDay[data-holiday] {
+  background: var(--holiday);
+}
+
+.agendaDay[aria-current='date'] {
+  box-shadow: inset 4px 0 0 var(--today);
+}
+
+.agendaDay:focus-visible {
+  outline: 3px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.agendaHeading {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Text for assistive tech only (the masked-chip hint referenced by aria-describedby). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

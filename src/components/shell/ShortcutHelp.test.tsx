@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import { SHORTCUT_SCOPES, SHORTCUTS } from '@/lib/shortcuts'
+import { SHORTCUT_SCOPE_LABELS, SHORTCUT_SCOPES, SHORTCUTS } from '@/lib/shortcuts'
 import { theme } from '@/lib/theme/theme'
 import { ShortcutHelp } from './ShortcutHelp'
 
@@ -22,7 +22,7 @@ describe('ShortcutHelp (X07, §8.6)', () => {
     fireEvent.keyDown(document.body, { code: 'Slash', key: 'ฦ', shiftKey: true })
     const dialog = await screen.findByRole('dialog', { name: th.shortcuts.title })
     for (const scope of SHORTCUT_SCOPES) {
-      const section = within(dialog).getByRole('region', { name: th.shortcuts.scopes[scope] })
+      const section = within(dialog).getByRole('region', { name: SHORTCUT_SCOPE_LABELS[scope] })
       for (const s of SHORTCUTS.filter((x) => x.scope === scope)) {
         expect(within(section).getByText(s.label)).toBeInTheDocument()
       }

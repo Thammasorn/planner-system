@@ -1,7 +1,7 @@
 // X30 / MASK-7 skeleton: pure helpers (no DB rows needed); runs in the integration project with src/server/**.
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import { isVisible, maskHidden, partitionByProject } from './masking'
+import { isVisible, maskHidden, maskTimeOff, partitionByProject, type TimeOffWithType } from './masking'
 
 const rows = [
   { projectId: 'p', v: 1 },
@@ -35,5 +35,40 @@ describe('masking skeleton (SPEC §3.3, X30)', () => {
   it('maskHidden returns masked = null when nothing is hidden', () => {
     expect(maskHidden(rows, 'ALL', sum)).toEqual({ visible: rows, masked: null })
     expect(maskHidden(rows, new Set(['p', 'q']), sum).masked).toBeNull()
+  })
+})
+
+describe('maskTimeOff (SPEC §3.3, MASK-5, M5-D7)', () => {
+  const row: TimeOffWithType = {
+    id: 'X-entry-7f3a',
+    userId: 'u-owner',
+    startDate: '2026-11-09',
+    endDate: '2026-11-10',
+    half: null,
+    note: 'โน้ตลับ-01',
+    leaveTypeId: 'lt-secret-91c2',
+    leaveTypeName: 'ลาพักร้อน',
+    leaveTypeColor: '#0369A1',
+    leaveTypeArchived: false,
+  }
+
+  it('hidden details keep only who / when / half and the Thai label', () => {
+    const out = maskTimeOff({ ...row, half: 'PM', startDate: '2026-11-16', endDate: '2026-11-16' }, false)
+    expect(Object.keys(out).sort()).toEqual(['endDate', 'half', 'kind', 'label', 'startDate', 'userId'])
+    expect(out).toEqual({
+      kind: 'masked',
+      userId: 'u-owner',
+      startDate: '2026-11-16',
+      endDate: '2026-11-16',
+      half: 'PM',
+      label: th.masking.leave,
+    })
+    const json = JSON.stringify(out)
+    for (const secret of ['โน้ตลับ-01', 'ลาพักร้อน', '#0369A1', 'X-entry-7f3a', 'lt-secret-91c2'])
+      expect(json).not.toContain(secret)
+  })
+
+  it('visible details → kind full with the note, type and colour', () => {
+    expect(maskTimeOff(row, true)).toEqual({ kind: 'full', ...row })
   })
 })

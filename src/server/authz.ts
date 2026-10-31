@@ -16,14 +16,10 @@ import {
   taskAssignments,
   taskStatuses,
   tasks,
+  user as userTable,
 } from './db/schema'
 import type { DbOrTx } from './db/types'
-import {
-  ForbiddenError,
-  NotFoundError,
-  UnauthenticatedError,
-  ValidationError,
-} from './errors'
+import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors'
 import * as filesRepo from './repo/files'
 import * as pagesRepo from './repo/pages'
 import type { TaskRow } from './repo/tasks'
@@ -373,7 +369,13 @@ export async function accessForPage(
   const prot = await effectiveProtection(tx, page.id)
   if (need === 'protect' && !manager) throw new ForbiddenError()
   if (need === 'edit' && prot && !manager) throw new ForbiddenError(th.pages.errors.protectedReadOnly)
-  return { page, role: manager ? 'MANAGER' : 'WIKI', archived: false, effectiveProtected: prot, isManager: manager }
+  return {
+    page,
+    role: manager ? 'MANAGER' : 'WIKI',
+    archived: false,
+    effectiveProtected: prot,
+    isManager: manager,
+  }
 }
 
 const crossSpace = (): ValidationError => {
@@ -412,7 +414,11 @@ export async function requirePageCreate(
 }
 
 /** Workers may not delete/move a subtree that contains a protected page (M4-D24); managers pass. */
-export async function requireSubtreeUnprotected(tx: DbOrTx, user: SessionUser, pageId: string): Promise<void> {
+export async function requireSubtreeUnprotected(
+  tx: DbOrTx,
+  user: SessionUser,
+  pageId: string,
+): Promise<void> {
   requireUser(user)
   if (isManager(user)) return
   if (await pagesRepo.subtreeHasLocked(tx, pageId)) throw new ForbiddenError(th.pages.errors.subtreeProtected)
@@ -430,4 +436,29 @@ export async function requireFile(tx: DbOrTx, user: SessionUser, fileId: string)
 /** True when the page or an ancestor is locked (recursive CTE, ≤ 10 levels; WORKSPACE only). */
 export function effectiveProtection(tx: DbOrTx, pageId: string): Promise<boolean> {
   return pagesRepo.anyLockedUpward(tx, pageId)
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M5 — leave (SPEC §3.2 PERM-20/21, §3.3, M5-D3, X41).
+// Entry actions look the entry up first (getLiveOrNotFound) and pass its user_id as the target.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** M5-D3: self → ok; manager → ok (404 if the user does not exist); worker → 404 if the target is outside
+ *  visibleUserIds(user) or does not exist, else ForbiddenError. */
+export async function requireTimeOffEdit(tx: DbOrTx, user: SessionUser, targetUserId: string): Promise<void> {
+  requireUser(user)
+  if (user.id === targetUserId) return
+  if (!isManager(user)) {
+    const visible = await visibleUserIds(tx, user)
+    if (visible !== 'ALL' && !visible.has(targetUserId)) throw new NotFoundError()
+  }
+  // Deactivated users exist too (their past leave stays editable by the manager, X64).
+  const [hit] = await tx.select({ id: userTable.id }).from(userTable).where(eq(userTable.id, targetUserId))
+  if (!hit) throw new NotFoundError()
+  if (!isManager(user)) throw new ForbiddenError()
+}
+
+/** §3.3: the leave type and note of `ownerId`'s entries are visible only to managers and the owner. Pure. */
+export function canSeeLeaveDetails(viewer: Pick<SessionUser, 'id' | 'role'>, ownerId: string): boolean {
+  return isManager(viewer) || viewer.id === ownerId
 }

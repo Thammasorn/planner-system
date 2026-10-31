@@ -20,6 +20,7 @@ const TAB_LABEL = new RegExp(`^(${sortedProjectTabs().map((t) => escapeRegExp(t.
  * ภาพรวม · งาน · เอกสาร and then its page tree (`role="tree"` th.pages.tree.projectLabel(name)); the "Wiki ทีม" section
  * (heading th.sidebar.wikiHeading, `+` th.sidebar.newWikiPage, tree th.pages.tree.wikiLabel) follows the projects.
  * Page-tree links are never project rows (projectLinks excludes everything inside a tree).
+ * M5 (X84): primary nav gains "ปฏิทินทีม" after งานของทีม (`calendarLink()`).
  */
 export class SidebarPage {
   readonly shell: ShellPage
@@ -130,6 +131,11 @@ export class SidebarPage {
 
   teamTasksLink(): Locator {
     return this.shell.navLink(th.nav.teamTasks)
+  }
+
+  /** M5 (X84): "ปฏิทินทีม" → /calendar, appended after งานของทีม for every role. */
+  calendarLink(): Locator {
+    return this.shell.navLink(th.nav.calendar)
   }
 
   newProjectButton(): Locator {

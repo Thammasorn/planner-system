@@ -1,8 +1,8 @@
 import { th } from '@/i18n/th'
 
 /** A key of Sidebar's icon map — nav.ts stays data-only (no component imports). Later keys:
- *  M5 'calendar', M9 'workload' | 'people'. */
-export type NavIcon = 'home' | 'settings' | 'projects' | 'clients' | 'my' | 'teamTasks'
+ *  M9 'workload' | 'people'. */
+export type NavIcon = 'home' | 'settings' | 'projects' | 'clients' | 'my' | 'teamTasks' | 'calendar'
 
 /** A count shown as text after the label (M3-D40); M9 widens it to 'myTaskCount' | 'workloadOver'. */
 export type NavBadge = 'myTaskCount'
@@ -27,6 +27,8 @@ export const PRIMARY_NAV: readonly NavItem[] = [
   { id: 'home', href: '/home', label: th.nav.home, icon: 'home' },
   { id: 'my', href: '/my', label: th.nav.my, icon: 'my', badge: 'myTaskCount' },
   { id: 'tasks', href: '/tasks', label: th.nav.teamTasks, icon: 'teamTasks' },
+  // M5 (X84): appended after tasks; M9 inserts 'workload' before it.
+  { id: 'calendar', href: '/calendar', label: th.nav.calendar, icon: 'calendar' },
 ]
 
 /** Bottom group (SPEC §8.1 "people, clients, settings"); not rendered while empty for the viewer.

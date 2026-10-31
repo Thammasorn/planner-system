@@ -10,7 +10,13 @@ import CloseOutlined from '@mui/icons-material/CloseOutlined'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { th } from '@/i18n/th'
 import type { Hotkey } from '@/lib/keys'
-import { SHORTCUT_SCOPES, SHORTCUTS, type KeyToken } from '@/lib/shortcuts'
+import {
+  SHORTCUT_KEY_LABELS,
+  SHORTCUT_SCOPE_LABELS,
+  SHORTCUT_SCOPES,
+  SHORTCUTS,
+  type KeyToken,
+} from '@/lib/shortcuts'
 
 /** `?` = Shift+Slash by physical key (Thai layout), `?` by character elsewhere (X49). */
 export const HELP_HOTKEY: Hotkey = { code: 'Slash', key: '?', shift: true }
@@ -21,7 +27,7 @@ function isApple(): boolean {
 
 function keyText(token: KeyToken, apple: boolean): string {
   if (token === 'Mod') return apple ? th.shortcuts.keys.ModMac : th.shortcuts.keys.Mod
-  return th.shortcuts.keys[token]
+  return SHORTCUT_KEY_LABELS[token]
 }
 
 /**
@@ -52,7 +58,7 @@ export function ShortcutHelpDialog({ open, onClose }: { open: boolean; onClose: 
         {SHORTCUT_SCOPES.map((scope) => (
           <Box key={scope} component="section" aria-labelledby={`shortcut-scope-${scope}`} sx={{ mb: 2 }}>
             <Typography id={`shortcut-scope-${scope}`} variant="subtitle2" component="h3" sx={{ mb: 1 }}>
-              {th.shortcuts.scopes[scope]}
+              {SHORTCUT_SCOPE_LABELS[scope]}
             </Typography>
             <Box
               component="dl"
