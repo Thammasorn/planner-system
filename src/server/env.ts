@@ -25,7 +25,10 @@ const EnvSchema = z.object({
   INITIAL_MANAGER_EMAIL: z.string().optional(),
   INITIAL_MANAGER_NAME: z.string().optional(),
   INITIAL_MANAGER_PASSWORD: z.string().optional(),
-  // M4 adds UPLOAD_DIR, MAX_*_MB.
+  // M4 — uploads (SPEC §7.6, §10.3, M4-D15, DEP-07).
+  UPLOAD_DIR: z.string().min(1).default('./uploads'),
+  MAX_IMAGE_MB: z.coerce.number().int().min(1).max(100).default(10),
+  MAX_ATTACHMENT_MB: z.coerce.number().int().min(1).max(200).default(25),
 })
 
 export type Env = z.output<typeof EnvSchema>
@@ -54,6 +57,12 @@ export function getEnv(): Env {
 /** Tests only. */
 export function resetEnvCache(): void {
   cached = undefined
+}
+
+/** Upload size limits in bytes (M4-D15); the editor receives them as props for its client pre-check. */
+export function uploadLimits(): { imageBytes: number; attachmentBytes: number } {
+  const env = getEnv()
+  return { imageBytes: env.MAX_IMAGE_MB * 1024 * 1024, attachmentBytes: env.MAX_ATTACHMENT_MB * 1024 * 1024 }
 }
 
 /** Comma-separated env value → trimmed, non-empty items (`TRUSTED_ORIGINS`, `TRUSTED_PROXIES`). */

@@ -1,3 +1,6 @@
+import { rmSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import postgres from 'postgres'
 import { afterAll, beforeEach, inject, vi } from 'vitest'
 import { asNobody } from '../helpers/as-user'
@@ -41,6 +44,15 @@ vi.mock('@/server/session', async (importOriginal) => {
     },
   }
 })
+
+// M4 (S0.2, X55): per-run, per-worker upload directory so file tests never touch ./uploads. env.ts is lazy, so
+// setting it here (before the first getEnv()) is early enough; emptied once per worker.
+const uploadDir = path.join(
+  os.tmpdir(),
+  `planner-uploads-${inject('runId')}-w${process.env.VITEST_POOL_ID ?? '0'}`,
+)
+rmSync(uploadDir, { recursive: true, force: true })
+process.env.UPLOAD_DIR = uploadDir
 
 const adminUrl = inject('adminUrl')
 const dbName = `planner_t_${inject('runId')}_w${process.env.VITEST_POOL_ID ?? '1'}`

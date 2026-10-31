@@ -422,3 +422,171 @@ describe('M3 schema (SPEC v3.1 §6.2 task_statuses / tasks / task_assignments / 
     })
   })
 })
+
+// ---------------------------------------------------------------------------------------------------------------
+// M4 — pages, page_locks, files (plan/m04 S0.3, DM-09, X10, M4-D25)
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('pages / files / page_locks', () => {
+  let sql: postgres.Sql
+
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string }
+      return { code: err.code, constraint: err.constraint_name }
+    }
+  }
+
+  async function seedProject(): Promise<{ projectId: string; userId: string }> {
+    const u = await makeUser({ role: 'manager' })
+    const [p] = await sql<{ id: string }[]>`
+      insert into projects (name, created_by) values ('P', ${u.id}) returning id`
+    return { projectId: p!.id, userId: u.id }
+  }
+
+  function insertPage(o: {
+    userId: string
+    space?: 'WORKSPACE' | 'PROJECT'
+    projectId?: string | null
+    depth?: number
+    isCharter?: boolean
+  }) {
+    return sql<{ id: string }[]>`
+      insert into pages (space, project_id, depth, is_charter, position, created_by, updated_by)
+      values (${o.space ?? 'WORKSPACE'}, ${o.projectId ?? null}, ${o.depth ?? 0}, ${o.isCharter ?? false}, 'a0',
+              ${o.userId}, ${o.userId})
+      returning id`
+  }
+
+  function insertFile(o: {
+    userId: string
+    projectId?: string | null
+    pageId?: string | null
+    kind?: string
+  }) {
+    return sql<{ id: string }[]>`
+      insert into files (storage_key, original_name, mime, size_bytes, kind, page_id, project_id, uploaded_by)
+      values (${'2026/09/' + crypto.randomUUID() + '.png'}, 'a.png', 'image/png', 1, ${o.kind ?? 'IMAGE'},
+              ${o.pageId ?? null}, ${o.projectId ?? null}, ${o.userId})
+      returning id`
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  it('pages.position is COLLATE "C"', async () => {
+    const [col] = await sql<{ collname: string }[]>`
+      select c.collname from pg_attribute a join pg_collation c on c.oid = a.attcollation
+      where a.attrelid = 'pages'::regclass and a.attname = 'position'`
+    expect(col?.collname).toBe('C')
+  })
+
+  it('checks space ⇔ project_id and depth 0..9 (23514)', async () => {
+    const { projectId, userId } = await seedProject()
+    expect(await pgError(() => insertPage({ userId, space: 'WORKSPACE', projectId }))).toMatchObject({
+      code: '23514',
+      constraint: 'pages_space_project_check',
+    })
+    expect(await pgError(() => insertPage({ userId, space: 'PROJECT', projectId: null }))).toMatchObject({
+      code: '23514',
+      constraint: 'pages_space_project_check',
+    })
+    expect(await pgError(() => insertPage({ userId, depth: 10 }))).toMatchObject({
+      code: '23514',
+      constraint: 'pages_depth_check',
+    })
+    expect(await pgError(() => insertPage({ userId, depth: 9 }))).toBeNull()
+    expect(await pgError(() => insertPage({ userId, space: 'PROJECT', projectId }))).toBeNull()
+  })
+
+  it('allows one live charter per project (23505); a soft-deleted charter frees the slot', async () => {
+    const { projectId, userId } = await seedProject()
+    const [first] = await insertPage({ userId, space: 'PROJECT', projectId, isCharter: true })
+    expect(
+      await pgError(() => insertPage({ userId, space: 'PROJECT', projectId, isCharter: true })),
+    ).toMatchObject({
+      code: '23505',
+      constraint: 'one_charter_per_project',
+    })
+    await sql`update pages set deleted_at = now() where id = ${first!.id}`
+    expect(
+      await pgError(() => insertPage({ userId, space: 'PROJECT', projectId, isCharter: true })),
+    ).toBeNull()
+  })
+
+  it('has the named indexes', async () => {
+    const names = [
+      'pages_tree_idx',
+      'one_charter_per_project',
+      'pages_title_trgm',
+      'pages_content_trgm',
+      'files_project_id_idx',
+    ]
+    const rows = await sql<
+      { indexname: string }[]
+    >`select indexname from pg_indexes where indexname in ${sql(names)}`
+    expect(rows.map((r) => r.indexname).sort()).toEqual([...names].sort())
+  })
+
+  it('defaults: content [], content_text "", version 1, locked false', async () => {
+    const u = await makeUser()
+    const [p] = await insertPage({ userId: u.id })
+    const [row] = await sql<
+      { content: unknown; content_text: string; version: number; locked: boolean; title: string }[]
+    >`
+      select content, content_text, version, locked, title from pages where id = ${p!.id}`
+    expect(row).toEqual({ content: [], content_text: '', version: 1, locked: false, title: '' })
+  })
+
+  it('files.kind check (23514); deleting a cover file nulls pages.cover_file_id', async () => {
+    const u = await makeUser()
+    expect(await pgError(() => insertFile({ userId: u.id, kind: 'OTHER' }))).toMatchObject({
+      code: '23514',
+      constraint: 'files_kind_check',
+    })
+    const [p] = await insertPage({ userId: u.id })
+    const [f] = await insertFile({ userId: u.id, pageId: p!.id })
+    await sql`update pages set cover_file_id = ${f!.id} where id = ${p!.id}`
+    await sql`delete from files where id = ${f!.id}`
+    const [row] = await sql<
+      { cover_file_id: string | null }[]
+    >`select cover_file_id from pages where id = ${p!.id}`
+    expect(row?.cover_file_id).toBeNull()
+  })
+
+  it('deleting a project cascades its pages, files and page_locks', async () => {
+    const { projectId, userId } = await seedProject()
+    const [p] = await insertPage({ userId, space: 'PROJECT', projectId })
+    const [f] = await insertFile({ userId, projectId, pageId: p!.id })
+    await sql`update pages set cover_file_id = ${f!.id} where id = ${p!.id}`
+    await sql`insert into page_locks (page_id, user_id, expires_at) values (${p!.id}, ${userId}, now() + interval '2 minutes')`
+    await sql`delete from projects where id = ${projectId}`
+    const [r] = await sql<{ pages: number; files: number; locks: number }[]>`
+      select (select count(*)::int from pages where id = ${p!.id}) as pages,
+             (select count(*)::int from files where id = ${f!.id}) as files,
+             (select count(*)::int from page_locks where page_id = ${p!.id}) as locks`
+    expect(r).toEqual({ pages: 0, files: 0, locks: 0 })
+  })
+
+  it('page_locks: one row per page (23505)', async () => {
+    const a = await makeUser()
+    const b = await makeUser()
+    const [p] = await insertPage({ userId: a.id })
+    await sql`insert into page_locks (page_id, user_id, expires_at) values (${p!.id}, ${a.id}, now())`
+    expect(
+      await pgError(
+        () => sql`insert into page_locks (page_id, user_id, expires_at) values (${p!.id}, ${b.id}, now())`,
+      ),
+    ).toMatchObject({ code: '23505' })
+  })
+})

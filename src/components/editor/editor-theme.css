@@ -1,0 +1,124 @@
+/* src/components/editor/editor-theme.css — BlockNote (Mantine view) ↔ MUI theme bridge (PLAN §3.11, r3 §10).
+   Imported by PageEditor BEFORE BlockNote's CSS; the doubled selectors win by specificity regardless of order.
+   .bn-root is set on the editor container AND on every portal root (menus, toolbars), so these variables reach the
+   floating UI too. MUI exposes --mui-palette-* (cssVariables, colorSchemeSelector: 'class'). No url(), no remote
+   fonts: the content font is the self-hosted IBM Plex stack from src/app/fonts/fonts.ts. */
+
+.bn-root.bn-root[data-color-scheme] {
+  --bn-ui-base-z-index: 1150; /* above the MUI AppBar (1100), below MUI Modal (1300) / Snackbar / Tooltip */
+  --bn-font-family: var(--font-plex-latin), var(--font-plex-thai), system-ui, sans-serif;
+  --bn-border-radius: 8px;
+  --bn-colors-editor-text: var(--mui-palette-text-primary);
+  --bn-colors-editor-background: var(--mui-palette-background-paper);
+  --bn-colors-menu-text: var(--mui-palette-text-primary);
+  --bn-colors-menu-background: var(--mui-palette-background-paper);
+  --bn-colors-tooltip-text: var(--mui-palette-text-primary);
+  --bn-colors-tooltip-background: var(--mui-palette-background-default);
+  --bn-colors-hovered-text: var(--mui-palette-text-primary);
+  --bn-colors-hovered-background: var(--mui-palette-action-hover);
+  --bn-colors-selected-text: var(--mui-palette-primary-contrastText);
+  --bn-colors-selected-background: var(--mui-palette-primary-main);
+  --bn-colors-disabled-text: var(--mui-palette-text-disabled);
+  --bn-colors-disabled-background: var(--mui-palette-action-disabledBackground);
+  --bn-colors-border: var(--mui-palette-divider);
+  --bn-colors-side-menu: var(--mui-palette-text-secondary);
+}
+
+/* VERIFIED 0.55.0: the CONTENT font is hard-coded (Inter) in core's .bn-default-styles; --bn-font-family only styles
+   menus/toolbars (r3 G13). */
+.bn-root .bn-default-styles.bn-default-styles {
+  font-family: var(--bn-font-family);
+}
+
+/* ---- Sub-page card (FR-528) ---- */
+.bn-root .subpage-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 8px;
+  color: var(--mui-palette-text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+}
+.bn-root .subpage-card:hover {
+  background: var(--mui-palette-action-hover);
+}
+.bn-root .subpage-card .subpage-title {
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--mui-palette-divider);
+  text-underline-offset: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* States are spelled out in text (deleted / no access / creating); styling only supports it. */
+.bn-root .subpage-card[aria-disabled='true'] {
+  cursor: default;
+  color: var(--mui-palette-text-secondary);
+  border-style: dashed;
+}
+.bn-root .subpage-card[aria-disabled='true'] .subpage-title {
+  font-style: italic;
+  text-decoration: none;
+}
+
+/* ---- Mention chips (FR-529) ---- */
+.bn-root .mention {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--mui-palette-action-selected);
+  color: var(--mui-palette-text-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.bn-root a.mention[href] {
+  cursor: pointer;
+}
+.bn-root a.mention[href]:hover {
+  text-decoration: underline;
+}
+.bn-root .mention[aria-disabled='true'],
+.bn-root .mention-inactive {
+  color: var(--mui-palette-text-secondary);
+  font-style: italic;
+}
+
+/* ---- Attachment card (FR-527) ---- */
+.bn-root .att {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 8px;
+  color: var(--mui-palette-text-primary);
+}
+.bn-root .att .att-name {
+  font-weight: 500;
+  color: var(--mui-palette-primary-main);
+  overflow-wrap: anywhere;
+}
+.bn-root .att .att-size {
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.875em;
+}
+.bn-root .att .att-caption {
+  flex-basis: 100%;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.875em;
+}
+.bn-root .att-empty {
+  cursor: pointer;
+  color: var(--mui-palette-text-secondary);
+  border-style: dashed;
+}
+.bn-root .att-uploading {
+  color: var(--mui-palette-text-secondary);
+  font-style: italic;
+}

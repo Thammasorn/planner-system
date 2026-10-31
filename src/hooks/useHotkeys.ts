@@ -7,6 +7,8 @@ export interface HotkeyBinding {
   handler: (e: KeyboardEvent) => void
   /** default false: shortcuts are ignored while typing (X49) */
   allowInEditable?: boolean
+  /** Leaves the event alone (no preventDefault, no handler) when it returns true — e.g. another widget owns the combo. */
+  skip?: (e: KeyboardEvent) => boolean
 }
 
 /** Global keydown bindings on window; skips events already handled (e.defaultPrevented). */
@@ -17,6 +19,7 @@ export function useHotkeys(bindings: readonly HotkeyBinding[], opts: { enabled?:
     for (const b of bindings) {
       if (!matchesHotkey(e, b.hotkey)) continue
       if (!b.allowInEditable && isEditableTarget(e.target)) return
+      if (b.skip?.(e)) return
       e.preventDefault()
       b.handler(e)
       return

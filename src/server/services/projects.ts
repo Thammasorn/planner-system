@@ -4,6 +4,7 @@
 // the audit row in the same transaction.
 import { th } from '@/i18n/th'
 import { sortByThai } from '@/lib/collate'
+import { displayName } from '@/lib/display-name'
 import type { ClientRef } from '@/lib/contracts/clients'
 import type {
   MemberUser,
@@ -16,12 +17,15 @@ import type { createProjectSchema, updateProjectSchema } from '@/lib/schemas/pro
 import type { z } from '@/lib/z'
 import * as authz from '../authz'
 import type { ProjectRow } from '../db/schema'
-import type { DbOrTx } from '../db/types'
+import type { DbOrTx, Tx } from '../db/types'
 import { NotFoundError, ValidationError } from '../errors'
 import * as repo from '../repo'
+import * as filesRepo from '../repo/files'
 import type { ProjectPatch } from '../repo/projects'
 import type { SessionUser } from '../session'
 import { compareByDisplayName, compareMembers, toClientRef, toMemberUser, toProjectMember } from './shared'
+import { getStorage } from '../storage'
+import { createCharter } from './charters'
 import { ensureProjectStatuses } from './taskStatuses'
 
 const fieldError = (field: string, message: string): ValidationError =>
@@ -145,13 +149,14 @@ async function assertPickableClient(tx: DbOrTx, clientId: string): Promise<void>
 
 /** Project row + optional LEAD row (added_by = user). Validates client (exists, not archived) and LEAD (active). */
 export async function createProject(
-  tx: DbOrTx,
+  tx: Tx,
   user: SessionUser,
   input: z.output<typeof createProjectSchema>,
-): Promise<ProjectRow> {
+): Promise<ProjectRow & { charterPageId: string }> {
   if (input.clientId) await assertPickableClient(tx, input.clientId)
+  const client = input.clientId ? await repo.clients.getClient(tx, input.clientId) : null
+  const lead = input.leadUserId ? await repo.people.getPerson(tx, input.leadUserId) : null
   if (input.leadUserId) {
-    const lead = await repo.people.getPerson(tx, input.leadUserId)
     if (!lead) throw new NotFoundError()
     if (!lead.active) throw fieldError('leadUserId', th.projects.errors.leadInactive)
   }
@@ -173,7 +178,16 @@ export async function createProject(
     })
   }
   await ensureProjectStatuses(tx, project.id) // FR-621 / X70: the 5 defaults in the same transaction
-  return project
+  // FR-402 / X25 / M4-D5: the Project Charter in the same transaction; the action's single audit row names it.
+  const charter = await createCharter(tx, {
+    projectId: project.id,
+    projectName: project.name,
+    actorId: user.id,
+    clientName: client?.name ?? '—',
+    leadName: lead ? displayName(lead) : '—',
+    certainty: project.certainty,
+  })
+  return { ...project, charterPageId: charter.id }
 }
 
 /** FR-409 progress (M3-D21): completed / all non-deleted tasks at every depth. Callers authorise the project first. */
@@ -219,9 +233,9 @@ export async function setProjectArchived(
   return { project: await repo.projects.setProjectArchivedAt(tx, projectId, archived), changed: true }
 }
 
-/** Storage keys to unlink after a permanent delete commits (X26): always [] in M2, M4 collects files.storage_key. */
-export function collectProjectFileKeys(_tx: DbOrTx, _projectId: string): Promise<string[]> {
-  return Promise.resolve([])
+/** Storage keys to unlink after a permanent delete commits (X26): collected inside the delete transaction. */
+export function collectProjectFileKeys(tx: DbOrTx, projectId: string): Promise<string[]> {
+  return filesRepo.listProjectFileKeys(tx, projectId)
 }
 
 /** Hard DELETE … RETURNING (M2-D11); FK cascades remove members (and later tables). */
@@ -231,7 +245,14 @@ export async function deleteProjectRow(tx: DbOrTx, projectId: string): Promise<P
   return row
 }
 
-/** Best-effort unlink after commit; logs failures only. No-op in M2 (M4 removes the files under UPLOAD_DIR). */
-export function unlinkFilesBestEffort(_keys: readonly string[]): Promise<void> {
-  return Promise.resolve()
+/** Best-effort unlink after commit (X26): a missing file or an unlink error is logged (key only), never thrown. */
+export async function unlinkFilesBestEffort(keys: readonly string[]): Promise<void> {
+  const storage = getStorage()
+  for (const key of keys) {
+    try {
+      await storage.remove(key)
+    } catch {
+      console.warn('[projects] could not remove file after permanent delete', { key })
+    }
+  }
 }

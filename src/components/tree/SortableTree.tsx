@@ -15,6 +15,7 @@ import {
   type DragEndEvent,
   type DragMoveEvent,
   type DragOverEvent,
+  type DndContextProps,
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
@@ -51,6 +52,8 @@ export interface SortableTreeProps<T extends FlatItem> {
   renderRow: (item: T, s: TreeRowState) => ReactNode
   /** Drag preview content (defaults to renderRow of the active item). */
   renderOverlay?: (item: T) => ReactNode
+  /** Screen-reader instructions + live-region announcements (Thai, from th); dnd-kit's English defaults otherwise. */
+  accessibility?: DndContextProps['accessibility']
 }
 
 const NO_HANDLE = { handleRef: () => {}, handleProps: {} } satisfies Pick<
@@ -66,6 +69,7 @@ export function SortableTree<T extends FlatItem>({
   onMove,
   renderRow,
   renderOverlay,
+  accessibility,
 }: SortableTreeProps<T>) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
@@ -112,6 +116,7 @@ export function SortableTree<T extends FlatItem>({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      accessibility={accessibility}
       onDragStart={({ active: a }: DragStartEvent) => {
         setActiveId(String(a.id))
         setOverId(String(a.id))

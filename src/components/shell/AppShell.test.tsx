@@ -1,28 +1,43 @@
 import { act, fireEvent, screen, waitForElementToBeRemoved, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { installCmdkShims } from '@/components/palette/jsdom.test.helper'
 import { PreferencesProvider } from '@/components/providers/PreferencesProvider'
+import { UndoProvider } from '@/components/undo/UndoProvider'
 import { th } from '@/i18n/th'
 import { DEFAULT_PREFERENCES, type PreferenceInput } from '@/lib/schemas/preferences'
 import { renderWithProviders as renderBase } from '../../../tests/helpers/render'
 import { AppShell } from './AppShell'
 
 const mocks = vi.hoisted(() => ({ setPreference: vi.fn<(i: PreferenceInput) => Promise<unknown>>() }))
-vi.mock('next/navigation', () => ({ usePathname: () => '/home' }))
+vi.mock('next/navigation', () => ({ usePathname: () => '/home', useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/server/actions/preferences', () => ({ setPreference: mocks.setPreference }))
 vi.mock('@/server/actions/auth', () => ({
   logout: () => Promise.resolve({ ok: true, redirectTo: '/login' }),
 }))
-// GET /api/sidebar (M2): an empty project list
+vi.mock('@/server/actions/pages', () => ({
+  createPage: vi.fn(),
+  deletePage: vi.fn(),
+  duplicatePage: vi.fn(),
+  restorePageBatch: vi.fn(),
+  setPageProtected: vi.fn(),
+  movePage: vi.fn(),
+}))
+// GET /api/sidebar (M2): an empty project list · GET /api/pages/tree (M4): an empty wiki
 vi.mock('@/lib/api', () => ({
-  getJson: () => Promise.resolve({ projects: [], hasArchived: false, canCreateProject: false }),
+  getJson: (url: string) =>
+    Promise.resolve(
+      url.startsWith('/api/pages/tree')
+        ? { nodes: [], canCreate: true }
+        : { projects: [], hasArchived: false, canCreateProject: false },
+    ),
 }))
 
 function renderWithProviders(ui: ReactElement, prefs = DEFAULT_PREFERENCES) {
   return renderBase(
     <PreferencesProvider initial={prefs} enabled>
-      {ui}
+      <UndoProvider>{ui}</UndoProvider>
     </PreferencesProvider>,
   )
 }
@@ -30,6 +45,8 @@ function renderWithProviders(ui: ReactElement, prefs = DEFAULT_PREFERENCES) {
 function sidebar(): HTMLElement {
   return screen.getByTestId('app-sidebar')
 }
+
+beforeAll(installCmdkShims)
 
 describe('AppShell', () => {
   it('renders the sidebar navigation and the main landmark', () => {
@@ -120,6 +137,20 @@ describe('AppShell', () => {
 
     await user.keyboard('{Escape}')
     await waitForElementToBeRemoved(() => screen.queryByRole('dialog', { name: th.nav.sidebarLabel }))
+  })
+
+  it('M4: Cmd/Ctrl+K opens the command palette from anywhere in the shell (X08)', async () => {
+    renderWithProviders(<AppShell>x</AppShell>)
+    fireEvent.keyDown(document.body, { code: 'KeyK', key: 'k', metaKey: true })
+    expect(await screen.findByRole('dialog', { name: th.palette.dialogLabel })).toBeInTheDocument()
+  })
+
+  it('M4: the sidebar shows the search button and the Wiki ทีม section (M4-D27)', async () => {
+    renderWithProviders(<AppShell>x</AppShell>)
+    const nav = screen.getByRole('navigation', { name: th.nav.sidebarLabel })
+    expect(within(nav).getByRole('button', { name: th.palette.open })).toBeInTheDocument()
+    expect(within(nav).getByRole('heading', { name: th.sidebar.wikiHeading })).toBeInTheDocument()
+    expect(await within(nav).findByText(th.pages.tree.empty)).toBeInTheDocument()
   })
 
   it('focuses the skip link first', async () => {

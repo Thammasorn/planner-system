@@ -3,8 +3,19 @@ import { asc, count, eq, inArray } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/server/db/client'
 import { th } from '@/i18n/th'
-import { auditLog, clients, projectMembers, projects, taskAssignments, taskStatuses, tasks, user } from '@/server/db/schema'
-import { seedGolden } from './fixtures'
+import { displayName } from '@/lib/display-name'
+import {
+  auditLog,
+  clients,
+  pages,
+  projectMembers,
+  projects,
+  taskAssignments,
+  taskStatuses,
+  tasks,
+  user,
+} from '@/server/db/schema'
+import { loadGolden, seedGolden } from './fixtures'
 
 async function membership(): Promise<Record<string, Record<string, string>>> {
   const rows = await db
@@ -72,14 +83,23 @@ describe('seedGolden — M3 stage (X11, X70, M3-D20)', () => {
     const perProject = new Map<string, string[]>()
     for (const s of st) perProject.set(s.projectId, [...(perProject.get(s.projectId) ?? []), s.name])
     const D = th.tasks.status.defaults
-    for (const names of perProject.values()) expect(names).toEqual([D.todo, D.doing, D.waitData, D.blocked, D.done])
+    for (const names of perProject.values())
+      expect(names).toEqual([D.todo, D.doing, D.waitData, D.blocked, D.done])
     const ts = await db
-      .select({ name: tasks.name, depth: tasks.depth, completedOn: tasks.completedOn, status: taskStatuses.name, o: tasks.certaintyOverride })
+      .select({
+        name: tasks.name,
+        depth: tasks.depth,
+        completedOn: tasks.completedOn,
+        status: taskStatuses.name,
+        o: tasks.certaintyOverride,
+      })
       .from(tasks)
       .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
     expect(ts).toHaveLength(10)
     for (const t of ts) expect(t).toMatchObject({ depth: 0, completedOn: null, status: D.todo })
-    expect(ts.filter((t) => t.o !== null)).toEqual([expect.objectContaining({ name: 'Rollout สาขา', o: 'TENTATIVE' })])
+    expect(ts.filter((t) => t.o !== null)).toEqual([
+      expect.objectContaining({ name: 'Rollout สาขา', o: 'TENTATIVE' }),
+    ])
     const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(taskAssignments)
     expect(n).toBe(10)
     const [{ m } = { m: 0 }] = await db.select({ m: count() }).from(projectMembers)
@@ -90,7 +110,11 @@ describe('seedGolden — M3 stage (X11, X70, M3-D20)', () => {
       .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(eq(projects.name, 'POS Upgrade'))
       .orderBy(asc(tasks.position), asc(tasks.id))
-    expect(pos.map((p) => p.name)).toEqual(['ปรับปรุงระบบ POS หน้าร้าน', 'ทำ UAT + คู่มือหน้าร้าน', 'Rollout สาขา'])
+    expect(pos.map((p) => p.name)).toEqual([
+      'ปรับปรุงระบบ POS หน้าร้าน',
+      'ทำ UAT + คู่มือหน้าร้าน',
+      'Rollout สาขา',
+    ])
     const audits = await db
       .select({ entity: auditLog.entity })
       .from(auditLog)
@@ -103,5 +127,50 @@ describe('seedGolden — M3 stage (X11, X70, M3-D20)', () => {
     expect(await db.select().from(tasks)).toEqual([])
     const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(taskStatuses)
     expect(n).toBe(25)
+  })
+})
+
+describe('seedGolden — M4 stage (X11, X25, FR-402)', () => {
+  it('5 charters, one per golden project, each first in its project root order; actor-null page audit rows', async () => {
+    await seedGolden(db)
+    const ps = await db.select({ id: projects.id, name: projects.name }).from(projects)
+    expect(ps).toHaveLength(5)
+    const charters = await db.select().from(pages).where(eq(pages.isCharter, true))
+    expect(charters).toHaveLength(5)
+    expect(new Set(charters.map((c) => c.projectId))).toEqual(new Set(ps.map((p) => p.id)))
+    for (const p of ps) {
+      const roots = await db
+        .select({ isCharter: pages.isCharter, title: pages.title })
+        .from(pages)
+        .where(eq(pages.projectId, p.id))
+        .orderBy(asc(pages.position), asc(pages.id))
+      expect(roots[0]).toEqual({ isCharter: true, title: th.pages.charterTitle })
+    }
+    // The backfill path (ensureProjectCharters, M4-D6) pre-fills every charter with its own client, LEAD display
+    // name and certainty — checked per project by containment (M4-D37c), expectations taken from the golden JSON.
+    const golden = loadGolden()
+    const expected = golden.projects.map((gp) => {
+      const lead = golden.users.find((u) => u.nickname === gp.lead)!
+      return { name: gp.name, client: gp.client!, lead: displayName(lead), certainty: gp.certainty }
+    })
+    expect(expected.map((e) => e.client)).toEqual(['Coral', 'Coral', 'Bluebird', 'Sunrise', 'Internal'])
+    for (const e of expected) {
+      const projectId = ps.find((p) => p.name === e.name)!.id
+      const charter = charters.find((c) => c.projectId === projectId)!
+      expect(charter.contentText, e.name).toContain(e.client)
+      expect(charter.contentText, e.name).toContain(e.lead)
+      expect(charter.contentText, e.name).toContain(th.projects.certainty[e.certainty])
+    }
+    const audits = await db
+      .select({ actorId: auditLog.actorId })
+      .from(auditLog)
+      .where(eq(auditLog.entity, 'page'))
+    expect(audits).toHaveLength(5)
+    for (const a of audits) expect(a.actorId).toBeNull()
+  })
+
+  it("upTo: 'tasks' seeds no pages", async () => {
+    await seedGolden(db, { upTo: 'tasks' })
+    expect(await db.select().from(pages)).toEqual([])
   })
 })

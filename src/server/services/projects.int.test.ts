@@ -1,5 +1,7 @@
 // M2 S1.5 — projects (FR-401, FR-405 part, FR-406 part, FR-407, FR-409 part, M2-D03, M2-D17, M2-D20, X26).
 import { randomUUID } from 'node:crypto'
+import { access, rm } from 'node:fs/promises'
+import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
@@ -12,11 +14,11 @@ import {
 } from '../actions/projects'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import { auditCount, auditRowsAfter } from '../../../tests/helpers/audit'
-import { makeProject, makeUser } from '../../../tests/helpers/factories'
+import { makeFile, makePage, makeProject, makeUser } from '../../../tests/helpers/factories'
 import { testCache } from '../../../tests/helpers/request'
 import { createWorld } from '../../../tests/helpers/world'
 import { db } from '../db/client'
-import { auditLog, projectMembers, projects } from '../db/schema'
+import { auditLog, files, projectMembers, projects } from '../db/schema'
 import { NotFoundError } from '../errors'
 import * as services from '../services'
 import { getProjectHeader, getProjectOverview, listProjectsForViewer } from './projects'
@@ -246,6 +248,35 @@ describe('delete', () => {
     expect(await deleteProjectPermanently({ projectId: w.A.id, confirmName: 'World A' })).toEqual({
       ok: true,
     })
+  })
+})
+
+describe('delete removes files (FR-407, X26, M4 S1.10)', () => {
+  it('two files on disk are gone after the permanent delete; rows cascade', async () => {
+    const w = await createWorld()
+    const page = await makePage({ project: w.P, title: 'หน้ามีไฟล์', createdBy: w.manager })
+    const f1 = await makeFile({ page, uploadedBy: w.manager })
+    const f2 = await makeFile({ page, uploadedBy: w.manager, kind: 'ATTACHMENT' })
+    const onDisk = (key: string) => access(path.join(process.env.UPLOAD_DIR!, key)).then(() => true, () => false)
+    expect(await onDisk(f1.storageKey)).toBe(true)
+    asUser(w.manager)
+    expect(await deleteProjectPermanently({ projectId: w.P.id, confirmName: 'World P' })).toEqual({ ok: true })
+    expect(await db.select().from(files).where(eq(files.projectId, w.P.id))).toEqual([])
+    expect(await onDisk(f1.storageKey)).toBe(false)
+    expect(await onDisk(f2.storageKey)).toBe(false)
+  })
+
+  it('a missing file does not fail the delete', async () => {
+    const w = await createWorld()
+    const page = await makePage({ project: w.P, createdBy: w.manager })
+    const f = await makeFile({ page, uploadedBy: w.manager })
+    await rm(path.join(process.env.UPLOAD_DIR!, f.storageKey))
+    const warn = vi.spyOn(console, 'warn')
+    asUser(w.manager)
+    expect(await deleteProjectPermanently({ projectId: w.P.id, confirmName: 'World P' })).toEqual({ ok: true })
+    expect(warn).not.toHaveBeenCalled() // ENOENT is ignored by storage.remove
+    await expect(services.projects.unlinkFilesBestEffort(['../../etc/passwd'])).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })
 

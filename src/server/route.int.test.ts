@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { th } from '@/i18n/th'
 import { z } from '@/lib/z'
 import { asNobody, asUser } from '../../tests/helpers/as-user'
 import { makeUser } from '../../tests/helpers/factories'
+import { PayloadTooLargeError, UnsupportedMediaTypeError } from './errors'
 import { route } from './route'
 
 const handler = route(async (_req, { user, query }) => ({ id: user.id, q: query.q }), {
@@ -46,5 +48,22 @@ describe('route() wrapper', () => {
     const r = await pub(req(''), ctx)
     expect(r.status).toBe(202)
     expect(await r.text()).toBe('anon')
+  })
+
+  it('upload errors answer 413 TOO_LARGE / 415 UNSUPPORTED_TYPE with the Thai message', async () => {
+    asUser(await makeUser())
+    const big = route(async () => {
+      throw new PayloadTooLargeError()
+    })
+    const r413 = await big(req(''), ctx)
+    expect(r413.status).toBe(413)
+    expect(await r413.json()).toEqual({ code: 'TOO_LARGE', message: th.files.errors.tooLarge })
+
+    const bad = route(async () => {
+      throw new UnsupportedMediaTypeError()
+    })
+    const r415 = await bad(req(''), ctx)
+    expect(r415.status).toBe(415)
+    expect(await r415.json()).toEqual({ code: 'UNSUPPORTED_TYPE', message: th.files.errors.unsupported })
   })
 })

@@ -11,13 +11,22 @@ vi.mock('next/navigation', () => ({ useSelectedLayoutSegment: () => nav.segment 
 const ID = '6f1c2b8e-3d4a-4b5c-9d6e-7f8a9b0c1d2e'
 
 describe('ProjectTabs', () => {
-  it('renders ภาพรวม then งาน, ภาพรวม selected on the overview segment (FR-408 part, X15)', () => {
+  it('renders ภาพรวม, งาน, เอกสาร in order, ภาพรวม selected on the overview segment (FR-408 part, X15)', () => {
     nav.segment = 'overview'
     renderWithProviders(<ProjectTabs projectId={ID} />)
     expect(screen.getByRole('tablist', { name: th.projects.tabsLabel })).toBeInTheDocument()
     const tabs = screen.getAllByRole('tab')
     expect(tabs).toHaveLength(PROJECT_TABS.length)
-    expect(tabs.map((t) => t.textContent)).toEqual([th.projects.tabs.overview, th.projects.tabs.tasks])
+    // M4 list (X84): M6 inserts แผนงาน at order 1
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      th.projects.tabs.overview,
+      th.projects.tabs.tasks,
+      th.projects.tabs.pages,
+    ])
+    expect(screen.getByRole('tab', { name: th.projects.tabs.pages })).toHaveAttribute(
+      'href',
+      `/projects/${ID}/pages`,
+    )
     expect(screen.getByRole('tab', { name: th.projects.tabs.tasks })).toHaveAttribute(
       'href',
       `/projects/${ID}/tasks`,
@@ -32,6 +41,16 @@ describe('ProjectTabs', () => {
     nav.segment = 'tasks'
     renderWithProviders(<ProjectTabs projectId={ID} />)
     expect(screen.getByRole('tab', { name: th.projects.tabs.tasks })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('selects เอกสาร on the pages segment (M4)', () => {
+    nav.segment = 'pages'
+    renderWithProviders(<ProjectTabs projectId={ID} />)
+    expect(screen.getByRole('tab', { name: th.projects.tabs.pages })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: th.projects.tabs.tasks })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
   })
 
   it('selects nothing on an unknown segment', () => {

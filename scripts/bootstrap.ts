@@ -1,4 +1,8 @@
 // pnpm bootstrap — idempotent first-run setup (FR-102, SPEC §10.4). Never prints passwords or hashes.
+// M4 (FR-402, X25): after runBootstrap (manager, positions, M3's status backfill) every live project without a live
+// Project Charter gets one (ensureProjectCharters; one actor-null audit row each). CommonJS under tsx (X56): no
+// top-level await, no import.meta.
+import { ensureProjectCharters } from '@/server/services/charters'
 import { runBootstrap } from './lib/bootstrap'
 import { createScriptDb } from './lib/db'
 
@@ -11,6 +15,10 @@ async function main(): Promise<void> {
         `${result.seededPositions} positions seeded, ${result.warnings.length} warning(s)` +
         (result.fatal ? ' — FAILED' : ''),
     )
+    if (!result.fatal) {
+      const charters = await ensureProjectCharters(db)
+      console.log(`bootstrap: charters: ${charters.created} created`)
+    }
     process.exitCode = result.fatal ? 1 : 0
   } finally {
     await close()

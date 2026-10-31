@@ -9,7 +9,7 @@
  * selectors live in page objects; waits are on server-action responses or UI state — never on time.
  *
  * Later milestones change some lines on purpose (§7.3): E9's completion toasts gain BR-52 numbers (M6); E13's count
- * and /my layout change in M9; E1/E15 tab lists gain แผนงาน (M6) and เอกสาร (M4).
+ * and /my layout change in M9; E1/E15 tab lists gain แผนงาน (M6) and เอกสาร (M4, done in plan/m04 S4.10).
  */
 import { randomUUID } from 'node:crypto'
 import type { Page } from '@playwright/test'
@@ -88,8 +88,12 @@ test.describe('E1–E3 ⟲ (AC-601, AC-602, AC-603) keyboard outliner on POS as 
     const project = new ProjectPage(page)
     await tasks.shell.goto('/home')
     await tasks.gotoProject(POS)
-    // FR-408 / X15: the งาน tab exists (M4/M6 append more); retrying, in order
-    await expect(project.tabs()).toContainText([th.projects.tabs.overview, th.projects.tabs.tasks])
+    // FR-408 / X15: the งาน tab exists, เอกสาร follows it (M4); M6 inserts แผนงาน; retrying, in order
+    await expect(project.tabs()).toContainText([
+      th.projects.tabs.overview,
+      th.projects.tabs.tasks,
+      th.projects.tabs.pages,
+    ])
     await expect(project.tab('tasks')).toHaveAttribute('aria-selected', 'true')
     await tasks.expectRowNames(POS_TASKS)
 
@@ -538,6 +542,8 @@ test.describe('E12 (X07) shortcut help', () => {
     await expect(tasks.helpDialog()).toBeVisible()
     await expect(tasks.helpDialog().getByText(th.shortcuts.items.listIndent, { exact: true })).toBeVisible()
     await expect(tasks.helpDialog().getByText(th.shortcuts.items.newTask, { exact: true })).toBeVisible()
+    // M4 (S0.11): the global Cmd/Ctrl+K entry is listed too (containment, not an exact list)
+    await expect(tasks.helpDialog().getByText(th.shortcuts.items.palette, { exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(tasks.helpDialog()).toHaveCount(0)
   })
@@ -623,8 +629,8 @@ test.describe('E15 ⟲ (AC-611, FR-621, FR-625) a new project gets the 5 default
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}\/overview$/)
     await expect(project.header()).toContainText(NAME)
 
-    // retrying: the create dialog keeps the app aria-hidden until its exit transition ends
-    await expect(project.tabs()).toContainText([th.projects.tabs.tasks])
+    // retrying: the create dialog keeps the app aria-hidden until its exit transition ends (M4 adds เอกสาร)
+    await expect(project.tabs()).toContainText([th.projects.tabs.tasks, th.projects.tabs.pages])
     await project.openTab('tasks')
     const tasks = new TaskListPage(page)
     await tasks.waitReady()

@@ -16,6 +16,8 @@ export type AuditEntity =
   | 'task_assignment'
   | 'task_status'
   | 'task_blocker'
+  | 'page'
+  | 'file'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
 export interface AuditInput {

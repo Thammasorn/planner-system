@@ -13,19 +13,26 @@ import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
 import { GET as getTeamTasks } from '@/app/api/tasks/route'
+import { sql } from 'drizzle-orm'
+import { th } from '@/i18n/th'
+import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
+import type { SearchResponse } from '@/lib/contracts/search'
 import type { MyTasksResponse, ProjectTasksResponse, TeamTasksResponse } from '@/lib/contracts/tasks'
+import { createPage, movePage } from '@/server/actions/pages'
 import { addTaskBlocker } from '@/server/actions/task-blockers'
 import { db } from '@/server/db/client'
+import { pageLocks, type PageRow } from '@/server/db/schema'
 import * as services from '@/server/services'
 import { seedGolden } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
-import { makeBlocker, type TestUser } from '../helpers/factories'
+import { makeBlocker, makePage, type TestUser } from '../helpers/factories'
 import { outcomeOf } from '../helpers/outcome'
 import { createWorld, type World } from '../helpers/world'
 import { goldenProjectId, goldenTaskNames, goldenUser, type GoldenProject } from './_support/golden'
 import { callRoute, okJson } from './_support/http'
 import { assertContains, assertNoLeak } from './_support/leak'
+import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './rows/_m4'
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -346,5 +353,264 @@ describe('masking — golden (r6a M2-17, r8 §4.3)', () => {
     assertNoLeak(team, hidden)
     const my = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
     assertNoLeak(my, hidden)
+  })
+})
+
+describe('masking — pages (M4, plan/m04 S4.6, K1–K14)', () => {
+  const UUID_G = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g
+  const q = (s: string) => encodeURIComponent(s)
+
+  /** World pages + files, plus a wiki page "อ้างอิง W-06" whose content mentions pPage and holds a card to pChild. */
+  async function pagesWorld(): Promise<{ w: World; ref: PageRow }> {
+    const w = await createWorld({ with: ['pages', 'files'] })
+    const ref = await makePage({
+      title: 'อ้างอิง W-06',
+      createdBy: w.manager,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'ดูหน้า ', styles: {} },
+            { type: 'mention', props: { kind: 'page', id: w.pages.pPage.id } },
+          ],
+        },
+        { type: 'subpage', props: { pageId: w.pages.pChild.id } },
+      ],
+    })
+    return { w, ref }
+  }
+
+  /** Titles, content, file names and project names of P and A (never ids). */
+  const pTitles = (w: World): string[] => [
+    w.pages.pCharter.title,
+    w.pages.pPage.title,
+    w.pages.pChild.title,
+    w.pages.aPage.title,
+    w.deletedPages.pDeleted.title,
+    w.deletedPages.aDeleted.title,
+    w.deletedPages.pOldDeleted.title,
+    'เนื้อหา P-ลับ06',
+    w.files.pPdf.originalName,
+    w.P.name,
+    w.A.name,
+  ]
+  /** M4-D32: everything above plus the P/A ids — for bodies that are not page content. */
+  const forbiddenP = (w: World): string[] => [
+    ...pTitles(w),
+    w.P.id,
+    w.A.id,
+    w.pages.pCharter.id,
+    w.pages.pPage.id,
+    w.pages.pChild.id,
+    w.pages.aPage.id,
+    w.deletedPages.pDeleted.id,
+    w.files.pImage.id,
+    w.files.pPdf.id,
+    w.files.aFile.id,
+  ]
+  /** Everything of Q P's team must never receive. */
+  const forbiddenQ = (w: World): string[] => [
+    w.pages.qPage.title,
+    'เนื้อหา Q-ลับ09',
+    w.Q.name,
+    w.Q.id,
+    w.pages.qPage.id,
+    w.files.qFile.id,
+  ]
+
+  async function search(query: string): Promise<SearchResponse> {
+    return okJson<SearchResponse>(await searchGet(query))
+  }
+
+  it('fixture sanity: the secret titles are the distinctive ones S0.15 promised', async () => {
+    const { w } = await pagesWorld()
+    expect(w.pages.pPage.title).toBe('หน้า P-ลับ05')
+    expect(w.pages.qPage.title).toBe('หน้า Q-ลับ08')
+    expect(w.pages.aPage.title).toBe('หน้า A-ลับ10')
+    expect(w.deletedPages.pDeleted.title).toBe('ลบแล้ว P')
+    expect(w.files.pPdf.originalName).toBe('สัญญา.pdf')
+  })
+
+  it('K1 outsider: GET /api/search?q=ลับ → only the Q title hit, nothing of P or A', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    const body = await search(`q=${q('ลับ')}`)
+    assertNoLeak(body, forbiddenP(w))
+    expect(body.pages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: w.pages.qPage.id, title: w.pages.qPage.title, matchedIn: 'title', subtitle: w.Q.name }),
+      ]),
+    )
+  })
+
+  it('K2 outsider: GET /api/search?q=เนื้อหา (content path) → Q content hit, nothing of P', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    const body = await search(`q=${q('เนื้อหา')}`)
+    assertNoLeak(body, forbiddenP(w))
+    expect(body.pages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: w.pages.qPage.id, matchedIn: 'content' })]),
+    )
+  })
+
+  it('K3 outsider: mention suggestions (?titleOnly=1) → Q title hit, no content hits, nothing of P', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    const body = await search(`q=${q('หน้า')}&titleOnly=1`)
+    assertNoLeak(body, forbiddenP(w))
+    expect(body.pages.map((h) => h.id)).toContain(w.pages.qPage.id)
+    expect(body.pages.filter((h) => h.matchedIn === 'content')).toEqual([])
+  })
+
+  it('K4 outsider: GET /api/search?q=W- → wiki pages (subtitle Wiki ทีม), nothing of P', async () => {
+    // plan K4 says q=W-0; S0.15 titled the protected root "นโยบาย W-ล็อก03", which "W-0" does not match → "W-".
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    const body = await search(`q=${q('W-')}`)
+    assertNoLeak(body, forbiddenP(w))
+    for (const page of [w.pages.wiki, w.pages.wikiProtected])
+      expect(body.pages).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: page.id, title: page.title, subtitle: th.palette.wiki })]),
+      )
+  })
+
+  it('K5 outsider: GET /api/pages/titles → P/A ids answer exactly { id, visible:false }; Q and wiki are titled', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    const hidden = [w.pages.pPage, w.pages.pChild, w.pages.aPage, w.deletedPages.pDeleted]
+    const body = await okJson<PageTitlesResponse>(
+      await titlesGet([...hidden.map((p) => p.id), w.pages.qPage.id, w.pages.wiki.id]),
+    )
+    assertNoLeak(body, [...pTitles(w), w.pages.pCharter.id, w.files.pImage.id, w.files.pPdf.id, w.files.aFile.id])
+    for (const p of hidden) expect(body.items.find((i) => i.id === p.id)).toEqual({ id: p.id, visible: false })
+    expect(body.items.find((i) => i.id === w.pages.qPage.id)).toMatchObject({ visible: true, title: w.pages.qPage.title })
+    expect(body.items.find((i) => i.id === w.pages.wiki.id)).toMatchObject({ visible: true, title: w.pages.wiki.title })
+  })
+
+  it('K6 outsider: P tree and a P parent under Q → 404 with an error body only', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    const tree = await bodyOf(await treeGet(`space=PROJECT&projectId=${w.P.id}`))
+    expect(tree.status).toBe(404)
+    assertNoLeak(tree.body, forbiddenP(w)) // not even the requested project id is echoed
+    const child = await bodyOf(
+      await treeGet(`space=PROJECT&projectId=${w.Q.id}&parentId=${w.pages.pPage.id}`),
+    )
+    expect(child.status).toBe(404)
+    assertNoLeak(child.body, forbiddenP(w))
+  })
+
+  it('K7 outsider: GET /api/pages/{pPage} and its lease → 404, no title and no lease holder', async () => {
+    const { w } = await pagesWorld()
+    await db.insert(pageLocks).values({
+      pageId: w.pages.pPage.id,
+      userId: w.lead.id,
+      expiresAt: sql`now() + interval '2 minutes'`,
+    })
+    asUser(w.outsider)
+    for (const res of [await pageGet(w.pages.pPage.id), await lockCall('GET', w.pages.pPage.id)]) {
+      const { status, body } = await bodyOf(res)
+      expect(status).toBe(404)
+      assertNoLeak(body, [...forbiddenP(w), w.lead.name, w.lead.id])
+    }
+  })
+
+  it('K8 outsider: GET /api/files/{pImage|pPdf|aFile} → 404 without bytes, name or Content-Disposition', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.outsider)
+    for (const file of [w.files.pImage, w.files.pPdf, w.files.aFile]) {
+      const res = await fileGet(file.id)
+      expect(res.status, file.originalName).toBe(404)
+      expect(res.headers.get('content-disposition')).toBeNull()
+      const text = await res.text()
+      for (const s of ['%PDF', 'PNG', w.files.pPdf.originalName, file.storageKey]) expect(text).not.toContain(s)
+      assertNoLeak(text, forbiddenP(w))
+    }
+  })
+
+  it('K9 outsider: wiki tree + a wiki page that references P → wiki titles only; content keeps the P ids (M4-D32)', async () => {
+    const { w, ref } = await pagesWorld()
+    asUser(w.outsider)
+    const tree = await okJson<PageTreeResponse>(await treeGet('space=WORKSPACE'))
+    assertContains(tree, [w.pages.wiki.title, w.pages.wikiProtected.title, w.pages.wikiFolder.title, ref.title])
+    assertNoLeak(tree, forbiddenP(w))
+    const view = await okJson<PageView>(await pageGet(ref.id))
+    assertNoLeak(view, pTitles(w))
+    const ids = new Set(JSON.stringify(view.page.content).match(UUID_G) ?? [])
+    expect(ids).toEqual(new Set([w.pages.pPage.id, w.pages.pChild.id]))
+  })
+
+  it('K10 outsider: titles of the two ids found in that content → { visible:false } × 2, no P titles', async () => {
+    const { w, ref } = await pagesWorld()
+    asUser(w.outsider)
+    const view = await okJson<PageView>(await pageGet(ref.id))
+    const ids = [...new Set(JSON.stringify(view.page.content).match(UUID_G) ?? [])]
+    expect(ids).toHaveLength(2)
+    const body = await okJson<PageTitlesResponse>(await titlesGet(ids))
+    assertNoLeak(body, pTitles(w))
+    expect(body.items).toEqual(expect.arrayContaining(ids.map((id) => ({ id, visible: false }))))
+    expect(body.items).toHaveLength(2)
+  })
+
+  it('K11 member: search q=ลับ / q=เนื้อหา → P (incl. archived A, X43) and nothing of Q; deleted pages never listed', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.member)
+    const titles = await search(`q=${q('ลับ')}`)
+    assertNoLeak(titles, forbiddenQ(w))
+    assertContains(titles, [w.pages.pPage.title, w.pages.aPage.title])
+    const content = await search(`q=${q('เนื้อหา')}`)
+    assertNoLeak(content, forbiddenQ(w))
+    expect(content.pages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: w.pages.pPage.id, matchedIn: 'content' })]),
+    )
+    const deleted = await search(`q=${q('ลบ')}`)
+    assertNoLeak(deleted, [
+      w.deletedPages.pDeleted.title,
+      w.deletedPages.pDeleted.id,
+      w.deletedPages.aDeleted.id,
+      w.deletedPages.wikiDeleted.id,
+      w.deletedPages.pOldDeleted.id,
+    ])
+  })
+
+  it('K12 member: Q file, Q page and Q title → 404 · 404 · { visible:false }', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.member)
+    const file = await fileGet(w.files.qFile.id)
+    expect(file.status).toBe(404)
+    assertNoLeak(await file.text(), forbiddenQ(w).filter((s) => s !== w.files.qFile.id))
+    const page = await bodyOf(await pageGet(w.pages.qPage.id))
+    expect(page.status).toBe(404)
+    assertNoLeak(page.body, forbiddenQ(w).filter((s) => s !== w.pages.qPage.id))
+    const titles = await okJson<PageTitlesResponse>(await titlesGet([w.pages.qPage.id]))
+    expect(titles.items).toEqual([{ id: w.pages.qPage.id, visible: false }])
+    assertNoLeak(titles, forbiddenQ(w).filter((s) => s !== w.pages.qPage.id))
+  })
+
+  it('K13 lead: create/move under a Q page → NOT_FOUND (M4-D31) and the error names nothing of Q', async () => {
+    const { w } = await pagesWorld()
+    asUser(w.lead)
+    const created = await createPage({ space: 'PROJECT', projectId: w.P.id, parentId: w.pages.qPage.id })
+    expect(created).toMatchObject({ ok: false, code: 'NOT_FOUND' })
+    assertNoLeak(created, forbiddenQ(w).filter((s) => s !== w.pages.qPage.id))
+    const moved = await movePage({ pageId: w.pages.pChild.id, parentId: w.pages.qPage.id, afterId: null })
+    expect(moved).toMatchObject({ ok: false, code: 'NOT_FOUND' })
+    assertNoLeak(moved, forbiddenQ(w).filter((s) => s !== w.pages.qPage.id))
+  })
+
+  it('K14 outsider: q=% and q=_ are literal (escaped) — only titles containing them, nothing of P', async () => {
+    const { w } = await pagesWorld()
+    const percent = await makePage({ title: 'ส่วนลด 100% W', createdBy: w.manager })
+    const underscore = await makePage({ title: 'ชื่อไฟล์ a_b W', createdBy: w.manager })
+    asUser(w.outsider)
+    for (const [ch, page] of [
+      ['%', percent],
+      ['_', underscore],
+    ] as const) {
+      const body = await search(`q=${q(ch)}`)
+      assertNoLeak(body, forbiddenP(w))
+      expect(body.pages.map((h) => h.id)).toContain(page.id)
+      for (const hit of body.pages) expect(hit.title, `hit for ${ch}`).toContain(ch)
+    }
   })
 })

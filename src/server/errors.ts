@@ -82,6 +82,19 @@ export class RateLimitedError extends AppError {
   }
 }
 
+/** M4 upload errors (§7.6, M4-D15): FILE-2 size cap → 413, FILE-5 type not allowed → 415 (ERROR_STATUS). */
+export class PayloadTooLargeError extends AppError {
+  constructor(message: string = th.files.errors.tooLarge) {
+    super('TOO_LARGE', message)
+  }
+}
+
+export class UnsupportedMediaTypeError extends AppError {
+  constructor(message: string = th.files.errors.unsupported) {
+    super('UNSUPPORTED_TYPE', message)
+  }
+}
+
 /** Stub bodies of contracts not implemented yet (S0 → S2). The action wrapper turns it into INTERNAL. */
 export function notImplemented(step: string): Error {
   return new Error('NOT_IMPLEMENTED: ' + step)

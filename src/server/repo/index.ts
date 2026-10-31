@@ -15,3 +15,7 @@ export * as tasks from './tasks'
 export * as assignments from './task-assignments'
 export * as statuses from './task-statuses'
 export * as blockers from './task-blockers'
+// M4 (X87)
+export * as files from './files'
+export * as pageLocks from './page-locks'
+export * as pages from './pages'

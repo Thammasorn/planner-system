@@ -1,0 +1,84 @@
+'use client'
+// src/components/editor/slash-menu.tsx — Thai slash menu (FR-506/520/528, AC-501/504, M4-D14, r3 §5.2).
+// From plan/research/snippets/r3/harness/src/slashMenu.tsx: BlockNote's default items (titles come from the Thai
+// dictionary, English aliases stay searchable), `/ตาราง` → 3×3, custom `/หน้า` (create a child page, insert its
+// card) when allowed, ranked filter, word-start guard, stable getItems (r3 G23).
+import { insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
+import {
+  type DefaultReactSuggestionItem,
+  getDefaultReactSlashMenuItems,
+  SuggestionMenuController,
+} from '@blocknote/react'
+import { type JSX, useCallback } from 'react'
+import { th } from '@/i18n/th'
+import { rankSuggestionItems, slashShouldOpen } from '@/lib/editor/suggest'
+import type { AppEditor } from './schema'
+
+export interface SlashCtx {
+  /** Creates the child page (server action) and resolves its id, or null after a failure (already toasted). */
+  createSubpage: () => Promise<string | null>
+  /** canEdit && depth < 9 (FR-502: at most 10 levels). */
+  canCreateSubpage: boolean
+}
+
+const EMPTY_ROW = (): { cells: string[] } => ({ cells: ['', '', ''] })
+
+function subpageItem(editor: AppEditor, ctx: SlashCtx): DefaultReactSuggestionItem {
+  const s = th.editor.slash.subpage
+  return {
+    title: s.title,
+    subtext: s.subtext,
+    aliases: [...s.aliases],
+    group: s.group,
+    icon: <span aria-hidden>📄</span>,
+    onItemClick: () => {
+      // Placeholder card first ("กำลังสร้างหน้า…") so the cursor stays put during the async call (M4-D14).
+      const block = insertOrUpdateBlockForSlashMenu(editor, { type: 'subpage', props: { pageId: '' } })
+      void ctx
+        .createSubpage()
+        .catch(() => null)
+        .then((id) => {
+          if (!editor.getBlock(block.id)) return
+          if (id) editor.updateBlock(block.id, { props: { pageId: id } })
+          else editor.removeBlocks([block.id])
+        })
+    },
+  }
+}
+
+export function getSlashMenuItems(editor: AppEditor, ctx: SlashCtx): DefaultReactSuggestionItem[] {
+  const out: DefaultReactSuggestionItem[] = []
+  for (const item of getDefaultReactSlashMenuItems(editor)) {
+    // The runtime items still carry `key` although the React type omits it (r3 §5.2).
+    if ('key' in item && item.key === 'table') {
+      out.push({
+        ...item,
+        onItemClick: () => {
+          insertOrUpdateBlockForSlashMenu(editor, {
+            type: 'table',
+            content: { type: 'tableContent', rows: [EMPTY_ROW(), EMPTY_ROW(), EMPTY_ROW()] },
+          })
+        },
+      })
+      // Right after the table so the "ขั้นสูง" group stays contiguous.
+      if (ctx.canCreateSubpage) out.push(subpageItem(editor, ctx))
+      continue
+    }
+    out.push(item)
+  }
+  return out
+}
+
+export function SlashMenu({ editor, ctx }: { editor: AppEditor; ctx: SlashCtx }): JSX.Element {
+  const getItems = useCallback(
+    (query: string): Promise<DefaultReactSuggestionItem[]> => {
+      try {
+        return Promise.resolve(rankSuggestionItems(getSlashMenuItems(editor, ctx), query))
+      } catch {
+        return Promise.resolve([]) // a rejection would leave the menu loading (r3 §5)
+      }
+    },
+    [editor, ctx],
+  )
+  return <SuggestionMenuController triggerCharacter="/" shouldOpen={slashShouldOpen} getItems={getItems} />
+}

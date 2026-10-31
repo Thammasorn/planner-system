@@ -1,0 +1,237 @@
+/* Page trees (sidebar + project เอกสาร tab, FR-503, SPEC §8.1): dense rows are plain elements reading theme
+   variables (PLAN §3.9); state is carried by text/icons and data-* attributes, never colour only (§8.9). */
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row {
+  --indent: 16px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding-right: 4px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.tree[data-variant='full'] .row {
+  --indent: 24px;
+  min-height: 36px;
+  font-size: 0.9375rem;
+}
+
+.row:hover,
+.row:focus-within {
+  background: var(--mui-palette-action-hover);
+}
+
+.row:has(.link[aria-current='page']) {
+  background: var(--brand-light);
+}
+
+/* Current page: background + bold + a left bar (not colour only). */
+.row:has(.link[aria-current='page'])::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--brand-navy);
+  content: '';
+}
+
+.row[data-dragging='true'] {
+  background: var(--mui-palette-background-paper);
+  box-shadow: var(--mui-shadows-4);
+}
+
+.handle,
+.toggle,
+.action {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mui-palette-text-secondary);
+  cursor: pointer;
+}
+
+.handle {
+  width: 16px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.spacer {
+  flex: none;
+  width: 22px;
+}
+
+.handleSpacer {
+  flex: none;
+  width: 16px;
+}
+
+.toggle:hover,
+.action:hover,
+.handle:hover {
+  background: var(--mui-palette-action-selected);
+}
+
+.row:focus-visible,
+.handle:focus-visible,
+.toggle:focus-visible,
+.action:focus-visible,
+.link:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--mui-palette-primary-main);
+  outline-offset: 1px;
+}
+
+/* Hover/focus affordances; opacity (not display) so they keep their box for pointer drags and stay focusable. */
+.handle,
+.actions {
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.row:hover .handle,
+.row:focus-within .handle,
+.row:hover .actions,
+.row:focus-within .actions,
+.actions:has([aria-expanded='true']) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .handle,
+  .actions {
+    opacity: 1;
+  }
+}
+
+.link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--mui-palette-text-primary);
+  text-decoration: none;
+}
+
+.link[aria-current='page'] {
+  color: var(--brand-navy);
+  font-weight: 600;
+}
+
+.icon {
+  flex: none;
+  width: 1.25em;
+  text-align: center;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lock {
+  flex: none;
+  color: var(--mui-palette-text-secondary);
+  display: inline-flex;
+  font-size: 15px;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+}
+
+.invalid {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--mui-palette-error-main);
+  font-size: 0.75rem;
+}
+
+.status {
+  padding: 4px 8px 4px 40px;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.tree[data-variant='full'] + .status,
+.statusFull {
+  padding-left: 8px;
+}
+
+.skeleton {
+  padding: 4px 12px 4px 40px;
+}
+
+/* Under an expanded row whose children are loading / failed (indent set inline from the row depth). */
+.childStatus {
+  --indent: 16px;
+  padding-top: 2px;
+  padding-right: 8px;
+  padding-bottom: 2px;
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.tree[data-variant='full'] .childStatus {
+  --indent: 24px;
+}
+
+.retry {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mui-palette-primary-main);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.overlay {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--mui-palette-background-paper);
+  box-shadow: var(--mui-shadows-4);
+  font-size: 0.875rem;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

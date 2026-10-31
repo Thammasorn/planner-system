@@ -9,12 +9,14 @@ import { defaultStatus } from '@/domain/status'
 import type { DbOrTx } from '@/server/db/types'
 import * as repo from '@/server/repo'
 import * as services from '@/server/services'
+import { ensureProjectCharters } from '@/server/services/charters'
 
 /** Seed stages in order; `upTo` stops after the named stage. M1 'users': positions + users + schedules ·
  *  M2 'projects': clients + projects + memberships (+ M3's 5 default statuses per project, X70) ·
- *  M3 'tasks': tasks + assignments (X11 M3 part, M3-D20). */
-export type GoldenStage = 'users' | 'projects' | 'tasks'
-const STAGES: readonly GoldenStage[] = ['users', 'projects', 'tasks']
+ *  M3 'tasks': tasks + assignments (X11 M3 part, M3-D20) · M4 'pages': one Project Charter per project through
+ *  ensureProjectCharters (X11 M4 part, X25; one actor-null `page` audit row each, M4-D5). */
+export type GoldenStage = 'users' | 'projects' | 'tasks' | 'pages'
+const STAGES: readonly GoldenStage[] = ['users', 'projects', 'tasks', 'pages']
 
 /** Placeholder for resetDb's first parameter (only `resetDb()` / `resetDb(undefined, { extras })` type-check in M1). */
 export type FixtureId = never
@@ -82,6 +84,8 @@ export async function seedGolden(db: DbOrTx, opts: { upTo?: GoldenStage } = {}):
   await services.taskStatuses.ensureAllProjectStatuses(db) // X70: 5 defaults per project
   if (!reached(opts.upTo, 'tasks')) return
   await seedTasks(db, ctx)
+  if (!reached(opts.upTo, 'pages')) return
+  await ensureProjectCharters(db) // X11 / X25: the 5 golden charters (FR-402)
 }
 
 async function seedUsers(db: DbOrTx): Promise<SeedCtx> {

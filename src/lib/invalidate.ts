@@ -1,5 +1,6 @@
 // src/lib/invalidate.ts — grouped TanStack invalidations so features don't forget views (PLAN.md §3.5, X18).
 import type { QueryClient } from '@tanstack/react-query'
+import type { PageSpace } from './contracts/pages'
 import { qk, qkPrefix } from './query-keys'
 
 async function invalidateAll(qc: QueryClient, keys: readonly (readonly unknown[])[]): Promise<void> {
@@ -35,4 +36,22 @@ export async function invalidateStatuses(qc: QueryClient, projectId: string): Pr
     qc.invalidateQueries({ queryKey: qk.projectStatuses(projectId) }),
     invalidateTasks(qc, projectId),
   ])
+}
+
+/** After any page create / rename / icon / move / duplicate / delete / restore / protect (M4): the tree of one space
+ *  (or every tree), every titles lookup and the whole search prefix (X82: M10's search index too). */
+export function invalidatePages(
+  qc: QueryClient,
+  scope?: { space: PageSpace; projectId: string | null },
+): Promise<void> {
+  return invalidateAll(qc, [
+    scope ? qk.pagesTreeScope(scope.space, scope.projectId) : qkPrefix.pagesTree,
+    qkPrefix.pageTitles,
+    qkPrefix.search,
+  ])
+}
+
+/** After a change of one page's own data (content save, template, cover): that page and every titles lookup. */
+export function invalidatePage(qc: QueryClient, pageId: string): Promise<void> {
+  return invalidateAll(qc, [qk.page(pageId), qkPrefix.pageTitles])
 }

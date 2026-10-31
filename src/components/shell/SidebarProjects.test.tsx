@@ -7,13 +7,27 @@ import { describe, expect, it, vi } from 'vitest'
 import { PreferencesContext, type PreferencesApi } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
 import type { SidebarResponse } from '@/lib/contracts/sidebar'
+import type { PageTreeResponse } from '@/lib/contracts/pages'
 import { qk } from '@/lib/query-keys'
 import { DEFAULT_PREFERENCES, type Preferences } from '@/lib/schemas/preferences'
 import { theme } from '@/lib/theme/theme'
 import { SidebarProjects } from './SidebarProjects'
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+const nav = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: nav.push, replace: vi.fn() }),
+  usePathname: () => '/home',
+}))
 vi.mock('@/server/actions/projects', () => ({ createProject: vi.fn(), updateProject: vi.fn() }))
+const pageActions = vi.hoisted(() => ({
+  createPage: vi.fn(),
+  deletePage: vi.fn(),
+  duplicatePage: vi.fn(),
+  restorePageBatch: vi.fn(),
+  setPageProtected: vi.fn(),
+  movePage: vi.fn(),
+}))
+vi.mock('@/server/actions/pages', () => pageActions)
 const api = vi.hoisted(() => ({ getJson: vi.fn(() => new Promise<never>(() => {})) })) // data comes from the cache
 vi.mock('@/lib/api', () => ({ getJson: api.getJson }))
 
@@ -56,10 +70,16 @@ function PrefsHarness({
 
 function renderSidebar(
   data: SidebarResponse | undefined,
-  opts: { prefs?: Preferences; pathname?: string; collapsed?: boolean } = {},
+  opts: {
+    prefs?: Preferences
+    pathname?: string
+    collapsed?: boolean
+    seed?: (qc: QueryClient) => void
+  } = {},
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   if (data) qc.setQueryData(qk.sidebar(), data)
+  opts.seed?.(qc)
   const spy = vi.fn()
   const utils = render(
     <QueryClientProvider client={qc}>
@@ -164,6 +184,63 @@ describe('SidebarProjects', () => {
     expect(screen.getByRole('link', { name: th.nav.projects })).toHaveAttribute('href', '/projects')
     expect(screen.queryByRole('list', { name: th.sidebar.projectsHeading })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: th.sidebar.newProject })).not.toBeInTheDocument()
+  })
+})
+
+describe('SidebarProjects — page trees (M4, X33, M4-D27)', () => {
+  const CHARTER = '44444444-4444-4444-8444-444444444444'
+  const NEW = '55555555-5555-4555-8555-555555555555'
+  const pages = (canCreate: boolean): PageTreeResponse => ({
+    nodes: [
+      {
+        id: CHARTER,
+        parentId: null,
+        title: th.pages.charterTitle,
+        icon: '📋',
+        depth: 0,
+        position: 'a0',
+        hasChildren: false,
+        locked: false,
+        effectiveProtected: false,
+        isCharter: true,
+      },
+    ],
+    canCreate,
+  })
+
+  it('an expanded project lists its เอกสาร sub-link and then its page tree, outside the project row', () => {
+    renderSidebar(response(), {
+      prefs: { ...DEFAULT_PREFERENCES, 'sidebar.expanded': [`project:${DW}`] },
+      seed: (qc) => qc.setQueryData(qk.pagesTree('PROJECT', DW, null), pages(false)),
+    })
+    const row = screen.getByTestId(`sidebar-project-${DW}`)
+    expect(within(row).getByRole('link', { name: th.projects.tabs.pages })).toHaveAttribute(
+      'href',
+      `/projects/${DW}/pages`,
+    )
+    const tree = screen.getByRole('tree', { name: th.pages.tree.projectLabel('Data Warehouse') })
+    expect(row.contains(tree)).toBe(false)
+    const charter = within(tree).getByRole('treeitem', { name: th.pages.charterTitle })
+    expect(charter).toHaveAttribute('aria-level', '1')
+    expect(within(charter).getByRole('link')).toHaveAttribute('href', `/p/${CHARTER}`)
+    expect(screen.queryByRole('button', { name: th.sidebar.newProjectPage('Data Warehouse') })).toBeNull()
+    expect(
+      screen.queryByRole('tree', { name: th.pages.tree.projectLabel('Store Analytics Dashboard') }),
+    ).toBeNull()
+  })
+
+  it('+ beside an expanded project creates a root page there when the viewer can', async () => {
+    const user = userEvent.setup()
+    pageActions.createPage.mockReturnValue(
+      Promise.resolve({ ok: true, page: { id: NEW }, space: 'PROJECT', projectId: DW, href: `/p/${NEW}` }),
+    )
+    renderSidebar(response(), {
+      prefs: { ...DEFAULT_PREFERENCES, 'sidebar.expanded': [`project:${DW}`] },
+      seed: (qc) => qc.setQueryData(qk.pagesTree('PROJECT', DW, null), pages(true)),
+    })
+    await user.click(screen.getByRole('button', { name: th.sidebar.newProjectPage('Data Warehouse') }))
+    expect(pageActions.createPage).toHaveBeenCalledWith({ space: 'PROJECT', projectId: DW, parentId: null })
+    await vi.waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/p/${NEW}`))
   })
 })
 

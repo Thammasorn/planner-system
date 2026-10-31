@@ -1,3 +1,5 @@
+import type { Dictionary } from '@blocknote/core'
+
 /**
  * All UI text (CLAUDE.md › UX, SPEC §8.8, PLAN.md §3.7). Namespaces are created by the milestone that needs
  * them; parameterised strings are functions. Tests and e2e import `th` instead of copying Thai literals.
@@ -7,6 +9,266 @@
 const MSG_LOCKED = 'เข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่'
 const MSG_DEACTIVATED = 'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้จัดการ'
 const MSG_BAD_LOGIN = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+const UNTITLED = 'ไม่มีชื่อ'
+/** Page titles in audit summaries and toasts: quoted, empty → "ไม่มีชื่อ". */
+const quoted = (title: string): string => `"${title || UNTITLED}"`
+
+/**
+ * BlockNote dictionary in Thai (FR-520, PLAN §3.7) — copied from plan/research/snippets/r3/harness/src/lib/th-editor.ts.
+ * A separate const (not inside `th`'s `as const`, which would make the alias arrays readonly and break `satisfies`).
+ * Two changes vs. the snippet, for th.test.ts (no empty/undefined leaves): `placeholders.emptyDocument` is omitted
+ * (BlockNote's default is undefined too) and the inline-code tooltip names its real shortcut (tiptap Code: Mod-e).
+ */
+const blocknote = {
+  slash_menu: {
+    heading: { title: 'หัวข้อ 1', subtext: 'หัวข้อระดับบนสุด', aliases: ['หัวข้อ'], group: 'หัวข้อ' },
+    heading_2: { title: 'หัวข้อ 2', subtext: 'หัวข้อของส่วนสำคัญ', aliases: ['หัวข้อ'], group: 'หัวข้อ' },
+    heading_3: { title: 'หัวข้อ 3', subtext: 'หัวข้อย่อย', aliases: ['หัวข้อ'], group: 'หัวข้อ' },
+    heading_4: { title: 'หัวข้อ 4', subtext: 'หัวข้อย่อยระดับ 4', aliases: [], group: 'หัวข้อย่อย' },
+    heading_5: { title: 'หัวข้อ 5', subtext: 'หัวข้อย่อยระดับ 5', aliases: [], group: 'หัวข้อย่อย' },
+    heading_6: { title: 'หัวข้อ 6', subtext: 'หัวข้อย่อยระดับ 6', aliases: [], group: 'หัวข้อย่อย' },
+    toggle_heading: {
+      title: 'หัวข้อพับได้ 1',
+      subtext: 'หัวข้อระดับบนสุดที่พับได้',
+      aliases: [],
+      group: 'หัวข้อย่อย',
+    },
+    toggle_heading_2: {
+      title: 'หัวข้อพับได้ 2',
+      subtext: 'หัวข้อที่พับได้',
+      aliases: [],
+      group: 'หัวข้อย่อย',
+    },
+    toggle_heading_3: {
+      title: 'หัวข้อพับได้ 3',
+      subtext: 'หัวข้อย่อยที่พับได้',
+      aliases: [],
+      group: 'หัวข้อย่อย',
+    },
+    quote: {
+      title: 'ข้อความอ้างอิง',
+      subtext: 'ยกคำพูดหรือข้อความอ้างอิง',
+      aliases: ['อ้างอิง', 'คำพูด'],
+      group: 'บล็อกพื้นฐาน',
+    },
+    toggle_list: {
+      title: 'รายการพับได้',
+      subtext: 'ซ่อน/แสดงเนื้อหาย่อยได้',
+      aliases: ['พับ', 'toggle'],
+      group: 'บล็อกพื้นฐาน',
+    },
+    numbered_list: {
+      title: 'ลำดับเลข',
+      subtext: 'รายการแบบมีลำดับเลข',
+      aliases: ['เลข', 'ลำดับ'],
+      group: 'บล็อกพื้นฐาน',
+    },
+    bullet_list: {
+      title: 'รายการจุด',
+      subtext: 'รายการแบบไม่มีลำดับ',
+      aliases: ['บูลเล็ต', 'จุด'],
+      group: 'บล็อกพื้นฐาน',
+    },
+    check_list: {
+      title: 'เช็กลิสต์',
+      subtext: 'รายการพร้อมช่องติ๊ก',
+      aliases: ['เช็ค', 'ติ๊ก', 'todo'],
+      group: 'บล็อกพื้นฐาน',
+    },
+    paragraph: {
+      title: 'ย่อหน้า',
+      subtext: 'ข้อความเนื้อหาทั่วไป',
+      aliases: ['ข้อความ'],
+      group: 'บล็อกพื้นฐาน',
+    },
+    code_block: { title: 'โค้ด', subtext: 'บล็อกโค้ด', aliases: ['โค้ด'], group: 'บล็อกพื้นฐาน' },
+    page_break: { title: 'ตัวแบ่งหน้า', subtext: 'แบ่งหน้าเมื่อพิมพ์', aliases: [], group: 'บล็อกพื้นฐาน' },
+    table: { title: 'ตาราง', subtext: 'ตารางที่แก้ไขในเซลล์ได้', aliases: [], group: 'ขั้นสูง' },
+    image: {
+      title: 'รูปภาพ',
+      subtext: 'อัปโหลดรูป ปรับขนาด ใส่คำบรรยาย',
+      aliases: ['รูป', 'ภาพ'],
+      group: 'สื่อ',
+    },
+    video: { title: 'วิดีโอ', subtext: 'วิดีโอพร้อมคำบรรยาย', aliases: [], group: 'สื่อ' },
+    audio: { title: 'เสียง', subtext: 'ไฟล์เสียงพร้อมคำบรรยาย', aliases: [], group: 'สื่อ' },
+    file: {
+      title: 'ไฟล์แนบ',
+      subtext: 'PDF, Word, Excel, PowerPoint, ZIP',
+      aliases: ['ไฟล์', 'แนบ'],
+      group: 'สื่อ',
+    },
+    emoji: { title: 'อีโมจิ', subtext: 'ค้นหาและแทรกอีโมจิ', aliases: [], group: 'อื่น ๆ' },
+    divider: {
+      title: 'เส้นคั่น',
+      subtext: 'เส้นแบ่งระหว่างบล็อก',
+      aliases: ['เส้น', 'คั่น'],
+      group: 'บล็อกพื้นฐาน',
+    },
+  },
+  placeholders: {
+    default: "พิมพ์ข้อความ หรือพิมพ์ '/' เพื่อเลือกคำสั่ง",
+    heading: 'หัวข้อ',
+    toggleListItem: 'รายการพับได้',
+    bulletListItem: 'รายการ',
+    numberedListItem: 'รายการ',
+    checkListItem: 'รายการ',
+    new_comment: 'เขียนความคิดเห็น…',
+    edit_comment: 'แก้ไขความคิดเห็น…',
+    comment_reply: 'ตอบกลับ…',
+  } as Record<string, string | undefined>,
+  file_blocks: {
+    add_button_text: {
+      image: 'เพิ่มรูปภาพ',
+      video: 'เพิ่มวิดีโอ',
+      audio: 'เพิ่มไฟล์เสียง',
+      file: 'เพิ่มไฟล์แนบ',
+    },
+  },
+  toggle_blocks: { add_block_button: 'ยังไม่มีเนื้อหา คลิกเพื่อเพิ่มบล็อก' },
+  code_block: { add_source_button_text: 'เพิ่มซอร์สโค้ด', ok_button_text: 'ตกลง' },
+  side_menu: { add_block_label: 'เพิ่มบล็อก', drag_handle_label: 'ลากเพื่อย้าย / คลิกเพื่อเปิดเมนู' },
+  drag_handle: {
+    delete_menuitem: 'ลบ',
+    colors_menuitem: 'สี',
+    header_row_menuitem: 'แถวหัวตาราง',
+    header_column_menuitem: 'คอลัมน์หัวตาราง',
+  },
+  table_handle: {
+    delete_column_menuitem: 'ลบคอลัมน์',
+    delete_row_menuitem: 'ลบแถว',
+    add_left_menuitem: 'เพิ่มคอลัมน์ทางซ้าย',
+    add_right_menuitem: 'เพิ่มคอลัมน์ทางขวา',
+    add_above_menuitem: 'เพิ่มแถวด้านบน',
+    add_below_menuitem: 'เพิ่มแถวด้านล่าง',
+    split_cell_menuitem: 'แยกเซลล์',
+    merge_cells_menuitem: 'รวมเซลล์',
+    background_color_menuitem: 'สีพื้น',
+  },
+  suggestion_menu: { no_items_title: 'ไม่พบรายการ' },
+  color_picker: {
+    text_title: 'สีตัวอักษร',
+    background_title: 'สีพื้น',
+    colors: {
+      default: 'อัตโนมัติ',
+      gray: 'เทา',
+      brown: 'น้ำตาล',
+      red: 'แดง',
+      orange: 'ส้ม',
+      yellow: 'เหลือง',
+      green: 'เขียว',
+      blue: 'น้ำเงิน',
+      purple: 'ม่วง',
+      pink: 'ชมพู',
+    },
+  },
+  formatting_toolbar: {
+    bold: { tooltip: 'ตัวหนา', secondary_tooltip: 'Mod+B' },
+    italic: { tooltip: 'ตัวเอียง', secondary_tooltip: 'Mod+I' },
+    underline: { tooltip: 'ขีดเส้นใต้', secondary_tooltip: 'Mod+U' },
+    strike: { tooltip: 'ขีดฆ่า', secondary_tooltip: 'Mod+Shift+S' },
+    code: { tooltip: 'โค้ดในบรรทัด', secondary_tooltip: 'Mod+E' },
+    colors: { tooltip: 'สี' },
+    link: { tooltip: 'ใส่ลิงก์', secondary_tooltip: 'Mod+K' },
+    file_caption: { tooltip: 'แก้คำบรรยาย', input_placeholder: 'แก้คำบรรยาย' },
+    file_replace: {
+      tooltip: {
+        image: 'เปลี่ยนรูปภาพ',
+        video: 'เปลี่ยนวิดีโอ',
+        audio: 'เปลี่ยนไฟล์เสียง',
+        file: 'เปลี่ยนไฟล์',
+      },
+    },
+    file_rename: {
+      tooltip: {
+        image: 'เปลี่ยนชื่อรูปภาพ',
+        video: 'เปลี่ยนชื่อวิดีโอ',
+        audio: 'เปลี่ยนชื่อไฟล์เสียง',
+        file: 'เปลี่ยนชื่อไฟล์',
+      },
+      input_placeholder: {
+        image: 'ชื่อรูปภาพ',
+        video: 'ชื่อวิดีโอ',
+        audio: 'ชื่อไฟล์เสียง',
+        file: 'ชื่อไฟล์',
+      },
+    },
+    file_download: {
+      tooltip: {
+        image: 'ดาวน์โหลดรูปภาพ',
+        video: 'ดาวน์โหลดวิดีโอ',
+        audio: 'ดาวน์โหลดไฟล์เสียง',
+        file: 'ดาวน์โหลดไฟล์',
+      },
+    },
+    file_delete: {
+      tooltip: { image: 'ลบรูปภาพ', video: 'ลบวิดีโอ', audio: 'ลบไฟล์เสียง', file: 'ลบไฟล์' },
+    },
+    file_preview_toggle: { tooltip: 'แสดง/ซ่อนตัวอย่าง' },
+    nest: { tooltip: 'เยื้องเข้า', secondary_tooltip: 'Tab' },
+    unnest: { tooltip: 'เยื้องออก', secondary_tooltip: 'Shift+Tab' },
+    align_left: { tooltip: 'ชิดซ้าย' },
+    align_center: { tooltip: 'กึ่งกลาง' },
+    align_right: { tooltip: 'ชิดขวา' },
+    align_justify: { tooltip: 'เต็มบรรทัด' },
+    table_cell_merge: { tooltip: 'รวมเซลล์' },
+    comment: { tooltip: 'เพิ่มความคิดเห็น' },
+  },
+  file_panel: {
+    upload: {
+      title: 'อัปโหลด',
+      file_placeholder: {
+        image: 'เลือกรูปภาพ',
+        video: 'เลือกวิดีโอ',
+        audio: 'เลือกไฟล์เสียง',
+        file: 'เลือกไฟล์',
+      },
+      upload_error: 'อัปโหลดไม่สำเร็จ',
+    },
+    embed: {
+      title: 'ลิงก์',
+      embed_button: {
+        image: 'ใช้รูปจากลิงก์',
+        video: 'ใช้วิดีโอจากลิงก์',
+        audio: 'ใช้เสียงจากลิงก์',
+        file: 'ใช้ไฟล์จากลิงก์',
+      },
+      url_placeholder: 'วาง URL',
+    },
+  },
+  link_toolbar: {
+    delete: { tooltip: 'เอาลิงก์ออก' },
+    edit: { text: 'แก้ลิงก์', tooltip: 'แก้ไข' },
+    open: { tooltip: 'เปิดในแท็บใหม่' },
+    form: { title_placeholder: 'ข้อความ', url_placeholder: 'URL' },
+  },
+  comments: {
+    edited: 'แก้ไขแล้ว',
+    save_button_text: 'บันทึก',
+    cancel_button_text: 'ยกเลิก',
+    deleted_reference_text: 'เนื้อหาต้นฉบับถูกลบแล้ว',
+    discard_pending_comment: 'ทิ้งความคิดเห็นที่ยังไม่บันทึก?',
+    actions: {
+      add_reaction: 'เพิ่มรีแอคชัน',
+      resolve: 'ปิดเรื่อง',
+      reopen: 'เปิดอีกครั้ง',
+      edit_comment: 'แก้ไขความคิดเห็น',
+      delete_comment: 'ลบความคิดเห็น',
+      more_actions: 'เพิ่มเติม',
+    },
+    reactions: { reacted_by: 'รีแอคโดย' },
+    sidebar: { marked_as_resolved: 'ปิดเรื่องแล้ว', more_replies: (count: number) => `อีก ${count} คำตอบ` },
+  },
+  suggestion_changes: {
+    formatting_change: 'เปลี่ยนรูปแบบ',
+    deleted: 'ลบแล้ว',
+    inserted_by: (users: string) => `แทรกโดย: ${users}`,
+    deleted_by: (users: string) => `ลบโดย: ${users}`,
+    formatting_change_by: (formats: string, users: string) => `เปลี่ยนรูปแบบ (${formats}) โดย: ${users}`,
+  },
+  exporter: { open_file: 'เปิดไฟล์', open_video_file: 'เปิดวิดีโอ', open_audio_file: 'เปิดไฟล์เสียง' },
+  generic: { ctrl_shortcut: 'Ctrl', form_submit: 'ตกลง' },
+} satisfies Dictionary
 
 export const th = {
   meta: {
@@ -81,6 +343,9 @@ export const th = {
     ACCOUNT_DEACTIVATED: MSG_DEACTIVATED,
     INVALID_PASSWORD: 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
     INTERNAL: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+    // M4 upload codes (HTTP 413 / 415).
+    TOO_LARGE: 'ไฟล์ใหญ่เกินกำหนด',
+    UNSUPPORTED_TYPE: 'ไม่รองรับไฟล์ชนิดนี้',
   },
   home: {
     title: 'หน้าหลัก',
@@ -231,6 +496,10 @@ export const th = {
     collapse: (name: string) => `ยุบ ${name}`,
     loadError: 'โหลดรายการโปรเจคไม่สำเร็จ',
     retry: 'ลองใหม่',
+    // M4 (S0.9)
+    wikiHeading: 'Wiki ทีม',
+    newWikiPage: 'สร้างหน้าใน Wiki ทีม',
+    newProjectPage: (project: string) => `สร้างหน้าใน ${project}`,
   },
   projects: {
     listTitle: 'โปรเจคทั้งหมด',
@@ -263,7 +532,7 @@ export const th = {
     tentativeGlyph: '◐',
     colorOption: (hex: string) => `สี ${hex}`,
     tabsLabel: 'แท็บของโปรเจค',
-    tabs: { overview: 'ภาพรวม', tasks: 'งาน' }, // M4/M6 add pages/plan
+    tabs: { overview: 'ภาพรวม', tasks: 'งาน', pages: 'เอกสาร' }, // M6 adds plan
     overview: {
       infoHeading: 'ข้อมูลโปรเจค',
       noLead: 'ยังไม่มี LEAD',
@@ -656,6 +925,7 @@ export const th = {
       Z: 'Z',
       N: 'N',
       S: 'S',
+      K: 'K',
       '?': '?',
     },
     items: {
@@ -675,7 +945,193 @@ export const th = {
       listStatus: 'เปลี่ยนสถานะ',
       listMove: 'ย้ายขึ้น/ลงในระดับเดียวกัน',
       listMenu: 'เปิดเมนูงาน',
+      palette: 'เปิดช่องค้นหา',
     },
+  },
+  // ---------------------------------------------------------------------------------------------------------------
+  // M4 — pages, editor, files, palette (plan/m04 S0.9). Build-time owners: S1 → files, pages.errors, audit (M4);
+  // S2 → editor; S3 → pages (except errors), palette, sidebar, shortcuts.items.
+  // ---------------------------------------------------------------------------------------------------------------
+  pages: {
+    untitled: UNTITLED,
+    titleLabel: 'ชื่อหน้า',
+    newPage: 'หน้าใหม่',
+    addRoot: 'เพิ่มหน้า',
+    addChild: (title: string) => `เพิ่มหน้าย่อยใน ${title}`,
+    menu: (title: string) => `ตัวเลือกของ ${title}`,
+    duplicate: 'ทำสำเนา',
+    delete: 'ลบหน้า',
+    protect: 'ล็อกหน้า',
+    unprotect: 'ปลดล็อกหน้า',
+    protectedIcon: 'หน้านี้ถูกล็อก',
+    protectedBanner: 'หน้านี้ถูกล็อกโดยผู้จัดการ — อ่านได้อย่างเดียว',
+    archivedBanner: 'โปรเจคนี้ถูก archive แล้ว — อ่านอย่างเดียว',
+    breadcrumbLabel: 'ตำแหน่งของหน้า',
+    wikiRoot: 'Wiki ทีม',
+    charterTitle: 'Project Charter',
+    copyTitle: (title: string) => `${title || UNTITLED} (สำเนา)`,
+    meetingTitle: (date: string) => `บันทึกการประชุม — ${date}`,
+    icon: { button: 'เลือกไอคอน', dialogTitle: 'ไอคอนของหน้า', remove: 'ลบไอคอน' },
+    cover: {
+      add: 'เพิ่มรูปปก',
+      change: 'เปลี่ยนรูปปก',
+      remove: 'ลบรูปปก',
+      alt: 'รูปปกของหน้า',
+      uploading: 'กำลังอัปโหลดรูปปก…',
+    },
+    templates: {
+      heading: 'เริ่มจาก template',
+      blank: 'ว่าง',
+      charter: 'Project Charter',
+      meeting: 'บันทึกการประชุม',
+      sop: 'คู่มือ/SOP',
+    },
+    tree: {
+      wikiLabel: 'หน้าใน Wiki ทีม',
+      projectLabel: (project: string) => `หน้าเอกสารของ ${project}`,
+      expand: (title: string) => `ขยาย ${title}`,
+      collapse: (title: string) => `ยุบ ${title}`,
+      dragHandle: 'ลากเพื่อย้ายหน้า',
+      dropInvalid: 'วางตรงนี้ไม่ได้ (ซ้อนได้สูงสุด 10 ชั้น)',
+      // FR-503 keyboard alternative to dragging (row ⋯ menu), same wording as M3's task row menu
+      moveUp: 'ย้ายขึ้น',
+      moveDown: 'ย้ายลง',
+      indent: 'ย้ายเข้าไปใต้หน้าก่อนหน้า',
+      outdent: 'ดึงออก',
+      // dnd-kit screen-reader text (pointer drags only; the keyboard uses the ⋯ menu)
+      dragInstructions:
+        'ลากด้วยเมาส์เพื่อย้ายหน้า หรือใช้เมนูตัวเลือกของหน้า: ย้ายขึ้น ย้ายลง ย้ายเข้า ดึงออก',
+      dragStart: (title: string) => `กำลังลาก ${title}`,
+      dragOver: (title: string, over: string) => `${title} อยู่ที่ ${over}`,
+      dragEnd: (title: string) => `วาง ${title} แล้ว`,
+      dragCancel: (title: string) => `ยกเลิกการลาก ${title}`,
+      empty: 'ยังไม่มีหน้า',
+      loadError: 'โหลดรายการหน้าไม่สำเร็จ',
+      retry: 'ลองใหม่',
+    },
+    projectTab: { heading: 'เอกสารของโปรเจค', newPage: 'สร้างหน้าใหม่', empty: 'ยังไม่มีหน้าเอกสาร' },
+    toasts: {
+      deleted: (title: string, children: number) =>
+        children > 0
+          ? `ลบ "${title || UNTITLED}" และหน้าย่อย ${children} หน้าแล้ว`
+          : `ลบ "${title || UNTITLED}" แล้ว`,
+      duplicated: (title: string) => `ทำสำเนา "${title || UNTITLED}" แล้ว`,
+      restored: 'กู้คืนหน้าแล้ว',
+      protected: 'ล็อกหน้าแล้ว',
+      unprotected: 'ปลดล็อกหน้าแล้ว',
+      moveFailed: 'ย้ายหน้าไม่สำเร็จ',
+      createFailed: 'สร้างหน้าไม่สำเร็จ',
+      // M4 S3: the "duplicated" toast action, and fallbacks when the server message is unusable
+      openCopy: 'เปิด',
+      actionFailed: 'ทำรายการไม่สำเร็จ',
+      renameFailed: 'เปลี่ยนชื่อหน้าไม่สำเร็จ',
+    },
+    errors: {
+      maxDepth: 'ซ้อนได้สูงสุด 10 ชั้น',
+      crossSpace: 'ย้ายหน้าข้าม Wiki ทีมหรือข้ามโปรเจคไม่ได้',
+      cycle: 'ย้ายหน้าไปไว้ใต้หน้าย่อยของตัวเองไม่ได้',
+      charterNotDeletable: 'ลบ Project Charter ไม่ได้',
+      charterRootOnly: 'Project Charter ต้องอยู่ระดับบนสุดของโปรเจค',
+      protectedReadOnly: 'หน้านี้ถูกล็อก แก้ไขไม่ได้',
+      subtreeProtected: 'มีหน้าย่อยที่ถูกล็อก จึงลบหรือย้ายไม่ได้',
+      protectWikiOnly: 'ล็อกได้เฉพาะหน้าใน Wiki ทีม',
+      treeChanged: 'รายการหน้าเปลี่ยนไปแล้ว — โหลดใหม่แล้ว',
+      titleTooLong: 'ชื่อหน้ายาวเกิน 200 ตัวอักษร',
+      contentTooLarge: 'เนื้อหายาวเกินไป (สูงสุด 2 MB)',
+      contentInvalid: 'เนื้อหาของหน้าไม่ถูกต้อง',
+      coverNotImage: 'รูปปกต้องเป็นรูปภาพ',
+      restore: {
+        failed: (reason: string) => `กู้คืนไม่ได้ เพราะ${reason}`,
+        expired: 'เกิน 30 วันแล้ว',
+        parentDeleted: 'หน้าแม่ถูกลบแล้ว',
+        tooDeep: 'จะซ้อนลึกเกิน 10 ชั้น',
+      },
+    },
+    notFound: {
+      title: 'ไม่พบหน้า',
+      body: 'หน้านี้ไม่มีอยู่ ถูกลบแล้ว หรือคุณไม่มีสิทธิ์เข้าถึง',
+      back: 'กลับหน้าหลัก',
+    },
+  },
+  editor: {
+    blocknote, // the `satisfies Dictionary` const above
+    label: 'เนื้อหาของหน้า',
+    slash: {
+      subpage: {
+        title: 'หน้า',
+        subtext: 'สร้างหน้าย่อยและแทรกลิงก์ไว้ตรงนี้',
+        aliases: ['page', 'subpage', 'หน้าย่อย'],
+        group: 'ขั้นสูง',
+      },
+    },
+    subpage: {
+      untitled: UNTITLED,
+      deleted: 'หน้านี้ถูกลบแล้ว',
+      noAccess: 'หน้าที่คุณไม่มีสิทธิ์เข้าถึง',
+      creating: 'กำลังสร้างหน้า…',
+      loading: 'กำลังโหลด…',
+    },
+    mention: {
+      unknownUser: 'ไม่พบผู้ใช้',
+      deactivated: '(ปิดใช้งาน)',
+      unknownPage: 'ไม่พบหน้า',
+      noAccess: 'หน้าที่คุณไม่มีสิทธิ์เข้าถึง',
+      deletedPage: 'หน้านี้ถูกลบแล้ว',
+      groupPeople: 'คน',
+      groupPages: 'หน้า',
+    },
+    attachment: { uploading: 'กำลังอัปโหลด…', download: (name: string) => `ดาวน์โหลด ${name}` },
+    upload: {
+      tooLargeImage: (mb: number) => `รูปต้องไม่เกิน ${mb} MB`,
+      tooLargeFile: (mb: number) => `ไฟล์ต้องไม่เกิน ${mb} MB`,
+      typeNotAllowed: 'ไม่รองรับไฟล์ชนิดนี้',
+      failed: 'อัปโหลดไม่สำเร็จ',
+    },
+    pasteImageLinkFallback: 'รูปภาพ (ลิงก์ภายนอก)',
+    saveStatus: { saving: 'กำลังบันทึก…', saved: 'บันทึกแล้ว', error: 'บันทึกไม่สำเร็จ · ลองใหม่' },
+    lease: {
+      heldBy: (name: string) => `${name} กำลังแก้หน้านี้`,
+      readOnlyHint: 'คุณเปิดหน้านี้แบบอ่านอย่างเดียว',
+      takeover: 'แก้ต่อจากนี้',
+      takenOverBy: (name: string) =>
+        `${name} แก้ต่อจากคุณแล้ว — บันทึกของคุณเรียบร้อย หน้านี้เป็นแบบอ่านอย่างเดียว`,
+      takenOverUnsaved: (name: string) =>
+        `${name} แก้ต่อจากคุณแล้ว — การแก้ไขล่าสุดของคุณยังบันทึกไม่สำเร็จ ระบบจะลองบันทึกให้อีกครั้ง`,
+      retrySave: 'ลองบันทึกอีกครั้ง',
+      lost: 'การเชื่อมต่อหลุดนานเกินไป',
+      reacquire: 'แก้ต่อ',
+      takeoverFailed: 'แก้ต่อจากนี้ไม่สำเร็จ ลองอีกครั้ง',
+    },
+    conflict: { banner: 'มีการแก้ไขใหม่กว่า', reload: 'โหลดใหม่' },
+    deletedBanner: 'หน้านี้ถูกลบแล้ว',
+    forbiddenBanner: 'คุณไม่มีสิทธิ์แก้หน้านี้แล้ว',
+    crashed: {
+      title: 'แสดงเนื้อหาหน้านี้ไม่ได้',
+      body: 'เนื้อหาบางส่วนอาจเสียหาย ลองโหลดใหม่อีกครั้ง',
+      reload: 'โหลดใหม่',
+    },
+  },
+  files: {
+    errors: {
+      tooLarge: 'ไฟล์ใหญ่เกินกำหนด',
+      unsupported: 'ไม่รองรับไฟล์ชนิดนี้',
+      lengthMismatch: 'ได้รับไฟล์ไม่ครบ ลองใหม่อีกครั้ง',
+      missingFile: 'ไม่พบไฟล์ที่อัปโหลด',
+    },
+  },
+  palette: {
+    dialogLabel: 'ค้นหา',
+    open: 'ค้นหา…',
+    shortcut: '⌘K',
+    placeholder: 'ค้นหาหน้าเอกสาร…',
+    hint: 'พิมพ์เพื่อค้นหาชื่อหรือเนื้อหาของหน้าเอกสาร',
+    loading: 'กำลังค้นหา…',
+    empty: 'ไม่พบผลลัพธ์',
+    error: 'ค้นหาไม่สำเร็จ',
+    retry: 'ลองค้นหาอีกครั้ง',
+    groups: { pages: 'หน้าเอกสาร' },
+    wiki: 'Wiki ทีม',
+    matchedInContent: 'พบในเนื้อหา',
   },
   masking: { otherProjects: 'งานในโปรเจคอื่น' }, // M5 adds `leave`
   audit: {
@@ -726,6 +1182,21 @@ export const th = {
     statusRestored: (name: string) => `กู้คืนสถานะงาน ${name}`,
     blockerAdded: (task: string, blocker: string) => `${task} ถูกขวางโดย ${blocker}`,
     blockerRemoved: (task: string, blocker: string) => `ลบตัวขวาง ${blocker} ของ ${task}`,
+    // M4 (plan/m04 S0.9) — titles quoted, empty → "ไม่มีชื่อ"
+    pageCreated: (title: string) => `สร้างหน้า ${quoted(title)}`,
+    pageRenamed: (from: string, to: string) => `เปลี่ยนชื่อหน้า ${quoted(from)} เป็น ${quoted(to)}`,
+    pageIconChanged: (title: string) => `เปลี่ยนไอคอนหน้า ${quoted(title)}`,
+    pageCoverChanged: (title: string) => `เปลี่ยนรูปปกหน้า ${quoted(title)}`,
+    pageMoved: (title: string) => `ย้ายหน้า ${quoted(title)}`,
+    pageDuplicated: (title: string, n: number) => `ทำสำเนาหน้า ${quoted(title)} (${n} หน้า)`,
+    pageDeleted: (title: string, n: number) => `ลบหน้า ${quoted(title)} (${n} หน้า)`,
+    pageRestored: (title: string, n: number) => `กู้คืนหน้า ${quoted(title)} (${n} หน้า)`,
+    pageProtected: (title: string) => `ล็อกหน้า ${quoted(title)}`,
+    pageUnprotected: (title: string) => `ปลดล็อกหน้า ${quoted(title)}`,
+    pageSaved: (title: string) => `บันทึกหน้า ${quoted(title)}`,
+    pageTemplateApplied: (title: string) => `ใช้ template กับหน้า ${quoted(title)}`,
+    charterCreated: (project: string) => `สร้าง Project Charter ของ ${quoted(project)}`,
+    fileUploaded: (name: string) => `อัปโหลดไฟล์ ${quoted(name)}`,
   },
 } as const
 

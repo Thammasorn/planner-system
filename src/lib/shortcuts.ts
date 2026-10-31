@@ -20,6 +20,7 @@ export type KeyToken =
   | 'Z'
   | 'N'
   | 'S'
+  | 'K'
   | '?'
 
 export interface ShortcutDef {
@@ -44,6 +45,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'redo', scope: 'global', combos: [['Mod', 'Shift', 'Z']], label: th.shortcuts.items.redo },
   { id: 'task.new', scope: 'global', combos: [['N']], label: th.shortcuts.items.newTask },
   { id: 'help', scope: 'global', combos: [['?']], label: th.shortcuts.items.help },
+  { id: 'palette.open', scope: 'global', combos: [['Mod', 'K']], label: th.shortcuts.items.palette },
   { id: 'list.next', scope: 'taskList', combos: [['Enter']], label: th.shortcuts.items.listNext },
   { id: 'list.indent', scope: 'taskList', combos: [['Tab']], label: th.shortcuts.items.listIndent },
   {

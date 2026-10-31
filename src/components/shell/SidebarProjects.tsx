@@ -8,6 +8,9 @@ import ChevronRight from '@mui/icons-material/ChevronRight'
 import ExpandMore from '@mui/icons-material/ExpandMore'
 import Link from '@/components/Link'
 import { CertaintyBadge } from '@/components/common/CertaintyBadge'
+import { PageTree } from '@/components/pages/PageTree'
+import { useCreatePage } from '@/components/pages/usePageActions'
+import { usePageTreeRoots } from '@/components/pages/usePageTree'
 import { ProjectFormDialog } from '@/components/projects/ProjectFormDialog'
 import { projectTabHref, sortedProjectTabs } from '@/components/projects/project-tabs'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -40,57 +43,91 @@ function ProjectNode({
 }) {
   const base = `/projects/${project.id}`
   const active = pathname === base || pathname.startsWith(`${base}/`)
+  // canCreate of the project's page root (M4): shared cache entry with the tree below, fetched only when expanded
+  const pageRoots = usePageTreeRoots('PROJECT', project.id, expanded)
+  const { create, pending } = useCreatePage()
   return (
-    <li data-testid={`sidebar-project-${project.id}`}>
-      <div className={styles.projectRow}>
-        <button
-          type="button"
-          className={styles.toggle}
-          aria-expanded={expanded}
-          aria-label={expanded ? th.sidebar.collapse(project.name) : th.sidebar.expand(project.name)}
-          onClick={onToggle}
-        >
-          {expanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
-        </button>
-        <Link
-          className={styles.link}
-          href={projectTabHref(project.id, 'overview')}
-          aria-current={active ? 'page' : undefined}
-          onClick={onNavigate}
-        >
-          <span className={styles.swatch} style={{ backgroundColor: project.color }} aria-hidden="true" />
-          <span className={styles.name}>{project.name}</span>
-        </Link>
-        <CertaintyBadge certainty={project.certainty} />
-      </div>
+    <>
+      <li data-testid={`sidebar-project-${project.id}`}>
+        <div className={styles.projectRow}>
+          <button
+            type="button"
+            className={styles.toggle}
+            aria-expanded={expanded}
+            aria-label={expanded ? th.sidebar.collapse(project.name) : th.sidebar.expand(project.name)}
+            onClick={onToggle}
+          >
+            {expanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
+          </button>
+          <Link
+            className={styles.link}
+            href={projectTabHref(project.id, 'overview')}
+            aria-current={active ? 'page' : undefined}
+            onClick={onNavigate}
+          >
+            <span className={styles.swatch} style={{ backgroundColor: project.color }} aria-hidden="true" />
+            <span className={styles.name}>{project.name}</span>
+          </Link>
+          <CertaintyBadge certainty={project.certainty} />
+          {expanded && pageRoots.data?.canCreate ? (
+            <Tooltip title={th.sidebar.newProjectPage(project.name)}>
+              <button
+                type="button"
+                className={styles.toggle}
+                aria-label={th.sidebar.newProjectPage(project.name)}
+                disabled={pending}
+                onClick={() => {
+                  onNavigate?.()
+                  void create({ space: 'PROJECT', projectId: project.id, parentId: null })
+                }}
+              >
+                <Add fontSize="small" />
+              </button>
+            </Tooltip>
+          ) : null}
+        </div>
+        {expanded ? (
+          <ul className={styles.sub}>
+            {sortedProjectTabs().map((tab) => {
+              const href = projectTabHref(project.id, tab.id)
+              const current = pathname === href || pathname.startsWith(`${href}/`)
+              return (
+                <li key={tab.id}>
+                  <Link
+                    className={styles.subLink}
+                    href={href}
+                    aria-current={current ? 'true' : undefined}
+                    onClick={onNavigate}
+                  >
+                    {tab.label}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+      </li>
+      {/* Kept outside the project <li> so its page links are never read as project rows (M2 page objects). */}
       {expanded ? (
-        <ul className={styles.sub}>
-          {sortedProjectTabs().map((tab) => {
-            const href = projectTabHref(project.id, tab.id)
-            const current = pathname === href || pathname.startsWith(`${href}/`)
-            return (
-              <li key={tab.id}>
-                <Link
-                  className={styles.subLink}
-                  href={href}
-                  aria-current={current ? 'true' : undefined}
-                  onClick={onNavigate}
-                >
-                  {tab.label}
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
+        <li className={styles.pageTree}>
+          <PageTree
+            space="PROJECT"
+            projectId={project.id}
+            label={th.pages.tree.projectLabel(project.name)}
+            variant="sidebar"
+            onNavigate={onNavigate}
+          />
+        </li>
       ) : null}
-    </li>
+    </>
   )
 }
 
 /**
  * The sidebar "โปรเจค" section (SPEC §8.1, UI-01..03, M2-D08): header link to /projects with `+` for managers,
  * the visible non-archived projects sorted by compareThai (◐ for อาจไม่ทำ), expandable to the PROJECT_TABS
- * sub-links (expansion saved in the `sidebar.expanded` preference — never localStorage, X05), and
+ * sub-links and the project's page tree with a `+` for writers (M4, X33; expansion saved in the `sidebar.expanded`
+ * preference — never browser storage, X05), and
  * "ดูโปรเจคที่ archive" when the viewer can see archived projects. The collapsed rail shows only the header icon.
  */
 export function SidebarProjects({

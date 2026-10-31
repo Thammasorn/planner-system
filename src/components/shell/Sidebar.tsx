@@ -9,11 +9,14 @@ import { th } from '@/i18n/th'
 import { BOTTOM_NAV, PRIMARY_NAV, visibleNav } from './nav'
 import { NavRow } from './NavRow'
 import { SidebarProjects } from './SidebarProjects'
+import { SidebarSearchButton } from './SidebarSearchButton'
+import { SidebarWiki } from './SidebarWiki'
 import { UserMenu } from './UserMenu'
 import styles from './Sidebar.module.css'
 
 /** Sidebar content (SPEC §8.1): used by the permanent <aside> and by the narrow-screen Drawer. Dense rows are plain
- *  elements + CSS Modules (PLAN.md §3.9); the active row has a background, bold text and a left bar (not colour only). */
+ *  elements + CSS Modules (PLAN.md §3.9); the active row has a background, bold text and a left bar (not colour only).
+ *  Order (M4-D27): 🔍 ค้นหา… ⌘K · primary nav · โปรเจค (with page trees) · Wiki ทีม · bottom group. */
 export function Sidebar({
   collapsed,
   onToggle,
@@ -47,6 +50,7 @@ export function Sidebar({
       </div>
       <nav aria-label={th.nav.sidebarLabel} className={styles.nav}>
         <div className={styles.top}>
+          <SidebarSearchButton collapsed={collapsed} />
           <ul className={styles.list}>
             {primary.map((item) => (
               <NavRow
@@ -59,6 +63,7 @@ export function Sidebar({
             ))}
           </ul>
           <SidebarProjects collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />
+          {collapsed ? null : <SidebarWiki onNavigate={onNavigate} />}
         </div>
         {bottom.length > 0 ? (
           <ul className={styles.list}>

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { csv, ENV_KEYS, getEnv, parseEnv, resetEnvCache } from '@/server/env'
+import { csv, ENV_KEYS, getEnv, parseEnv, resetEnvCache, uploadLimits } from '@/server/env'
 
 const DEV_URL = 'postgres://planner:planner@localhost:54329/planner'
 const SECRET = 'x'.repeat(32)
@@ -21,7 +21,24 @@ describe('env', () => {
       DB_POOL_MAX: 10,
       TRUSTED_ORIGINS: '',
       TRUSTED_PROXIES: '',
+      UPLOAD_DIR: './uploads',
+      MAX_IMAGE_MB: 10,
+      MAX_ATTACHMENT_MB: 25,
     })
+  })
+
+  it('M4 upload limits: MB → bytes, bounded, defaults 10/25 MB', () => {
+    vi.stubEnv('DATABASE_URL', DEV_URL)
+    vi.stubEnv('MAX_IMAGE_MB', '12')
+    vi.stubEnv('MAX_ATTACHMENT_MB', undefined)
+    resetEnvCache()
+    expect(uploadLimits()).toEqual({ imageBytes: 12582912, attachmentBytes: 25 * 1024 * 1024 })
+    vi.stubEnv('MAX_IMAGE_MB', undefined)
+    resetEnvCache()
+    expect(uploadLimits()).toEqual({ imageBytes: 10 * 1024 * 1024, attachmentBytes: 25 * 1024 * 1024 })
+    expect(() => parseEnv({ ...BASE, MAX_ATTACHMENT_MB: '0' })).toThrow(/MAX_ATTACHMENT_MB/)
+    expect(() => parseEnv({ ...BASE, MAX_IMAGE_MB: '101' })).toThrow(/MAX_IMAGE_MB/)
+    expect(() => parseEnv({ ...BASE, MAX_IMAGE_MB: '1.5' })).toThrow(/MAX_IMAGE_MB/)
   })
 
   it('parses booleans strictly', () => {

@@ -1,16 +1,22 @@
 // tests/helpers/factories.ts — test data inserted with plain Drizzle through the schema (M1-D19, X59, X91).
 // Ids are real v4 UUIDs. Later milestones append makeTask, … here. Never through src/server/repo/** (M2-D13).
 import { randomBytes, randomUUID } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
 import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
 import { DEFAULT_STATUSES, type DefaultStatusKey } from '@/domain/status'
 import type { Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { PageSpace } from '@/lib/contracts/pages'
+import { extractContentText } from '@/lib/editor/content-text'
 import { db } from '@/server/db/client'
 import {
   account,
   clients,
+  files,
+  pages,
   positions,
   projectMembers,
   projects,
@@ -22,12 +28,15 @@ import {
   user,
   workSchedules,
   type ClientRow,
+  type FileRow,
+  type PageRow,
   type ProjectRow,
 } from '@/server/db/schema'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
 import type { TaskBlockerRow } from '@/server/repo/task-blockers'
 import type { TaskStatusRow } from '@/server/repo/task-statuses'
+import { pdfBytes, PNG_1X1 } from './files'
 
 /** Password of every factory user. Hashed once per worker (scrypt is slow). */
 export const TEST_PASSWORD = 'Test-pass-1234'
@@ -480,6 +489,121 @@ export async function makeBlocker(o: {
       createdBy: o.createdBy.id,
       deletedAt: deletedAt(o.deleted),
       deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M4 — pages and files (plain Drizzle + node:fs, X59 / X91; plan/m04 S0.15). No dependency on src/server/repo or
+// src/server/storage.ts.
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface MakePageOptions {
+  /** Default: PROJECT when `project` is given, else the parent's space, else WORKSPACE. */
+  space?: PageSpace
+  project?: { id: string } | null
+  parent?: PageRow | null
+  /** Default 'Page <n>'. */
+  title?: string
+  createdBy: { id: string }
+  locked?: boolean
+  isCharter?: boolean
+  icon?: string | null
+  /** Default []. */
+  content?: unknown[]
+  /** Default extractContentText(content). */
+  contentText?: string
+  deleted?: DeletedAs
+}
+
+let pageSeq = 0
+
+/** Appended after the last live sibling (generateKeyBetween(last, null)); depth = parent.depth + 1. */
+export async function makePage(o: MakePageOptions): Promise<PageRow> {
+  pageSeq += 1
+  const projectId = o.project?.id ?? o.parent?.projectId ?? null
+  const space: PageSpace = o.space ?? (o.project ? 'PROJECT' : (o.parent?.space ?? 'WORKSPACE'))
+  const parentId = o.parent?.id ?? null
+  const [last] = await db
+    .select({ position: pages.position })
+    .from(pages)
+    .where(
+      and(
+        eq(pages.space, space),
+        projectId ? eq(pages.projectId, projectId) : isNull(pages.projectId),
+        parentId ? eq(pages.parentId, parentId) : isNull(pages.parentId),
+        isNull(pages.deletedAt),
+      ),
+    )
+    .orderBy(desc(pages.position), desc(pages.id))
+    .limit(1)
+  const content = o.content ?? []
+  const [row] = await db
+    .insert(pages)
+    .values({
+      space,
+      projectId,
+      parentId,
+      depth: o.parent ? o.parent.depth + 1 : 0,
+      title: o.title ?? `Page ${pageSeq}`,
+      icon: o.icon ?? null,
+      content,
+      contentText: o.contentText ?? extractContentText(content),
+      isCharter: o.isCharter ?? false,
+      locked: o.locked ?? false,
+      position: generateKeyBetween(last?.position ?? null, null),
+      createdBy: o.createdBy.id,
+      updatedBy: o.createdBy.id,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+export interface MakeFileOptions {
+  page: PageRow
+  uploadedBy: { id: string }
+  /** Default IMAGE. */
+  kind?: 'IMAGE' | 'ATTACHMENT'
+  /** Default 'image.png' / 'file.pdf'. */
+  name?: string
+  /** Default a 1×1 PNG / a minimal PDF. */
+  bytes?: Uint8Array
+  /** Default image/png / application/pdf. */
+  mime?: string
+}
+
+/**
+ * Writes the bytes with plain node:fs to `UPLOAD_DIR/2026/09/<uuid>.<ext>` (mkdir -p) and inserts the files row
+ * (project_id = the page's project, null for wiki pages).
+ */
+export async function makeFile(o: MakeFileOptions): Promise<FileRow> {
+  const kind = o.kind ?? 'IMAGE'
+  const name = o.name ?? (kind === 'IMAGE' ? 'image.png' : 'file.pdf')
+  const bytes = o.bytes ?? (kind === 'IMAGE' ? PNG_1X1 : pdfBytes())
+  const mime = o.mime ?? (kind === 'IMAGE' ? 'image/png' : 'application/pdf')
+  const dot = name.lastIndexOf('.')
+  const ext =
+    (dot >= 0 ? name.slice(dot + 1).toLowerCase() : '').replace(/[^a-z0-9]/g, '').slice(0, 5) || 'bin'
+  const storageKey = `2026/09/${randomUUID()}.${ext}`
+  const root = process.env.UPLOAD_DIR
+  if (!root) throw new Error('makeFile: UPLOAD_DIR is not set (tests/setup/db-worker.ts sets it per worker)')
+  const full = path.join(root, storageKey)
+  await mkdir(path.dirname(full), { recursive: true })
+  await writeFile(full, bytes)
+  const [row] = await db
+    .insert(files)
+    .values({
+      storageKey,
+      originalName: name,
+      mime,
+      sizeBytes: bytes.length,
+      kind,
+      pageId: o.page.id,
+      projectId: o.page.projectId,
+      uploadedBy: o.uploadedBy.id,
     })
     .returning()
   return row!

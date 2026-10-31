@@ -5,15 +5,18 @@
 import { randomUUID } from 'node:crypto'
 import type { ISODate } from '@/domain/types'
 import type { RemovedMemberSnapshot } from '@/lib/contracts/tasks'
-import type { ClientRow, ProjectRow } from '@/server/db/schema'
+import type { ClientRow, FileRow, PageRow, ProjectRow } from '@/server/db/schema'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
 import type { TaskBlockerRow } from '@/server/repo/task-blockers'
 import type { TaskStatusRow } from '@/server/repo/task-statuses'
+import { pdfBytes } from './files'
 import {
   makeAssignment,
   makeBlocker,
   makeClient,
+  makeFile,
+  makePage,
   makeProject,
   makeStatus,
   makeStatuses,
@@ -41,7 +44,9 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
 
 /** Implications; the owning milestone adds its entry (M6 allocations → tasks + timeOff, M7 dayAllocations →
  *  allocations, M8 milestones → tasks + allocations). */
-export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>> = {}
+export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>> = {
+  files: ['pages'], // M4: every world file sits on a world page
+}
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
 export interface DeletedStatusBatch {
@@ -101,7 +106,66 @@ export interface WorldTasks {
   blockers: { pLeafByChildA: TaskBlockerRow }
 }
 
-export interface World extends WorldTasks {
+/** Part 'pages' (M4, plan/m04 S0.15). Distinctive titles for leak tests. */
+export interface WorldPages {
+  pages: {
+    /** P root, is_charter, 'Charter P-ลับ04'. */
+    pCharter: PageRow
+    /** P root after the charter, 'หน้า P-ลับ05', content 'เนื้อหา P-ลับ06'. */
+    pPage: PageRow
+    /** P depth 1 under pPage, 'ลูก P-ลับ07'. */
+    pChild: PageRow
+    /** Q root 'หน้า Q-ลับ08', content 'เนื้อหา Q-ลับ09'. */
+    qPage: PageRow
+    /** A (archived) root 'หน้า A-ลับ10'. */
+    aPage: PageRow
+    /** WORKSPACE root 'คู่มือ W-01'. */
+    wiki: PageRow
+    /** WORKSPACE child of wiki 'ย่อย W-02'. */
+    wikiChild: PageRow
+    /** WORKSPACE root, locked, 'นโยบาย W-ล็อก03'. */
+    wikiProtected: PageRow
+    /** Child of wikiProtected (inherits protection, X63) 'ย่อยล็อก W-04'. */
+    wikiProtectedChild: PageRow
+    /** WORKSPACE root, unlocked, 'แฟ้ม W-05' (its child is locked). */
+    wikiFolder: PageRow
+    /** Locked child of wikiFolder 'ล็อกในแฟ้ม W-06'. */
+    wikiFolderLocked: PageRow
+  }
+  /** Soft-deleted roots under the w.batches.*Page batches. */
+  deletedPages: { pDeleted: PageRow; aDeleted: PageRow; wikiDeleted: PageRow; pOldDeleted: PageRow }
+}
+
+/** Part 'files' (M4; implies 'pages'). Bytes exist under UPLOAD_DIR. */
+export interface WorldFiles {
+  files: {
+    /** IMAGE (1×1 PNG) on pPage. */
+    pImage: FileRow
+    /** ATTACHMENT (pdf) 'สัญญา.pdf' on pPage. */
+    pPdf: FileRow
+    /** IMAGE on qPage. */
+    qFile: FileRow
+    /** IMAGE on aPage (archived project). */
+    aFile: FileRow
+    /** IMAGE on wiki (project_id null). */
+    wikiFile: FileRow
+  }
+}
+
+/** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
+export type WorldBatches = WorldTasks['batches'] & {
+  /** P root 'ลบแล้ว P', deleted 1 day ago. */
+  pDeletedPage: string
+  /** A root, deleted 1 day ago. */
+  aDeletedPage: string
+  /** WORKSPACE root, deleted 1 day ago. */
+  wikiDeletedPage: string
+  /** P root deleted 31 days ago (outside the restore window). */
+  pOldDeletedPage: string
+}
+
+export interface World extends Omit<WorldTasks, 'batches'>, WorldPages, WorldFiles {
+  batches: WorldBatches
   manager: TestUser
   lead: TestUser
   member: TestUser
@@ -135,6 +199,31 @@ function notBuilt<T extends object>(part: WorldPart, field: string): T {
 }
 
 const DAY_AGO = { daysAgo: 1 } as const
+
+/** Which part fills each w.batches key (error messages of the batches proxy). */
+const BATCH_PART: Record<keyof WorldBatches, WorldPart> = {
+  pDeletedTask: 'tasks',
+  aDeletedTask: 'tasks',
+  pRemovedAssignment: 'tasks',
+  pDeletedStatus: 'tasks',
+  aDeletedStatus: 'tasks',
+  pDeletedPage: 'pages',
+  aDeletedPage: 'pages',
+  wikiDeletedPage: 'pages',
+  pOldDeletedPage: 'pages',
+}
+
+/** w.batches: builders Object.assign their keys; reading a key of an unbuilt part throws like notBuilt. */
+function batchesProxy(): WorldBatches {
+  return new Proxy({} as WorldBatches, {
+    get(t, prop) {
+      if (typeof prop === 'symbol' || prop === 'then' || prop === 'toJSON' || prop in t)
+        return (t as Record<string | symbol, unknown>)[prop]
+      const part = (BATCH_PART as Record<string, WorldPart | undefined>)[prop] ?? '?'
+      throw new Error(`world.batches.${prop} needs createWorld({ with: ['${part}'] })`)
+    },
+  })
+}
 
 /** M3 'tasks' part (plan/m03 S0.15). */
 async function buildTasks(w: World): Promise<void> {
@@ -224,7 +313,7 @@ async function buildTasks(w: World): Promise<void> {
   w.tasks = { pParent, pChildA, pChildB, pLeaf, pDone, qTask, aTask, aTask2 }
   w.deletedTasks = { pDeleted, aDeleted }
   w.assignments = { pChildAMember, pLeafLead, qTaskOutsider, aTaskMember }
-  w.batches = {
+  Object.assign(w.batches, {
     pDeletedTask,
     aDeletedTask,
     pRemovedAssignment,
@@ -240,7 +329,7 @@ async function buildTasks(w: World): Promise<void> {
       moveToStatusId: sa.doing.id,
       moved: [{ taskId: aTask2.id, fromStatusId: aDeletedStatus.id, completedOn: null }],
     },
-  }
+  })
   w.removedMembers = {
     pFormer: {
       projectId: P.id,
@@ -253,8 +342,105 @@ async function buildTasks(w: World): Promise<void> {
   w.blockers = { pLeafByChildA }
 }
 
+const para = (text: string): unknown[] => [{ type: 'paragraph', content: text }]
+
+/** M4 'pages' part (plan/m04 S0.15). Created by the manager; deleted roots under fresh batches. */
+async function buildPages(w: World): Promise<void> {
+  const { manager, P, Q, A } = w
+  const by = { createdBy: manager }
+  const pCharter = await makePage({
+    project: P,
+    title: 'Charter P-ลับ04',
+    isCharter: true,
+    icon: '📋',
+    ...by,
+  })
+  const pPage = await makePage({ project: P, title: 'หน้า P-ลับ05', content: para('เนื้อหา P-ลับ06'), ...by })
+  const pChild = await makePage({ parent: pPage, title: 'ลูก P-ลับ07', ...by })
+  const qPage = await makePage({ project: Q, title: 'หน้า Q-ลับ08', content: para('เนื้อหา Q-ลับ09'), ...by })
+  const aPage = await makePage({ project: A, title: 'หน้า A-ลับ10', ...by })
+  const wiki = await makePage({ title: 'คู่มือ W-01', ...by })
+  const wikiChild = await makePage({ parent: wiki, title: 'ย่อย W-02', ...by })
+  const wikiProtected = await makePage({ title: 'นโยบาย W-ล็อก03', locked: true, ...by })
+  const wikiProtectedChild = await makePage({ parent: wikiProtected, title: 'ย่อยล็อก W-04', ...by })
+  const wikiFolder = await makePage({ title: 'แฟ้ม W-05', ...by })
+  const wikiFolderLocked = await makePage({
+    parent: wikiFolder,
+    title: 'ล็อกในแฟ้ม W-06',
+    locked: true,
+    ...by,
+  })
+
+  const pDeletedPage = randomUUID()
+  const aDeletedPage = randomUUID()
+  const wikiDeletedPage = randomUUID()
+  const pOldDeletedPage = randomUUID()
+  const pDeleted = await makePage({
+    project: P,
+    title: 'ลบแล้ว P',
+    deleted: { batch: pDeletedPage, ...DAY_AGO },
+    ...by,
+  })
+  const aDeleted = await makePage({
+    project: A,
+    title: 'ลบแล้ว A',
+    deleted: { batch: aDeletedPage, ...DAY_AGO },
+    ...by,
+  })
+  const wikiDeleted = await makePage({
+    title: 'ลบแล้ว W',
+    deleted: { batch: wikiDeletedPage, ...DAY_AGO },
+    ...by,
+  })
+  const pOldDeleted = await makePage({
+    project: P,
+    title: 'ลบนานแล้ว P',
+    deleted: { batch: pOldDeletedPage, daysAgo: 31 },
+    ...by,
+  })
+
+  w.pages = {
+    pCharter,
+    pPage,
+    pChild,
+    qPage,
+    aPage,
+    wiki,
+    wikiChild,
+    wikiProtected,
+    wikiProtectedChild,
+    wikiFolder,
+    wikiFolderLocked,
+  }
+  w.deletedPages = { pDeleted, aDeleted, wikiDeleted, pOldDeleted }
+  Object.assign(w.batches, { pDeletedPage, aDeletedPage, wikiDeletedPage, pOldDeletedPage })
+}
+
+/** M4 'files' part (plan/m04 S0.15): bytes on disk under UPLOAD_DIR + files rows. */
+async function buildFiles(w: World): Promise<void> {
+  const { manager } = w
+  const by = { uploadedBy: manager }
+  w.files = {
+    pImage: await makeFile({ page: w.pages.pPage, ...by }),
+    pPdf: await makeFile({
+      page: w.pages.pPage,
+      kind: 'ATTACHMENT',
+      name: 'สัญญา.pdf',
+      bytes: pdfBytes(),
+      ...by,
+    }),
+    qFile: await makeFile({ page: w.pages.qPage, ...by }),
+    aFile: await makeFile({ page: w.pages.aPage, ...by }),
+    wikiFile: await makeFile({ page: w.pages.wiki, ...by }),
+  }
+}
+
 /** Builders by part; each milestone adds its own. */
-const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = { tasks: buildTasks }
+const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
+  tasks: buildTasks,
+  pages: buildPages,
+  files: buildFiles,
+}
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
 export function expandParts(parts: readonly WorldPart[]): Set<WorldPart> {
@@ -304,10 +490,13 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     tasks: notBuilt('tasks', 'tasks'),
     deletedTasks: notBuilt('tasks', 'deletedTasks'),
     assignments: notBuilt('tasks', 'assignments'),
-    batches: notBuilt('tasks', 'batches'),
+    batches: batchesProxy(),
     removedMembers: notBuilt('tasks', 'removedMembers'),
     statuses: notBuilt('tasks', 'statuses'),
     blockers: notBuilt('tasks', 'blockers'),
+    pages: notBuilt('pages', 'pages'),
+    deletedPages: notBuilt('pages', 'deletedPages'),
+    files: notBuilt('files', 'files'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w

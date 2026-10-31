@@ -1,6 +1,8 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import { sortedProjectTabs } from '../../src/components/projects/project-tabs'
 import { th } from '../../src/i18n/th'
+import { PageTreePanel } from './page-tree'
+import { Palette } from './palette'
 import { ShellPage } from './shell'
 import { escapeRegExp } from './text'
 
@@ -14,6 +16,10 @@ const TAB_LABEL = new RegExp(`^(${sortedProjectTabs().map((t) => escapeRegExp(t.
  * expanded — the tab sub-links (ภาพรวม, งาน from M3). Header `+` = th.sidebar.newProject; footer link =
  * th.sidebar.archivedLink. M3 (X33, M3-D40): primary nav "งานของฉัน" (link named "<label> <count>" once the count
  * has loaded, count in `data-testid="nav-badge-my"`) and "งานของทีม".
+ * M4 (M4-D27, plan/m04 S4.8/S4.10): "🔍 ค้นหา… ⌘K" at the top, each expanded project shows the sub-links
+ * ภาพรวม · งาน · เอกสาร and then its page tree (`role="tree"` th.pages.tree.projectLabel(name)); the "Wiki ทีม" section
+ * (heading th.sidebar.wikiHeading, `+` th.sidebar.newWikiPage, tree th.pages.tree.wikiLabel) follows the projects.
+ * Page-tree links are never project rows (projectLinks excludes everything inside a tree).
  */
 export class SidebarPage {
   readonly shell: ShellPage
@@ -28,7 +34,11 @@ export class SidebarPage {
 
   /** Project name links in display order (tab sub-links such as ภาพรวม / งาน excluded). */
   projectLinks(): Locator {
-    return this.nav().locator('[data-testid^="sidebar-project-"]').getByRole('link').filter({ hasNotText: TAB_LABEL })
+    return this.nav()
+      .locator('[data-testid^="sidebar-project-"]')
+      .getByRole('link')
+      .and(this.page.locator('a:not([role="tree"] a)'))
+      .filter({ hasNotText: TAB_LABEL })
   }
 
   /** Retrying assertion: the sidebar lists exactly these project names, in this order. */
@@ -69,6 +79,43 @@ export class SidebarPage {
   /** The งาน sub-link of an expanded project row (M3, FR-408). */
   tasksSubLink(projectId: string): Locator {
     return this.projectRow(projectId).getByRole('link', { name: th.projects.tabs.tasks, exact: true })
+  }
+
+  /** The เอกสาร sub-link of an expanded project row (M4, FR-408 / X15). */
+  pagesSubLink(projectId: string): Locator {
+    return this.projectRow(projectId).getByRole('link', { name: th.projects.tabs.pages, exact: true })
+  }
+
+  // --- M4: search, Wiki ทีม, project page trees (M4-D27) ------------------------------------------------------
+  /** Sidebar "🔍 ค้นหา… ⌘K" — opens the command palette. */
+  searchButton(): Locator {
+    return new Palette(this.page).searchButton()
+  }
+  wikiHeading(): Locator {
+    return this.nav().getByText(th.sidebar.wikiHeading, { exact: true })
+  }
+  wiki(): PageTreePanel {
+    return new PageTreePanel(this.page, th.pages.tree.wikiLabel, this.nav())
+  }
+  newWikiPageButton(): Locator {
+    return this.nav().getByRole('button', { name: th.sidebar.newWikiPage, exact: true })
+  }
+  /** Sidebar `+` of Wiki ทีม → a blank page opens at /p/<new id>. */
+  async newWikiPage(): Promise<void> {
+    const before = this.page.url()
+    await this.newWikiPageButton().click()
+    await this.page.waitForURL((u) => /^\/p\/[0-9a-f-]{36}$/.test(u.pathname) && u.href !== before)
+  }
+  projectTree(name: string): PageTreePanel {
+    return new PageTreePanel(this.page, th.pages.tree.projectLabel(name), this.nav())
+  }
+  newProjectPageButton(name: string): Locator {
+    return this.nav().getByRole('button', { name: th.sidebar.newProjectPage(name), exact: true })
+  }
+  async newProjectPage(name: string): Promise<void> {
+    const before = this.page.url()
+    await this.newProjectPageButton(name).click()
+    await this.page.waitForURL((u) => /^\/p\/[0-9a-f-]{36}$/.test(u.pathname) && u.href !== before)
   }
 
   /** "งานของฉัน" (with or without its count in the accessible name). */

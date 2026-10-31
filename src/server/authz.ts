@@ -6,9 +6,26 @@ import { alias } from 'drizzle-orm/pg-core'
 import { th } from '@/i18n/th'
 import type { ProjectAccessRole } from '@/lib/contracts/projects'
 import { z } from '@/lib/z'
-import { clients, projectMembers, projects, taskAssignments, taskStatuses, tasks } from './db/schema'
+import type { PageSpace } from '@/lib/contracts/pages'
+import {
+  clients,
+  type FileRow,
+  type PageRow,
+  projectMembers,
+  projects,
+  taskAssignments,
+  taskStatuses,
+  tasks,
+} from './db/schema'
 import type { DbOrTx } from './db/types'
-import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors'
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthenticatedError,
+  ValidationError,
+} from './errors'
+import * as filesRepo from './repo/files'
+import * as pagesRepo from './repo/pages'
 import type { TaskRow } from './repo/tasks'
 import type { AssignmentRow } from './repo/task-assignments'
 import type { TaskStatusRow } from './repo/task-statuses'
@@ -300,4 +317,117 @@ export async function requireStatus(
   if (!status) throw new NotFoundError()
   const access = await requireProject(tx, user, status.projectId, need)
   return { status, ...access }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M4 — pages and files (SPEC §3.2 PERM-16…19, FR-510, X41/X42/X63, M4-D17/D24/D31). Signatures by S0; bodies by S1.
+// Invisible (non-member project, deleted, malformed id) → NotFoundError; visible but not allowed (protected for a
+// worker, archived project write) → ForbiddenError.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** view: everyone who can see the space · edit: + not archived, not effectively protected for workers · protect:
+ *  managers on WORKSPACE pages (PROJECT page → VALIDATION protectWikiOnly for managers, 403 workers). */
+export type PageNeed = 'view' | 'edit' | 'protect'
+
+export interface PageAccess {
+  page: PageRow
+  /** MANAGER for managers everywhere; LEAD/MEMBER on PROJECT pages; WIKI for workers on WORKSPACE pages. */
+  role: 'MANAGER' | 'LEAD' | 'MEMBER' | 'WIKI'
+  archived: boolean
+  /** The page or an ancestor has locked = true (WORKSPACE only, M4-D24). */
+  effectiveProtected: boolean
+  isManager: boolean
+}
+
+/** Live page → PROJECT: requireProject(view|edit) · WORKSPACE: any user; edit blocked by effective protection for
+ *  workers. Missing/deleted/malformed id → NotFoundError (X86). */
+export async function requirePage(
+  tx: DbOrTx,
+  user: SessionUser,
+  pageId: string,
+  need: PageNeed,
+): Promise<PageAccess> {
+  requireUser(user)
+  const page = await pagesRepo.getLivePageOrNotFound(tx, pageId)
+  return accessForPage(tx, user, page, need)
+}
+
+/** requirePage's rules for a row the caller already loaded (restore checks a soft-deleted batch root this way). */
+export async function accessForPage(
+  tx: DbOrTx,
+  user: SessionUser,
+  page: PageRow,
+  need: PageNeed,
+): Promise<PageAccess> {
+  requireUser(user)
+  const manager = isManager(user)
+  if (page.space === 'PROJECT') {
+    const acc = await requireProject(tx, user, page.projectId!, need === 'view' ? 'view' : 'edit') // W → 404
+    if (need === 'protect') {
+      if (!manager) throw new ForbiddenError()
+      const msg = th.pages.errors.protectWikiOnly
+      throw new ValidationError({ pageId: [msg] }, msg)
+    }
+    return { page, role: acc.role, archived: acc.archived, effectiveProtected: false, isManager: manager }
+  }
+  const prot = await effectiveProtection(tx, page.id)
+  if (need === 'protect' && !manager) throw new ForbiddenError()
+  if (need === 'edit' && prot && !manager) throw new ForbiddenError(th.pages.errors.protectedReadOnly)
+  return { page, role: manager ? 'MANAGER' : 'WIKI', archived: false, effectiveProtected: prot, isManager: manager }
+}
+
+const crossSpace = (): ValidationError => {
+  const msg = th.pages.errors.crossSpace
+  return new ValidationError({ parentId: [msg] }, msg)
+}
+
+/** M4-D31 for a second page named by a request: view (404) → same space/project (400 crossSpace) → edit (403). */
+export async function assertSecondPage(
+  tx: DbOrTx,
+  user: SessionUser,
+  otherId: string,
+  scope: { space: PageSpace; projectId: string | null },
+): Promise<PageAccess> {
+  const seen = await requirePage(tx, user, otherId, 'view') // invisible / deleted → 404
+  if (seen.page.space !== scope.space || seen.page.projectId !== scope.projectId) throw crossSpace()
+  return accessForPage(tx, user, seen.page, 'edit') // protected (workers) / archived → 403
+}
+
+/** May the user create a page at `target` (space root or under `parentId`)? Parent checks follow M4-D31. */
+export async function requirePageCreate(
+  tx: DbOrTx,
+  user: SessionUser,
+  target: { space: PageSpace; projectId: string | null; parentId: string | null },
+): Promise<{ parent: PageAccess | null }> {
+  requireUser(user)
+  if ((target.space === 'PROJECT') !== (target.projectId !== null)) throw crossSpace()
+  // The named project itself must be visible first: a 400 for a visible parent would otherwise confirm that an
+  // invisible target project exists (PG-CREATE-X: W → 404).
+  if (target.space === 'PROJECT') await requireProject(tx, user, target.projectId!, 'view')
+  if (target.parentId) {
+    return { parent: await assertSecondPage(tx, user, target.parentId, target) }
+  }
+  if (target.space === 'PROJECT') await requireProject(tx, user, target.projectId!, 'edit')
+  return { parent: null }
+}
+
+/** Workers may not delete/move a subtree that contains a protected page (M4-D24); managers pass. */
+export async function requireSubtreeUnprotected(tx: DbOrTx, user: SessionUser, pageId: string): Promise<void> {
+  requireUser(user)
+  if (isManager(user)) return
+  if (await pagesRepo.subtreeHasLocked(tx, pageId)) throw new ForbiddenError(th.pages.errors.subtreeProtected)
+}
+
+/** Download authz by `files.project_id` only (M4-D17): null → any user; else requireProject(view), archived ok. */
+export async function requireFile(tx: DbOrTx, user: SessionUser, fileId: string): Promise<{ file: FileRow }> {
+  requireUser(user)
+  const file = await filesRepo.getFile(tx, fileId)
+  if (!file) throw new NotFoundError()
+  if (file.projectId) await requireProject(tx, user, file.projectId, 'view')
+  return { file }
+}
+
+/** True when the page or an ancestor is locked (recursive CTE, ≤ 10 levels; WORKSPACE only). */
+export function effectiveProtection(tx: DbOrTx, pageId: string): Promise<boolean> {
+  return pagesRepo.anyLockedUpward(tx, pageId)
 }

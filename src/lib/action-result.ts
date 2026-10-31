@@ -18,6 +18,8 @@ export type ErrorCode =
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_DEACTIVATED'
   | 'INVALID_PASSWORD'
+  | 'TOO_LARGE'
+  | 'UNSUPPORTED_TYPE'
   | 'INTERNAL'
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -36,6 +38,8 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   INVALID_CREDENTIALS: 401,
   ACCOUNT_DEACTIVATED: 403,
   INVALID_PASSWORD: 400,
+  TOO_LARGE: 413,
+  UNSUPPORTED_TYPE: 415,
   INTERNAL: 500,
 }
 

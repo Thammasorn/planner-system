@@ -47,7 +47,8 @@ function pickChanged(
   return { before: b, after: a }
 }
 
-/** FR-401: manager only; project + optional LEAD row + one audit row in one tx. No refresh (the client navigates). */
+/** FR-401: manager only; project + optional LEAD row + default statuses + Project Charter (FR-402) + one audit row in
+ *  one tx. No refresh (the client navigates). */
 export const createProject = action(
   createProjectSchema,
   async (input, { user }): Promise<{ projectId: string }> => {
@@ -68,6 +69,7 @@ export const createProject = action(
           certainty: p.certainty,
           certaintyNote: p.certaintyNote,
           leadUserId: input.leadUserId ?? null,
+          charterPageId: p.charterPageId, // FR-402 / M4-D5: the charter is part of this one operation
         },
       })
       return p

@@ -11,10 +11,10 @@
 import { rmSync } from 'node:fs'
 import path from 'node:path'
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
 import { seedGolden, type FixtureId } from '../scripts/lib/fixtures'
-import { clients, projects, user } from '../src/server/db/schema'
+import { clients, pages, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
 
@@ -174,12 +174,23 @@ export function waitForServerAction(page: Page) {
 // M2: id lookups in planner_e2e (plan/m02-clients-projects-authz.md S3.5)
 // ---------------------------------------------------------------------------------------------------------------
 
-export type IdKind = 'project' | 'client' | 'user'
+/** M4 adds 'page' (newest live page with that title — titles are not unique, e.g. "Project Charter"). */
+export type IdKind = 'project' | 'client' | 'user' | 'page'
 
-/** Id of a seeded row in `planner_e2e`: projects/clients by `name`, users by `nickname`. Throws when absent. */
+/** Id of a seeded row in `planner_e2e`: projects/clients by `name`, users by `nickname`, pages by `title`. Throws when absent. */
 export async function idOf(kind: IdKind, name: string): Promise<string> {
   const { db, close } = createScriptDb(E2E.databaseUrl)
   try {
+    if (kind === 'page') {
+      const [row] = await db
+        .select({ id: pages.id })
+        .from(pages)
+        .where(and(eq(pages.title, name), isNull(pages.deletedAt)))
+        .orderBy(desc(pages.createdAt), desc(pages.id))
+        .limit(1)
+      if (!row) throw new Error(`idOf(page, ${name}): no live page in ${E2E.dbName}`)
+      return row.id
+    }
     const rows =
       kind === 'project'
         ? await db.select({ id: projects.id }).from(projects).where(eq(projects.name, name))
@@ -191,4 +202,26 @@ export async function idOf(kind: IdKind, name: string): Promise<string> {
   } finally {
     await close()
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M4: page URLs (plan/m04-pages-editor.md S4.7)
+// ---------------------------------------------------------------------------------------------------------------
+
+const PAGE_URL_RE = /\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#]|$)/
+
+/** The uuid of the current `/p/<uuid>` URL (throws on any other URL). */
+export function pageIdFromUrl(page: Page): string {
+  const m = PAGE_URL_RE.exec(new URL(page.url()).pathname)
+  if (!m) throw new Error(`pageIdFromUrl: ${page.url()} is not a /p/<uuid> URL`)
+  return m[1]!
+}
+
+/** Waits until the browser is on some `/p/<uuid>` (other than `notId`) and returns that id. */
+export async function waitForPageUrl(page: Page, notId?: string): Promise<string> {
+  await page.waitForURL((u) => {
+    const m = PAGE_URL_RE.exec(u.pathname)
+    return m !== null && m[1] !== notId
+  })
+  return pageIdFromUrl(page)
 }

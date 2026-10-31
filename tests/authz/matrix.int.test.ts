@@ -59,6 +59,17 @@ describe('authz matrix', () => {
     }
   })
 
+  it('M4 meta (plan/m04 S4.1): PERM-16…19 each have rows; M4 rows need world parts and declare audit', () => {
+    for (const perm of ['PERM-16', 'PERM-17', 'PERM-18', 'PERM-19'])
+      expect(rows.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no row`).toBe(true)
+    const m4 = rows.filter((r) => /^(PG|WK|FL|SR)-/.test(r.id))
+    expect(m4.length).toBeGreaterThan(0)
+    for (const r of m4) {
+      expect(r.with ?? [], `${r.id} needs the pages world`).toContain('pages')
+      if (r.mutates) expect(r.audit, `${r.id} must declare audit (or audit: false)`).toBeDefined()
+    }
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })
@@ -78,6 +89,11 @@ describe('authz matrix', () => {
           actorId: actor.id,
           ...(p === 'any' ? {} : { projectId: p ? p(w, ctx) : null }),
         })
+      }
+      // X44 exceptions (leases, preferences): an allowed `audit: false` mutation must not write any audit row —
+      // e.g. a lease heartbeat that audited every 30 s would fail here.
+      if (row.mutates && outcome === 'allow' && row.audit === false) {
+        expect(await auditRowsAfter(before)).toEqual([])
       }
     })
 

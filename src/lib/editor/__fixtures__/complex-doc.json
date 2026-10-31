@@ -1,0 +1,354 @@
+[
+ {
+  "id": "09389437-a5bd-4f23-a433-04b331f54749",
+  "type": "heading",
+  "props": {
+   "backgroundColor": "default",
+   "textColor": "default",
+   "textAlignment": "left",
+   "level": 1
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "ตัว",
+    "styles": {}
+   },
+   {
+    "type": "text",
+    "text": "หนา",
+    "styles": {
+     "bold": true
+    }
+   },
+   {
+    "type": "text",
+    "text": "และปกติ",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "db9ebc04-f609-4929-9c36-b33aea2558ca",
+  "type": "paragraph",
+  "props": {
+   "backgroundColor": "default",
+   "textColor": "default",
+   "textAlignment": "left"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "ดูที่ ",
+    "styles": {}
+   },
+   {
+    "type": "link",
+    "href": "https://example.com/spec",
+    "content": [
+     {
+      "type": "text",
+      "text": "สเปก",
+      "styles": {
+       "italic": true
+      }
+     }
+    ]
+   },
+   {
+    "type": "text",
+    "text": " แล้วคุยกับ ",
+    "styles": {}
+   },
+   {
+    "type": "mention",
+    "props": {
+     "kind": "user",
+     "id": "u-cindy"
+    }
+   },
+   {
+    "type": "text",
+    "text": " และหน้า ",
+    "styles": {}
+   },
+   {
+    "type": "mention",
+    "props": {
+     "kind": "page",
+     "id": "p-secret"
+    }
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "75412690-759b-41ac-a481-5e153577ca33",
+  "type": "bulletListItem",
+  "props": {
+   "backgroundColor": "default",
+   "textColor": "default",
+   "textAlignment": "left"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "ข้อแม่",
+    "styles": {}
+   }
+  ],
+  "children": [
+   {
+    "id": "830407ae-b528-4c57-8f7a-aca5ef8dd65c",
+    "type": "bulletListItem",
+    "props": {
+     "backgroundColor": "default",
+     "textColor": "default",
+     "textAlignment": "left"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "ข้อลูก",
+      "styles": {}
+     }
+    ],
+    "children": [
+     {
+      "id": "ff50e7b4-ee4a-4454-9026-00183e775f7c",
+      "type": "checkListItem",
+      "props": {
+       "backgroundColor": "default",
+       "textColor": "default",
+       "textAlignment": "left",
+       "checked": true
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "หลาน",
+        "styles": {}
+       }
+      ],
+      "children": []
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "1ca31233-706d-4db5-911b-ad5bffa7c75b",
+  "type": "table",
+  "props": {
+   "textColor": "default"
+  },
+  "content": {
+   "type": "tableContent",
+   "columnWidths": [
+    null,
+    null
+   ],
+   "headerRows": 1,
+   "rows": [
+    {
+     "cells": [
+      {
+       "type": "tableCell",
+       "content": [
+        {
+         "type": "text",
+         "text": "ชื่อ",
+         "styles": {}
+        }
+       ],
+       "props": {
+        "colspan": 1,
+        "rowspan": 1,
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+       }
+      },
+      {
+       "type": "tableCell",
+       "content": [
+        {
+         "type": "text",
+         "text": "บทบาท",
+         "styles": {}
+        }
+       ],
+       "props": {
+        "colspan": 1,
+        "rowspan": 1,
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+       }
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "type": "tableCell",
+       "content": [
+        {
+         "type": "mention",
+         "props": {
+          "kind": "user",
+          "id": "u-ivy"
+         }
+        }
+       ],
+       "props": {
+        "colspan": 1,
+        "rowspan": 1,
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+       }
+      },
+      {
+       "type": "tableCell",
+       "content": [
+        {
+         "type": "text",
+         "text": "Dev",
+         "styles": {
+          "code": true
+         }
+        }
+       ],
+       "props": {
+        "colspan": 1,
+        "rowspan": 1,
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "children": []
+ },
+ {
+  "id": "181f9a0c-0081-42b7-95fa-f5a4601e533a",
+  "type": "codeBlock",
+  "props": {
+   "language": "sql"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "select * from pages;",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "1fa545e4-9ad7-4c11-b0ee-dd1ab98bd270",
+  "type": "image",
+  "props": {
+   "textAlignment": "left",
+   "backgroundColor": "default",
+   "name": "screenshot.png",
+   "url": "/api/files/1b7e0f2a-3c4d-4e5f-8a9b-0c1d2e3f4a51",
+   "caption": "ภาพหน้าจอ",
+   "showPreview": true
+  },
+  "children": []
+ },
+ {
+  "id": "d08a93b0-79e6-42f4-9f1f-d49a9c8a54ac",
+  "type": "file",
+  "props": {
+   "backgroundColor": "default",
+   "name": "สัญญา.pdf",
+   "url": "/api/files/2c8f1a3b-4d5e-4f60-9b0c-1d2e3f4a5b62",
+   "caption": "",
+   "size": 2048
+  },
+  "children": []
+ },
+ {
+  "id": "cc36d889-0afb-40d1-9823-b98ad8e9b069",
+  "type": "subpage",
+  "props": {
+   "pageId": "0c4d6a0e-7f3b-4c2a-9d1e-5b6a7c8d9e01"
+  },
+  "children": []
+ },
+ {
+  "id": "0d6c3b8c-4a57-4e41-89a5-c8bb0a438a41",
+  "type": "toggleListItem",
+  "props": {
+   "backgroundColor": "default",
+   "textColor": "default",
+   "textAlignment": "left"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "พับได้",
+    "styles": {}
+   }
+  ],
+  "children": [
+   {
+    "id": "44deab2d-129e-473f-a4c5-a079d7b170cb",
+    "type": "paragraph",
+    "props": {
+     "backgroundColor": "default",
+     "textColor": "default",
+     "textAlignment": "left"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "ซ่อนอยู่",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  ]
+ },
+ {
+  "id": "11df2df9-5289-4304-bcbc-220b54f9ec7c",
+  "type": "quote",
+  "props": {
+   "backgroundColor": "default",
+   "textColor": "default"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "คำพูด",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "1bf7c071-3e2b-402a-9c28-a6530700ac78",
+  "type": "divider",
+  "props": {},
+  "children": []
+ },
+ {
+  "id": "154ab44d-0e7b-40f2-b7bf-c590339259f3",
+  "type": "paragraph",
+  "props": {
+   "backgroundColor": "default",
+   "textColor": "default",
+   "textAlignment": "left"
+  },
+  "content": [],
+  "children": []
+ }
+]

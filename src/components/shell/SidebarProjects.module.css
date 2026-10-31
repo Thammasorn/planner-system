@@ -176,3 +176,9 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* M4: an expanded project's page tree, indented under its sub-links (SPEC §8.1 mock). */
+.pageTree {
+  margin: 0 0 4px;
+  padding: 0 0 0 20px;
+}

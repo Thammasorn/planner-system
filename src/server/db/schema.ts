@@ -413,6 +413,96 @@ export const taskBlockers = pgTable(
   ],
 )
 
+// ---------------------------------------------------------------------------------------------------------------
+// M4 — pages, page_locks, files (SPEC §6.2, DM-09, X10; plan/m04 S0.3). The circular pages.cover_file_id ↔ files
+// FK is emitted after both tables (r2 §12); Drizzle names it pages_cover_file_id_files_id_fk (M4-D25).
+// ---------------------------------------------------------------------------------------------------------------
+
+export const pageSpace = pgEnum('page_space', ['WORKSPACE', 'PROJECT'])
+
+/** FR-501…510: one page system for the team wiki (WORKSPACE) and project documents (PROJECT); depth 0..9 (FR-502). */
+export const pages = pgTable(
+  'pages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    space: pageSpace('space').notNull(),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    parentId: uuid('parent_id').references((): AnyPgColumn => pages.id, { onDelete: 'cascade' }),
+    depth: smallint('depth').notNull().default(0),
+    title: text('title').notNull().default(''),
+    icon: text('icon'), // emoji (curated PAGE_ICONS)
+    coverFileId: uuid('cover_file_id').references((): AnyPgColumn => files.id, { onDelete: 'set null' }),
+    content: jsonb('content').$type<unknown[]>().notNull().default([]), // BlockNote Block[] (§7.7)
+    contentText: text('content_text').notNull().default(''), // extractContentText(content) (DM-16, M4-D10)
+    isCharter: boolean('is_charter').notNull().default(false),
+    locked: boolean('locked').notNull().default(false), // FR-510 "protected" (WORKSPACE only, service-enforced)
+    version: integer('version').notNull().default(1), // FR-543 (content saves only, M4-D4)
+    position: orderKey('position').notNull(), // text COLLATE "C" (X48)
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    updatedBy: text('updated_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('pages_depth_check', sql`${t.depth} between 0 and 9`),
+    check('pages_space_project_check', sql`(${t.space} = 'PROJECT') = (${t.projectId} is not null)`),
+    index('pages_tree_idx')
+      .on(t.space, t.projectId, t.parentId, t.position)
+      .where(sql`${t.deletedAt} is null`),
+    uniqueIndex('one_charter_per_project')
+      .on(t.projectId)
+      .where(sql`${t.isCharter} and ${t.deletedAt} is null`),
+    index('pages_title_trgm').using('gin', t.title.op('gin_trgm_ops')),
+    index('pages_content_trgm').using('gin', t.contentText.op('gin_trgm_ops')),
+  ],
+)
+
+/** FR-540–542 "edit lease" (≠ FR-510 protection, X63): one holder per page, expires 2 min after the last heartbeat. */
+export const pageLocks = pgTable('page_locks', {
+  pageId: uuid('page_id')
+    .primaryKey()
+    .references(() => pages.id, { onDelete: 'cascade' }),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  expiresAt: timestamptz('expires_at').notNull(),
+})
+
+/** §7.6: uploaded bytes live in UPLOAD_DIR under `storage_key`; downloads authorised by project_id (null = wiki). */
+export const files = pgTable(
+  'files',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storageKey: text('storage_key').notNull().unique(), // path inside UPLOAD_DIR
+    originalName: text('original_name').notNull(),
+    mime: text('mime').notNull(), // detected from magic bytes, never the client's type
+    sizeBytes: integer('size_bytes').notNull(),
+    kind: text('kind', { enum: ['IMAGE', 'ATTACHMENT'] }).notNull(),
+    pageId: uuid('page_id').references((): AnyPgColumn => pages.id, { onDelete: 'set null' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }), // null = wiki
+    uploadedBy: text('uploaded_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check('files_kind_check', sql`${t.kind} in ('IMAGE','ATTACHMENT')`),
+    index('files_project_id_idx').on(t.projectId), // M4-D25: FR-407 key collection + FK cascades
+  ],
+)
+
+export type PageRow = typeof pages.$inferSelect
+export type NewPage = typeof pages.$inferInsert
+export type PageLockRow = typeof pageLocks.$inferSelect
+export type FileRow = typeof files.$inferSelect
+export type NewFile = typeof files.$inferInsert
+
 export type ClientRow = typeof clients.$inferSelect
 export type NewClient = typeof clients.$inferInsert
 export type ProjectRow = typeof projects.$inferSelect

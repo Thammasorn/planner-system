@@ -3,11 +3,12 @@ import type { ProjectRole } from '../../src/domain/types'
 import { th } from '../../src/i18n/th'
 import { waitForServerAction } from '../fixtures'
 import { ShellPage } from './shell'
+import { PageTreePanel } from './page-tree'
 import { StatusSettingsPage } from './status-settings'
 import { exactName } from './text'
 import { toastWith } from './toast'
 
-export type ProjectTab = 'overview' | 'tasks'
+export type ProjectTab = 'overview' | 'tasks' | 'pages' // M4 เอกสาร (X15, X84); M6 adds 'plan'
 
 /**
  * Project shell + ภาพรวม tab (FR-408, FR-409 part; plan/m02-clients-projects-authz.md S2.3–S2.5 / S3.5).
@@ -37,6 +38,15 @@ export class ProjectPage {
     await this.page.waitForURL((u) => u.pathname.endsWith(`/${tab}`))
     await expect(this.tab(tab)).toHaveAttribute('aria-selected', 'true')
   }
+  // --- M4: เอกสาร tab (FR-408, X15) ---------------------------------------------------------------------------
+  /** The project's page tree inside the tab (same PageTree component as the sidebar, M4-D27/X81). */
+  pagesTree(projectName: string): PageTreePanel {
+    return new PageTreePanel(this.page, th.pages.tree.projectLabel(projectName), this.main())
+  }
+  newPageButton(): Locator {
+    return this.main().getByRole('button', { name: th.pages.projectTab.newPage, exact: true })
+  }
+
   /** FR-409 "เสร็จ X/Y งาน" (M3-D21). */
   progress(): Locator {
     return this.page.getByTestId('project-progress')

@@ -418,8 +418,8 @@ test.describe('E8 (FR-408 part) project tabs', () => {
     await resetDb()
   })
 
-  // M3 (X15, S5.3): the งาน tab joins ภาพรวม; M4 (เอกสาร) and M6 (แผนงาน) update this list.
-  test('/projects/<id> redirects to the overview; only built tabs (ภาพรวม, งาน), overview selected, none disabled', async ({
+  // M3 (X15, S5.3): the งาน tab joins ภาพรวม; M4 (X15, X84) appends เอกสาร; M6 (แผนงาน) updates this list.
+  test('/projects/<id> redirects to the overview; only built tabs (ภาพรวม, งาน, เอกสาร), overview selected, none disabled', async ({
     page,
   }) => {
     const mobile = await idOf('project', 'Mobile App Revamp')
@@ -428,10 +428,16 @@ test.describe('E8 (FR-408 part) project tabs', () => {
     await page.goto(`/projects/${mobile}`)
     await onPath(page, `/projects/${mobile}/overview`)
     await project.shell.waitForHydration()
-    await expect(project.tabs()).toHaveText([th.projects.tabs.overview, th.projects.tabs.tasks])
+    await expect(project.tabs()).toHaveText([
+      th.projects.tabs.overview,
+      th.projects.tabs.tasks,
+      th.projects.tabs.pages,
+    ])
     await expect(project.tab('overview')).toHaveAttribute('aria-selected', 'true')
     await expect(project.tab('tasks')).toHaveAttribute('aria-selected', 'false')
     await expect(project.tab('tasks')).toHaveAttribute('href', `/projects/${mobile}/tasks`)
+    await expect(project.tab('pages')).toHaveAttribute('aria-selected', 'false')
+    await expect(project.tab('pages')).toHaveAttribute('href', `/projects/${mobile}/pages`)
     await expect(project.tabList().getByRole('tab', { disabled: true })).toHaveCount(0)
   })
 })
@@ -461,6 +467,7 @@ test.describe('E9 (UI-02 part, X05) the sidebar remembers expanded projects', ()
     await expect(sidebar.collapseToggle('POS Upgrade')).toHaveAttribute('aria-expanded', 'true')
     await expect(sidebar.overviewSubLink(pos)).toBeVisible()
     await expect(sidebar.tasksSubLink(pos)).toHaveAttribute('href', `/projects/${pos}/tasks`) // M3 tab sub-link
+    await expect(sidebar.pagesSubLink(pos)).toHaveAttribute('href', `/projects/${pos}/pages`) // M4 tab sub-link
     await sidebar.expectProjects(['Mobile App Revamp', 'POS Upgrade']) // sub-links are not project rows
     // eslint-disable-next-line no-restricted-globals -- reads (never writes) localStorage to prove it stays empty (X53)
     expect(await page.evaluate(() => localStorage.length)).toBe(0)

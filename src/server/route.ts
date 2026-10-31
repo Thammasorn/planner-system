@@ -5,7 +5,13 @@
 import { unstable_rethrow } from 'next/navigation'
 import type { z } from 'zod'
 import { ERROR_STATUS } from '@/lib/action-result'
-import { MustChangePasswordError, toActionError, UnauthenticatedError, ValidationError } from './errors'
+import {
+  AppError,
+  MustChangePasswordError,
+  toActionError,
+  UnauthenticatedError,
+  ValidationError,
+} from './errors'
 import { getSessionUser, type SessionUser } from './session'
 
 export const JSON_HEADERS = {
@@ -68,7 +74,7 @@ export function route<P extends Params, Q extends z.ZodType | undefined>(
     } catch (e) {
       unstable_rethrow(e)
       const { ok: _ok, ...body } = toActionError(e)
-      return jsonResponse(body, ERROR_STATUS[body.code])
+      return jsonResponse(body, e instanceof AppError ? e.status : ERROR_STATUS[body.code])
     }
   }
 }

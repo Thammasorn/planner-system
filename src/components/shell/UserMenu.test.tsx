@@ -11,11 +11,17 @@ import { renderWithProviders } from '../../../tests/helpers/render'
 import { Sidebar } from './Sidebar'
 import { UserMenu } from './UserMenu'
 
-const mocks = vi.hoisted(() => ({ logout: vi.fn<() => Promise<unknown>>(), navigate: vi.fn<(url: string) => void>() }))
+const mocks = vi.hoisted(() => ({
+  logout: vi.fn<() => Promise<unknown>>(),
+  navigate: vi.fn<(url: string) => void>(),
+}))
 vi.mock('@/server/actions/auth', () => ({ logout: mocks.logout }))
 vi.mock('@/components/account/hard-navigate', () => ({ hardNavigate: mocks.navigate }))
 vi.mock('@/server/actions/preferences', () => ({ setPreference: () => Promise.resolve({ ok: true }) }))
-vi.mock('next/navigation', () => ({ usePathname: () => '/home' }))
+vi.mock('next/navigation', () => ({ usePathname: () => '/home', useRouter: () => ({ push: vi.fn() }) }))
+// M4: the Sidebar's Wiki ทีม section imports the page actions; its tree stays loading (no fetch result)
+vi.mock('@/server/actions/pages', () => ({ createPage: vi.fn(), movePage: vi.fn() }))
+vi.mock('@/lib/api', () => ({ getJson: () => new Promise<never>(() => {}) }))
 
 const manager: CurrentUserDTO = {
   id: '6f1c2c38-5a8e-4a6c-9a0e-1b2c3d4e5f60',
@@ -26,9 +32,19 @@ const manager: CurrentUserDTO = {
   role: 'manager',
   color: '#2F5597',
 }
-const worker: CurrentUserDTO = { ...manager, id: '7f1c2c38-5a8e-4a6c-9a0e-1b2c3d4e5f61', role: 'worker', nickname: 'Mint', displayName: 'Mint' }
+const worker: CurrentUserDTO = {
+  ...manager,
+  id: '7f1c2c38-5a8e-4a6c-9a0e-1b2c3d4e5f61',
+  role: 'worker',
+  nickname: 'Mint',
+  displayName: 'Mint',
+}
 
-function wrap(user: CurrentUserDTO, children: ReactNode, setPreference: PreferencesApi['setPreference'] = vi.fn()) {
+function wrap(
+  user: CurrentUserDTO,
+  children: ReactNode,
+  setPreference: PreferencesApi['setPreference'] = vi.fn(),
+) {
   return renderWithProviders(
     <PreferencesContext value={{ prefs: DEFAULT_PREFERENCES, setPreference }}>
       <CurrentUserProvider user={user}>{children}</CurrentUserProvider>
@@ -51,7 +67,10 @@ describe('UserMenu', () => {
     expect(button).toHaveTextContent('Manager')
     await user.click(button)
     const menu = await screen.findByRole('menu')
-    expect(within(menu).getByRole('menuitem', { name: th.nav.account })).toHaveAttribute('href', '/account/password')
+    expect(within(menu).getByRole('menuitem', { name: th.nav.account })).toHaveAttribute(
+      'href',
+      '/account/password',
+    )
     expect(within(menu).getByRole('menuitem', { name: th.nav.logout })).toBeInTheDocument()
     for (const t of ['light', 'dark', 'system'] as const) {
       expect(within(menu).getByRole('menuitemradio', { name: th.prefs.themes[t] })).toBeInTheDocument()
@@ -76,7 +95,10 @@ describe('UserMenu', () => {
   it('U-MENU-02 the settings nav item renders for a manager and not for a worker', () => {
     const { unmount } = wrap(manager, <Sidebar collapsed={false} />)
     const nav = screen.getByRole('navigation', { name: th.nav.sidebarLabel })
-    expect(within(nav).getByRole('link', { name: th.nav.settings })).toHaveAttribute('href', '/settings/employees')
+    expect(within(nav).getByRole('link', { name: th.nav.settings })).toHaveAttribute(
+      'href',
+      '/settings/employees',
+    )
     unmount()
     wrap(worker, <Sidebar collapsed={false} />)
     const nav2 = screen.getByRole('navigation', { name: th.nav.sidebarLabel })

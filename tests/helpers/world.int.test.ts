@@ -1,8 +1,18 @@
+import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
 import { and, asc, count, eq, isNull } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import { db } from '@/server/db/client'
-import { projectMembers, taskAssignments, taskBlockers, taskStatuses, tasks } from '@/server/db/schema'
+import {
+  files,
+  pages,
+  projectMembers,
+  taskAssignments,
+  taskBlockers,
+  taskStatuses,
+  tasks,
+} from '@/server/db/schema'
 import { assertCompletionInvariant } from './invariants'
 import { createWorld, expandParts } from './world'
 
@@ -40,9 +50,13 @@ describe('world fixture (X91)', () => {
   })
 
   it('parts without a builder throw; part fields of an unbuilt part throw on access', async () => {
-    await expect(createWorld({ with: ['pages'] })).rejects.toThrow('world part pages has no builder yet')
+    await expect(createWorld({ with: ['timeOff'] })).rejects.toThrow('world part timeOff has no builder yet')
     const w = await createWorld()
     expect(() => w.tasks.pLeaf).toThrow("needs createWorld({ with: ['tasks'] })")
+    expect(() => w.batches.pDeletedTask).toThrow("needs createWorld({ with: ['tasks'] })")
+    expect(() => w.batches.pDeletedPage).toThrow("needs createWorld({ with: ['pages'] })")
+    expect(() => w.pages.wiki).toThrow("needs createWorld({ with: ['pages'] })")
+    expect(() => w.files.pImage).toThrow("needs createWorld({ with: ['files'] })")
   })
 
   it('M3 with tasks: tree shape, statuses, assignments, batches, blockers (plan/m03 S0.15)', async () => {
@@ -158,5 +172,56 @@ describe('world fixture (X91)', () => {
     expect(w.blockers.pLeafByChildA.id).toBe(edges[0]!.id)
 
     await assertCompletionInvariant()
+  })
+
+  it('M4 with pages/files: tree shape, protection, batches, files on disk (plan/m04 S0.15)', async () => {
+    const w = await createWorld({ with: ['files'] }) // files implies pages
+    const p = w.pages
+    expect(expandParts(['files'])).toEqual(new Set(['files', 'pages']))
+    expect([p.pCharter.depth, p.pPage.depth, p.pChild.depth, p.wikiChild.depth]).toEqual([0, 0, 1, 1])
+    expect(p.pChild.parentId).toBe(p.pPage.id)
+    expect(p.pChild).toMatchObject({ space: 'PROJECT', projectId: w.P.id })
+    expect(p.pCharter).toMatchObject({ isCharter: true, projectId: w.P.id, parentId: null })
+    expect(p.pCharter.position < p.pPage.position).toBe(true)
+    expect([p.qPage.projectId, p.aPage.projectId]).toEqual([w.Q.id, w.A.id])
+    expect(p.wiki).toMatchObject({ space: 'WORKSPACE', projectId: null, parentId: null })
+    expect(p.wikiChild.parentId).toBe(p.wiki.id)
+    expect([
+      p.wikiProtected.locked,
+      p.wikiProtectedChild.locked,
+      p.wikiFolder.locked,
+      p.wikiFolderLocked.locked,
+    ]).toEqual([true, false, false, true])
+    expect(p.wikiFolderLocked.parentId).toBe(p.wikiFolder.id)
+    expect(p.pPage.contentText).toBe('เนื้อหา P-ลับ06')
+
+    const d = w.deletedPages
+    expect(d.pDeleted).toMatchObject({ projectId: w.P.id, deletedBatch: w.batches.pDeletedPage })
+    expect(d.aDeleted).toMatchObject({ projectId: w.A.id, deletedBatch: w.batches.aDeletedPage })
+    expect(d.wikiDeleted).toMatchObject({ space: 'WORKSPACE', deletedBatch: w.batches.wikiDeletedPage })
+    expect(d.pOldDeleted.deletedBatch).toBe(w.batches.pOldDeletedPage)
+    const days = (t: Date | null) => (Date.now() - (t?.getTime() ?? 0)) / 86_400_000
+    expect(days(d.pDeleted.deletedAt)).toBeCloseTo(1, 1)
+    expect(days(d.pOldDeleted.deletedAt)).toBeCloseTo(31, 1)
+    const [live] = await db.select({ n: count() }).from(pages).where(isNull(pages.deletedAt))
+    expect(live?.n).toBe(11)
+
+    const f = w.files
+    expect([f.pImage.kind, f.pPdf.kind]).toEqual(['IMAGE', 'ATTACHMENT'])
+    expect(f.pPdf).toMatchObject({ originalName: 'สัญญา.pdf', mime: 'application/pdf', pageId: p.pPage.id })
+    expect([f.pImage.projectId, f.qFile.projectId, f.aFile.projectId, f.wikiFile.projectId]).toEqual([
+      w.P.id,
+      w.Q.id,
+      w.A.id,
+      null,
+    ])
+    const root = process.env.UPLOAD_DIR!
+    for (const file of Object.values(f)) {
+      const full = path.join(root, file.storageKey)
+      expect(existsSync(full), file.storageKey).toBe(true)
+      expect(readFileSync(full).length).toBe(file.sizeBytes)
+    }
+    const [n] = await db.select({ n: count() }).from(files)
+    expect(n?.n).toBe(5)
   })
 })
