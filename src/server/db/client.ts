@@ -26,7 +26,7 @@ export function getDb(): Db {
     holder.sql = postgres(env.DATABASE_URL, {
       max: env.DB_POOL_MAX,
       idle_timeout: 20,
-      connect_timeout: 5,
+      connect_timeout: env.DB_CONNECT_TIMEOUT,
       onnotice: () => {},
     })
     holder.db = drizzle(holder.sql, { schema })

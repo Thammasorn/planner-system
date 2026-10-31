@@ -19,6 +19,7 @@ describe('env', () => {
       NODE_ENV: 'development',
       SECURE_COOKIES: false,
       DB_POOL_MAX: 10,
+      DB_CONNECT_TIMEOUT: 5,
       TRUSTED_ORIGINS: '',
       TRUSTED_PROXIES: '',
       UPLOAD_DIR: './uploads',
@@ -57,6 +58,12 @@ describe('env', () => {
     expect(() => parseEnv({ ...BASE, DB_POOL_MAX: '0' })).toThrow(/DB_POOL_MAX/)
     expect(() => parseEnv({ ...BASE, DB_POOL_MAX: '51' })).toThrow(/DB_POOL_MAX/)
     expect(parseEnv({ ...BASE, DB_POOL_MAX: '20' }).DB_POOL_MAX).toBe(20)
+  })
+
+  it('bounds the connect timeout (seconds)', () => {
+    expect(() => parseEnv({ ...BASE, DB_CONNECT_TIMEOUT: '0' })).toThrow(/DB_CONNECT_TIMEOUT/)
+    expect(() => parseEnv({ ...BASE, DB_CONNECT_TIMEOUT: '121' })).toThrow(/DB_CONNECT_TIMEOUT/)
+    expect(parseEnv({ ...BASE, DB_CONNECT_TIMEOUT: '30' }).DB_CONNECT_TIMEOUT).toBe(30)
   })
 
   it('never echoes values', () => {

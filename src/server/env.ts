@@ -12,6 +12,8 @@ const EnvSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
+  /** Seconds postgres.js waits for a new connection; integration tests raise it (4 workers + Docker Postgres on one machine). */
+  DB_CONNECT_TIMEOUT: z.coerce.number().int().min(1).max(120).default(5),
   // M1 — auth (SPEC §10.3, PLAN.md §3.12). Optional here but validated when set: getEnv() also serves the DB client
   // and the proxy's CSP, which do not need them; auth.ts reads process.env itself and Better Auth refuses a missing
   // or default secret in production.

@@ -11,6 +11,8 @@ import { resetTestRequest, testCache } from '../helpers/request'
 process.env.BETTER_AUTH_SECRET ??= 'test-secret-0123456789abcdef0123456789'
 process.env.BETTER_AUTH_URL ??= 'http://localhost:3100'
 process.env.SECURE_COOKIES ??= 'false'
+// The 5 s production default intermittently hit CONNECT_TIMEOUT under full integration load (M4/M5 close-out).
+process.env.DB_CONNECT_TIMEOUT ??= '30'
 
 // Next APIs that throw outside a request (PLAN.md §4.2). Mocks are plain functions, never vi.fn implementations
 // that `restoreMocks` could reset (R-M1-12). Factories import helpers lazily (vi.mock is hoisted).
