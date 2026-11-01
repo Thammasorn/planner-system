@@ -3,6 +3,20 @@
 > Depends on: M7 ✅ · SPEC v3.1: §4.7 (FR-701…708, AC-701, AC-702), §5.9 (BR-70…72), §3.2 (milestone row = PERM-15; PERM-06/11 for reads and task binding), §3.3 (milestones of hidden projects are not shown), §6.2 (`milestones`, `tasks.milestone_id`), §7.4 (`GridResponse.milestones`, `lateForMilestone`), §7.5, §7.8 (`TaskCard.milestoneId`), FR-409 (upcoming milestones), FR-601/613/614 milestone parts, FR-661/663 milestone parts, FR-702 `Cmd+K`, FR-705 (project grid + calendar), FR-907 milestone part, §8.3, §8.7 `--milestone`, §8.9, §8.10, §11.1 `milestone`, §12 M8 ·
 > Owner-visible result: projects get **milestones** (◆) — created and edited on the overview tab, on the ◆ row of the plan grid (click a date cell, drag ◆ to move it, works in week and day zoom) or from `Cmd+K`; every view warns **"เลย milestone"** when a bound task still has plans or a due date after the milestone; tasks can be bound one by one or in bulk, grouped by milestone, filtered on the board and on `/tasks`; ◆ also appears on the team calendar. Deleting a milestone unbinds its tasks with an 8-second "เลิกทำ" that re-binds them exactly.
 
+> **Forward note — SPEC v3.3 / M7.1 (2026-11-01, PLAN §1.9). M8 now depends on M7.1; read `plan/m07.1-grid-improvements.md` §3.2 first.**
+> (1) **Header rows:** M7.1 already set `HEADER_ROWS = 2` (month row `aria-rowindex 1`, period row 2) and `HEADER_TOTAL_H = MONTH_H + HEADER_H`.
+> M8-D26 therefore becomes **`HEADER_ROWS = 3`** with the ◆ row **on top** (`aria-rowindex 1`), month row 2, period row 3, and adds the ◆ row height
+> (28 px) to `HEADER_TOTAL_H`; every "`HEADER_ROWS === 2`" / "`aria-rowindex 2`" expectation in this plan (S3.3, S3.9, S6.3, R4) reads 3 / 3.
+> (2) **Frozen columns:** the single name column (`NAME_W`, `NAME_COL_W`) no longer exists — the ◆ row's first cell spans the two frozen columns
+> (`--grid-task-w` + `--grid-assignee-w`, `src/lib/grid/frozen.ts`). (3) **Milestone lines (SPEC FR-820, D24):** besides ◆, every milestone is
+> drawn as a vertical line in M7.1's `MarkerLayer` — map `GridMilestone` → `GridMarkerView { source: 'MILESTONE', tone: 'MILESTONE', date,
+> label: name, editable: false }` (helper `milestoneMarkerViews` in `src/lib/grid/milestones.ts`) and concatenate with the plan markers;
+> placement = `markerEdgeColumn` (BR-102) so the line sits on the right edge of the column holding the ◆; colour `--milestone`, pattern
+> dash-dot; the line is not interactive (edit via ◆). Plan markers (`plan_markers`) are **not** milestones: no binding, status or lateness, and no
+> conversion either way. (4) **Task-row label `→◆UAT`** (S3.7) goes in the **task** column (`TaskCell`), never the assignee column; in M7.1's
+> hidden-assignee mode it is shown on the sum row. (5) `CellMenu` header items: M7.1 added "เพิ่มเส้นกำกับที่ขอบขวา" on column headers; M8's
+> ◆-row items are separate (◆ row cells), so there is no conflict.
+
 ---
 
 ## 1. Goal and scope

@@ -4,6 +4,8 @@
 > **Precedence:** `SPEC.md` > `CLAUDE.md` > `PLAN.md` / `plan/**` (this file included) > `docs/**`. If a row here disagrees with a milestone plan, the milestone plan's §1.1/§7 wins for *how*; SPEC wins for *what*. This file replaces `plan/research/r7-traceability.md` §F–§I (v3.0 baseline) and the interim v3.1-only version of this file.
 > **Generated** 2026-10-30 (HANDOFF T9) from the 12 milestone plans `plan/m00…m11-*.md` of that day (all complete, reviewed, consistency-checked; PLAN §1.4 rulings X01–X96). **Updated 2026-11-01 (SPEC v3.2, PLAN §1.8):** the hardening plan is now `plan/m12-hardening-deploy.md` (every former "M11"/"m11" here reads M12/m12; r6b gap ids `M11-nn` unchanged); rows for the new M11 (FR-1401…1506, BR-90…98, AC-1401…1504, PERM-24…28, NFR-11…12; plus the M6.1 ids FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, AC-1414) are placeholders marked "plan pending" until `plan/m11-database-views.md` is written; the same holds for the M6.1 rows (FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, PERM-27…28) until `plan/m06.1-task-page-ui.md` is written.
 
+> **Updated 2026-11-01 (SPEC v3.3, PLAN §1.9):** rows for M7.1 (FR-810…820, BR-100…105, AC-806…813, PERM-29, NFR-13) point to `plan/m07.1-grid-improvements.md`; e2e index `e2e/m7.1-grid.spec.ts`.
+
 ## 0. How to read and how to regenerate
 
 - **Source of each row.** Mechanically extracted from each plan's §1.1 (§1.2 in m01) "In scope" table (columns *id · requirement · where implemented · tested by*), its §3.2-permission table, §7.1 (AC → test map), §7.2 (authorization rows) and §7.3 (e2e scenarios). Descriptions are r7's English summaries (v3.0 ids), the v3.1 rows of the previous version of this file, or the plan's own wording; Thai only where SPEC is quoted.
@@ -18,7 +20,7 @@ comm -23 <(grep -oE '^\| \*{0,2}(FR|BR)-[0-9]+[a-z]?|^- \*{0,2}(AC|BR|FR)-[0-9]+
         <(grep -oE '^\| (FR|BR|AC)-[0-9]+[a-z]?' plan/traceability.md | grep -oE '(FR|BR|AC)-[0-9]+[a-z]?' | sort -u)   # must print nothing
 ```
 
-**Row counts:** FR 228 (222 SPEC ids + 6 r7 sub-rows FR-1101a–f) · BR 60 · AC 63 · PERM 28 · NFR 16 · MASK 7 (masking section) · other v3.1 ids 15 (§6).
+**Row counts:** FR 239 (233 SPEC ids + 6 r7 sub-rows FR-1101a–f) · BR 66 · AC 71 · PERM 29 · NFR 17 · MASK 7 (masking section) · other v3.1 ids 15 (§6).
 
 ## 1. Functional requirements (FR)
 
@@ -150,6 +152,17 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | FR-807 | Time off as diagonal stripes + icon; holidays grey with name tooltip | M6 (week cells) · M7 (day cells) | m06 §5.S2.2, §5.S3.4, §5.S3.6<br>m07 §5.S2.3, §5.S3.4 | M6: ui `src/components/grid/GridCell.test.tsx` · mask · `e2e/m6-grid.spec.ts` › G3<br>M7: ui · `e2e/m7-daily.spec.ts` › D7 (files per step: `src/components/grid/GridCell.day.test.tsx`) · unit `src/lib/grid/day-input.test.ts` · ui `src/components/grid/GridCell.day.test.tsx` | §4.8 |
 | FR-808 | Tentative task rows: amber bar on the left + faded numbers | M6 | m06 §5.S3.4 | ui `src/components/grid/GridCell.test.tsx` | §4.8 |
 | FR-809 | Load view: all · confirmed only · uncertain part | M6 | m06 §5.S1.2, §5.S3.7, §5.S3.9 | unit `aggregate.test.ts` · `e2e/m6-grid.spec.ts` › G8 | §4.8 |
+| FR-810 | Plan tab switch [แผนงาน \| ปฏิทิน]; pref plan.view; ?view= wins; panel in both | M7.1 | m07.1 §5.S0.4, §5.S4.1 | ui `PlanViewSwitch.test.tsx` · `e2e/m7.1-grid.spec.ts` › P7 | §4.8.1, M7.1-D20 |
+| FR-811 | Project month calendar: Thai month/พ.ศ., Monday first, holidays, bars start→due with assignee names, ◐, done, +N, click = panel, ↗ = page | M7.1 | m07.1 §5.S1.6, §5.S4.2 | unit `src/lib/plan-calendar/bars.test.ts` · ui `PlanCalendar.test.tsx` · `e2e/m7.1-grid.spec.ts` › P7 | §4.8.1, §8.13, D22, M7.1-D19 |
+| FR-812 | Calendar date rules (BR-103), "ไม่มีวันที่" list, parents with own dates, phone agenda | M7.1 | m07.1 §5.S1.6, §5.S4.2, §5.S4.3 | unit `bars.test.ts`, `agenda.test.ts` · ui `PlanAgenda.test.tsx` · `e2e/m7.1-grid.spec.ts` › P7, P9 | §4.8.1 |
+| FR-813 | Per-person weekly load line chart over visible weeks; capacity; shared "รวมงานโปรเจคอื่น"; OVER marks; markers; table view | M7.1 | m07.1 §5.S1.4, §5.S3.7, §5.S4.4 | unit `src/lib/grid/load-series.test.ts` · ui `LoadChartPanel.test.tsx` · golden `tests/golden/plan-chart.int.test.ts` · mask `› M7.1 chart` · `e2e/m7.1-grid.spec.ts` › P8 | §4.8.1, §8.13, D25, M7.1-D2…D5, X29 |
+| FR-814 | Resize the งาน column (pointer + keyboard separator), 160–640 px, pref grid.taskColumnWidth | M7.1 | m07.1 §5.S1.5, §5.S3.2 | unit `frozen.test.ts` · ui `ColumnResizeHandle.test.tsx` · `e2e/m7.1-grid.spec.ts` › P2 | §4.8.1, M7.1-D8/D9 |
+| FR-815 | Drag ⠿ to reorder task rows (subtree, depth by offset, autoscroll); Alt+↑/↓/→/←; undo | M7.1 | m07.1 §5.S1.3, §5.S3.6 | unit `row-drop.test.ts` · ui `useRowDrag.test.tsx` · `e2e/m7.1-grid.spec.ts` › P3 | §4.8.1, BR-105, M7.1-D16…D18 |
+| FR-816 | Separate frozen columns งาน / ผู้รับผิดชอบ; hide toggle (grid.showAssignees); hidden = one row per task with sums | M7.1 | m07.1 §5.S1.2, §5.S3.1, §5.S3.3 | unit `rows.test.ts` · ui `PlanGrid.columns.test.tsx` · `e2e/m7.1-grid.spec.ts` › P1 | §4.8.1, §8.3, M7.1-D6/D7 |
+| FR-817 | Summed cell editing: 1 assignee editable, ≥ 2 read-only + hint + [แสดงผู้รับผิดชอบ]; ranges skip | M7.1 | m07.1 §5.S1.2, §5.S3.3 | unit `rows.test.ts › readOnlySum` · ui `SumModeHint.test.tsx` · `e2e/m7.1-grid.spec.ts` › P1 | §4.8.1, BR-101, D23 |
+| FR-818 | Two-level header: month-year row + week/day row; month boundary lines | M7.1 | m07.1 §5.S1.1, §5.S3.4 | unit `months.test.ts` · ui `MonthHeader.test.tsx` · `e2e/m7.1-grid.spec.ts` › P4 | §4.8.1, M7.1-D10, X85 |
+| FR-819 | Plan markers red/yellow/green + label at a column's right edge; shared per project; create/edit/delete + undo; ≤ 100 | M7.1 | m07.1 §5.S0.2–S0.6, §5.S2.1–S2.4, §5.S3.5 | int `src/server/services/plan-markers.int.test.ts` · authz `tests/authz/rows/plan-markers.ts` · ui `MarkerPopover.test.tsx` · `e2e/m7.1-grid.spec.ts` › P5, P6 | §4.8.1, §6.2, §7.10, M7.1-D11…D15 |
+| FR-820 | Marker rendering (patterns, flags, grid/calendar/chart); one layer shared with M8 milestones | M7.1 | m07.1 §5.S1.7, §5.S3.5, §5.S4.2, §5.S4.4 | unit `markers.test.ts` · ui `MarkerLayer.test.tsx` · `e2e/m7.1-grid.spec.ts` › P5 | §4.8.1, D24, M7.1-D12 |
 | FR-901 | Manager manages company holidays: add/edit/delete one by one and import CSV (date,name) | M5 | m05 §5.S1.2, §5.S2.2, §5.S2.8, §5.S3.6 | unit `src/lib/csv/holidays.test.ts` · int `src/server/services/holidays.int.test.ts`, `scripts/lib/import-holidays.int.test.ts` · authz `tests/authz/rows/holidays.ts` › PERM-02f…j · `e2e/m5-calendar.spec.ts` › E4 · ui `HolidaysTable.test.tsx` | §4.9, X64 |
 | FR-902 | Manager manages leave types: name, colour, order (seed 4: ลาพักร้อน, ลาป่วย, ลากิจ, อบรม/สัมมนา) | M5 | m05 §5.S2.3, §5.S2.9, §5.S3.7 | int `src/server/services/leave-types.int.test.ts` · int `tests/integration/bootstrap.int.test.ts` (M5 cases) · authz `tests/authz/rows/leave-types.ts` › PERM-02k…p · `e2e/m5-calendar.spec.ts` › E6 · ui `LeaveTypesList.test.tsx` · bootstrap T-BOOT-LT-* | §4.9, X64 |
 | FR-903 | Employee records own leave: date range, type, full/AM/PM (half only for single day), note | M5 | m05 §5.S0.6, §5.S2.4, §5.S3.4 | unit `src/lib/schemas/time-off.test.ts` · int `src/server/services/time-off.int.test.ts` · ui `src/components/calendar/LeaveDialog.test.tsx` · authz `tests/authz/rows/time-off.ts` › PERM-20a…e · `e2e/m5-calendar.spec.ts` › E1 · `e2e/m5-calendar.spec.ts` › E1, E5, E7 · int `› create`, `› effective immediately` | §4.9, X50 |
@@ -321,6 +334,12 @@ SPEC §5 (incl. BR-20a, BR-20b, BR-21a). Every §5 rule is a pure function in `s
 | BR-96 | Kanban grouping order and drop effect (multi-person: card in every person group; A→B replaces A) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
 | BR-97 | Calendar month range and placement | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
 | BR-98 | Databases never touch planning, membership or automation | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-100 | Summed cell = task row totals (view, BR-50); day columns = Σ per-person days | M7.1 | m07.1 §5.S1.2 | unit `src/lib/grid/rows.test.ts` (+ fast-check Σ days = week) | §5.12 |
+| BR-101 | Summed cell editable ⇔ leaf with exactly one active assignee; never distribute | M7.1 | m07.1 §5.S1.2, §5.S3.3 | unit `rows.test.ts` · ui `SumModeHint.test.tsx` · `e2e/m7.1-grid.spec.ts` › P1 | §5.12, D23 |
+| BR-102 | Marker edge = right edge of the displayed column containing the date (week / day / last shown day); never "รวม" | M7.1 | m07.1 §5.S1.7 | unit `src/lib/grid/markers.test.ts` | §5.12, D24 |
+| BR-103 | Calendar bar span (start ?? due … due ?? start), week-row segments, greedy lanes, +N | M7.1 | m07.1 §5.S1.6 | unit `src/lib/plan-calendar/bars.test.ts` (+ fast-check) | §5.12 |
+| BR-104 | Chart series = counted project load (+ otherProjects) vs capacity; BR-40 level; DAYS/FRACTION; Σ = footer | M7.1 | m07.1 §5.S1.4 | unit `load-series.test.ts` · golden `tests/golden/plan-chart.int.test.ts` | §5.12, X29 |
+| BR-105 | Grid order = task tree DFS by position; grid moves call M3 moveTask (depth, BR-31 transfer, same project) | M7.1 | m07.1 §5.S1.3, §5.S3.6 | unit `row-drop.test.ts` · int `tasks.int.test.ts › move` (M3) · `e2e/m7.1-grid.spec.ts` › P3 | §5.12, FR-603/604 |
 
 ## 3. Acceptance criteria (AC)
 
@@ -365,6 +384,14 @@ SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets
 | AC-803 | Copy 2×4 cells from Excel (0.5, 1 … in fraction mode) → paste → values match the chosen unit | M6 · M7 (§7.1 tests) | m06 §5.S3.11 | M6: unit `paste.test.ts` · `e2e/m6-grid.spec.ts` › G4 · unit `paste.test.ts`, `src/lib/editor/tsv.test.ts`, `src/domain/units.test.ts` › fraction<br>M7: unit `src/lib/grid/kinds.test.ts`, `src/lib/grid/day-input.test.ts` · e2e m6-grid unchanged (S5.3) · `e2e/m7-daily.spec.ts` › D6 (paste on day cells) | §4.8 |
 | AC-804 | Expand Ivy's 2.5-day WEEK week → 0.5/day dashed → edit Wednesday to 1.0 → week = 3.0 and the other days become real values | M7 | m07 §5.S1.5, §5.S2.4, §5.S3.4–S3.6 | unit `src/domain/allocation.day.test.ts` › AC-804 · int `src/server/services/allocations-day.int.test.ts` › AC-804 · `e2e/m7-daily.spec.ts` › D1 · unit `src/domain/allocation.day.test.ts` › materializeWithEdits › AC-804, `planWeek` row 3 · int `src/server/services/grid-day.int.test.ts` › derived · golden `day-level › F1 Ivy` | §4.8 |
 | AC-805 | Edit several cells → Cmd+Z three times → values revert in order → reload shows the undone values | M6 · M7 (§7.5, continuity) | m06 §5.S3.14<br>m07 §5.S3.9 | M6: unit `snapshots.test.ts` · `e2e/m6-grid.spec.ts` › G5 · unit `undo.test.ts` · int `allocations.int.test.ts` › X27 snapshot replay<br>M7: unit `src/lib/grid/undo.day.test.ts` · `e2e/m7-daily.spec.ts` › D2, D4 · int `› BR-23 via COLLAPSE` (7-day replay) · `e2e/m7-daily.spec.ts` › D2 (undo after SCALE, no dialog), D3 (one undo for two weeks), D4 (undo/redo + reload) | §4.8, X27 |
+| AC-806 | Calendar: Rollout สาขา 3–12 Nov bar split over 2 weeks with Mint ◐; no-date list; click = panel; view remembered | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P7 | §4.8.1 |
+| AC-807 | Chart: Cindy/Ivy/Mint values match grid; includeOthers syncs with footer; table; no other-project names for Mint | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P8 | §4.8.1 |
+| AC-808 | Resize งาน to 420 px persists per user across projects; keyboard ±; double-click reset | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P2 | §4.8.1 |
+| AC-809 | Drag/Alt+↑ reorder persists in grid + task tab; Cmd+Z; Alt+→ indent with BR-31 transfer; archived: no handle | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P3 | §4.8.1 |
+| AC-810 | Split columns; hidden mode one row per task, 3.5 sum with 👥 2 read-only + hint; single-assignee edit saves | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P1 | §4.8.1 |
+| AC-811 | Month row ก.ย./ต.ค./พ.ย. spans + boundary lines; expanded week splits at 1 ต.ค. | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P4 | §4.8.1 |
+| AC-812 | Red marker at 19/10 edge; Ivy edits to green; day zoom Fri 23; calendar flag; delete + undo; W 404, archived 403 | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P5, P6 | §4.8.1 |
+| AC-813 | Viewports 390/768/1280/1920/2560 usable; phone calendar agenda; no horizontal page scroll | M7.1 | m07.1 §7.1 | `e2e/m7.1-grid.spec.ts` › P9 | §4.8.1 |
 | AC-1301 | `/มุมมองงาน` in POS charter; drag updates the tasks tab | M10 | m10 §5.S3.4, §5.S3.6 | `e2e/m10-home-search.spec.ts` › B1 · `src/components/editor/slash-menu.test.ts` › มุมมองงาน · `src/components/tasks/embed/EmbeddedTasks.test.tsx` › onMove | §4.13 |
 | AC-1302 | Copied block follows the destination page's project; wiki placeholder | M10 | m10 §5.S3.4, §5.S1.9 | `e2e/m10-home-search.spec.ts` › B2 · `src/server/services/embed.int.test.ts` › binding · `src/server/services/embed.int.test.ts` › tasks binding · rows `tests/authz/rows/pages.ts` › EMB-T-WIKI | §4.13 |
 | AC-1303 | Worker sees "งานในโปรเจคอื่น" with no other project name | M10 | m10 §5.S1.10 | `tests/authz/masking.int.test.ts` › K6–K8 · `e2e/m10-home-search.spec.ts` › B3 · `tests/authz/masking.int.test.ts` › **K6/K8** + golden Ivy variant · `src/server/services/embed.int.test.ts` › workload | §4.13 |
@@ -426,6 +453,7 @@ Outcomes: `M` manager · `L` LEAD of that project · `Me` MEMBER of that project
 | PERM-26 | "คัดลอกฐานข้อมูลไปหน้าอื่น" — view source (else 404) + edit target (invisible 404, protected/archived 403) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2), D15 |
 | PERM-27 | "เปิด task เป็นหน้า / ดูเนื้อหางาน" — = view of the task (M/L/Me allow, archived allowed · W 404) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §3.2 (v3.2) |
 | PERM-28 | "แก้เนื้อหางาน" (save, lease, upload) — = edit of the task (M/L/Me allow · archived 403 · W 404) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §3.2 (v3.2) |
+| PERM-29 | "เพิ่ม/แก้/ลบ/กู้คืน เส้นกำกับบนแผนงาน" = plan edit (M/L/Me allow · archived 403 · W 404); GET markers = PERM-06 | M7.1 | m07.1 §5.S2.2–S2.4, §5.S5.1 | `tests/authz/rows/plan-markers.ts` › PM-LIST…PM-LIMIT | §3.2 (v3.3), M7.1-D22 |
 
 Rows not tied to one PERM line: M1 `ACC-01/02` (own password, sign-out everywhere), `PREF-01/02`, `BA-01…08` (Better Auth endpoints → 404) in `tests/authz/rows/{account,preferences,auth-endpoints}.ts`; M3 `T-TEAM`, `T-MY`, `T-SIDEBAR` (own data / visibility filter X75); M5 `LT-READ` (M5-D15); M8 `MS-Q`, `MS-MISSING`, `MS-BAD` (X41/X42); M10 `HM-HOME` extra assertion `manager` card only for M.
 
@@ -451,6 +479,7 @@ Rows not tied to one PERM line: M1 `ACC-01/02` (own password, sign-out everywher
 | NFR-10 | Backup: daily pg_dump kept 14 days + UPLOAD_DIR backup | M12 | m12 §5.S2.4 | `tests/deploy/files.test.ts` · `e2e/m12-deploy.spec.ts` › D3–D4 · m12 §7.4 M1 restore drill · `tests/deploy/backup.int.test.ts` | §9 (r7 numbering) |
 | NFR-11 | Page database 1,000 rows × 20 columns: GET < 500 ms p95, table render < 300 ms, view switch < 100 ms, cell edit < 50 ms | M11 (smoke) · M12 | m11 (plan pending — PLAN §1.8)<br>m12 (to be added, PLAN §1.8) | TBD | §9 (v3.2, appended) |
 | NFR-12 | Page with 3 database blocks (1,000 rows) + 50 equations opens < 1.5 s; KaTeX lazy | M11 (smoke) · M12 | m11 (plan pending — PLAN §1.8)<br>m12 (to be added, PLAN §1.8) | TBD | §9 (v3.2, appended) |
+| NFR-13 | Plan tab (M7.1): chart 20 people × 26 weeks < 200 ms after data; calendar month switch < 150 ms with 500 tasks; drag/resize ≥ 50 fps on 200 rows | M7.1 (smoke) · M12 | m07.1 §5.S3.8, §5.S4.5 | `e2e/m7.1-grid.spec.ts` › P10 (local smoke) · M12 perf | §9 (v3.3 row) |
 
 ## 6. Other v3.1 ids (kept from the interim v3.1 table; r7 families)
 
@@ -680,6 +709,23 @@ ACs covered: AC-801, AC-802, AC-803, AC-804, AC-805
 | D5 | D5 (FR-802 day zoom, seed A.2) — `resetDb(undefined, { dayExample: true })` · jack | — | FR-802 |
 | D6 | D6 (keyboard only, KEY-07, A11Y-2b, same-kind) — `resetDb()` · ivy | AC-801, AC-802, AC-803 | BR-26, FR-803 |
 | D7 | D7 (F2: overload glyphs, spill, holiday) — `resetDb('F2')` · jack | — | BR-22, BR-40, BR-45, FR-804, FR-807 |
+
+### `e2e/m7.1-grid.spec.ts`
+
+ACs covered: AC-806, AC-807, AC-808, AC-809, AC-810, AC-811, AC-812, AC-813
+
+| Scenario | Plan label (actor) | ACs | Other ids |
+|---|---|---|---|
+| P1 | Split + hide assignees, summed cells (cindy) | AC-810 | FR-816, FR-817, BR-100, BR-101 |
+| P2 | Resize the งาน column (cindy, ivy) | AC-808 | FR-814 |
+| P3 | Drag / Alt+arrows reorder, undo, transfer, archived (cindy, manager) | AC-809 | FR-815, BR-105, FR-610 |
+| P4 | Month header row + boundaries (ivy) | AC-811 | FR-818 |
+| P5 | Plan markers CRUD, day zoom, calendar flag, undo (cindy, ivy) | AC-812 | FR-819, FR-820, BR-102 |
+| P6 | Marker permissions (peter 404, archived 403) | AC-812 | PERM-29 |
+| P7 | Calendar view (cindy) | AC-806 | FR-810, FR-811, FR-812, BR-103 |
+| P8 | Load chart + masking (cindy, mint) | AC-807 | FR-813, BR-104 |
+| P9 | Viewport suite 390/768/1280/1920/2560 | AC-813 | FR-1601, FR-1606 |
+| P10 | Perf smoke (not a gate) | — | NFR-13 |
 
 ### `e2e/m8-milestones.spec.ts`
 

@@ -77,6 +77,7 @@ e.g. TypeScript 7.
 | UI | @mui/material, @mui/icons-material, @mui/material-nextjs | **9.4.0** | `AppRouterCacheProvider` from `@mui/material-nextjs/v16-appRouter`. |
 | UI | @emotion/react, @emotion/styled, @emotion/cache | 11.14.0 / 11.14.1 / 11.14.0 | |
 | Date inputs | @mui/x-date-pickers **9.14.0** (MIT), dayjs **1.11.23** | | `AdapterDayjsBuddhist` + `adapterLocale="th"`. Range pickers are Pro, so use two pickers. New dependency (Decision). |
+| Charts (M7.1) | @mui/x-charts **9.14.0** exact (MIT) | | Same release as x-date-pickers; peers React 19 / MUI ^9 / Emotion; d3 bundled via `@mui/x-charts-vendor`. Loaded only by `LoadChartPanel` through `next/dynamic` (`ssr: false`). Verified with `pnpm view` on 2026-11-01; M7.1 S0.1 spikes CSP/size/jsdom before adoption, fallback = in-house SVG (M7.1-D2, SPEC D25). |
 | Fonts | @fontsource/ibm-plex-sans-thai **5.3.0** (dev-only source) | | The woff2 files and the OFL licence are copied into `src/app/fonts/` and loaded with `next/font/local`. |
 | Auth | better-auth **1.7.6** (+ dev CLI `auth` 1.7.6) | | The CLI is used only for `auth check schema`; auth tables are hand-written in `schema.ts`. |
 | Validation | zod **4.6.5** | | Use `z.uuid()` and `z.iso.date()`; call `z.config(z.locales.th())` once in `src/lib/z.ts`. |
@@ -436,6 +437,29 @@ new **§8.11**, §9 (data size + two rows appended, NFR-11/12 in r7 numbering), 
   `pages.full_width` (shared, `setPageFullWidth`, Cmd+Z, audited — FR-1602, AC-1602, §8.12, M6.1); the database
   `PERSON` column holds 1–20 people (BR-90/93/94/95/96, FR-1410/1430/1433, D17 — a multi-person row appears in every
   person's Kanban group, dragging A → B replaces A); all other draft defaults were accepted as written.
+
+### 1.9 SPEC v3.3 amendments made on 2026-11-01
+
+After using M7's **แผนงาน** tab the owner wrote six improvements for the project plan grid
+(`improvment_point/261101_01_plan_under_each_project/instruction.md` + 3 screenshots) and answered the follow-up questions the same day:
+(a) deliver all six in one catch-up milestone **before M8**; (b) "แสดงเป็น calendar" = a **monthly calendar of the project's tasks** (bars from start
+to due date with assignee names, switchable with the grid, Thai months / พ.ศ., Monday first like `/calendar`). SPEC v3.3: §2 glossary
+(`plan_marker`), §3.2 (**PERM-29** appended — markers = plan edit; PERM-01…28 keep their numbers), §3.3 (chart/footer numbers-only bullet),
+FR-604 widened, new **§4.8.1** (FR-810…820, AC-806…813), new **§5.12** (BR-100…105), §6.2 (`plan_marker_color`, `plan_markers`, four preference
+keys), §7.1 (Charts row), §7.2, §7.5, new **§7.10**, §8.3 (sketch v3.3: split columns, month row, marker line, ⠿), §8.6, new **§8.13**, §9 (one
+row = NFR-13), §11.1 (one row), §12 (**M7.1** between M7 and M8; M8 now depends on M7.1), §14 **D21–D25**.
+
+- **Milestone M7.1 "ปรับกริดแผนงานโปรเจค"** — `plan/m07.1-grid-improvements.md`, e2e `m7.1-grid`, tag `m7.1`; the workflow ORDER already contains
+  `7.1` (`422b975`), so `Workflow({ name: "implement-milestone", args: { milestone: "7.1" } })` works.
+- **Key rulings** (details in the plan's §3.2): summed cells with the assignee column hidden are editable only for a leaf with exactly one assignee,
+  otherwise read-only with a "แสดงผู้รับผิดชอบ" hint — never distributed (D23); plan markers are their own table (date + colour + label) and share
+  one drawing layer and placement rule (BR-102) with M8's milestones, which M8 feeds as `source: 'MILESTONE'` (D24); the chart is computed
+  client-side from the grid chunks, so masking is the footer's (X29) and there is no new endpoint; grid reorder reuses M3's `moveTask` and
+  `useTaskMutations` (no new action, no new authz rows); `HEADER_ROWS` becomes 2 (M8 → 3).
+- **New dependency:** `@mui/x-charts` 9.14.0 (§1.2 row above, SPEC D25), lazy-loaded; its Decision row with the reason is copied into
+  `PROGRESS.md › Decisions` at M7.1 kickoff (CLAUDE.md). Recharts stays forbidden.
+- **Forward notes** were added to `plan/m08-milestones.md` (header rows, marker layer) and `plan/m09-workload-people.md` (person grid without the
+  assignee column, frozen-width model).
 
 ---
 
@@ -1291,7 +1315,8 @@ grid. The synthetic edge cases in `r8-golden.md` (WORKLOAD and BOTH causes, load
 | M6 | `plan/m06-weekly-grid.md` | Excel-like weekly planning grid; FR-612 "วางแผน N วัน"; golden F1 | §4.8 (week level), FR-643 grid badge (X76), §5.1, §5.3 (BR-21, 25–27), §5.5, §5.7, §6.3, §7.4–7.5 | S0 contracts (backend) → S1 units/certainty/allocation/completed (domain) · S2 grid+allocations backend (backend) · S3 PlanGrid (grid) · S4 plan tab + FR-612 UI (frontend) · S5 tests+golden+e2e (test) | `m6-grid` |
 | M6.1 | `plan/m06.1-task-page-ui.md` (✅ delivered, tag `m6.1`) | Every task opens as a document page (`/t/[taskId]`) with properties + BlockNote body; panel keeps quick edits; AFFiNE-like layout (full-width work screens, 760 px reading column, 48 px header bar, light forms, token scale, phone/tablet) | §4.6.4, §4.16, §8.12, §3.2 PERM-27/28, §6.2 (`page_kind`, `pages.task_id`, drop `tasks.notes`), §9 Browser row | actual: S0 contracts + migrations 0009–0011 → {S1 backend · S2 editor · S3 task page + task views + palette · S4 tokens/theme/layout + restyle · S5 grid · S6 authz/integration} → S7 e2e + viewport suite; six-lens review incl. `visual` (workflow `663d14f`); §8.12 tokens, spacing function `var(--space-n)`, light forms and the token-scale check (§3.9); lazy page id, `leaseAcquire 'focus'`, `TaskBody` (§3.11) | `m6.1-task-page` |
 | M7 | `plan/m07-daily-resolution.md` | Zoom to days, inline week expansion, BR-24 dialog, day-level overload glyphs | §5.3 BR-20…24, §8.4, BR-40/45 at day level (X06) | S0 contracts (backend) → S1 allocation BR-22–24 + invariants + `overload.ts` levels/tones (domain) · S2 conversion backend (backend) · S3 day zoom/expand (grid) · S4 tests + e2e (test) | `m7-daily` |
-| M8 | `plan/m08-milestones.md` | ◆ milestones on grids/calendar/overview, late warnings | §4.7, §5.9 | S0 contracts (backend) → S1 milestone.ts (domain) · S2 milestone backend (backend) · S3 ◆ row in grid (grid) · S4 overview/tasks/calendar UI (frontend) · S5 tests+e2e (test) | `m8-milestones` |
+| M7.1 | `plan/m07.1-grid-improvements.md` | Project plan tab: [แผนงาน \| ปฏิทิน] month calendar of task bars; per-person weekly load line chart; resizable งาน column; drag/`Alt+↑↓→←` row reorder; separate, hideable ผู้รับผิดชอบ column with summed cells; month-year header row + month lines; red/yellow/green plan markers | §4.8.1, §5.12 (BR-100…105), §3.2 PERM-29, §6.2 (`plan_markers`, 4 preference keys), §7.10, §8.3, §8.13 | S0 contracts + chart spike (backend) → {S1 months/rows/row-drop/load-series/frozen/markers/plan-calendar (domain) · S2 markers backend (backend) · S5 authz/masking/golden (test)} → {S3 grid (grid) · S4 calendar + chart + plan page (frontend)} → S6 e2e + viewports (test) | `m7.1-grid` |
+| M8 | `plan/m08-milestones.md` | ◆ milestones on grids/calendar/overview, late warnings | §4.7, §5.9 (depends on M7.1: `HEADER_ROWS = 3`, milestones also drawn in M7.1's marker layer — PLAN §1.9) | S0 contracts (backend) → S1 milestone.ts (domain) · S2 milestone backend (backend) · S3 ◆ row in grid (grid) · S4 overview/tasks/calendar UI (frontend) · S5 tests+e2e (test) | `m8-milestones` |
 | M9 | `plan/m09-workload-people.md` | Team workload, overload list, person pages with masking; golden F2–F4 | §4.10, §5.6, §3.3 masking, FR-667 person tab (X77), FR-906/409/303 load parts | S0 contracts (backend) → S1 overload.ts (domain) · S2 workload/person backend + masking (backend) · S3 person grid mode (grid) · S4 workload/people UI (frontend) · S5 masking+golden+e2e (test) | `m9-workload` |
 | M10 | `plan/m10-home-search.md` | `/home` dashboard; Cmd+K across everything + quick commands; **live task/workload blocks in project pages** (v3.1) | §4.11, §4.13, §7.8 (embeds), App. B.1 (X78) | S0 contracts (backend) → S1 home+search+embed backend (backend) · S2 home/palette UI (frontend) · S3 `taskView`/`projectWorkload` blocks (editor) · S4 tests+masking+e2e (test) | `m10-home-search` |
 | M11 | `plan/m11-database-views.md` (**not written yet** — after the owner reviews SPEC v3.2, §1.8) | Database blocks in pages (table · kanban · calendar views, typed columns, row panel, undo, copy/duplicate) + LaTeX equations | §4.14, §4.15, §5.11, §6.2 (database tables), §6.4, §7.7, §7.9, §8.11, §9 database rows (smoke) | expected: S0 contracts (backend) → S1 `database.ts` (domain) · S2 database backend + M4/M10 extensions (backend) · S3 database block + views (editor/frontend) · S4 equation blocks (editor) · S5 tests + e2e (test) | `m11-database` |

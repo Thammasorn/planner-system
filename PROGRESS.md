@@ -4,7 +4,7 @@
 
 ## สถานะ
 
-**Milestone ปัจจุบัน:** M8 — ยังไม่เริ่ม
+**Milestone ปัจจุบัน:** M7.1 — ยังไม่เริ่ม
 
 | # | Milestone | สถานะ | หมายเหตุ |
 |---|---|---|---|
@@ -17,7 +17,8 @@
 | M6 | กริดวางแผนรายสัปดาห์ | ✅ | 2026-11-01 · PlanGrid (2-axis virtualisation, ±156-week timeline, every §4.8 input/delete gesture, undo/redo, footer + other-projects switch, leave/holiday/tentative marks, ⛔ badge), `allocations` + custom `allocations_week_day_guard` (trigger + exclusion), batch `saveAllocations`, `GET /api/grid/project/[projectId]`, FR-612 plan range in the task panel, BR-52 released load on every DONE path, FR-406 X, golden F1 via service + route; review fix rounds fix-r1…fix-r3; `pnpm check` (250 files, 4094 tests, 16 skipped by design) and e2e (117: m0-smoke 9 + m1-auth 14 + m2-projects 15 + m3-tasks 24 + m4-pages 21 + m5-calendar 15 + m6-grid 19) green; tag `m6` |
 | M6.1 | Task เป็นหน้าเอกสาร + ปรับ UI | ✅ | 2026-11-01 · SPEC v3.2 · TASK pages (`page_kind`, 0009–0011 with `tasks.notes` migrated then dropped), `ensureTaskBody` + `GET /api/tasks/[id]/body`, `/t/[taskId]`, panel compact body + เปิดเป็นหน้า, ↗ / Shift+Space in list, board, grid, /my, /tasks, 📄 marker, task bodies in Cmd+K, `setPageFullWidth`, §8.12 tokens in the MUI theme + token-scale scanner, 48 px header bar on every screen, 760 px doc column, light forms, phone/tablet; review fix rounds fix-r1…fix-r3; `pnpm check` (286 files, 4789 tests, 16 skipped by design) and e2e (150: m0-smoke 9 + m1-auth 14 + m2-projects 15 + m3-tasks 24 + m4-pages 21 + m5-calendar 15 + m6-grid 19 + m6-responsive 15 + m6.1-task-page 18) green; tag `m6.1` |
 | M7 | รายวัน | ✅ | 2026-11-01 · day zoom (`grid.zoom`) + inline week expand/collapse (header, `Cmd+↓/↑`), BR-20..24 in `allocation.ts` with clamp-and-spill (M7-D7) + fast-check P1–P8, per-week save table (BR-22 split, BR-23 collapse, BR-24 `NEEDS_CHOICE` → one dialog for N weeks, SCALE/COLLAPSE), dashed derived values, `overload.ts` BR-40/BR-45 day glyphs + footer tones, `addDayExample`; `pnpm check` (311 files, 5204 tests, 16 skipped by design) and e2e (159 incl. m7-daily D1–D7 + V1) green; tag `m7` |
-| M8 | Milestones | ⬜ | |
+| M7.1 | ปรับกริดแผนงานโปรเจค | ⬜ | SPEC v3.3 · feedback เจ้าของ 2026-11-01 (ปฏิทินงาน, กราฟภาระรายคน, ปรับความกว้าง/ลากเรียง/แยกคอลัมน์ผู้รับผิดชอบ, หัว 2 ชั้น + เส้นกำกับ) · `plan/m07.1-grid-improvements.md` |
+| M8 | Milestones | ⬜ | ต้องมี M7.1 ก่อน (SPEC v3.3) |
 | M9 | Workload & มุมมองรายคน | ⬜ | |
 | M10 | หน้าหลัก, การค้นหา, บล็อกข้อมูลสด | ⬜ | SPEC v3.1 |
 | M11 | ฐานข้อมูลในหน้าเอกสาร + สมการ | ⬜ | SPEC v3.2 · `plan/m11-database-views.md` ยังไม่เขียน (รอเจ้าของรีวิว spec) |
@@ -30,7 +31,7 @@
 
 ## แผนของ milestone ปัจจุบัน
 
-_(ยังไม่เริ่ม — kickoff ของ milestone ถัดไป (M8) เขียนแผนย่อยจาก `plan/m08-milestones.md` §4–§5 ลงที่นี่: หนึ่งบรรทัด `- [ ]` ต่อ stream แล้วตามด้วย gates)_
+_(ยังไม่เริ่ม — kickoff ของ milestone ถัดไป (M7.1) เขียนแผนย่อยจาก `plan/m07.1-grid-improvements.md` §4–§5 ลงที่นี่: หนึ่งบรรทัด `- [ ]` ต่อ stream แล้วตามด้วย gates)_
 
 ## Decisions
 

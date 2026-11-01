@@ -3,6 +3,13 @@
 > Depends on: M8 ✅ · SPEC: §3.3 (all masking rules), §4.10 (FR-1001…1009), FR-667 (person tab), FR-906 (overload part), FR-409 (load part), FR-303 (load part), AC-604 (verification), §5.6 (BR-40…45), §5.7, §6.5, §7.4 (person grid, masked rows), §8.1 (badge, ทีมงาน), §8.5, §8.8, §8.9, §9 (workload budget), §11.2, §11.3 F1–F4, §12 M9 ·
 > Owner-visible result: a **Workload ทีม** page (people × weeks grouped by position, `ภาระ/capacity` cells coloured by BR-45 with 🔴/⚠ glyphs, hover breakdown, three load views, filters, side panel of tasks, a **รายการที่ล้น** tab with excess + cause + fix link), a live **●N** badge on the sidebar item, a **ทีมงาน** directory and **person pages** (`/people/[id]`: header, แผนงาน person grid grouped by project with one masked "งานในโปรเจคอื่น" row, งาน tab reusing the `/tasks` list/board, วันลา tab), `/my` grouped **สัปดาห์นี้ / สัปดาห์หน้า / หลังจากนั้น / ยังไม่วางแผน**, new-overload lines after recording leave, load figures on the project overview and client page — and golden F2–F4 matching the old Excel, with no hidden project or task name ever leaving the server.
 
+> **Forward note — SPEC v3.3 / M7.1 (2026-11-01, PLAN §1.9).** The grid now has two frozen columns (งาน · ผู้รับผิดชอบ, widths from
+> `src/lib/grid/frozen.ts`, CSS `--grid-task-w` / `--grid-assignee-w`) and `buildViewRows(m, { …, showAssignees })`. The **person context**
+> hides the assignee column (width 0, no toolbar toggle — every row belongs to that person) while keeping M9's own row model (project →
+> task rows, masked rows), keeps the user's `grid.taskColumnWidth`, and renders project/masked labels in the task column. `HEADER_ROWS` is **3** after M8 (◆, month, period) —
+> every "`HEADER_ROWS` (= 2 after M8)" below reads 3; never a literal. Plan markers (`plan_markers`) are project-scoped and are **not** shown on the
+> person grid; `LoadChartPanel` / `memberLoadSeries` (M7.1) are available but M9's scope does not change (no chart on `/workload` unless SPEC says so).
+
 ---
 
 ## 1. Goal and scope
