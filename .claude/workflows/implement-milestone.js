@@ -7,20 +7,27 @@ export const meta = {
     { title: 'Contracts', detail: 'stream S0 alone: dependencies, schema + migrations, shared contracts, i18n keys, stubs' },
     { title: 'Build', detail: 'remaining streams in dependency order, parallel where the DAG allows' },
     { title: 'Integrate', detail: 'apply cross-stream requests; pnpm check + full e2e until green' },
-    { title: 'Review', detail: 'five lens reviewers; every finding adversarially verified' },
+    { title: 'Review', detail: 'six lens reviewers (incl. visual QA on the running app); every finding adversarially verified' },
     { title: 'Fix', detail: 'owners fix confirmed findings; gates re-run' },
     { title: 'Close', detail: 'PROGRESS.md, final gates, commit feat(mN) + tag' },
   ],
 }
 
 // ───────────────────────── parameters ─────────────────────────
-const N = Number(args && args.milestone)
-if (!Number.isInteger(N) || N < 0 || N > 12) throw new Error('args.milestone must be an integer 0..12')
+// Milestone order (SPEC §12). M6.1 is a catch-up milestone between M6 and M7 (SPEC v3.2).
+const ORDER = ['0', '1', '2', '3', '4', '5', '6', '6.1', '7', '8', '9', '10', '11', '12']
+const KEY = String(args && args.milestone)
+const IDX = ORDER.indexOf(KEY)
+if (IDX < 0) throw new Error('args.milestone must be one of ' + ORDER.join(', '))
+const N = Number(KEY)
+const PREV = IDX > 0 ? ORDER[IDX - 1] : null
+const NEXT = IDX < ORDER.length - 1 ? ORDER[IDX + 1] : null
 const MAX_FIX_ROUNDS = (args && Number(args.maxFixRounds)) || 3
 const SKIP_REVIEW = Boolean(args && args.skipReview)
-const NN = String(N).padStart(2, '0')
-const MID = 'M' + N
-const PREV_TAG = N > 0 ? 'm' + (N - 1) : null
+const NN = KEY.split('.')[0].padStart(2, '0') + (KEY.includes('.') ? '.' + KEY.split('.')[1] : '') // '06.1'
+const MID = 'M' + KEY
+const TAG = 'm' + KEY
+const PREV_TAG = PREV !== null ? 'm' + PREV : null
 
 const AGENT_TYPES = [
   'domain-engineer', 'backend-engineer', 'frontend-engineer', 'grid-engineer',
@@ -155,6 +162,10 @@ const LENSES = [
     desc: 'Test adequacy — each AC of this milestone maps to a passing automated test; every new action/route has authz-matrix rows for M, L, Me, W (mutating allow cases assert audit rows); property tests for §5.3 invariants where relevant; golden fixtures where required; e2e specs of this and all previous milestones exist and assert real outcomes (not tautologies).',
   },
   {
+    key: 'visual',
+    desc: `Visual and responsive QA on the RUNNING app — code reading alone missed real layout bugs (owner feedback 2026-11-01). Steps: (1) pnpm db:up; pnpm seed:golden is NOT allowed (it wipes the owner's dev data) — use the existing dev DB; log in as manager@example.com / demo1234 and as a worker (ivy@example.com / demo1234). (2) Start your OWN server: pick a free port 3500–3599, run \`BETTER_AUTH_URL=http://localhost:<port> pnpm exec next dev -p <port>\` in the background, record its PID, and at the end kill ONLY that PID — never pkill/killall by pattern (a production server on :3300 must stay up). (3) With a Playwright script run via \`NODE_PATH=$PWD/node_modules node <script>\` (scripts in your scratchpad, not the repo), screenshot every route/screen this milestone added or changed, at 390×844, 768×1024, 1280×800, 1920×1080 and 2560×1440, in light and dark, sidebar expanded and collapsed; Read the images and look at them. (4) Check: no horizontal document scroll; nothing clipped/overlapping/off-screen; work screens use the full width after the sidebar on 1920/2560; documents use the centred reading column (and full-width toggle when built); phone scope of SPEC §9 Browser row works; dialogs/panels fit the viewport; text/controls follow the SPEC §8.12 token scale and AFFiNE-like style (SPEC §4.16, D19): light borderless forms, 48 px header bar with breadcrumb + actions, consistent spacing/typography, no cramped or misaligned controls, focus rings visible, state not by colour alone. (5) If AFFiNE is reachable at http://localhost:3010 (local workspace, no login needed), screenshot the comparable AFFiNE screen at the same widths and cite concrete differences. Each finding must cite the screenshot path, viewport, route, the element, the rule (SPEC id / §8.12 token / §4.16), and the file:line of the component responsible.`,
+  },
+  {
     key: 'ux',
     desc: 'UX and accessibility — P1 quick keyboard-first entry, P2 undo instead of confirm, P4 problems visible, state never by colour alone, ARIA roles (grid/tree/dialog), focus management and Esc behaviour, Thai formats (พ.ศ. dates, 1-decimal loads), loading/empty/error states, SPEC §8 layouts.',
   },
@@ -187,9 +198,9 @@ const kickoff = await agent(
   `Kickoff of milestone ${MID} for Team Working OS. The repository root is the current working directory.
 
 1. Preflight
-   - Read PROGRESS.md. ${N > 0 ? `M${N - 1} must be ✅ — if not, stop (ok=false, blocker explains).` : 'This is M0; there is no previous milestone.'}
-   - ${N > 0 ? 'Run `git status --porcelain`: the tree must be clean (PROGRESS.md edits allowed). If not, stop and list the files.' : 'git may not be initialised yet (M0 does it). Check that node, npm and docker are available; pnpm may be missing (M0 S0 installs it).'}
-   - ${N > 0 ? 'Run `pnpm db:up` and confirm Postgres is healthy (docker compose ps / pg_isready inside the container).' : 'Confirm Docker is running (`docker info`).'}
+   - Read PROGRESS.md. ${PREV !== null ? `M${PREV} must be ✅ — if not, stop (ok=false, blocker explains).` : 'This is M0; there is no previous milestone.'}
+   - ${PREV !== null ? 'Run `git status --porcelain`: the tree must be clean (PROGRESS.md edits allowed). If not, stop and list the files.' : 'git may not be initialised yet (M0 does it). Check that node, npm and docker are available; pnpm may be missing (M0 S0 installs it).'}
+   - ${PREV !== null ? 'Run `pnpm db:up` and confirm Postgres is healthy (docker compose ps / pg_isready inside the container).' : 'Confirm Docker is running (`docker info`).'}
 2. Locate the plan file plan/m${NN}-*.md. Read it end-to-end and read PLAN.md §2 and §8 (plan-file format).
 3. Extract the JSON block in section "## 4. Streams (machine-readable)". Validate: ids unique; "S0" exists and has no dependencies; every dependsOn id exists; no cycles; each owns list is non-empty; agent ∈ {${AGENT_TYPES.join(', ')}}. If invalid, stop (ok=false) and explain.
 4. Update PROGRESS.md (and nothing else):
@@ -447,14 +458,14 @@ const close = await agent(
 1. Run pnpm check and the full e2e suite (pnpm test:e2e) one final time. If either fails, do NOT commit: set the PROGRESS.md row to ⛔ with the reason and return committed=false.
 2. Walk ${kickoff.planFile} section 8 (Definition of done) and SPEC §12 ${MID}; tick every box you can verify, and list anything unverifiable in followUps.
 3. Update PROGRESS.md:
-   - row ${MID} → ✅ with a one-line note (date from \`date +%F\`); "Milestone ปัจจุบัน" → ${N < 12 ? 'M' + (N + 1) + ' — ยังไม่เริ่ม' : 'MVP เสร็จ'}.
+   - row ${MID} → ✅ with a one-line note (date from \`date +%F\`); "Milestone ปัจจุบัน" → ${NEXT !== null ? 'M' + NEXT + ' — ยังไม่เริ่ม' : 'MVP เสร็จ'}.
    - "## แผนของ milestone ปัจจุบัน": tick everything done; then clear it back to the template placeholder for the next milestone.
    - "## Decisions": add these stream decisions (dedupe; date · ref · decision · reason):
 ${decisions.length ? decisions.map(d => `     - ${d.ref} · ${d.decision} · ${d.reason} (${d.stream})`).join('\n') : '     - (none reported)'}
    - "## Deviations": add any deviation from SPEC you find in the stream reports or code comments marked DEVIATION.
    - "## Known issues / TODO ถัดไป": add:
 ${openIssues.length ? openIssues.map(o => `     - ${o}`).join('\n') : '     - (none reported)'}
-4. git add -A; git commit with subject "feat(m${N}): <one-line summary in English>" and a short body listing the delivered FR/AC ids; end the message with the attribution trailer your session instructions specify (if any). Then git tag m${N}.
+4. git add -A; git commit with subject "feat(${TAG}): <one-line summary in English>" and a short body listing the delivered FR/AC ids; end the message with the attribution trailer your session instructions specify (if any). Then git tag ${TAG}.
 Return committed, commit (hash + subject), tag, progressUpdated, summary (5 lines max), followUps.`,
   { label: `${MID}:close`, phase: 'Close', schema: CLOSE_SCHEMA },
 )
