@@ -158,115 +158,117 @@ export function TaskRow(p: TaskRowProps) {
             slotProps={{ input: { 'aria-label': th.tasks.completeCheckbox(row.name), tabIndex: -1 } }}
           />
         </span>
-        <span
-          className={styles.name}
-          onKeyDownCapture={(e) => {
-            if ((e.target as HTMLElement).tagName !== 'INPUT') return
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) renameByEnter.current = true
-            else if (e.key === 'Escape') renameByEnter.current = false
-          }}
-          onClickCapture={(e) => {
-            // Rename = F2, double-click or a click on the name of an already-selected row (M3-D18).
-            if (e.detail === 0) return
-            if (!p.selected || e.metaKey || e.ctrlKey || e.shiftKey) {
-              e.stopPropagation()
-              e.preventDefault()
-              a.select(e, p.rowKey, row.id)
-            }
-          }}
-        >
-          <InlineEditText
-            value={row.name}
-            label={th.tasks.panel.name}
-            disabled={!p.canEdit}
-            maxLength={500}
-            variant="body2"
-            tabIndex={-1}
-            onRefocus={() => {
-              rowRef.current?.focus()
-              if (!renameByEnter.current) return
-              renameByEnter.current = false
-              a.quickAddBelow(row)
+        <span className={styles.body}>
+          <span
+            className={styles.name}
+            onKeyDownCapture={(e) => {
+              if ((e.target as HTMLElement).tagName !== 'INPUT') return
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) renameByEnter.current = true
+              else if (e.key === 'Escape') renameByEnter.current = false
             }}
-            onCommit={(name) =>
-              a.rename(row.id, name).catch((err: unknown) => {
-                renameByEnter.current = false // a failed save reverts and stays on the row
-                throw err
-              })
-            }
-          />
-        </span>
-        {p.invalid ? (
-          <span className={styles.invalid}>
-            <BlockOutlined sx={{ fontSize: 16 }} aria-hidden="true" />
-            {th.tasks.dropInvalid}
-          </span>
-        ) : null}
-        <span className={styles.meta}>
-          {p.status ? (
-            <StatusChip
-              status={p.status}
+            onClickCapture={(e) => {
+              // Rename = F2, double-click or a click on the name of an already-selected row (M3-D18).
+              if (e.detail === 0) return
+              if (!p.selected || e.metaKey || e.ctrlKey || e.shiftKey) {
+                e.stopPropagation()
+                e.preventDefault()
+                a.select(e, p.rowKey, row.id)
+              }
+            }}
+          >
+            <InlineEditText
+              value={row.name}
+              label={th.tasks.panel.name}
               disabled={!p.canEdit}
+              maxLength={500}
+              variant="body2"
               tabIndex={-1}
-              onClick={(e) => a.openStatus(e.currentTarget, row.id)}
+              onRefocus={() => {
+                rowRef.current?.focus()
+                if (!renameByEnter.current) return
+                renameByEnter.current = false
+                a.quickAddBelow(row)
+              }}
+              onCommit={(name) =>
+                a.rename(row.id, name).catch((err: unknown) => {
+                  renameByEnter.current = false // a failed save reverts and stays on the row
+                  throw err
+                })
+              }
             />
+          </span>
+          {p.invalid ? (
+            <span className={styles.invalid}>
+              <BlockOutlined sx={{ fontSize: 16 }} aria-hidden="true" />
+              {th.tasks.dropInvalid}
+            </span>
           ) : null}
-          {row.blockers.total > 0 ? (
-            <BlockerBadge
-              open={row.blockers.open}
-              total={row.blockers.total}
-              names={p.blockerNames}
-              focusable={false}
+          <span className={styles.meta}>
+            {p.status ? (
+              <StatusChip
+                status={p.status}
+                disabled={!p.canEdit}
+                tabIndex={-1}
+                onClick={(e) => a.openStatus(e.currentTarget, row.id)}
+              />
+            ) : null}
+            {row.blockers.total > 0 ? (
+              <BlockerBadge
+                open={row.blockers.open}
+                total={row.blockers.total}
+                names={p.blockerNames}
+                focusable={false}
+              />
+            ) : null}
+            {p.certainty === 'TENTATIVE' ? <CertaintyBadge certainty="TENTATIVE" /> : null}
+            <AssigneeChips
+              assignees={row.assignees}
+              unionUserIds={p.unionUserIds}
+              isLeaf={row.isLeaf}
+              people={p.people}
+              canEdit={p.canEdit}
+              onUnassign={a.unassign}
+              removeTabIndex={-1}
             />
-          ) : null}
-          {p.certainty === 'TENTATIVE' ? <CertaintyBadge certainty="TENTATIVE" /> : null}
-          <AssigneeChips
-            assignees={row.assignees}
-            unionUserIds={p.unionUserIds}
-            isLeaf={row.isLeaf}
-            people={p.people}
-            canEdit={p.canEdit}
-            onUnassign={a.unassign}
-            removeTabIndex={-1}
-          />
-          {row.isLeaf && p.canEdit ? (
-            <AssigneeAddButton
-              projectId={p.projectId}
-              taskId={row.id}
-              projectMemberIds={p.memberIds}
-              assignedUserIds={new Set(row.assignees.map((x) => x.userId))}
-              canManage={p.canManage}
+            {row.isLeaf && p.canEdit ? (
+              <AssigneeAddButton
+                projectId={p.projectId}
+                taskId={row.id}
+                projectMemberIds={p.memberIds}
+                assignedUserIds={new Set(row.assignees.map((x) => x.userId))}
+                canManage={p.canManage}
+                tabIndex={-1}
+              />
+            ) : null}
+            {when ? <span className={styles.muted}>{when}</span> : null}
+            {done && row.completedOn ? (
+              <span className={styles.muted}>{th.tasks.completedOn(formatThaiDate(row.completedOn))}</span>
+            ) : null}
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label={th.tasks.openPanel}
               tabIndex={-1}
-            />
+              onClick={() => a.openPanel(row.id)}
+            >
+              <OpenInNewOutlined sx={{ fontSize: 16 }} />
+            </button>
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label={th.tasks.rowMenu.label}
+              aria-haspopup="menu"
+              tabIndex={-1}
+              data-row-menu=""
+              onClick={(e) => setMenu(e.currentTarget)}
+            >
+              <MoreHoriz sx={{ fontSize: 18 }} />
+            </button>
+          </span>
+          {p.showPath && row.parentPath.length > 0 ? (
+            <span className={styles.path}>{th.tasks.groups.parentPath(row.parentPath.join(' › '))}</span>
           ) : null}
-          {when ? <span className={styles.muted}>{when}</span> : null}
-          {done && row.completedOn ? (
-            <span className={styles.muted}>{th.tasks.completedOn(formatThaiDate(row.completedOn))}</span>
-          ) : null}
-          <button
-            type="button"
-            className={styles.iconButton}
-            aria-label={th.tasks.openPanel}
-            tabIndex={-1}
-            onClick={() => a.openPanel(row.id)}
-          >
-            <OpenInNewOutlined sx={{ fontSize: 16 }} />
-          </button>
-          <button
-            type="button"
-            className={styles.iconButton}
-            aria-label={th.tasks.rowMenu.label}
-            aria-haspopup="menu"
-            tabIndex={-1}
-            data-row-menu=""
-            onClick={(e) => setMenu(e.currentTarget)}
-          >
-            <MoreHoriz sx={{ fontSize: 18 }} />
-          </button>
         </span>
-        {p.showPath && row.parentPath.length > 0 ? (
-          <span className={styles.path}>{th.tasks.groups.parentPath(row.parentPath.join(' › '))}</span>
-        ) : null}
       </div>
       <Menu anchorEl={menu} open={menu !== null} onClose={close}>
         {menuItem(th.tasks.rowMenu.open, () => a.openPanel(row.id))}

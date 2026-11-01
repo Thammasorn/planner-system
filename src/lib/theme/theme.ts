@@ -18,6 +18,31 @@ export const theme = createTheme(
       MuiButton: { defaultProps: { size: 'small' } },
       MuiIconButton: { defaultProps: { size: 'small' } },
       MuiTextField: { defaultProps: { size: 'small' } },
+      // Tab rows that do not fit (settings on a phone) scroll with arrows instead of clipping the last tabs (SPEC §7).
+      MuiTabs: {
+        defaultProps: { variant: 'scrollable', scrollButtons: 'auto', allowScrollButtonsMobile: true },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: ({ theme: t }) => ({ [t.breakpoints.down('sm')]: { minWidth: 64, paddingInline: 12 } }),
+        },
+      },
+      // Phones (SPEC §7 browser support): every non-full-screen dialog uses the screen width minus a 16 px gutter
+      // and never grows past the viewport height (its content scrolls), instead of MUI's fixed 32 px margins.
+      MuiDialog: {
+        styleOverrides: {
+          paper: ({ theme: t }) => ({
+            [t.breakpoints.down('sm')]: {
+              '&:not(.MuiDialog-paperFullScreen)': {
+                margin: 16,
+                width: 'calc(100% - 32px)',
+                maxWidth: 'calc(100% - 32px)',
+                maxHeight: 'calc(100% - 32px)',
+              },
+            },
+          }),
+        },
+      },
     },
   },
   thTH,

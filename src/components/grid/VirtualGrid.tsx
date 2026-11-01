@@ -9,7 +9,10 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
+  useState,
+  type CSSProperties,
   type ClipboardEvent,
   type FocusEvent,
   type KeyboardEvent,
@@ -21,7 +24,9 @@ import {
   FOOTER_ROWS,
   HEADER_H,
   HEADER_ROWS,
+  NAME_COMPACT_W,
   NAME_W,
+  nameColumnWidth,
   ROW_H,
   TOTAL_W,
   WEEK_W,
@@ -34,6 +39,8 @@ export interface VirtualGridHandle {
   scrollToCell: (r: number, c: number) => void
   /** the first column right of the sticky name column */
   firstVisibleColumn: () => number
+  /** whole week columns that fit beside the frozen columns (0 = not measured) */
+  fittingColumns: () => number
   element: () => HTMLDivElement | null
 }
 
@@ -70,6 +77,19 @@ const TAB_STOP = '[data-cell][tabindex="0"], [data-row-header][tabindex="0"]'
 export function VirtualGrid(p: VirtualGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const { cols, rowKey } = p
+  // The frozen name column shrinks with the grid (phones / narrow tablets) so week columns stay visible (SPEC §7).
+  // Its width reaches the sticky cells through --grid-name-w; the virtualizer needs the number.
+  const [nameW, setNameW] = useState(NAME_W)
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const measure = () => setNameW(nameColumnWidth(el.clientWidth))
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const rowV = useVirtualizer({
     count: p.rowCount,
@@ -90,9 +110,9 @@ export function VirtualGrid(p: VirtualGridProps) {
     // a NEW getItemKey identity (deps [cols]) is what makes the virtualizer re-measure (r4 §14)
     estimateSize: (i) => cols[i]?.width ?? WEEK_W,
     getItemKey: useCallback((i: number) => cols[i]?.key ?? i, [cols]),
-    paddingStart: NAME_W,
+    paddingStart: nameW,
     paddingEnd: TOTAL_W,
-    scrollPaddingStart: NAME_W,
+    scrollPaddingStart: nameW,
     scrollPaddingEnd: TOTAL_W,
     overscan: 4,
     useFlushSync: false,
@@ -108,6 +128,10 @@ export function VirtualGrid(p: VirtualGridProps) {
     firstVisibleColumn: () => {
       const left = scrollRef.current?.scrollLeft ?? 0
       return Math.round(left / WEEK_W)
+    },
+    fittingColumns: () => {
+      const w = scrollRef.current?.clientWidth ?? 0
+      return w > 0 ? Math.max(1, Math.floor((w - nameColumnWidth(w) - TOTAL_W) / WEEK_W)) : 0
     },
     element: () => scrollRef.current,
   }))
@@ -175,6 +199,8 @@ export function VirtualGrid(p: VirtualGridProps) {
       // initial value only: syncTabStop owns it afterwards (React never rewrites an unchanged prop)
       tabIndex={-1}
       className={styles.scroller}
+      style={{ '--grid-name-w': `${nameW}px` } as CSSProperties}
+      data-compact={nameW < NAME_COMPACT_W ? 'true' : undefined}
       onKeyDown={p.onKeyDown}
       onFocus={onFocus}
       onPointerDownCapture={() => {

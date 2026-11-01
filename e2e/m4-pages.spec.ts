@@ -136,7 +136,7 @@ async function recordSaveStates(page: Page): Promise<void> {
   await page.evaluate(() => {
     const w = window as unknown as { __saveStates: string[] }
     w.__saveStates = []
-    const el = document.querySelector('[data-testid="page-editor"] [data-save-state]')
+    const el = document.querySelector('[data-testid="save-status"][data-save-state]')
     if (!el) throw new Error('no [data-save-state] element')
     w.__saveStates.push(el.getAttribute('data-save-state') ?? '')
     new MutationObserver(() => w.__saveStates.push(el.getAttribute('data-save-state') ?? '')).observe(el, {

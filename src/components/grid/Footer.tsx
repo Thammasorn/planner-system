@@ -8,7 +8,7 @@ import { formatCd } from '@/domain/units'
 import type { LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import { footerValue, type FooterCell as FooterCellData } from '@/lib/grid/aggregate'
-import { FOOTER_ROWS, NAME_W, ROW_H, TOTAL_W, type GridColumn } from '@/lib/grid/columns'
+import { FOOTER_ROWS, NAME_COL_W, ROW_H, TOTAL_W, type GridColumn } from '@/lib/grid/columns'
 import { FooterCell } from './FooterCell'
 import styles from './grid.module.css'
 
@@ -63,7 +63,7 @@ export function Footer(p: FooterProps) {
             role="rowheader"
             aria-colindex={1}
             className={styles.footerHeader}
-            style={{ width: NAME_W, height: ROW_H }}
+            style={{ width: NAME_COL_W, height: ROW_H }}
           >
             <span className={styles.name}>{row.label}</span>
             {row.kind === 'util' ? (

@@ -24,6 +24,32 @@
   --bn-colors-side-menu: var(--mui-palette-text-secondary);
 }
 
+/* Inline gutter (BlockNote's side menu lives in it): the page shell sets --page-gutter so the body lines up with the
+   title and shrinks on phones (SPEC §7 browser support); 54 px is BlockNote's own default. */
+.bn-root .bn-editor.bn-editor {
+  padding-inline: var(--page-gutter, 54px);
+}
+
+/* Wide tables scroll inside their block (BlockNote's .tableWrapper is overflow-x: auto) instead of widening the
+   flex row they sit in, which would clip them at the page edge. */
+.bn-root .bn-block-content[data-content-type='table'] {
+  min-width: 0;
+}
+.bn-root .bn-block-content[data-content-type='table'] > .tableWrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+/* VERIFIED 0.55.0: when every column has a stored width, prosemirror-tables writes the sum as an inline `width:` on
+   the table (otherwise an inline `min-width:`), but BlockNote forces `width: auto !important`, which squeezes such a
+   table into a narrow block (4 × 220 px → 311 px at 390 px). Sizing its inner wrapper to max-content keeps the stored
+   column widths so the table scrolls inside .tableWrapper instead. Tables without stored widths keep BlockNote's
+   behaviour (fill the block, scroll past their inline min-width) — max-content would unwrap their long cells. */
+.bn-root
+  .bn-block-content[data-content-type='table']
+  .tableWrapper-inner:has(> table:is([style^='width:'], [style*=' width:'], [style*=';width:'])) {
+  width: max-content;
+}
+
 /* VERIFIED 0.55.0: the CONTENT font is hard-coded (Inter) in core's .bn-default-styles; --bn-font-family only styles
    menus/toolbars (r3 G13). */
 .bn-root .bn-default-styles.bn-default-styles {

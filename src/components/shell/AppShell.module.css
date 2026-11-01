@@ -66,8 +66,9 @@
   box-sizing: border-box;
   grid-row: 1 / -1;
   grid-column: 2;
+  /* No max-width: data screens (grid, task lists, board, calendar, tables) use the whole width of wide monitors;
+     reading-focused screens (the page editor) centre their own column (SPEC §7 browser support). */
   width: 100%;
-  max-width: 1200px;
   min-width: 0;
   padding: 24px 32px;
 }

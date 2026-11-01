@@ -6,11 +6,28 @@ import type { ISODate, PeriodKey } from '@/domain/types'
 
 export const WEEK_W = 64
 export const NAME_W = 260
+/** Narrowest frozen task/assignee column (phones): the week area keeps the rest (SPEC §7 browser support). */
+export const NAME_MIN_W = 120
+/** Share of the grid's width the frozen column may take before it is capped at NAME_W. */
+export const NAME_SHARE = 0.4
+/** Below this frozen-column width the row header switches to its compact layout (shorter person label). */
+export const NAME_COMPACT_W = 200
 export const TOTAL_W = 72
+/** CSS width of the sticky name cells: VirtualGrid sets --grid-name-w from nameColumnWidth(). */
+export const NAME_COL_W = `var(--grid-name-w, ${NAME_W}px)`
 export const ROW_H = 32
 export const HEADER_H = 40
 export const CHUNK_WEEKS = 8
 export const TIMELINE_WEEKS = 156
+
+/**
+ * Width of the frozen task/assignee column for a grid `gridWidth` px wide: 40 % of it, clamped to
+ * [NAME_MIN_W, NAME_W], so a phone still shows whole week columns next to it. 0 (not measured yet) → NAME_W.
+ */
+export function nameColumnWidth(gridWidth: number): number {
+  if (!(gridWidth > 0)) return NAME_W
+  return Math.max(NAME_MIN_W, Math.min(NAME_W, Math.round(gridWidth * NAME_SHARE)))
+}
 
 /** ARIA bookkeeping (C27): header rows above the body (M8 adds the ◆ row → 2) and footer rows below it. Every
  *  aria-rowindex / aria-rowcount is computed from these — never a literal. */

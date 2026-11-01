@@ -5,13 +5,33 @@ import {
   chunkStartOf,
   columnIndexOfPeriod,
   initialScrollIndex,
+  NAME_MIN_W,
+  NAME_W,
+  nameColumnWidth,
   timelineStart,
   timelineWeeks,
+  TOTAL_W,
   WEEK_W,
 } from './columns'
 
 const today = '2026-09-30'
 const cols = buildColumns(timelineWeeks(today), new Set(), new Map())
+
+describe('nameColumnWidth (SPEC §7 browser support)', () => {
+  it('keeps NAME_W on wide grids and before the grid is measured', () => {
+    expect(nameColumnWidth(0)).toBe(NAME_W)
+    expect(nameColumnWidth(1200)).toBe(NAME_W)
+    expect(nameColumnWidth(736)).toBe(NAME_W)
+  })
+  it('takes 40 % on narrow grids, never below NAME_MIN_W', () => {
+    expect(nameColumnWidth(358)).toBe(143)
+    expect(nameColumnWidth(200)).toBe(NAME_MIN_W)
+  })
+  it('leaves room for at least one whole week column at phone width', () => {
+    const w = 358 // 390 px viewport − 2 × 16 px page padding
+    expect(w - nameColumnWidth(w) - TOTAL_W).toBeGreaterThanOrEqual(WEEK_W)
+  })
+})
 
 describe('columns (FR-801, M6-D15, M6-D35)', () => {
   it('builds 313 week columns of 64 px from today − 156 w to today + 157 w (exclusive)', () => {

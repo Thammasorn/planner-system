@@ -11,6 +11,7 @@ import { useColorScheme } from '@mui/material/styles'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
@@ -40,6 +41,8 @@ import { type Autosave, useAutosave } from './useAutosave'
 export interface PageEditorShellProps extends PageEditorProps {
   /** After every local document change: whether the document is still blank (template chooser, M4-D7). */
   onBlankChange?: (blank: boolean) => void
+  /** Page-header element the save status is portalled into (SPEC §7: it stays with the header); inline when absent. */
+  saveStatusSlot?: HTMLElement | null
 }
 
 /** FR-502: depth 0…9 → a page at depth 9 cannot get children. */
@@ -158,7 +161,11 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
   return (
     <Box data-testid="page-editor" data-editable={editable} data-lease-mode={lease.mode}>
       <EditorBanners lease={lease} blocked={save.blocked} onReload={() => void reload()} />
-      <SaveStatus state={save.status} pending={save.pending} />
+      {props.saveStatusSlot ? (
+        createPortal(<SaveStatus state={save.status} pending={save.pending} />, props.saveStatusSlot)
+      ) : (
+        <SaveStatus state={save.status} pending={save.pending} />
+      )}
       <BlockNoteView
         editor={editor}
         editable={editable}

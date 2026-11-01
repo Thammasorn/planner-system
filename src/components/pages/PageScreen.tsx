@@ -36,8 +36,15 @@ export function headerProtected(locked: boolean, server: { locked: boolean; effe
   return server.locked ? true : server.effective
 }
 
-/** Readable column on wide screens, full width on phones (NFR-07b). */
+/** Readable text column on wide screens, full width on phones (NFR-07b, SPEC §7 browser support). */
 export const PAGE_MAX_WIDTH = 900
+
+/**
+ * Inline gutter of the page column. BlockNote keeps its side menu (⠿ / +) in the editor's own inline padding, so the
+ * header (breadcrumb, title) uses the same gutter and the body text lines up with the title at every width; phones
+ * get a narrow gutter (no hover side menu there) instead of BlockNote's fixed 54 px (editor-theme.css reads it).
+ */
+const PAGE_GUTTER = { xs: '8px', sm: '54px' } as const
 
 /**
  * `/p/[pageId]` client shell (FR-504…510): cover, icon + title, breadcrumb, page menu, protected / archived banners,
@@ -59,6 +66,7 @@ export function PageScreen({ view }: { view: PageView }) {
   const [focusReq, setFocusReq] = useState<{ n: number; to: 'title' | 'editor' }>({ n: 0, to: 'title' })
   const titleRef = useRef<HTMLTextAreaElement>(null)
   const editorBox = useRef<HTMLDivElement>(null)
+  const [statusSlot, setStatusSlot] = useState<HTMLDivElement | null>(null)
   const scope = { space: page.space, projectId: page.projectId }
   const effectiveProtected = headerProtected(locked, serverProt)
 
@@ -90,102 +98,109 @@ export function PageScreen({ view }: { view: PageView }) {
   }
 
   return (
-    <Box sx={{ pb: 8 }}>
-      <Box sx={{ maxWidth: PAGE_MAX_WIDTH, mx: 'auto', px: { xs: 2, sm: 3 } }}>
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', justifyContent: 'space-between', minHeight: 40, py: 1 }}
-        >
-          <Box sx={{ minWidth: 0 }}>
-            <PageBreadcrumbs
-              space={page.space}
-              projectId={page.projectId}
-              projectName={page.projectName}
-              crumbs={view.breadcrumb}
-              current={{ title, icon }}
-            />
-          </Box>
-          <PageActionsMenu
-            page={{
-              id: page.id,
-              title,
-              space: page.space,
-              projectId: page.projectId,
-              isCharter: page.isCharter,
-              locked,
-            }}
-            can={can}
-            navigateAfterDelete
-            onProtectedChange={setLocked}
-            onProtectedSaved={() => void rereadProtection()}
-          />
-        </Stack>
-        <CoverImage
-          pageId={page.id}
-          cover={cover}
-          canEdit={can.edit}
-          uploadLimits={view.uploadLimits}
-          onChange={setCover}
-        />
-        <Stack spacing={1} sx={{ pt: 2 }}>
-          <IconPicker pageId={page.id} icon={icon} canEdit={can.edit} scope={scope} onChange={setIcon} />
-          <PageTitle
-            key={reloadToken}
-            pageId={page.id}
-            value={title}
-            canEdit={can.edit}
-            scope={scope}
-            onChange={setTitle}
-            onEnter={focusEditor}
-            inputRef={titleRef}
-          />
-          {effectiveProtected ? (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.5,
-                color: 'text.secondary',
-                fontSize: '0.875rem',
-              }}
-            >
-              <span role="img" aria-label={th.pages.protectedIcon} style={{ display: 'inline-flex' }}>
-                <LockOutlined fontSize="inherit" />
-              </span>
+    <Box sx={{ pb: 8, '--page-gutter': PAGE_GUTTER }}>
+      <Box
+        data-testid="page-column"
+        sx={{ maxWidth: `calc(${PAGE_MAX_WIDTH}px + 2 * var(--page-gutter))`, mx: 'auto' }}
+      >
+        <Box sx={{ px: 'var(--page-gutter)' }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', justifyContent: 'space-between', minHeight: 40, py: 1 }}
+          >
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <PageBreadcrumbs
+                space={page.space}
+                projectId={page.projectId}
+                projectName={page.projectName}
+                crumbs={view.breadcrumb}
+                current={{ title, icon }}
+              />
             </Box>
-          ) : null}
-          {effectiveProtected && !can.edit ? (
-            <Alert severity="info" icon={<LockOutlined fontSize="inherit" />}>
-              {th.pages.protectedBanner}
-            </Alert>
-          ) : null}
-          {page.projectArchived ? (
-            <Alert severity="warning" icon={<Inventory2Outlined fontSize="inherit" />}>
-              {th.pages.archivedBanner}
-            </Alert>
-          ) : null}
-          {showChooser ? (
-            <TemplateChooser
-              pageId={page.id}
-              version={page.version}
-              onDismiss={() => {
-                setChooserDismissed(true)
-                requestFocus('editor') // ว่าง → start writing
+            {/* the editor portals its save status here, so it stays with the page header at every width */}
+            <Box ref={setStatusSlot} sx={{ flex: 'none', minWidth: 0 }} data-testid="page-status-slot" />
+            <PageActionsMenu
+              page={{
+                id: page.id,
+                title,
+                space: page.space,
+                projectId: page.projectId,
+                isCharter: page.isCharter,
+                locked,
               }}
-              onApplied={(r) => {
-                setTitle(r.title)
-                setIcon(r.icon)
-                setChooserDismissed(true)
-                setReloadToken((n) => n + 1)
-                void invalidatePages(qc, scope)
-                void invalidatePage(qc, page.id)
-                requestFocus('title') // SOP: type the empty title; others: Enter goes on into the content
-              }}
+              can={can}
+              navigateAfterDelete
+              onProtectedChange={setLocked}
+              onProtectedSaved={() => void rereadProtection()}
             />
-          ) : null}
-        </Stack>
-        <Box ref={editorBox} sx={{ pt: 2, mx: { xs: -1, sm: -6 } }}>
+          </Stack>
+          <CoverImage
+            pageId={page.id}
+            cover={cover}
+            canEdit={can.edit}
+            uploadLimits={view.uploadLimits}
+            onChange={setCover}
+          />
+          <Stack spacing={1} sx={{ pt: 2 }}>
+            <IconPicker pageId={page.id} icon={icon} canEdit={can.edit} scope={scope} onChange={setIcon} />
+            <PageTitle
+              key={reloadToken}
+              pageId={page.id}
+              value={title}
+              canEdit={can.edit}
+              scope={scope}
+              onChange={setTitle}
+              onEnter={focusEditor}
+              inputRef={titleRef}
+            />
+            {effectiveProtected ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  color: 'text.secondary',
+                  fontSize: '0.875rem',
+                }}
+              >
+                <span role="img" aria-label={th.pages.protectedIcon} style={{ display: 'inline-flex' }}>
+                  <LockOutlined fontSize="inherit" />
+                </span>
+              </Box>
+            ) : null}
+            {effectiveProtected && !can.edit ? (
+              <Alert severity="info" icon={<LockOutlined fontSize="inherit" />}>
+                {th.pages.protectedBanner}
+              </Alert>
+            ) : null}
+            {page.projectArchived ? (
+              <Alert severity="warning" icon={<Inventory2Outlined fontSize="inherit" />}>
+                {th.pages.archivedBanner}
+              </Alert>
+            ) : null}
+            {showChooser ? (
+              <TemplateChooser
+                pageId={page.id}
+                version={page.version}
+                onDismiss={() => {
+                  setChooserDismissed(true)
+                  requestFocus('editor') // ว่าง → start writing
+                }}
+                onApplied={(r) => {
+                  setTitle(r.title)
+                  setIcon(r.icon)
+                  setChooserDismissed(true)
+                  setReloadToken((n) => n + 1)
+                  void invalidatePages(qc, scope)
+                  void invalidatePage(qc, page.id)
+                  requestFocus('title') // SOP: type the empty title; others: Enter goes on into the content
+                }}
+              />
+            ) : null}
+          </Stack>
+        </Box>
+        <Box ref={editorBox} sx={{ pt: 2 }}>
           <EditorClient
             pageId={page.id}
             space={page.space}
@@ -196,6 +211,7 @@ export function PageScreen({ view }: { view: PageView }) {
             canEdit={can.edit}
             uploadLimits={view.uploadLimits}
             reloadToken={reloadToken}
+            saveStatusSlot={statusSlot}
             // only while the chooser is up: the check reads the whole document on every change
             onBlankChange={
               showChooser

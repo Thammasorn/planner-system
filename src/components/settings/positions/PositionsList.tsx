@@ -209,7 +209,7 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
   }
 
   return (
-    <Stack spacing={2} sx={{ maxWidth: 720 }}>
+    <Stack spacing={2}>
       {list.length === 0 ? (
         <EmptyState title={th.positions.empty} />
       ) : (
@@ -218,7 +218,12 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
             {list.map((row, i) => {
               const isEditing = editing?.id === row.id
               return (
-                <ListItem key={row.id} divider={i < list.length - 1} data-position-id={row.id} sx={{ gap: 1 }}>
+                <ListItem
+                  key={row.id}
+                  divider={i < list.length - 1}
+                  data-position-id={row.id}
+                  sx={{ gap: 1 }}
+                >
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     {isEditing ? (
                       <TextField
@@ -273,7 +278,11 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
                     </span>
                   </Tooltip>
                   <Tooltip title={th.common.delete}>
-                    <IconButton ref={buttonRef('delete', row.id)} aria-label={th.common.delete} onClick={() => remove(row)}>
+                    <IconButton
+                      ref={buttonRef('delete', row.id)}
+                      aria-label={th.common.delete}
+                      onClick={() => remove(row)}
+                    >
                       <DeleteOutlined fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -283,7 +292,14 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
           </List>
         </Paper>
       )}
-      <Stack component="form" direction="row" spacing={1} noValidate onSubmit={onAdd} sx={{ alignItems: 'flex-start' }}>
+      <Stack
+        component="form"
+        direction="row"
+        spacing={1}
+        noValidate
+        onSubmit={onAdd}
+        sx={{ alignItems: 'flex-start' }}
+      >
         <TextField
           fullWidth
           placeholder={th.positions.namePlaceholder}
@@ -297,7 +313,13 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
           helperText={helperText(addErrors)}
           slotProps={{ htmlInput: { 'aria-label': th.positions.namePlaceholder, maxLength: 100 } }}
         />
-        <Button type="submit" variant="contained" startIcon={<Add />} disabled={adding} sx={{ flex: 'none', mt: '2px' }}>
+        <Button
+          type="submit"
+          variant="contained"
+          startIcon={<Add />}
+          disabled={adding}
+          sx={{ flex: 'none', mt: '2px' }}
+        >
           {th.positions.add}
         </Button>
       </Stack>

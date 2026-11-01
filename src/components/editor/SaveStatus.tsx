@@ -19,7 +19,7 @@ export function SaveStatus({ state, pending = false }: { state: SaveState; pendi
       data-testid="save-status"
       variant="caption"
       color={state === 'error' ? 'error' : 'text.secondary'}
-      sx={{ display: 'block', minHeight: '1.5em', textAlign: 'right' }}
+      sx={{ display: 'block', minHeight: '1.5em', textAlign: 'right', whiteSpace: 'nowrap' }}
     >
       {text}
     </Typography>

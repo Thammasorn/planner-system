@@ -36,7 +36,7 @@ import {
   columnIndexOfPeriod,
   HEADER_ROWS,
   initialScrollIndex,
-  NAME_W,
+  NAME_COL_W,
   ROW_H,
   timelineWeeks,
   TOTAL_W,
@@ -375,7 +375,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     focusCell(r)
     // GridCell focuses itself when its focus flag changes; same position as before → focus its node here
     const c = store.get().focus?.c
-    el?.querySelector<HTMLElement>(`[data-cell][data-r="${r}"][data-c="${c}"]`)?.focus({ preventScroll: true })
+    el?.querySelector<HTMLElement>(`[data-cell][data-r="${r}"][data-c="${c}"]`)?.focus({
+      preventScroll: true,
+    })
   }, [addPersonTask, taskRowIndex, focusCell, store])
 
   /** Shift+click on a week header: that column over every editable row (M6-D33). */
@@ -425,8 +427,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
 
   // ── initial scroll + perf marks (M6-D15, M6-D22) ──
   useLayoutEffect(() => {
-    gridRef.current?.scrollToColumn(initialIdx)
-  }, [initialIdx])
+    // a narrow grid (phone) that cannot show the 4 weeks of history still opens with this week in view (SPEC §7)
+    const fit = gridRef.current?.fittingColumns() ?? 0
+    const start = fit > 0 && todayIdx >= 0 ? Math.max(initialIdx, todayIdx - fit + 1) : initialIdx
+    gridRef.current?.scrollToColumn(start)
+  }, [initialIdx, todayIdx])
   const hasData = model !== null
   useEffect(() => {
     if (!hasData || typeof performance === 'undefined') return
@@ -472,7 +477,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             role="rowheader"
             aria-colindex={1}
             className={styles.rowHeader}
-            style={{ width: NAME_W, height: ROW_H }}
+            style={{ width: NAME_COL_W, height: ROW_H }}
           >
             {canEdit ? (
               <QuickAdd

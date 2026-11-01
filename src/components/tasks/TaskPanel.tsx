@@ -10,6 +10,8 @@ import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
+import { useTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import CloseOutlined from '@mui/icons-material/CloseOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import { DateField } from '@/components/common/DateField'
@@ -46,7 +48,9 @@ function focusTask(taskId: string): void {
   const id = CSS.escape(taskId)
   const el =
     document.querySelector<HTMLElement>(`[role="row"][data-task-id="${id}"], [data-board-card="${id}"]`) ??
-    document.querySelector<HTMLElement>('[role="treegrid"] [role="row"][tabindex="0"], [data-board-card][tabindex="0"]')
+    document.querySelector<HTMLElement>(
+      '[role="treegrid"] [role="row"][tabindex="0"], [data-board-card][tabindex="0"]',
+    )
   el?.focus()
 }
 
@@ -74,25 +78,40 @@ export function TaskPanel({ projectId }: { projectId: string }) {
   useHotkeys([{ hotkey: { code: 'Escape', key: 'Escape' }, handler: onEscape }], {
     enabled: taskId !== null,
   })
+  // Below md there is no room beside the list: the panel becomes a full-screen sheet over it (SPEC §7 browser
+  // support) and takes focus, so Esc / ✕ / Tab work from inside it and closing returns focus to the row.
+  const sheet = useMediaQuery(useTheme().breakpoints.down('md'))
+  const ref = useRef<HTMLElement>(null)
+  const ready = q.data !== undefined
+  useEffect(() => {
+    if (sheet && taskId !== null && ready) ref.current?.focus()
+  }, [sheet, taskId, ready])
   if (taskId === null || !q.data) return null
   return (
     <Box
+      ref={ref}
       component="aside"
       aria-label={th.tasks.panel.label}
       data-testid="task-panel"
+      data-sheet={sheet ? 'true' : undefined}
+      tabIndex={sheet ? -1 : undefined}
       sx={{
         width: { xs: '100%', md: PANEL_WIDTH },
         flex: 'none',
         alignSelf: 'flex-start',
-        position: { md: 'sticky' },
+        position: { xs: 'fixed', md: 'sticky' },
+        inset: { xs: 0, md: 'auto' },
+        zIndex: { xs: 'appBar', md: 'auto' },
         top: { md: 0 },
         maxHeight: { md: 'calc(100vh - 32px)' },
         overflowY: 'auto',
-        border: 1,
+        overscrollBehavior: 'contain',
+        border: { xs: 0, md: 1 },
         borderColor: 'divider',
-        borderRadius: 1,
+        borderRadius: { xs: 0, md: 1 },
         bgcolor: 'background.paper',
         p: 2,
+        outline: 'none',
       }}
     >
       <PanelBody key={taskId} projectId={projectId} taskId={taskId} data={q.data} />

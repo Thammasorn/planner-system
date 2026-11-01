@@ -314,7 +314,7 @@ export function LeaveTypesList({ rows }: { rows: LeaveTypeAdminDTO[] }) {
   const menuRow = colorMenu ? list.find((r) => r.id === colorMenu.id) : undefined
 
   return (
-    <Stack spacing={2} sx={{ maxWidth: 880 }}>
+    <Stack spacing={2}>
       {list.length === 0 ? (
         <EmptyState title={th.leaveTypes.title} />
       ) : (

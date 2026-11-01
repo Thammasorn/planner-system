@@ -4,8 +4,8 @@ import { escapeRegExp } from './text'
 
 /**
  * BlockNote editor on `/p/<id>` (plan/m04-pages-editor.md S4.8, r3 §14.2 selectors). DOM contract requested from S2:
- * the editor root is `data-testid="page-editor"` with `data-editable="true|false"`; the save status is a
- * `role="status"` element inside it carrying `data-save-state` (idle · saving · saved · error, M4-D26) and `data-dirty`; the lease
+ * the editor root is `data-testid="page-editor"` with `data-editable="true|false"`; the save status is the
+ * `data-testid="save-status"` `role="status"` element (portalled into the page header, SPEC §7) carrying `data-save-state` (idle · saving · saved · error, M4-D26) and `data-dirty`; the lease
  * banner is `data-testid="lease-banner"`; sub-page cards are `data-testid="subpage-card"`. BlockNote's own class
  * names (`.bn-editor`, `.bn-suggestion-menu`, `.bn-table-handle`, …) are verified for 0.55 in r3.
  */
@@ -180,7 +180,7 @@ export class EditorPage {
 
   // --- save status (FR-531, M4-D26) -------------------------------------------------------------------------
   saveState(): Locator {
-    return this.root().getByRole('status')
+    return this.page.getByTestId('save-status')
   }
   /**
    * The save that follows the LAST edit is done: "saved" alone is not enough, because the status stays "saved"
@@ -189,7 +189,9 @@ export class EditorPage {
    */
   async waitSaved(): Promise<void> {
     // One selector, so both attributes are read in the same DOM snapshot.
-    await expect(this.root().locator('[data-save-state="saved"][data-dirty="false"]')).toHaveCount(1)
+    await expect(
+      this.page.locator('[data-testid="save-status"][data-save-state="saved"][data-dirty="false"]'),
+    ).toHaveCount(1)
   }
 
   // --- lease (FR-540–542) and conflict (FR-543) -------------------------------------------------------------

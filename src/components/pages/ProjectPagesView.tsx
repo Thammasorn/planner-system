@@ -13,7 +13,7 @@ export function ProjectPagesView({ projectId, projectName }: { projectId: string
   const roots = usePageTreeRoots('PROJECT', projectId)
   const { create, pending } = useCreatePage()
   return (
-    <Stack spacing={2} sx={{ maxWidth: 900 }}>
+    <Stack spacing={2}>
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h6" component="h2">
           {th.pages.projectTab.heading}

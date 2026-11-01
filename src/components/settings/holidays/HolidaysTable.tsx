@@ -220,7 +220,7 @@ export function HolidaysTable({ rows, initialYear }: { rows: HolidayDTO[]; initi
   }
 
   return (
-    <Stack spacing={2} sx={{ maxWidth: 880 }}>
+    <Stack spacing={2}>
       <Stack direction="row" spacing={2} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="h6" component="h2">
           {th.holidays.title}

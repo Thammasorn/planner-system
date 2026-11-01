@@ -144,7 +144,7 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
             onChange={(v) => patch({ positionId: v || undefined })}
           />
         ) : null}
-        <FormControl size="small" sx={{ minWidth: 160 }}>
+        <FormControl size="small" sx={FILTER_SX}>
           <InputLabel id="team-category">{th.teamTasks.filters.category}</InputLabel>
           <Select<TaskStatusCategory[]>
             multiple
@@ -232,6 +232,9 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
   )
 }
 
+/** Filter selects share a phone row evenly instead of leaving ragged gaps (SPEC §7). */
+const FILTER_SX = { minWidth: { xs: 140, sm: 160 }, flex: { xs: '1 1 140px', sm: '0 0 auto' } } as const
+
 function FilterSelect({
   label,
   value,
@@ -245,7 +248,7 @@ function FilterSelect({
 }) {
   const id = `team-filter-${label}`
   return (
-    <FormControl size="small" sx={{ minWidth: 160 }}>
+    <FormControl size="small" sx={FILTER_SX}>
       <InputLabel id={id}>{label}</InputLabel>
       <Select labelId={id} label={label} value={value} onChange={(e) => onChange(e.target.value)}>
         <MenuItem value="">{th.common.all}</MenuItem>
@@ -309,7 +312,7 @@ function TeamList({
                 component="li"
                 key={c.id}
                 data-task-id={c.id}
-                sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, py: 0.5, minWidth: 0 }}
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.5, minWidth: 0 }}
               >
                 <Checkbox
                   size="small"
@@ -318,36 +321,52 @@ function TeamList({
                   sx={{ p: 0.5 }}
                   slotProps={{ input: { 'aria-label': th.tasks.completeCheckbox(c.name) } }}
                 />
+                {/* name, then the meta line; on narrow widths the meta wraps under the name (SPEC §7) */}
                 <Box
-                  component={Link}
-                  href={taskHref(c)}
                   sx={{
-                    color: 'text.primary',
-                    flex: '1 1 160px',
+                    flex: 1,
                     minWidth: 0,
-                    overflowWrap: 'anywhere',
-                    textDecoration: c.completed ? 'line-through' : 'none',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    columnGap: 1.5,
+                    rowGap: 0.5,
+                    minHeight: 32,
                   }}
                 >
-                  {c.name}
+                  <Box
+                    component={Link}
+                    href={taskHref(c)}
+                    sx={{
+                      color: 'text.primary',
+                      flex: '1 1 220px',
+                      minWidth: 0,
+                      overflowWrap: 'anywhere',
+                      textDecoration: c.completed ? 'line-through' : 'none',
+                    }}
+                  >
+                    {c.name}
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <StatusChip
+                      status={c.status}
+                      onClick={(e) => setMenu({ anchor: e.currentTarget, card: c })}
+                    />
+                    {c.blockers.total > 0 ? (
+                      <BlockerBadge open={c.blockers.open} total={c.blockers.total} />
+                    ) : null}
+                    {c.assigneeIds.length === 0 ? (
+                      <Typography variant="caption">{th.tasks.unassigned}</Typography>
+                    ) : (
+                      c.assigneeIds.map((id) => <UserName key={id} user={personOf(people, id)} />)
+                    )}
+                    {c.dueDate ? (
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {formatThaiDate(c.dueDate)}
+                      </Typography>
+                    ) : null}
+                  </Box>
                 </Box>
-                <StatusChip
-                  status={c.status}
-                  onClick={(e) => setMenu({ anchor: e.currentTarget, card: c })}
-                />
-                {c.blockers.total > 0 ? (
-                  <BlockerBadge open={c.blockers.open} total={c.blockers.total} />
-                ) : null}
-                {c.assigneeIds.length === 0 ? (
-                  <Typography variant="caption">{th.tasks.unassigned}</Typography>
-                ) : (
-                  c.assigneeIds.map((id) => <UserName key={id} user={personOf(people, id)} />)
-                )}
-                {c.dueDate ? (
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {formatThaiDate(c.dueDate)}
-                  </Typography>
-                ) : null}
               </Box>
             ))}
           </Box>

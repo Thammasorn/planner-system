@@ -51,7 +51,7 @@ export function GridToolbar(p: GridToolbarProps) {
         label={th.grid.toolbar.view}
         value={p.view}
         onChange={(e) => p.onView(e.target.value as LoadView)}
-        sx={{ minWidth: 170 }}
+        sx={{ minWidth: { xs: 140, sm: 170 } }}
       >
         {LOAD_VIEWS.map((v) => (
           <MenuItem key={v} value={v}>
@@ -65,7 +65,7 @@ export function GridToolbar(p: GridToolbarProps) {
         label={th.units.label}
         value={p.unit}
         onChange={(e) => p.onUnit(e.target.value as CellUnit)}
-        sx={{ minWidth: 110 }}
+        sx={{ minWidth: { xs: 96, sm: 110 } }}
       >
         {GRID_UNITS.map((u) => (
           <MenuItem key={u} value={u}>

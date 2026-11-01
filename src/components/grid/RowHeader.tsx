@@ -11,7 +11,7 @@ import { UserName } from '@/components/common/UserName'
 import { BlockerBadge } from '@/components/tasks/blockers/BlockerBadge'
 import { blockerBadge } from '@/domain/blockers'
 import { th } from '@/i18n/th'
-import { NAME_W } from '@/lib/grid/columns'
+import { NAME_COL_W } from '@/lib/grid/columns'
 import type { ViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
 import styles from './grid.module.css'
@@ -96,7 +96,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       aria-selected={selected}
       tabIndex={selected ? 0 : -1}
       className={styles.rowHeader}
-      style={{ width: NAME_W, height: p.height, paddingLeft: 6 + row.depth * INDENT }}
+      style={{ width: NAME_COL_W, height: p.height, paddingLeft: 6 + row.depth * INDENT }}
       data-row-header=""
       data-row-key={row.key}
       data-r={p.r}

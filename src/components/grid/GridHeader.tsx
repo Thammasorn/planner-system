@@ -8,7 +8,7 @@ import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { VisuallyHidden } from '@/components/common/VisuallyHidden'
 import { th } from '@/i18n/th'
 import { formatWeekHeader } from '@/lib/format'
-import { HEADER_H, HEADER_ROWS, NAME_W, TOTAL_W, type GridColumn } from '@/lib/grid/columns'
+import { HEADER_H, HEADER_ROWS, NAME_COL_W, TOTAL_W, type GridColumn } from '@/lib/grid/columns'
 import styles from './grid.module.css'
 
 export interface GridHeaderProps {
@@ -83,7 +83,7 @@ export function GridHeader(p: GridHeaderProps) {
         role="columnheader"
         aria-colindex={1}
         className={styles.corner}
-        style={{ width: NAME_W, height: HEADER_H }}
+        style={{ width: NAME_COL_W, height: HEADER_H }}
       >
         {th.grid.header.name}
       </div>

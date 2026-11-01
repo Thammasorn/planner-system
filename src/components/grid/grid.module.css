@@ -116,6 +116,26 @@
   font-weight: 600;
 }
 
+/* narrow frozen column (phones, SPEC §7): the person label and the footer switch caption give way to the task name;
+   the switch keeps its accessible name and the full name is in the row's aria-label */
+.scroller[data-compact='true'] .person {
+  max-width: 48px;
+}
+
+.scroller[data-compact='true'] .rowHeader:not([aria-selected='true'], :focus-within) .actions {
+  display: none;
+}
+
+.scroller[data-compact='true'] .footerHeader .actions .muted {
+  display: none;
+}
+
+.corner {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* ── body ── */
 .row {
   position: absolute;
