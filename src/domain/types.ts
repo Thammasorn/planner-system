@@ -25,3 +25,16 @@ export interface TimeOffSpan {
   endDate: ISODate
   fractionCd: 50 | 100
 }
+/** Resolution of one allocation row (SPEC §6.2 `granularity`, BR-20): a week is either one WEEK row or DAY rows. */
+export type Granularity = 'WEEK' | 'DAY'
+/** Grid period key (X65): `W:<Monday>` for a week column, `D:<date>` for a day column (M7). */
+export type PeriodKey = `W:${ISODate}` | `D:${ISODate}`
+/** Load split by certainty (BR-37): atRisk = total − committed. */
+export interface LoadPair {
+  total: Cd
+  committed: Cd
+}
+/** Load view (FR-809), preference `load.view`. */
+export type LoadView = 'ALL' | 'COMMITTED' | 'AT_RISK'
+/** Cell unit (FR-804), preference `grid.unit`. */
+export type CellUnit = 'DAYS' | 'FRACTION'

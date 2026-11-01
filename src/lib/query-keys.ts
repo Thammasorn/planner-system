@@ -5,6 +5,11 @@ import type { ISODate } from '@/domain/types'
 import type { PageSpace } from '@/lib/contracts/pages'
 import type { TeamTasksQuery } from '@/lib/schemas/tasks'
 
+/** Planning-grid context (PLAN §3.5, M6): a project grid (M6) or a person grid (M9). */
+export type GridCtx = { kind: 'project'; id: string } | { kind: 'person'; id: string }
+/** One 8-week chunk query of a grid (X65): `from` = the chunk's Monday; M7 fills `expand`/`zoom: 'DAY'`. */
+export type GridChunk = { from: ISODate; expand: ISODate[]; zoom: 'WEEK' | 'DAY'; includeOthers: boolean }
+
 export const qk = {
   sidebar: () => ['sidebar'] as const,
   peopleOptions: () => ['people', 'options'] as const,
@@ -37,9 +42,13 @@ export const qk = {
   calendar: (from: ISODate, to: ISODate) => ['calendar', from, to] as const,
   /** GET /api/leave-types — active types for the leave dialog (M5-D9). */
   leaveTypes: () => ['leaveTypes'] as const,
+  /** Prefix of every chunk of one grid — the optimistic overlay patches through setQueriesData (M6). */
+  gridAll: (ctx: GridCtx) => ['grid', ctx.kind, ctx.id] as const,
+  /** GET /api/grid/project/[id]?from&to&includeOthers — one 8-week chunk (M6; person grid M9). */
+  gridChunk: (ctx: GridCtx, c: GridChunk) => ['grid', ctx.kind, ctx.id, c] as const,
 }
 
-/** Prefixes for views that arrive later (M6 grid, M9 workload, M10 home). Invalidating an unused prefix is a no-op,
+/** Prefixes for load views (M6 grid = qk.gridAll(…) under ['grid'], M9 workload, M10 home). Invalidating an unused prefix is a no-op,
  *  so invalidateLoad is correct from M2 on. */
 export const qkPrefix = {
   grid: ['grid'] as const,

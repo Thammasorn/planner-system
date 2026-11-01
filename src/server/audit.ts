@@ -21,6 +21,7 @@ export type AuditEntity =
   | 'holiday'
   | 'leave_type'
   | 'time_off'
+  | 'allocation'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
 export interface AuditInput {

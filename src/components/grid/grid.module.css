@@ -1,0 +1,466 @@
+/* PlanGrid (SPEC §8.3, FR-804/807/808, PLAN §3.9): dense surfaces are plain elements with one class and data-* state,
+   reading token (src/app/tokens.css) and MUI CSS variables. No load colours in M6 (M6-D20). State is never colour
+   alone: glyphs (⋯ ◐ ลา ▨) carry hidden text. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  /* selection / fill tint: --brand-light lightened toward the surface, so --faded-fg text on it (tentative and
+     not-counted numbers, the completed name, เสร็จแล้ว / รอมอบหมาย) stays ≥ 4.5:1 in both themes (§8.9; plain
+     --brand-light is 4.36:1 in light). The X51 tokens stay as they are; grid-css.test.ts checks the ratio. */
+  --grid-select-bg: color-mix(in srgb, var(--brand-light) 60%, var(--surface));
+}
+
+.scroller {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  contain: strict;
+  background: var(--surface);
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 4px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.sized {
+  position: relative;
+}
+
+/* ── header ── */
+.headerRow {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--mui-palette-divider);
+}
+
+.corner,
+.rowHeader,
+.footerHeader {
+  position: sticky;
+  left: 0;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 6px;
+  background: var(--surface);
+  border-right: 1px solid var(--mui-palette-divider);
+  box-sizing: border-box;
+}
+
+.corner {
+  z-index: 4;
+  font-weight: 600;
+  color: var(--mui-palette-text-secondary);
+}
+
+.colHeader {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid var(--mui-palette-divider);
+  color: var(--mui-palette-text-secondary);
+  user-select: none;
+  cursor: default;
+}
+
+/* this week: bold text in the primary colour (≥ 4.5:1, §8.9) + the red underline — the --today red is for lines only */
+.colHeader[data-today='true'] {
+  color: var(--mui-palette-text-primary);
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 var(--today);
+}
+
+.colHeader[data-selected='true'] {
+  background: var(--brand-light);
+}
+
+.totalHeader,
+.totalCell,
+.footerTotal {
+  position: sticky;
+  right: 0;
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border-left: 1px solid var(--mui-palette-divider);
+}
+
+.totalHeader {
+  z-index: 4;
+  font-weight: 600;
+  color: var(--mui-palette-text-secondary);
+}
+
+.totalCell {
+  z-index: 1;
+  font-weight: 600;
+}
+
+/* ── body ── */
+.row {
+  position: absolute;
+  left: 0;
+  display: flex;
+  border-bottom: 1px solid var(--mui-palette-divider);
+  box-sizing: border-box;
+}
+
+.row:hover .rowHeader,
+.row:hover .cell {
+  background-color: var(--nonworking);
+}
+
+.rowHeader {
+  z-index: 2;
+  outline: none;
+}
+
+.rowHeader[aria-selected='true'] {
+  background: var(--grid-select-bg);
+  box-shadow: inset 0 0 0 2px var(--brand-blue);
+}
+
+.row[data-tentative='true'] .rowHeader {
+  box-shadow: inset 4px 0 0 var(--tentative-fg);
+}
+
+/* a selected tentative row keeps both the amber bar and the selection ring */
+.row[data-tentative='true'] .rowHeader[aria-selected='true'] {
+  box-shadow:
+    inset 4px 0 0 var(--tentative-fg),
+    inset 0 0 0 2px var(--brand-blue);
+}
+
+.row[data-kind='task'] .name {
+  font-weight: 600;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.row[data-completed='true'] .name {
+  text-decoration: line-through;
+  color: var(--faded-fg);
+}
+
+.person {
+  flex: none;
+  color: var(--mui-palette-text-secondary);
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  flex: none;
+  color: var(--faded-fg);
+  font-size: 12px;
+}
+
+.toggle,
+.iconButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mui-palette-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toggle:hover,
+.iconButton:hover {
+  background: var(--brand-light);
+}
+
+.toggle:focus-visible,
+.iconButton:focus-visible,
+.addPerson:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* "+ คน" is visible on hover and focus-within (keyboard reachable, §8.9) */
+.addPerson {
+  composes: iconButton;
+  opacity: 0;
+  color: var(--brand-blue);
+}
+
+.row:hover .addPerson,
+.row:focus-within .addPerson,
+.addPerson[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.cell {
+  position: absolute;
+  top: 0;
+  bottom: 0; /* full row height: an empty cell must stay clickable */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--mui-palette-divider);
+  outline: none;
+  cursor: cell;
+  user-select: none;
+  background-color: var(--surface);
+}
+
+.cell[data-today='true'] {
+  box-shadow: inset 2px 0 0 var(--today);
+}
+
+.row[data-tentative='true'] .cell,
+.row[data-tentative='true'] .totalCell {
+  color: var(--faded-fg);
+}
+
+.cell[data-not-counted='true'] {
+  color: var(--faded-fg);
+  font-style: italic;
+}
+
+.cell[data-leave='true'] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--timeoff) 0,
+    var(--timeoff) 2px,
+    transparent 2px,
+    transparent 7px
+  );
+}
+
+/* the number sits on the cell's own solid colour, not on the stripes (--faded-fg on --timeoff is 3.83:1, §8.9);
+   `inherit` follows the cell's surface / hover / selection colour */
+.cell[data-leave='true'] > [data-cell-value]:not(:empty) {
+  background-color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.cell[data-no-capacity='true'] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--holiday) 0,
+    var(--holiday) 4px,
+    transparent 4px,
+    transparent 6px
+  );
+}
+
+.cell[aria-readonly='true'] {
+  cursor: default;
+}
+
+.row[data-kind='task'] .cell {
+  font-weight: 600;
+}
+
+/* selection / fill preview: a 1px ring as well as the tint (never colour alone, §8.9); `.row .cell[…]` outranks the
+   `.row:hover .cell` tint so the row under the pointer (the drag-select row) still shows its selection */
+.row .cell[aria-selected='true'] {
+  background-color: var(--grid-select-bg);
+  box-shadow: inset 0 0 0 1px var(--brand-blue);
+}
+
+.row .cell[data-today='true'][aria-selected='true'] {
+  box-shadow:
+    inset 2px 0 0 var(--today),
+    inset 0 0 0 1px var(--brand-blue);
+}
+
+.row .cell[data-fill='true'] {
+  box-shadow: inset 0 0 0 1px var(--brand-blue);
+  background-color: var(--grid-select-bg);
+}
+
+.row .cell[data-focused='true'],
+.row .cell:focus-visible {
+  /* :focus-visible: the roving cell reached by Tab (no store focus yet) or kept after the second Esc (§8.9) */
+  box-shadow: inset 0 0 0 2px var(--brand-blue);
+  z-index: 1;
+}
+
+.fillHandle {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  background: var(--brand-blue);
+  border: 1px solid var(--surface);
+  cursor: crosshair;
+  z-index: 2;
+}
+
+.editor {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0 4px;
+  margin: 0 -6px;
+  box-sizing: content-box;
+  font: inherit;
+  text-align: right;
+  background: var(--surface);
+  color: var(--mui-palette-text-primary);
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.editor[aria-invalid='true'] {
+  outline-color: var(--load-over-fg);
+}
+
+.quickAddRow {
+  position: absolute;
+  left: 0;
+  display: flex;
+}
+
+.quickAddRow .rowHeader {
+  padding: 0;
+}
+
+.message {
+  position: sticky;
+  left: 0;
+  padding: 12px 16px;
+  color: var(--mui-palette-text-secondary);
+  width: max-content;
+}
+
+/* ── footer (FR-806) ── */
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--surface);
+  border-top: 2px solid var(--mui-palette-divider);
+}
+
+.footerRow {
+  position: relative;
+  display: flex;
+  border-bottom: 1px solid var(--mui-palette-divider);
+  box-sizing: border-box;
+}
+
+.footerHeader {
+  z-index: 4;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.footerCell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--mui-palette-divider);
+  font-weight: 600;
+}
+
+/* ── toolbar ── */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.saveState {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mui-palette-text-secondary);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 2px 0;
+  font-size: 12px;
+  color: var(--mui-palette-text-secondary);
+}
+
+.tooltip {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--mui-palette-grey-800, #424242);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  max-width: 320px;
+  z-index: 1500;
+}
+
+/* screen-reader-only text (clip pattern, like VisuallyHidden) — referenced by aria-describedby */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

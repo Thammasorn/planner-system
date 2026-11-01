@@ -367,9 +367,9 @@ describe('deleteTimeOff / restoreTimeOff (FR-909, M5-D16)', () => {
 
 describe('BR-42 (M5 part): leave writes never edit plans', () => {
   it('row counts of every table except time_off / audit_log are unchanged after create / update / delete / restore', async () => {
-    const w = await createWorld({ with: ['tasks'] })
-    await db.transaction((tx) => ensureDefaultLeaveTypes(tx, null))
-    const [vacation] = await db.select().from(leaveTypes).where(eq(leaveTypes.name, 'ลาพักร้อน'))
+    // M6 S2.9: with plans (the member's pDone week 10-05 overlaps the leave) + an allocations checksum
+    const w = await createWorld({ with: ['allocations'] })
+    const vacation = w.leaveTypes.vacation
     const counts = async () => {
       const tables = await db.execute<{ tablename: string }>(
         sql`select tablename from pg_tables where schemaname = 'public' and tablename not in ('time_off', 'audit_log') order by tablename`,
@@ -381,17 +381,28 @@ describe('BR-42 (M5 part): leave writes never edit plans', () => {
       }
       return out
     }
+    /** count + Σ cd of plans, bounded by week_start (SPEC §6.5). */
+    const planChecksum = async () => {
+      const [r] = await db.execute<{ n: number; cd: number }>(
+        sql`select count(*)::int as n, (coalesce(sum(person_days), 0) * 100)::int as cd from allocations
+            where week_start >= '2020-01-06' and week_start < '2030-01-07'`,
+      )
+      return r
+    }
     const before = await counts()
+    const plansBefore = await planChecksum()
     expect(before.tasks).toBeGreaterThan(0)
     expect(before.task_assignments).toBeGreaterThan(0)
+    expect(plansBefore?.n).toBeGreaterThan(0)
     asUser(w.member)
     const { id } = ok(
-      await createTimeOff({ leaveTypeId: vacation!.id, startDate: '2026-10-05', endDate: '2026-10-09' }),
+      await createTimeOff({ leaveTypeId: vacation.id, startDate: '2026-10-05', endDate: '2026-10-09' }),
     )
-    ok(await updateTimeOff({ id, leaveTypeId: vacation!.id, startDate: '2026-10-05', endDate: '2026-10-06' }))
+    ok(await updateTimeOff({ id, leaveTypeId: vacation.id, startDate: '2026-10-05', endDate: '2026-10-06' }))
     const { batch } = ok(await deleteTimeOff({ id }))
     ok(await restoreTimeOff({ batch }))
     expect(await counts()).toEqual(before)
+    expect(await planChecksum()).toEqual(plansBefore)
   })
 })
 

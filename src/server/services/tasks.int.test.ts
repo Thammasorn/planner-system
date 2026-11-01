@@ -15,14 +15,26 @@ import {
 } from '../actions/tasks'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import { auditCount, auditRowsAfter } from '../../../tests/helpers/audit'
-import { makeAssignment, makeBlocker, makeStatuses, makeTask, makeUser } from '../../../tests/helpers/factories'
+import {
+  allocationRows,
+  makeAllocation,
+  makeAssignment,
+  makeBlocker,
+  makeStatuses,
+  makeTask,
+  makeUser,
+} from '../../../tests/helpers/factories'
+import { goldenUser } from '../../../tests/authz/_support/golden'
+import { seedGolden } from '../../../scripts/lib/fixtures'
 import { assertCompletionInvariant } from '../../../tests/helpers/invariants'
 import { createWorld, type World } from '../../../tests/helpers/world'
 import * as authz from '../authz'
 import { db } from '../db/client'
 import { taskAssignments, tasks } from '../db/schema'
 import type { DbOrTx } from '../db/types'
+import * as repo from '../repo'
 import type { TaskRow } from '../repo/tasks'
+import { buildChunk } from './grid'
 import {
   createTask,
   deleteTaskTree,
@@ -640,5 +652,76 @@ describe('FR-409 progress', () => {
     const w = await createWorld({ with: ['tasks'] })
     const { projectProgress } = await import('./projects')
     expect(await projectProgress(db, w.P.id)).toEqual({ done: 1, total: 5 })
+  })
+})
+
+// ── M6 S2.9 — plans follow tasks (X13, X20, AC-603 plans clause, FR-610 / BR-31) ─────────────────────────────────
+describe('plans follow tasks (M6)', () => {
+  const chunk = { from: '2026-11-16', to: '2026-11-23', expand: [], zoom: 'week' as const, includeOthers: false }
+  const range = { from: '2026-11-16', to: '2026-11-23' }
+
+  it('AC-603 plans: the child’s plan is hidden while the tree is deleted and back (same row) after restore', async () => {
+    const w = await plainWorld()
+    const ivy = await makeUser({ nickname: 'Ivy' })
+    const parent = await makeTask({ project: w.P, name: 'Parent', createdBy: w.manager })
+    await makeTask({ project: w.P, parent, name: 'C1', createdBy: w.manager })
+    const c2 = await makeTask({ project: w.P, parent, name: 'C2', createdBy: w.manager })
+    await makeTask({ project: w.P, parent, name: 'C3', createdBy: w.manager })
+    const asg = await makeAssignment({ task: c2, user: ivy })
+    await makeAllocation({ assignment: asg, period: '2026-11-16', cd: 200 })
+    const viewer = S(w.manager)
+    asUser(w.member)
+    const del = await deleteAction({ taskIds: [parent.id] })
+    if (!del.ok) throw new Error('delete failed')
+    const hidden = await buildChunk(db, viewer, { kind: 'project', id: w.P.id }, chunk, TODAY)
+    expect(hidden.rows.some((r) => r.kind === 'assignee' && r.taskAssignmentId === asg.id)).toBe(false)
+    expect(hidden.rows.some((r) => r.kind === 'task' && r.id === c2.id)).toBe(false)
+    expect((await repo.allocations.loadByUserWeek(db, { userIds: [ivy.id], range })).get(ivy.id)).toBeUndefined()
+    expect(await allocationRows(asg.id, '2026-11-16')).toEqual([{ granularity: 'WEEK', periodStart: '2026-11-16', cd: 200 }])
+
+    expect(await restoreAction({ batch: del.batch })).toMatchObject({ ok: true })
+    const back = await buildChunk(db, viewer, { kind: 'project', id: w.P.id }, chunk, TODAY)
+    const i = back.rows.findIndex((r) => r.kind === 'task' && r.id === c2.id)
+    expect(back.rows[i + 1]).toMatchObject({
+      kind: 'assignee',
+      taskAssignmentId: asg.id,
+      cells: { 'W:2026-11-16': { cd: 200, resolution: 'WEEK' } },
+    })
+    expect((await repo.allocations.loadByUserWeek(db, { userIds: [ivy.id], range })).get(ivy.id)).toEqual({
+      '2026-11-16': { total: 200, committed: 200 },
+    })
+  })
+
+  it('FR-610 plans: UAT’s first child takes over Ivy’s assignment (version + 1) with its 4 WEEK rows; undo moves them back', async () => {
+    await seedGolden(db)
+    const [uat] = await db.select().from(tasks).where(eq(tasks.name, 'ทำ UAT + คู่มือหน้าร้าน'))
+    const [asg] = await db.select().from(taskAssignments).where(eq(taskAssignments.taskId, uat!.id))
+    const weeks = ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05']
+    const rowsOf = async () => Promise.all(weeks.map((wk) => allocationRows(asg!.id, wk)))
+    const before = await rowsOf()
+    const cindy = S(await goldenUser('Cindy'))
+    const r = await inTx((tx) => createTask(tx, cindy, { projectId: uat!.projectId, parentId: uat!.id, name: 'ลูก UAT' }, TODAY))
+    expect(r.transfer).toEqual({ assignmentIds: [asg!.id], fromTaskId: uat!.id, toTaskId: r.task.id })
+    const [moved] = await db.select().from(taskAssignments).where(eq(taskAssignments.id, asg!.id))
+    expect(moved).toMatchObject({ taskId: r.task.id, version: asg!.version + 1 })
+    expect(await rowsOf()).toEqual(before)
+    const g = await buildChunk(
+      db,
+      cindy,
+      { kind: 'project', id: uat!.projectId },
+      { ...chunk, from: '2026-09-14', to: '2026-10-12' },
+      TODAY,
+    )
+    const i = g.rows.findIndex((x) => x.kind === 'task' && x.id === r.task.id)
+    expect(g.rows[i + 1]).toMatchObject({ kind: 'assignee', taskAssignmentId: asg!.id })
+    expect(g.rows.find((x) => x.kind === 'task' && x.id === uat!.id)).toMatchObject({
+      hasChildren: true,
+      totals: { 'W:2026-10-05': { total: 125, committed: 125 } },
+    })
+    asUser(await goldenUser('Cindy'))
+    expect(await deleteAction({ taskIds: [r.task.id], transfer: reverse(r.transfer!) })).toMatchObject({ ok: true })
+    const [backRow] = await db.select().from(taskAssignments).where(eq(taskAssignments.id, asg!.id))
+    expect(backRow).toMatchObject({ taskId: uat!.id, version: asg!.version + 2 })
+    expect(await rowsOf()).toEqual(before)
   })
 })

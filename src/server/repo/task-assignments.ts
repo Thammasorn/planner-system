@@ -3,7 +3,8 @@
 // Soft delete under a batch (unassign, FR-404); restore re-checks the active unique pair.
 import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, notExists, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { taskAssignments, tasks } from '../db/schema'
+import type { Certainty, ISODate } from '@/domain/types'
+import { projects, taskAssignments, tasks } from '../db/schema'
 import type { DbOrTx } from '../db/types'
 
 export type AssignmentRow = typeof taskAssignments.$inferSelect
@@ -24,14 +25,19 @@ export async function insertAssignment(
   return out!
 }
 
-/** Active assignments on live tasks of the project, ORDER BY created_at, id. (M6 adds `version` to the row and
- *  listActiveForTasks/bumpVersions beside it, X87 — no M3 test asserts this row's exact key set.) */
+/** Active assignments on live tasks of the project, ORDER BY created_at, id. M6 (M6-D36) adds `version`
+ *  (GridAssigneeRow.version); M3's listProjectTasks still maps only assignmentId/userId. */
 export async function listActiveForProject(
   tx: DbOrTx,
   projectId: string,
-): Promise<{ id: string; taskId: string; userId: string }[]> {
+): Promise<{ id: string; taskId: string; userId: string; version: number }[]> {
   return tx
-    .select({ id: taskAssignments.id, taskId: taskAssignments.taskId, userId: taskAssignments.userId })
+    .select({
+      id: taskAssignments.id,
+      taskId: taskAssignments.taskId,
+      userId: taskAssignments.userId,
+      version: taskAssignments.version,
+    })
     .from(taskAssignments)
     .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
     .where(and(eq(tasks.projectId, projectId), isNull(taskAssignments.deletedAt)))
@@ -71,6 +77,63 @@ export async function lockActiveOnTask(
     )
     .orderBy(asc(taskAssignments.id))
     .for('update')
+}
+
+/** M6 plan writers (services/allocations#lockAssignments): one live assignment on a live task with what a save needs. */
+export interface PlanAssignmentRow {
+  id: string
+  version: number
+  userId: string
+  taskId: string
+  projectId: string
+  hasChildren: boolean
+  completedWeek: ISODate | null
+  /** Effective certainty (BR-35): coalesce(task, parent, grandparent, project) — the §6.5 expression. */
+  certainty: Certainty
+}
+
+/**
+ * M6 (BR-20b, r6b E11): the live assignments among `ids` on live tasks, ORDER BY ta.id; with `lock`,
+ * `FOR UPDATE OF ta` (deterministic lock order — deadlock-free batches). Missing/deleted ids are simply absent.
+ */
+export async function selectForPlan(
+  tx: DbOrTx,
+  ids: readonly string[],
+  o: { lock: boolean },
+): Promise<PlanAssignmentRow[]> {
+  if (ids.length === 0) return []
+  const p1 = alias(tasks, 'p1')
+  const p2 = alias(tasks, 'p2')
+  const q = tx
+    .select({
+      id: taskAssignments.id,
+      version: taskAssignments.version,
+      userId: taskAssignments.userId,
+      taskId: taskAssignments.taskId,
+      projectId: tasks.projectId,
+      hasChildren: sql<boolean>`exists (select 1 from tasks c where c.parent_id = ${tasks.id} and c.deleted_at is null)`,
+      completedWeek: tasks.completedWeek,
+      certainty: sql<Certainty>`coalesce(${tasks.certaintyOverride}, ${p1.certaintyOverride}, ${p2.certaintyOverride}, ${projects.certainty})`,
+    })
+    .from(taskAssignments)
+    .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
+    .leftJoin(p1, eq(p1.id, tasks.parentId))
+    .leftJoin(p2, eq(p2.id, p1.parentId))
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(inArray(taskAssignments.id, [...ids]), isNull(taskAssignments.deletedAt)))
+    .orderBy(asc(taskAssignments.id))
+  return o.lock ? q.for('update', { of: taskAssignments }) : q
+}
+
+/** ★ M6 (BR-20b, M6-D36): version + 1 for each id (the caller holds the row locks); empty → no query. */
+export async function bumpVersions(tx: DbOrTx, ids: readonly string[]): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map()
+  const rows = await tx
+    .update(taskAssignments)
+    .set({ version: sql`${taskAssignments.version} + 1` })
+    .where(inArray(taskAssignments.id, [...ids]))
+    .returning({ id: taskAssignments.id, version: taskAssignments.version })
+  return new Map(rows.map((r) => [r.id, r.version]))
 }
 
 /** X20: re-point assignments to another task and bump their version (BR-20b lock for M6 writers). */

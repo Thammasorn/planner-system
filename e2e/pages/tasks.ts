@@ -463,6 +463,19 @@ export class TaskListPage {
     await answered
   }
 
+  // ── FR-612 วางแผน (M6) ────────────────────────────────────────────────────────────────────────────────────
+  /** The panel's "วางแผน" button of one assignee (leaf tasks). */
+  planButton(personName: string): Locator {
+    return this.panel().getByRole('button', { name: th.plan.buttonFor(personName), exact: true })
+  }
+  /** Opens the FR-612 dialog for `personName` from the open task panel. */
+  async planFor(personName: string, taskName: string): Promise<PlanRangeDialog> {
+    await this.planButton(personName).click()
+    const dialog = new PlanRangeDialog(this.page, personName, taskName)
+    await expect(dialog.root()).toBeVisible()
+    return dialog
+  }
+
   // ── shortcut help (X07) ───────────────────────────────────────────────────────────────────────────────────
   helpDialog(): Locator {
     return this.page.getByRole('dialog', { name: th.shortcuts.title })
@@ -470,5 +483,61 @@ export class TaskListPage {
 
   toast(text: string): Locator {
     return toastWith(this.page, text)
+  }
+}
+
+/** FR-612 "วางแผน N วัน" dialog (plan/m06 S4.3): total in days, start/end DateFields, debounced preview, apply. */
+export class PlanRangeDialog {
+  constructor(
+    readonly page: Page,
+    readonly personName: string,
+    readonly taskName: string,
+  ) {}
+
+  root(): Locator {
+    return this.page.getByRole('dialog', { name: th.plan.title(this.personName, this.taskName) })
+  }
+  total(): Locator {
+    return this.root().getByRole('textbox', { name: exactName(th.plan.totalLabel) })
+  }
+  applyButton(): Locator {
+    return this.root().getByRole('button', { name: th.plan.apply, exact: true })
+  }
+  previewTable(): Locator {
+    return this.root().getByRole('table', { name: th.plan.preview })
+  }
+  /** MUI X accessible field (DD / MM / BBBB): month, year, then day, so each step stays a valid date. */
+  private async setDate(label: string, iso: string): Promise<void> {
+    const [y, m, d] = iso.split('-') as [string, string, string]
+    const sections = this.root().getByRole('group', { name: label }).getByRole('spinbutton')
+    await expect(sections).toHaveCount(3)
+    await sections.nth(1).click()
+    await this.page.keyboard.type(m)
+    await sections.nth(2).click()
+    await this.page.keyboard.type(String(Number(y) + 543))
+    await sections.nth(0).click()
+    await this.page.keyboard.type(d)
+  }
+  /** Types the total and the range (end first, so the start never exceeds it), then waits for the preview. */
+  async fill(days: string, start: string, end: string): Promise<void> {
+    await this.setDate(th.plan.endLabel, end)
+    await this.setDate(th.plan.startLabel, start)
+    await this.total().fill(days)
+    await expect(this.previewTable()).toBeVisible()
+    await expect(this.applyButton()).toBeEnabled()
+  }
+  /** Preview rows as [week header, kind label]. */
+  async previewRows(): Promise<string[][]> {
+    return this.previewTable()
+      .locator('tbody tr')
+      .evaluateAll((rows) =>
+        rows.map((r) => [...r.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent ?? '')),
+      )
+  }
+  async apply(): Promise<void> {
+    const answered = waitForServerAction(this.page)
+    await this.applyButton().click()
+    await answered
+    await expect(this.root()).toHaveCount(0)
   }
 }

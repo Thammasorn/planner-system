@@ -5,6 +5,7 @@
 import { refresh } from 'next/cache'
 import { th } from '@/i18n/th'
 import type { Ok } from '@/lib/action-result'
+import type { ArchiveProjectResult } from '@/lib/contracts/projects'
 import {
   createProjectSchema,
   deleteProjectSchema,
@@ -14,6 +15,7 @@ import {
 import { action } from '../action'
 import * as audit from '../audit'
 import * as authz from '../authz'
+import { serverToday } from '../clock'
 import { db } from '../db/client'
 import type { ProjectRow } from '../db/schema'
 import { NotFoundError, ValidationError } from '../errors'
@@ -108,12 +110,15 @@ async function setArchived(
   user: SessionUser,
   projectId: string,
   archived: boolean,
-): Promise<{ changed: boolean }> {
-  const changed = await db.transaction(async (tx) => {
+): Promise<{ changed: boolean; releasedCd: number }> {
+  const today = serverToday()
+  const res = await db.transaction(async (tx) => {
     // archive: archived projects are read-only → 403 (M2-D20); unarchive is the only allowArchived caller (M2-D02).
     await authz.requireProject(tx, user, projectId, 'manage', archived ? undefined : { allowArchived: true })
+    // FR-406 X (M6-D17): counted future load, computed in the same tx before archiving.
+    const releasedCd = archived ? await services.allocations.futureProjectLoad(tx, projectId, today) : 0
     const r = await services.projects.setProjectArchived(tx, projectId, archived)
-    if (!r.changed) return false
+    if (!r.changed) return { changed: false, releasedCd: 0 }
     await audit.log(tx, user, {
       entity: 'project',
       entityId: projectId,
@@ -125,20 +130,26 @@ async function setArchived(
       before: { archived: !archived },
       after: { archived, archivedAt: r.project.archivedAt },
     })
-    return true
+    return { changed: true, releasedCd }
   })
   refresh()
-  return { changed }
+  return res
 }
 
-/** FR-406 (part): immediate, undo via unarchiveProject (X17). */
-export const archiveProject = action(projectIdSchema, ({ projectId }, { user }) =>
-  setArchived(user, projectId, true),
+/** FR-406: immediate, undo via unarchiveProject (X17). `releasedCd` (M6-D17) = the project's counted future load
+ *  (BR-50) from this week to the timeline bound, computed in the same tx before archiving; 0 when unchanged. */
+export const archiveProject = action(
+  projectIdSchema,
+  async ({ projectId }, { user }): Promise<ArchiveProjectResult> => setArchived(user, projectId, true),
 )
 
 /** No-op `{ changed: false }` (no audit row) on an active project (M2-D20). */
-export const unarchiveProject = action(projectIdSchema, ({ projectId }, { user }) =>
-  setArchived(user, projectId, false),
+export const unarchiveProject = action(
+  projectIdSchema,
+  async ({ projectId }, { user }): Promise<{ changed: boolean }> => {
+    const { changed } = await setArchived(user, projectId, false)
+    return { changed }
+  },
 )
 
 /** FR-407: manager only (archived too); `confirmName.trim()` must equal the project name. One tx (cascade + audit),

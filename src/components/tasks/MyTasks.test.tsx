@@ -73,12 +73,29 @@ describe('MyTasks (FR-1009 basic, X22, M3-D8)', () => {
         statusId: S.done,
         changed: [{ taskId: T.e, previous: { statusId: S.todo, completedOn: null } }],
         openDescendantIds: [],
+        released: null,
       }),
     )
     renderMy()
     await user.click(screen.getByRole('checkbox', { name: th.tasks.completeCheckbox('ตั้งค่า automation') }))
     await waitFor(() => expect(a.completeTask).toHaveBeenCalledWith({ taskIds: [T.e] }))
     expect(await screen.findByText(th.tasks.toast.completed)).toBeInTheDocument()
+  })
+
+  it('BR-52: ticking a task with future load shows the released load', async () => {
+    const user = userEvent.setup()
+    a.completeTask.mockReturnValue(
+      ok({
+        projectId: CRM,
+        statusId: S.done,
+        changed: [{ taskId: T.e, previous: { statusId: S.todo, completedOn: null } }],
+        openDescendantIds: [],
+        released: { cd: 1000, weeks: 4 },
+      }),
+    )
+    renderMy()
+    await user.click(screen.getByRole('checkbox', { name: th.tasks.completeCheckbox('ตั้งค่า automation') }))
+    expect(await screen.findByText(th.tasks.toast.released('10.0', 4))).toBeInTheDocument()
   })
 
   it('the name opens the task in its project', async () => {

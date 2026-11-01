@@ -1,5 +1,5 @@
 // src/lib/contracts/projects.ts — isomorphic, type-only project DTOs (FR-401..FR-409, M2 S0.5).
-import type { Certainty, ProjectRole } from '@/domain/types'
+import type { Cd, Certainty, ProjectRole } from '@/domain/types'
 import type { ClientRef } from './clients'
 
 /** The viewer's effective role on a project: managers are always MANAGER, even when they are members (M2-D17). */
@@ -55,4 +55,10 @@ export interface ProjectOverview {
   project: ProjectHeader
   members: ProjectMember[]
   warnings: { noLead: boolean }
+}
+
+/** archiveProject (FR-406, X17, M6-D17): `releasedCd` = future counted load released by archiving (0 = none). */
+export interface ArchiveProjectResult {
+  changed: boolean
+  releasedCd: Cd
 }

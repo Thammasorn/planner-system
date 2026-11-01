@@ -1267,7 +1267,7 @@ Integrator checks by hand: the M3 task panel opened from the grid uses the same 
 | GR-MISSING | — | `GET …/<random v4 uuid>` | 404 | 404 | 404 | 404 | no |
 | GR-BADID | X86 | `GET /api/grid/project/not-a-uuid?from=2026-09-28&to=2026-11-23` (malformed id) | 404 | 404 | 404 | 404 | no |
 | GR-BADQ | — | `GET …/{P}?from=2026-09-29&to=2026-11-23` (parse before authz) | 400 | 400 | 400 | 400 | no |
-| GR-SPAN | — | `GET …/{P}?from=2026-01-05&to=2027-01-11` (54 weeks) | 400 | 400 | 400 | 400 | no |
+| GR-SPAN | — | `GET …/{P}?from=2026-01-05&to=2027-01-18` (54 weeks) | 400 | 400 | 400 | 400 | no |
 | AL-SAVE | PERM-12 | `saveAllocations` pLeafLead WEEK 2026-11-16 = 200 | allow | allow | allow | 404 | yes |
 | AL-CLEAR | PERM-12 | pLeafLead WEEK 2026-09-28 = null | allow | allow | allow | 404 | yes |
 | AL-COLLAPSE | PERM-12, X27 | pChildAMember WEEK 2026-10-12 = 150 + `COLLAPSE` | allow | allow | allow | 404 | yes |
@@ -1318,17 +1318,17 @@ Deterministic per PLAN §4.5: production build, `APP_NOW=2026-09-30T10:00:00+07:
 
 ## 8. Definition of done
 
-- [ ] SPEC §12 M6 delivered: `units.ts`, `certainty.ts` (split), `allocation.ts` (distribute + BR-25 + spread/spill), `completed.ts`; `allocations` + trigger (+ exclusion); `GET /api/grid/project`; `saveAllocations`; PlanGrid with 2-axis virtualisation, horizontal timeline, **every** row of §4.8 "การกรอก" and "การลบ", undo/redo, footer, leave/holiday, certainty toggle; FR-612 in the task panel. No day-level UI (M7).
-- [ ] AC-801, AC-802, AC-803, AC-805 pass in `e2e/m6-grid.spec.ts`; AC-603 plans clause, AC-604 M6 part and AC-203 grid clause pass; golden F1 matches through the grid service **and** route.
-- [ ] e2e m0 … m6 all green (older specs updated per S6.3).
-- [ ] `pnpm check` green (domain coverage ≥ 95 %); `pnpm db:generate` → "No schema changes"; `drizzle-kit check` OK; both migrations journaled; `allocations_one_resolution_per_week` present.
-- [ ] Authz rows exist for **every** new action and route (§7.2), each single-item mutating `allow` asserting one `allocation` audit row; masking block `grid (M6)` green (leave labels, `otherProjects` numbers only).
-- [ ] Every allocation writer locks the assignment first (`lockAssignments`/version bump); every `allocations` query has a `week_start` bound (guard test green); `saveAllocations`/`planAssignmentRange` never call `refresh()`.
-- [ ] BR-52 numbers appear on every `DONE` path through `setStatus` + `statusToastMessage` (one ui test per path); FR-406 X shown.
-- [ ] No float math on loads (all formatting integer-based); no JS `Date` on plan dates; no Thai outside `src/i18n`; no `localStorage`; no confirm dialog added (the FR-612 dialog is a form); state never by colour alone (◐, ⋯, ลา glyphs with hidden text).
-- [ ] Only new dependency `@tanstack/react-virtual 3.14.13` (Decision M6-D30).
-- [ ] No `any`, `@ts-ignore` or `eslint-disable` without a reason comment.
-- [ ] `PROGRESS.md` updated (§10); commit + tag done.
+- [x] SPEC §12 M6 delivered: `units.ts`, `certainty.ts` (split), `allocation.ts` (distribute + BR-25 + spread/spill), `completed.ts`; `allocations` + trigger (+ exclusion); `GET /api/grid/project`; `saveAllocations`; PlanGrid with 2-axis virtualisation, horizontal timeline, **every** row of §4.8 "การกรอก" and "การลบ", undo/redo, footer, leave/holiday, certainty toggle; FR-612 in the task panel. No day-level UI (M7).
+- [x] AC-801, AC-802, AC-803, AC-805 pass in `e2e/m6-grid.spec.ts`; AC-603 plans clause, AC-604 M6 part and AC-203 grid clause pass; golden F1 matches through the grid service **and** route.
+- [x] e2e m0 … m6 all green (older specs updated per S6.3).
+- [x] `pnpm check` green (domain coverage ≥ 95 %); `pnpm db:generate` → "No schema changes"; `drizzle-kit check` OK; both migrations journaled; `allocations_one_resolution_per_week` present.
+- [x] Authz rows exist for **every** new action and route (§7.2), each single-item mutating `allow` asserting one `allocation` audit row; masking block `grid (M6)` green (leave labels, `otherProjects` numbers only).
+- [x] Every allocation writer locks the assignment first (`lockAssignments`/version bump); every `allocations` query has a `week_start` bound (guard test green); `saveAllocations`/`planAssignmentRange` never call `refresh()`.
+- [x] BR-52 numbers appear on every `DONE` path through `setStatus` + `statusToastMessage` (one ui test per path); FR-406 X shown.
+- [x] No float math on loads (all formatting integer-based); no JS `Date` on plan dates; no Thai outside `src/i18n`; no `localStorage`; no confirm dialog added (the FR-612 dialog is a form); state never by colour alone (◐, ⋯, ลา glyphs with hidden text).
+- [x] Only new dependency `@tanstack/react-virtual 3.14.13` (Decision M6-D30).
+- [x] No `any`, `@ts-ignore` or `eslint-disable` without a reason comment.
+- [x] `PROGRESS.md` updated (§10); commit + tag done.
 
 ---
 

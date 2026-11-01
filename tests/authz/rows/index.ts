@@ -2,6 +2,7 @@
 // one import + spread per rows file it creates; the matrix and M11's audit sweep read only this index.
 import type { AuthzRow } from '../types'
 import { rows as account } from './account'
+import { rows as allocations } from './allocations'
 import { rows as assignments } from './assignments'
 import { rows as authEndpoints } from './auth-endpoints'
 import { rows as calendar } from './calendar'
@@ -48,4 +49,6 @@ export const rows: AuthzRow[] = [
   ...leaveTypes,
   ...timeOff,
   ...calendar,
+  // M6
+  ...allocations,
 ]

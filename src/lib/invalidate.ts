@@ -25,9 +25,16 @@ export function invalidateProjects(qc: QueryClient): Promise<void> {
 }
 
 /** After any task / assignment / blocker mutation of a project (M3). The single extension point for task views:
- *  M8 appends qk.projectMilestones(projectId), M10 home + embed tasks (X82, C29); callers never list task keys. */
+ *  M6 adds the project's grid (its rows are the task tree: create, rename, move, blockers), M8 appends
+ *  qk.projectMilestones(projectId), M10 home + embed tasks (X82, C29); callers never list task keys. */
 export function invalidateTasks(qc: QueryClient, projectId: string): Promise<void> {
-  return invalidateAll(qc, [qk.projectTasks(projectId), qk.myTasks(), qk.sidebar(), qk.teamTasksAll()])
+  return invalidateAll(qc, [
+    qk.projectTasks(projectId),
+    qk.myTasks(),
+    qk.sidebar(),
+    qk.teamTasksAll(),
+    qk.gridAll({ kind: 'project', id: projectId }),
+  ])
 }
 
 /** After a status-set change (v3.1 FR-622–624): the status settings and every task view of the project. */

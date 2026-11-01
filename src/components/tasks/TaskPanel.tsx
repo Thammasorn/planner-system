@@ -14,19 +14,22 @@ import CloseOutlined from '@mui/icons-material/CloseOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import { DateField } from '@/components/common/DateField'
 import { InlineEditText } from '@/components/common/InlineEditText'
-import { compareISO } from '@/domain/dates'
+import { addDays, compareISO } from '@/domain/dates'
 import type { Certainty } from '@/domain/types'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
+import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { ProjectTasksResponse } from '@/lib/contracts/tasks'
+import { displayName } from '@/lib/display-name'
 import { formatThaiDate } from '@/lib/format'
 import { taskCertainty } from '@/lib/tasks/certainty'
 import { buildTaskRows, unionAssigneeIds, type TaskRowModel } from '@/lib/tasks/tree'
-import { AssigneeChips } from './AssigneeChips'
+import { AssigneeChips, personOf } from './AssigneeChips'
 import { AssigneeAddButton } from './AssigneePicker'
 import { BlockersSection } from './blockers/BlockersSection'
+import { PlanRangeDialog } from './plan/PlanRangeDialog'
 import { QuickAdd } from './QuickAdd'
 import { StatusChip } from './status/StatusChip'
 import { StatusMenu } from './status/StatusMenu'
@@ -60,7 +63,7 @@ function closePanel(taskId: string): void {
 /**
  * Task detail panel (FR-601, FR-611, BR-36, M3-D17): an `<aside>` beside the list (not an overlay), opened by
  * `?task=<id>`; Esc or ✕ closes. Reads the task from the project-tasks query — an id not in it shows only
- * "ไม่พบงาน". No "วางแผน" (M6) and no milestone (M8).
+ * "ไม่พบงาน". A leaf's assignees each get "วางแผน" (FR-612, M6). No milestone (M8).
  */
 export function TaskPanel({ projectId }: { projectId: string }) {
   const taskId = useTaskParam()
@@ -130,6 +133,8 @@ function PanelBody({
   const [dateError, setDateError] = useState<string | undefined>(undefined)
   const [statusAnchor, setStatusAnchor] = useState<HTMLElement | null>(null)
   const [addingSub, setAddingSub] = useState(false)
+  const [planFor, setPlanFor] = useState<{ assignmentId: string; name: string } | null>(null)
+  const today = useToday()
   const subRef = useRef<HTMLInputElement>(null)
   const addSubRef = useRef<HTMLButtonElement>(null)
   const assigneesRef = useRef<HTMLDivElement>(null)
@@ -159,6 +164,10 @@ function PanelBody({
         ? th.tasks.certainty.source.ancestor(certainty.sourceTaskName ?? '')
         : th.tasks.certainty.source.project
   const children = rows.filter((r) => r.parentId === task.id)
+  // FR-612 defaults: the task's dates, else today .. today + 4 (end never before start)
+  const planStart = task.startDate ?? today
+  const dueOrDefault = task.dueDate ?? addDays(planStart, 4)
+  const planEnd = compareISO(dueOrDefault, planStart) < 0 ? planStart : dueOrDefault
   const done = task.completedOn !== null
 
   const setDate = (field: 'startDate' | 'dueDate', value: string | null) => {
@@ -302,6 +311,35 @@ function PanelBody({
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {th.tasks.panel.parentAssigneesHint}
           </Typography>
+        ) : null}
+        {task.isLeaf && canEdit && task.assignees.length > 0 ? (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }} data-testid="plan-buttons">
+            {task.assignees.map((a) => {
+              const name = displayName(personOf(peopleById, a.userId))
+              return (
+                <Button
+                  key={a.assignmentId}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setPlanFor({ assignmentId: a.assignmentId, name })}
+                >
+                  {th.plan.buttonFor(name)}
+                </Button>
+              )
+            })}
+          </Box>
+        ) : null}
+        {planFor ? (
+          <PlanRangeDialog
+            open
+            onClose={() => setPlanFor(null)}
+            taskAssignmentId={planFor.assignmentId}
+            personName={planFor.name}
+            taskName={task.name}
+            projectId={projectId}
+            defaultStart={planStart}
+            defaultEnd={planEnd}
+          />
         ) : null}
       </Box>
 

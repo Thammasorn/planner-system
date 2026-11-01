@@ -554,6 +554,47 @@ export const timeOff = pgTable(
   ],
 )
 
+// ---------------------------------------------------------------------------------------------------------------
+// M6 — allocations (SPEC §6.2, BR-20/20b/26, X10; plan/m06 S0.3). The BR-20b trigger `trg_week_day_exclusivity`
+// and the EXCLUDE constraint "allocations_one_resolution_per_week" have no Drizzle API: they live in the custom
+// migration `allocations_week_day_guard` (needs btree_gist from 0000_extensions, M6-D5). numeric(4,2) ↔ cd only in
+// src/server/repo/allocations.ts (BR-02). Every query on this table carries a `week_start` range (SPEC §6.5).
+// ---------------------------------------------------------------------------------------------------------------
+
+export const granularity = pgEnum('granularity', ['WEEK', 'DAY'])
+
+/** Plans per assignment: one WEEK row per week, or DAY rows inside that week — never both (BR-20b). */
+export const allocations = pgTable(
+  'allocations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskAssignmentId: uuid('task_assignment_id')
+      .notNull()
+      .references(() => taskAssignments.id, { onDelete: 'cascade' }),
+    granularity: granularity('granularity').notNull(),
+    periodStart: date('period_start', { mode: 'string' }).notNull(), // Monday for WEEK, the day for DAY
+    weekStart: date('week_start', { mode: 'string' }).notNull(),
+    personDays: numeric('person_days', { precision: 4, scale: 2 }).notNull(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('allocations_ta_granularity_period_key').on(t.taskAssignmentId, t.granularity, t.periodStart),
+    check('allocations_person_days_check', sql`${t.personDays} > 0`),
+    check('allocations_week_start_check', sql`extract(isodow from ${t.weekStart}) = 1`),
+    check(
+      'allocations_period_check',
+      sql`(${t.granularity} = 'WEEK' and ${t.periodStart} = ${t.weekStart} and ${t.personDays} <= 7) or
+      (${t.granularity} = 'DAY' and ${t.periodStart} >= ${t.weekStart} and ${t.periodStart} < ${t.weekStart} + 7 and ${t.personDays} <= 1)`,
+    ),
+    index('allocations_week_start_ta_idx').on(t.weekStart, t.taskAssignmentId),
+    index('allocations_ta_week_start_idx').on(t.taskAssignmentId, t.weekStart),
+    // EXCLUDE "allocations_one_resolution_per_week" + trigger: custom migration allocations_week_day_guard
+  ],
+)
+
+export type AllocationDbRow = typeof allocations.$inferSelect
+export type NewAllocation = typeof allocations.$inferInsert
+
 export type HolidayRow = typeof holidays.$inferSelect
 export type NewHoliday = typeof holidays.$inferInsert
 export type LeaveTypeRow = typeof leaveTypes.$inferSelect

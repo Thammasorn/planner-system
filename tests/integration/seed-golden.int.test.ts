@@ -1,14 +1,16 @@
 // X11 / SEED-A1 (M1 stage) — seedGolden inserts docs/reference/golden-fixtures.json positions, users and schedules
 // through the services. plan/m01-auth-employees.md §5.S4 (S4.9, second part) and §7.4. M5 (plan/m05 S4.6, M5-D12):
 // the 4 default leave types right after positions (so applyFixture finds "ลาพักร้อน"); audit counts stay relative.
+// M6 (plan/m06 S5.5, M6-D23): the 57 WEEK plans of the JSON + one actor-null `allocation` audit row per assignment.
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { asc, count, countDistinct, eq, sql } from 'drizzle-orm'
+import { and, asc, count, countDistinct, eq, gte, lt, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/server/db/client'
 import { th } from '@/i18n/th'
 import {
   account,
+  allocations,
   auditLog,
   holidays,
   leaveTypes,
@@ -163,5 +165,44 @@ describe('seedGolden — M5 leave types (X11, M5-D12)', () => {
     const previousStage = [...byEntity].filter(([e]) => e !== 'leave_type').reduce((a, [, k]) => a + k, 0)
     expect(total).toBe(previousStage + 4)
     expect(byEntity.get('user')).toBe(golden.users.length)
+  })
+})
+
+describe('seedGolden — M6 allocations (X11, M6-D23)', () => {
+  const total = async () => Number((await db.select({ n: count() }).from(auditLog))[0]?.n ?? 0)
+  /** Every allocations query is bounded by week_start (SPEC §6.5); the golden plans lie in 2026–2027. */
+  const inRange = and(gte(allocations.weekStart, '2026-01-05'), lt(allocations.weekStart, '2028-01-03'))
+
+  it('T-SEED-M6-01 57 WEEK rows, Σ person_days = 195.00, every row on a Monday of its own week', async () => {
+    await seedGolden(db)
+    const [agg] = await db
+      .select({
+        n: count(),
+        sum: sql<string>`sum(${allocations.personDays})::text`,
+        weekly: sql<number>`count(*) filter (where ${allocations.granularity} = 'WEEK' and ${allocations.periodStart} = ${allocations.weekStart})::int`,
+      })
+      .from(allocations)
+      .where(inRange)
+    expect(Number(agg?.n)).toBe(57)
+    expect(agg?.weekly).toBe(57)
+    expect(agg?.sum).toBe('195.00')
+  })
+
+  it('T-SEED-M6-02 the allocations stage adds exactly 10 audit rows (one per assignment, entity allocation, actor null) — relative count, C3/C23', async () => {
+    await seedGolden(db, { upTo: 'pages' })
+    const previousStage = await total()
+    expect(Number((await db.select({ n: count() }).from(allocations).where(inRange))[0]?.n ?? 0)).toBe(0)
+    await db.transaction(async (tx) => {
+      await truncateAll(tx)
+      await seedGolden(tx)
+    })
+    expect(await total()).toBe(previousStage + 10)
+    const audits = await db
+      .select({ action: auditLog.action, actorId: auditLog.actorId, entityId: auditLog.entityId })
+      .from(auditLog)
+      .where(eq(auditLog.entity, 'allocation'))
+    expect(audits).toHaveLength(10)
+    expect(new Set(audits.map((a) => a.entityId)).size).toBe(10)
+    for (const a of audits) expect(a).toMatchObject({ actorId: null })
   })
 })

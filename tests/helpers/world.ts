@@ -14,12 +14,14 @@ import type {
   ProjectRow,
   TimeOffRow,
 } from '@/server/db/schema'
+import type { AllocRow } from '@/server/repo/allocations'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
 import type { TaskBlockerRow } from '@/server/repo/task-blockers'
 import type { TaskStatusRow } from '@/server/repo/task-statuses'
 import { pdfBytes } from './files'
 import {
+  makeAllocation,
   makeAssignment,
   makeBlocker,
   makeClient,
@@ -58,6 +60,7 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
  *  allocations, M8 milestones → tasks + allocations). */
 export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>> = {
   files: ['pages'], // M4: every world file sits on a world page
+  allocations: ['tasks', 'timeOff'], // M6: plans on the M3 assignments + the M5 coworker (plan/m06 S0.11)
 }
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
@@ -87,6 +90,8 @@ export interface WorldTasks {
     aTask: TaskRow
     /** A second root (status doing after aDeletedStatus). */
     aTask2: TaskRow
+    /** M6 (with 'allocations'): P root 'งานร่วม P-ลับ03' after pDone, assigned coworker. */
+    pCoworker: TaskRow
   }
   /** Soft-deleted roots (1 day ago) whose batches are w.batches.pDeletedTask / aDeletedTask. */
   deletedTasks: { pDeleted: TaskRow; aDeleted: TaskRow }
@@ -95,6 +100,12 @@ export interface WorldTasks {
     pLeafLead: AssignmentRow
     qTaskOutsider: AssignmentRow
     aTaskMember: AssignmentRow
+    /** M6 (with 'allocations'): member on pDone (completed 2026-09-28). */
+    pDoneMember: AssignmentRow
+    /** M6 (with 'allocations'): coworker on pCoworker. */
+    pCoworker: AssignmentRow
+    /** M6 (with 'allocations'): coworker on qTask (feeds P's otherProjects; Q stays hidden). */
+    qTaskCoworker: AssignmentRow
   }
   batches: {
     pDeletedTask: string
@@ -190,6 +201,27 @@ export interface WorldTimeOff {
   }
 }
 
+/** Part 'allocations' (M6, plan/m06 S0.11). Rows of each assignment (plain inserts: every assignment version stays 1).
+ *  No November 2026 week on pLeafLead or aTaskMember (M7's dayAllocations uses 11-02 / 11-09). */
+export interface WorldAllocations {
+  allocations: {
+    /** WEEK 2026-09-28 = 250, 2026-10-05 = 500. */
+    pLeafLead: AllocRow[]
+    /** WEEK 2026-09-28 = 100; DAY 2026-10-12 = 50, 2026-10-13 = 50 (the X27 DAY week). */
+    pChildAMember: AllocRow[]
+    /** WEEK 2026-09-28 = 100, 2026-10-05 = 200 (BR-50: 10-05 not counted, pDone completed 2026-09-28). */
+    pDoneMember: AllocRow[]
+    /** WEEK 2026-09-28 = 300 (Q). */
+    qTaskOutsider: AllocRow[]
+    /** WEEK 2026-10-05 = 200 (archived A). */
+    aTaskMember: AllocRow[]
+    /** WEEK 2026-10-05 = 100. */
+    pCoworker: AllocRow[]
+    /** WEEK 2026-10-05 = 300 (Q). */
+    qTaskCoworker: AllocRow[]
+  }
+}
+
 /** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
 export type WorldBatches = WorldTasks['batches'] & {
   /** P root 'ลบแล้ว P', deleted 1 day ago. */
@@ -204,7 +236,8 @@ export type WorldBatches = WorldTasks['batches'] & {
   coworkerDeletedTimeOff: string
 }
 
-export interface World extends Omit<WorldTasks, 'batches'>, WorldPages, WorldFiles, WorldTimeOff {
+export interface World
+  extends Omit<WorldTasks, 'batches'>, WorldPages, WorldFiles, WorldTimeOff, WorldAllocations {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
@@ -235,6 +268,25 @@ function notBuilt<T extends object>(part: WorldPart, field: string): T {
     get(_t, prop) {
       if (typeof prop === 'symbol' || prop === 'then' || prop === 'toJSON') return undefined
       throw new Error(`world.${field}.${prop} needs createWorld({ with: ['${part}'] })`)
+    },
+  })
+}
+
+/** Keys a later part adds to an object an earlier part built: reading one before that part ran throws like notBuilt.
+ *  Only the listed keys trap, so matchers that probe other properties keep working. */
+function withPendingKeys<T extends object>(
+  obj: T,
+  part: WorldPart,
+  field: string,
+  keys: readonly string[],
+): T {
+  const pending = new Set(keys)
+  return new Proxy(obj, {
+    get(t, prop, receiver) {
+      if (typeof prop === 'string' && pending.has(prop) && !(prop in t)) {
+        throw new Error(`world.${field}.${prop} needs createWorld({ with: ['${part}'] })`)
+      }
+      return Reflect.get(t, prop, receiver) as unknown
     },
   })
 }
@@ -352,9 +404,19 @@ async function buildTasks(w: World): Promise<void> {
   const pLeafByChildA = await makeBlocker({ task: pLeaf, blocker: pChildA, createdBy: manager })
 
   w.users.former = former
-  w.tasks = { pParent, pChildA, pChildB, pLeaf, pDone, qTask, aTask, aTask2 }
+  w.tasks = withPendingKeys(
+    { pParent, pChildA, pChildB, pLeaf, pDone, qTask, aTask, aTask2 } as World['tasks'],
+    'allocations',
+    'tasks',
+    ['pCoworker'],
+  )
   w.deletedTasks = { pDeleted, aDeleted }
-  w.assignments = { pChildAMember, pLeafLead, qTaskOutsider, aTaskMember }
+  w.assignments = withPendingKeys(
+    { pChildAMember, pLeafLead, qTaskOutsider, aTaskMember } as World['assignments'],
+    'allocations',
+    'assignments',
+    ['pDoneMember', 'pCoworker', 'qTaskCoworker'],
+  )
   Object.assign(w.batches, {
     pDeletedTask,
     aDeletedTask,
@@ -528,12 +590,50 @@ async function buildTimeOff(w: World): Promise<void> {
   Object.assign(w.batches, { coworkerDeletedTimeOff })
 }
 
+/** M6 'allocations' part (plan/m06 S0.11): plans on the M3 assignments + three new assignments (WorldAllocations). */
+async function buildAllocations(w: World): Promise<void> {
+  const { manager, member, P } = w
+  const coworker = w.users.coworker!
+  const week = (assignment: { id: string }, pairs: readonly (readonly [ISODate, number])[]) =>
+    Promise.all(pairs.map(([period, cd]) => makeAllocation({ assignment, period, cd })))
+
+  const pCoworkerTask = await makeTask({ project: P, name: 'งานร่วม P-ลับ03', createdBy: manager })
+  const pDoneMember = await makeAssignment({ task: w.tasks.pDone, user: member })
+  const pCoworker = await makeAssignment({ task: pCoworkerTask, user: coworker })
+  const qTaskCoworker = await makeAssignment({ task: w.tasks.qTask, user: coworker })
+  const a = w.assignments
+
+  const pChildAMember = [
+    ...(await week(a.pChildAMember, [['2026-09-28', 100]])),
+    await makeAllocation({ assignment: a.pChildAMember, period: '2026-10-12', cd: 50, granularity: 'DAY' }),
+    await makeAllocation({ assignment: a.pChildAMember, period: '2026-10-13', cd: 50, granularity: 'DAY' }),
+  ]
+  w.allocations = {
+    pLeafLead: await week(a.pLeafLead, [
+      ['2026-09-28', 250],
+      ['2026-10-05', 500],
+    ]),
+    pChildAMember,
+    pDoneMember: await week(pDoneMember, [
+      ['2026-09-28', 100],
+      ['2026-10-05', 200],
+    ]),
+    qTaskOutsider: await week(a.qTaskOutsider, [['2026-09-28', 300]]),
+    aTaskMember: await week(a.aTaskMember, [['2026-10-05', 200]]),
+    pCoworker: await week(pCoworker, [['2026-10-05', 100]]),
+    qTaskCoworker: await week(qTaskCoworker, [['2026-10-05', 300]]),
+  }
+  Object.assign(w.tasks, { pCoworker: pCoworkerTask })
+  Object.assign(w.assignments, { pDoneMember, pCoworker, qTaskCoworker })
+}
+
 /** Builders by part; each milestone adds its own. */
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
   pages: buildPages,
   files: buildFiles,
   timeOff: buildTimeOff,
+  allocations: buildAllocations,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -594,6 +694,7 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     leaveTypes: notBuilt('timeOff', 'leaveTypes'),
     timeOff: notBuilt('timeOff', 'timeOff'),
     holidays: notBuilt('timeOff', 'holidays'),
+    allocations: notBuilt('allocations', 'allocations'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w

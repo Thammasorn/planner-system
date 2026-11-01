@@ -3,7 +3,7 @@
 // the widgets' own key handlers (e.code, X49).
 import { th } from '@/i18n/th'
 
-export type ShortcutScope = 'global' | 'taskList' | 'calendar'
+export type ShortcutScope = 'global' | 'taskList' | 'calendar' | 'grid'
 export type KeyToken =
   | 'Mod'
   | 'Shift'
@@ -25,6 +25,13 @@ export type KeyToken =
   | 'S'
   | 'K'
   | '?'
+  | 'F'
+  | 'H'
+  | 'C'
+  | 'V'
+  | 'Arrows'
+  | 'Backspace'
+  | 'Drag'
 
 export interface ShortcutDef {
   id: string
@@ -34,21 +41,18 @@ export interface ShortcutDef {
   label: string
 }
 
-export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList', 'calendar']
+export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList', 'calendar', 'grid']
 
 /** Section heading of each scope in the `?` help (M5: the calendar heading lives in its own namespace). */
 export const SHORTCUT_SCOPE_LABELS: Readonly<Record<ShortcutScope, string>> = {
   global: th.shortcuts.scopes.global,
   taskList: th.shortcuts.scopes.taskList,
   calendar: th.calendar.shortcuts.scope,
+  grid: th.shortcuts.scopes.grid,
 }
 
 /** Key caption of every token ('Mod' = Ctrl here; the help shows ⌘ on Apple platforms). */
-export const SHORTCUT_KEY_LABELS: Readonly<Record<KeyToken, string>> = {
-  ...th.shortcuts.keys,
-  ArrowLeft: th.calendar.shortcuts.keys.ArrowLeft,
-  ArrowRight: th.calendar.shortcuts.keys.ArrowRight,
-}
+export const SHORTCUT_KEY_LABELS: Readonly<Record<KeyToken, string>> = th.shortcuts.keys
 
 export const SHORTCUTS: readonly ShortcutDef[] = [
   {
@@ -126,4 +130,36 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     label: th.calendar.shortcuts.open,
   },
   { id: 'calendar.clear', scope: 'calendar', combos: [['Esc']], label: th.calendar.shortcuts.clear },
+  // M6 planning grid (§4.8, §8.6, X07, X49 — matched on e.code by useGridKeyboard). M7 appends grid.expandWeek,
+  // grid.collapseWeek, grid.cellMenu.
+  { id: 'grid.edit', scope: 'grid', combos: [['Enter'], ['Tab']], label: th.shortcuts.items.gridEdit },
+  { id: 'grid.cancel', scope: 'grid', combos: [['Esc']], label: th.shortcuts.items.gridCancel },
+  {
+    id: 'grid.select',
+    scope: 'grid',
+    combos: [['Shift', 'Arrows'], ['Drag']],
+    label: th.shortcuts.items.gridSelect,
+  },
+  { id: 'grid.full', scope: 'grid', combos: [['F']], label: th.shortcuts.items.gridFull },
+  { id: 'grid.half', scope: 'grid', combos: [['H']], label: th.shortcuts.items.gridHalf },
+  { id: 'grid.copy', scope: 'grid', combos: [['Mod', 'C']], label: th.shortcuts.items.gridCopy },
+  { id: 'grid.paste', scope: 'grid', combos: [['Mod', 'V']], label: th.shortcuts.items.gridPaste },
+  {
+    id: 'grid.shift',
+    scope: 'grid',
+    combos: [
+      ['Mod', 'ArrowLeft'],
+      ['Mod', 'ArrowRight'],
+    ],
+    label: th.shortcuts.items.gridShift,
+  },
+  {
+    id: 'grid.clear',
+    scope: 'grid',
+    combos: [['Delete'], ['Backspace']],
+    label: th.shortcuts.items.gridClear,
+  },
+  // Shift+Space selects the focused row — the keyboard path to deleting a task row (M6-D19)
+  { id: 'grid.selectRow', scope: 'grid', combos: [['Shift', 'Space']], label: th.shortcuts.items.gridSelectRow },
+  { id: 'grid.newTask', scope: 'grid', combos: [['N']], label: th.shortcuts.items.gridNewTask },
 ]

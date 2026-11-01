@@ -1,8 +1,13 @@
 // tests/authz/types.ts — the table-driven authorization matrix contract (PLAN.md §4.4, X91).
 import type { ActionResult } from '@/lib/action-result'
 import type { AuditEntity } from '@/server/audit'
+import type { ALLOCATION_AUDIT_ENTITY } from '@/server/services/allocations'
 import type { TestUser } from '../helpers/factories'
 import type { World, WorldPart } from '../helpers/world'
+
+/** Audit entities the matrix may expect. M6 rows expect `ALLOCATION_AUDIT_ENTITY` ('allocation', M6-D29/X93), which
+ *  M6 S2 adds to `AuditEntity` itself; the explicit union keeps the rows typed against the canonical constant. */
+export type MatrixAuditEntity = AuditEntity | typeof ALLOCATION_AUDIT_ENTITY
 
 /** M manager · L lead · Me member · W outsider (in M1 L/Me/W are three plain workers). */
 export type Role = 'M' | 'L' | 'Me' | 'W'
@@ -17,7 +22,7 @@ export interface AuthzRow<C = unknown> {
   mutates: boolean
   /** required for mutating rows unless explicitly false (X44 exceptions). projectId: omitted → the audit row's
    *  project_id must be null; a function → must equal its result; 'any' → not checked (rows that create a project). */
-  audit?: { entity: AuditEntity; projectId?: ((w: World, ctx: C) => string | null) | 'any' } | false
+  audit?: { entity: MatrixAuditEntity; projectId?: ((w: World, ctx: C) => string | null) | 'any' } | false
   /** action allowed while mustChangePassword */
   allowMustChange?: boolean
   /** world parts the row needs (X91); default [] */

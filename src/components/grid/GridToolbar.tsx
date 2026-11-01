@@ -1,0 +1,110 @@
+'use client'
+// src/components/grid/GridToolbar.tsx — `[สัปดาห์] ◀ [วันนี้] ▶ ภาระ: [ทั้งหมด▾] หน่วย: [วัน▾]` (SPEC §8.3, FR-801/802/804/809,
+// M6-D12/D21). The toolbar is one set of MUI controls (not per cell). M7 adds the วัน zoom option.
+import Button from '@mui/material/Button'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
+import Switch from '@mui/material/Switch'
+import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ChevronLeft from '@mui/icons-material/ChevronLeft'
+import ChevronRight from '@mui/icons-material/ChevronRight'
+import EventBusyOutlined from '@mui/icons-material/EventBusyOutlined'
+import type { CellUnit, LoadView } from '@/domain/types'
+import { th } from '@/i18n/th'
+import { GRID_UNITS, LOAD_VIEWS } from '@/lib/schemas/preferences'
+import type { SaveState } from './useSaveAllocations'
+import styles from './grid.module.css'
+
+export interface GridToolbarProps {
+  view: LoadView
+  unit: CellUnit
+  showCompleted: boolean
+  saveState: SaveState
+  onPrev: () => void
+  onNext: () => void
+  onToday: () => void
+  onView: (v: LoadView) => void
+  onUnit: (u: CellUnit) => void
+  onShowCompleted: (on: boolean) => void
+}
+
+export function GridToolbar(p: GridToolbarProps) {
+  return (
+    <div role="toolbar" aria-label={th.grid.toolbar.label} className={styles.toolbar}>
+      <ToggleButton value="WEEK" selected size="small" aria-label={th.grid.toolbar.zoomWeek} disableRipple>
+        {th.grid.toolbar.zoomWeek}
+      </ToggleButton>
+      <IconButton size="small" aria-label={th.grid.toolbar.prev} onClick={p.onPrev}>
+        <ChevronLeft fontSize="small" />
+      </IconButton>
+      <Button size="small" variant="outlined" onClick={p.onToday}>
+        {th.grid.toolbar.today}
+      </Button>
+      <IconButton size="small" aria-label={th.grid.toolbar.next} onClick={p.onNext}>
+        <ChevronRight fontSize="small" />
+      </IconButton>
+      <TextField
+        select
+        size="small"
+        label={th.grid.toolbar.view}
+        value={p.view}
+        onChange={(e) => p.onView(e.target.value as LoadView)}
+        sx={{ minWidth: 170 }}
+      >
+        {LOAD_VIEWS.map((v) => (
+          <MenuItem key={v} value={v}>
+            {th.grid.view[v]}
+          </MenuItem>
+        ))}
+      </TextField>
+      <TextField
+        select
+        size="small"
+        label={th.units.label}
+        value={p.unit}
+        onChange={(e) => p.onUnit(e.target.value as CellUnit)}
+        sx={{ minWidth: 110 }}
+      >
+        {GRID_UNITS.map((u) => (
+          <MenuItem key={u} value={u}>
+            {th.units[u]}
+          </MenuItem>
+        ))}
+      </TextField>
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={p.showCompleted}
+            onChange={(e) => p.onShowCompleted(e.target.checked)}
+          />
+        }
+        label={th.grid.toolbar.showCompleted}
+      />
+      <span className={styles.saveState} role="status" aria-live="polite" data-save-status={p.saveState}>
+        {th.grid.save[p.saveState]}
+      </span>
+    </div>
+  )
+}
+
+/** What M6 draws (§8.3, FR-807, M6-D20): ⋯ day detail, ◐ / * / ▌ tentative, leave stripes + icon, 🎌 holiday week
+ *  in the header, ▨ grey stripes for a week without capacity. */
+export function GridLegend() {
+  return (
+    <div className={styles.legend} data-testid="grid-legend">
+      <span>{th.grid.legend.dayDetail}</span>
+      <span>{th.grid.legend.tentative}</span>
+      <span>{th.grid.legend.source}</span>
+      <span>{th.grid.legend.bar}</span>
+      <span className={styles.legendItem}>
+        <EventBusyOutlined fontSize="inherit" aria-hidden="true" />
+        {th.grid.legend.leave}
+      </span>
+      <span>{th.grid.legend.holiday}</span>
+      <span>{th.grid.legend.noCapacity}</span>
+    </div>
+  )
+}

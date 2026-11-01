@@ -175,9 +175,10 @@ test.describe('E1 ⟲ (FR-402, FR-505, FR-408, UI-01, X78) every project has its
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}\/overview$/)
     const projectId = /\/projects\/([0-9a-f-]{36})\//.exec(page.url())![1]!
 
-    // FR-408 / X15: ภาพรวม · งาน · เอกสาร (M4-only list: M6 inserts แผนงาน and updates this line)
+    // FR-408 / X15 / X84: ภาพรวม · แผนงาน (M6) · งาน · เอกสาร
     await expect(project.tabs()).toHaveText([
       th.projects.tabs.overview,
+      th.projects.tabs.plan,
       th.projects.tabs.tasks,
       th.projects.tabs.pages,
     ])

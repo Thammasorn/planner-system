@@ -1,7 +1,16 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { certaintySource, effectiveCertainty, resolveCertainty, type CertaintyNode } from './certainty'
-import type { Certainty } from './types'
+import {
+  addLoad,
+  certaintySource,
+  effectiveCertainty,
+  resolveCertainty,
+  splitLoad,
+  viewLoad,
+  ZERO_LOAD,
+  type CertaintyNode,
+} from './certainty'
+import type { Certainty, LoadPair, LoadView } from './types'
 
 type O = Certainty | null
 const IDS = ['t', 'p', 'g'] as const
@@ -93,6 +102,59 @@ describe('BR-35/36 resolveCertainty', () => {
           expect(r.sourceTaskId === null).toBe(r.source === 'project')
         },
       ),
+    )
+  })
+})
+
+describe('load (BR-37, X03)', () => {
+  it.each([
+    [250, 'TENTATIVE', { total: 250, committed: 0 }],
+    [250, 'CONFIRMED', { total: 250, committed: 250 }],
+    [0, 'CONFIRMED', { total: 0, committed: 0 }],
+  ] as const)('splitLoad(%i, %s) = %j', (cd, certainty, expected) => {
+    expect(splitLoad(cd, certainty)).toEqual(expected)
+  })
+
+  it.each([
+    ['ALL', 625],
+    ['COMMITTED', 500],
+    ['AT_RISK', 125],
+  ] as const)('viewLoad({625, 500}, %s) = %i', (view, expected) => {
+    expect(viewLoad({ total: 625, committed: 500 }, view)).toBe(expected)
+  })
+
+  it('addLoad adds both parts; ZERO_LOAD is the identity and frozen', () => {
+    expect(addLoad({ total: 250, committed: 0 }, { total: 375, committed: 375 })).toEqual({ total: 625, committed: 375 })
+    expect(addLoad(ZERO_LOAD, { total: 5, committed: 1 })).toEqual({ total: 5, committed: 1 })
+    expect(ZERO_LOAD).toEqual({ total: 0, committed: 0 })
+    expect(Object.isFrozen(ZERO_LOAD)).toBe(true)
+  })
+
+  it('splitLoad rejects non-integer cd (BR-01)', () => {
+    expect(() => splitLoad(1.5, 'CONFIRMED')).toThrow(RangeError)
+  })
+
+  const arbPair: fc.Arbitrary<LoadPair> = fc
+    .tuple(fc.integer({ min: 0, max: 100_000 }), fc.integer({ min: 0, max: 100_000 }))
+    .map(([a, b]) => ({ total: Math.max(a, b), committed: Math.min(a, b) }))
+
+  it('property: addLoad is associative and commutative; ZERO_LOAD is neutral', () => {
+    fc.assert(
+      fc.property(arbPair, arbPair, arbPair, (a, b, c) => {
+        expect(addLoad(addLoad(a, b), c)).toEqual(addLoad(a, addLoad(b, c)))
+        expect(addLoad(a, b)).toEqual(addLoad(b, a))
+        expect(addLoad(a, ZERO_LOAD)).toEqual(a)
+      }),
+    )
+  })
+
+  it('property: ALL = COMMITTED + AT_RISK and the views are additive', () => {
+    const views: LoadView[] = ['ALL', 'COMMITTED', 'AT_RISK']
+    fc.assert(
+      fc.property(arbPair, arbPair, (a, b) => {
+        expect(viewLoad(a, 'ALL')).toBe(viewLoad(a, 'COMMITTED') + viewLoad(a, 'AT_RISK'))
+        for (const v of views) expect(viewLoad(addLoad(a, b), v)).toBe(viewLoad(a, v) + viewLoad(b, v))
+      }),
     )
   })
 })

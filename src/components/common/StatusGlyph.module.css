@@ -1,0 +1,41 @@
+/* StatusGlyph (PLAN §3.9, SPEC §8.9): small inline glyphs that sit next to (never instead of) text alternatives.
+   Dense surfaces (grid cells) use these classes; no MUI styling per cell. M7 adds .over / .risk. */
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  line-height: 1;
+  font-size: 12px;
+}
+
+.leave {
+  composes: glyph;
+  color: var(--mui-palette-text-secondary);
+}
+
+.leave svg {
+  width: 12px;
+  height: 12px;
+}
+
+.holiday {
+  composes: glyph;
+}
+
+.tentative {
+  composes: glyph;
+  color: var(--tentative-fg);
+  font-weight: 700;
+}
+
+.dayDetail {
+  composes: glyph;
+  color: var(--faded-fg);
+  font-weight: 700;
+}
+
+.noCapacity {
+  composes: glyph;
+  color: var(--faded-fg);
+}

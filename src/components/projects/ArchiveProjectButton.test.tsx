@@ -48,3 +48,26 @@ describe('ArchiveProjectButton — keyboard focus (SPEC §8.9, KEY-03)', () => {
     expect(document.activeElement).not.toBe(document.body)
   })
 })
+
+describe('ArchiveProjectButton — FR-406 X (X17, M6-D17)', () => {
+  it('names the released future load in the archive toast', async () => {
+    const user = userEvent.setup()
+    mocks.archiveProject.mockResolvedValue({ ok: true, changed: true, releasedCd: 2500 })
+    renderWithProviders(<ArchiveProjectButton projectId={PID} name="POS Upgrade" action="archive" />)
+    await user.click(screen.getByRole('button', { name: th.projects.archive }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledTimes(1))
+    expect(mocks.push.mock.calls[0]![1]).toEqual({
+      toast: 'archive "POS Upgrade" แล้ว — ปลดภาระ 25.0 วัน-คน ในอนาคต',
+    })
+    expect(mocks.push.mock.calls[0]![0]).toMatchObject({ label: th.projects.toasts.archived('POS Upgrade') })
+  })
+
+  it('keeps the plain archive toast when nothing is released', async () => {
+    const user = userEvent.setup()
+    mocks.archiveProject.mockResolvedValue({ ok: true, changed: true, releasedCd: 0 })
+    renderWithProviders(<ArchiveProjectButton projectId={PID} name="POS Upgrade" action="archive" />)
+    await user.click(screen.getByRole('button', { name: th.projects.archive }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledTimes(1))
+    expect(mocks.push.mock.calls[0]![1]).toEqual({ toast: th.projects.toasts.archived('POS Upgrade') })
+  })
+})

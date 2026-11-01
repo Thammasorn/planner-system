@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import { getJson } from '@/lib/api'
-import { qk } from '@/lib/query-keys'
+import { qk, qkPrefix } from '@/lib/query-keys'
 import type { TimeOffImpact } from '@/lib/contracts/time-off'
 import { formatLeaveRange, formatThaiDate } from '@/lib/format'
 import { LeaveDialog } from './LeaveDialog'
@@ -146,6 +146,20 @@ describe('LeaveDialog (FR-903/905/906, M5-D6/D14)', () => {
     expect(buttons).toHaveLength(1)
     await user.click(buttons[0]!)
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('a successful save invalidates the load views (grid footer capacity, X18 / M6 S4.5)', async () => {
+    const user = userEvent.setup()
+    a.createTimeOff.mockResolvedValue({
+      ok: true,
+      id: '7a1c2c38-5a8e-4a6c-9a0e-0000000000ab',
+      impact: impact([{ weekStart: '2026-10-05', beforeCd: 500, afterCd: 300 }]),
+    })
+    const { dialog, qc } = setup({ mode: 'create', startDate: '2026-10-05', endDate: '2026-10-06' })
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    await user.click(within(dialog).getByRole('button', { name: th.timeOff.dialog.save }))
+    expect(await within(dialog).findByText(th.timeOff.dialog.saved)).toBeInTheDocument()
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: qkPrefix.grid }))
   })
 
   it('an impact with no changed week renders noImpact; the chosen type, half and note are sent', async () => {

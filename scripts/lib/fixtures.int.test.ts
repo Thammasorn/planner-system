@@ -1,10 +1,11 @@
 // M2 S1.7 — golden clients / projects / memberships (X11, M2-D12, BR-60 context, SEED-A1 part).
-import { asc, count, eq, inArray } from 'drizzle-orm'
+import { and, asc, count, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/server/db/client'
 import { th } from '@/i18n/th'
 import { displayName } from '@/lib/display-name'
 import {
+  allocations,
   auditLog,
   clients,
   holidays,
@@ -18,7 +19,7 @@ import {
   timeOff,
   user,
 } from '@/server/db/schema'
-import { applyFixture, loadGolden, parseFixtureArg, seedGolden } from './fixtures'
+import { addSyntheticGridProject, applyFixture, loadGolden, parseFixtureArg, seedGolden } from './fixtures'
 
 async function membership(): Promise<Record<string, Record<string, string>>> {
   const rows = await db
@@ -238,5 +239,95 @@ describe('M5 — seedGolden leave types + applyFixture F2/F3/F4 (X11, M5-D12; pl
     expect(parseFixtureArg([])).toBeNull()
     expect(() => parseFixtureArg(['--fixture=F9'])).toThrow()
     expect(() => parseFixtureArg(['--fixture'])).toThrow()
+  })
+})
+
+describe('M6 — seedGolden allocations + addSyntheticGridProject (X11, X92, M6-D22/D23; plan/m06 S0.10)', () => {
+  /** Bounded like every allocations query (SPEC §6.5): the golden window [2026-08-31, 2027-01-04) and beyond. */
+  const inRange = and(gte(allocations.weekStart, '2026-01-05'), lt(allocations.weekStart, '2028-01-03'))
+
+  it('57 WEEK rows, Σ person_days = 195.00; Rollout สาขา 11-30 … 12-28; 10 actor-null allocation audit rows', async () => {
+    await seedGolden(db)
+    const rows = await db.select().from(allocations).where(inRange)
+    expect(rows).toHaveLength(57)
+    expect(rows.every((r) => r.granularity === 'WEEK' && r.periodStart === r.weekStart)).toBe(true)
+    const [sum] = await db
+      .select({ total: sql<string>`sum(${allocations.personDays})::text` })
+      .from(allocations)
+      .where(inRange)
+    expect(sum?.total).toBe('195.00')
+    const rollout = await db
+      .select({ week: allocations.weekStart, pd: allocations.personDays })
+      .from(allocations)
+      .innerJoin(taskAssignments, eq(taskAssignments.id, allocations.taskAssignmentId))
+      .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+      .where(and(eq(tasks.name, 'Rollout สาขา'), inRange))
+      .orderBy(asc(allocations.weekStart))
+    expect(rollout).toEqual([
+      { week: '2026-11-30', pd: '2.50' },
+      { week: '2026-12-07', pd: '3.75' },
+      { week: '2026-12-14', pd: '5.00' },
+      { week: '2026-12-21', pd: '5.00' },
+      { week: '2026-12-28', pd: '2.50' },
+    ])
+    const audits = await db.select().from(auditLog).where(eq(auditLog.entity, 'allocation'))
+    expect(audits).toHaveLength(10)
+    const assignmentIds = (await db.select({ id: taskAssignments.id }).from(taskAssignments)).map((a) => a.id)
+    expect(audits.map((a) => a.entityId).sort()).toEqual([...assignmentIds].sort())
+    for (const a of audits) {
+      expect(a.actorId).toBeNull()
+      expect(a.projectId).not.toBeNull()
+    }
+    const rolloutAudit = audits.find((a) => a.summary === th.audit.allocationsSeeded(5))
+    expect(rolloutAudit).toBeDefined()
+  })
+
+  it("upTo: 'pages' seeds no allocations and no allocation audit rows", async () => {
+    await seedGolden(db, { upTo: 'pages' })
+    expect(await db.select().from(allocations).where(inRange)).toEqual([])
+    expect(await db.select().from(auditLog).where(eq(auditLog.entity, 'allocation'))).toEqual([])
+  })
+
+  it('addSyntheticGridProject 200 × 16 → 220 tasks, 200 assignments, 3 200 WEEK rows of 1.00; audit_log unchanged', async () => {
+    await seedGolden(db)
+    const [before] = await db.select({ n: count() }).from(auditLog)
+    const { projectId } = await addSyntheticGridProject(db, { tasks: 200, weeks: 16, from: '2026-09-28' })
+    const [after] = await db.select({ n: count() }).from(auditLog)
+    expect(after?.n).toBe(before?.n)
+    const [p] = await db.select().from(projects).where(eq(projects.id, projectId))
+    expect(p).toMatchObject({ name: 'Perf grid', clientId: null, archivedAt: null })
+    const ts = await db.select().from(tasks).where(eq(tasks.projectId, projectId))
+    expect(ts).toHaveLength(220)
+    expect(ts.filter((t) => t.depth === 0 && t.parentId === null)).toHaveLength(20)
+    expect(ts.filter((t) => t.depth === 1 && t.parentId !== null)).toHaveLength(200)
+    const as = await db
+      .select({ id: taskAssignments.id, nickname: user.nickname })
+      .from(taskAssignments)
+      .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+      .innerJoin(user, eq(user.id, taskAssignments.userId))
+      .where(eq(tasks.projectId, projectId))
+    expect(as).toHaveLength(200)
+    expect(new Set(as.map((a) => a.nickname))).toEqual(new Set(['Cindy', 'Ivy', 'Mint']))
+    const rows = await db
+      .select({
+        granularity: allocations.granularity,
+        pd: allocations.personDays,
+        week: allocations.weekStart,
+      })
+      .from(allocations)
+      .where(
+        and(
+          inArray(
+            allocations.taskAssignmentId,
+            as.map((a) => a.id),
+          ),
+          gte(allocations.weekStart, '2026-09-28'),
+          lt(allocations.weekStart, '2027-01-18'),
+        ),
+      )
+    expect(rows).toHaveLength(3200)
+    expect(rows.every((r) => r.granularity === 'WEEK' && r.pd === '1.00')).toBe(true)
+    expect(new Set(rows.map((r) => r.week)).size).toBe(16)
+    expect(await membership()).toMatchObject({ 'Perf grid': { Cindy: 'LEAD', Ivy: 'MEMBER', Mint: 'MEMBER' } })
   })
 })

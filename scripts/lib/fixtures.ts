@@ -4,21 +4,35 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
+import { addWeeks } from '@/domain/dates'
 import { defaultStatus } from '@/domain/status'
-import { user } from '@/server/db/schema'
+import type { ISODate } from '@/domain/types'
+import { cdToNumeric } from '@/domain/units'
+import { th } from '@/i18n/th'
+import {
+  allocations,
+  auditLog,
+  type NewAllocation,
+  projects,
+  taskAssignments,
+  tasks,
+  user,
+} from '@/server/db/schema'
 import type { DbOrTx } from '@/server/db/types'
 import * as repo from '@/server/repo'
 import * as services from '@/server/services'
+import { ALLOCATION_AUDIT_ENTITY } from '@/server/services/allocations'
 import { ensureProjectCharters } from '@/server/services/charters'
 
 /** Seed stages in order; `upTo` stops after the named stage. M1 'users': positions + users + schedules ·
  *  M2 'projects': clients + projects + memberships (+ M3's 5 default statuses per project, X70) ·
  *  M3 'tasks': tasks + assignments (X11 M3 part, M3-D20) · M4 'pages': one Project Charter per project through
- *  ensureProjectCharters (X11 M4 part, X25; one actor-null `page` audit row each, M4-D5). */
-export type GoldenStage = 'users' | 'projects' | 'tasks' | 'pages'
-const STAGES: readonly GoldenStage[] = ['users', 'projects', 'tasks', 'pages']
+ *  ensureProjectCharters (X11 M4 part, X25; one actor-null `page` audit row each, M4-D5) · M6 'allocations': the
+ *  JSON's WEEK plans per assignment (X11 M6 part, M6-D23; one actor-null `allocation` audit row per assignment). */
+export type GoldenStage = 'users' | 'projects' | 'tasks' | 'pages' | 'allocations'
+const STAGES: readonly GoldenStage[] = ['users', 'projects', 'tasks', 'pages', 'allocations']
 
 /** SPEC §11.3 fixtures beyond F1 (X11, X91): each = the golden seed (F1) + its own setup only (not cumulative).
  *  resetDb(fixture) in e2e and `pnpm seed:golden --fixture=F3` take one of these. */
@@ -65,13 +79,15 @@ const GoldenUsers = z.object({
       lead: z.string().nullable(),
     }),
   ),
-  /** M2: MEMBER rows = distinct assignees (X11) · M3: name + certainty override (allocations come in M6). */
+  /** M2: MEMBER rows = distinct assignees (X11) · M3: name + certainty override · M6: plans (cd per Monday). */
   tasks: z.array(
     z.object({
       project: z.string(),
       name: z.string(),
       assignee: z.string().nullable(),
       certaintyOverride: z.enum(['CONFIRMED', 'TENTATIVE']).nullable(),
+      granularity: z.enum(['WEEK', 'DAY']),
+      allocationsCd: z.record(z.iso.date(), z.number().int().positive()),
     }),
   ),
   /** M5 (X11): the own setup of each §11.3 fixture beyond F1 (`expected.<id>.setup`). */
@@ -108,6 +124,8 @@ export async function seedGolden(db: DbOrTx, opts: { upTo?: GoldenStage } = {}):
   await seedTasks(db, ctx)
   if (!reached(opts.upTo, 'pages')) return
   await ensureProjectCharters(db) // X11 / X25: the 5 golden charters (FR-402)
+  if (!reached(opts.upTo, 'allocations')) return
+  await seedAllocations(db)
 }
 
 async function seedUsers(db: DbOrTx): Promise<SeedCtx> {
@@ -220,6 +238,146 @@ export async function seedTasks(db: DbOrTx, ctx: SeedCtx): Promise<void> {
       await repo.assignments.insertAssignment(db, { taskId: task.id, userId })
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M6 — golden plans + the synthetic perf grid (X11, X92, M6-D22/D23; plan/m06 S0.10)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * M6 (X11, M6-D23): for each JSON task with an assignee, its `allocationsCd` weeks as rows of `granularity` (WEEK in
+ * F1: period_start = week_start = the Monday) via plain Drizzle (X59; the assignments are new in this transaction, so
+ * no lock is needed), then one actor-null `allocation` audit row per assignment (`th.audit.allocationsSeeded(n)`).
+ */
+export async function seedAllocations(db: DbOrTx): Promise<void> {
+  const g = loadGolden()
+  const live = await db
+    .select({ id: taskAssignments.id, project: projects.name, projectId: projects.id, task: tasks.name })
+    .from(taskAssignments)
+    .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+  const byTask = new Map(live.map((a) => [`${a.project}\u0000${a.task}`, a]))
+  for (const t of g.tasks) {
+    const weeks = Object.entries(t.allocationsCd).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    if (!t.assignee || weeks.length === 0) continue
+    const a = byTask.get(`${t.project}\u0000${t.name}`)
+    if (!a) throw new Error(`golden assignment for ${t.project} / ${t.name} not found`)
+    const rows: NewAllocation[] = weeks.map(([week, cd]) => ({
+      taskAssignmentId: a.id,
+      granularity: t.granularity,
+      periodStart: week,
+      weekStart: week,
+      personDays: cdToNumeric(cd),
+    }))
+    await db.insert(allocations).values(rows)
+    // Plain insert like the rows above: same columns audit.log writes (actor null), entity = M6-D29's.
+    await db.insert(auditLog).values({
+      actorId: null,
+      entity: ALLOCATION_AUDIT_ENTITY,
+      entityId: a.id,
+      action: 'create',
+      projectId: a.projectId,
+      summary: th.audit.allocationsSeeded(weeks.length),
+      before: null,
+      after: {
+        weeks: Object.fromEntries(weeks.map(([week, cd]) => [week, { cd, resolution: t.granularity }])),
+      },
+    })
+  }
+}
+
+/** Golden assignees of the synthetic perf grid, in round-robin order (LEAD first). */
+const SYNTHETIC_PEOPLE = ['Cindy', 'Ivy', 'Mint'] as const
+const SYNTHETIC_PARENTS = 20
+const INSERT_CHUNK = 1000
+
+/**
+ * M6-D22 perf smoke (needs `seedGolden` first): project "Perf grid" without client (LEAD Cindy, MEMBER Ivy/Mint, the 5
+ * default statuses, X70), `o.tasks` leaf tasks spread over 20 depth-0 parents (depth 1), assigned Cindy, Ivy, Mint in
+ * turn, each with WEEK 100 in every week of [from, from + weeks). Plain Drizzle; **no audit rows** (X92).
+ */
+export async function addSyntheticGridProject(
+  db: DbOrTx,
+  o: { tasks: number; weeks: number; from: ISODate },
+): Promise<{ projectId: string }> {
+  const people = await db
+    .select({ id: user.id, nickname: user.nickname })
+    .from(user)
+    .where(inArray(user.nickname, [...SYNTHETIC_PEOPLE]))
+  const idOf = (nickname: string): string => {
+    const hit = people.find((p) => p.nickname === nickname)
+    if (!hit) throw new Error(`golden user ${nickname} not found (seedGolden first)`)
+    return hit.id
+  }
+  const [manager] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'manager')).limit(1)
+  if (!manager) throw new Error('no manager (seedGolden first)')
+  const [project] = await db
+    .insert(projects)
+    .values({ name: 'Perf grid', clientId: null, createdBy: manager.id })
+    .returning({ id: projects.id })
+  const projectId = project!.id
+  for (const [i, nickname] of SYNTHETIC_PEOPLE.entries()) {
+    await repo.members.insertMember(db, {
+      projectId,
+      userId: idOf(nickname),
+      role: i === 0 ? 'LEAD' : 'MEMBER',
+      addedBy: manager.id,
+    })
+  }
+  await services.taskStatuses.ensureProjectStatuses(db, projectId)
+  const status = defaultStatus(await repo.statuses.listLiveStatuses(db, projectId))
+  const parentKeys = repo.order.rekey(SYNTHETIC_PARENTS)
+  const parents = await db
+    .insert(tasks)
+    .values(
+      parentKeys.map((position, i) => ({
+        projectId,
+        depth: 0,
+        name: `Perf parent ${String(i + 1).padStart(2, '0')}`,
+        position,
+        statusId: status.id,
+        createdBy: manager.id,
+      })),
+    )
+    .returning({ id: tasks.id })
+  const perParent = Math.ceil(o.tasks / SYNTHETIC_PARENTS)
+  const childKeys = repo.order.rekey(perParent)
+  const leafValues = Array.from({ length: o.tasks }, (_, i) => ({
+    projectId,
+    parentId: parents[i % SYNTHETIC_PARENTS]!.id,
+    depth: 1,
+    name: `Perf task ${String(i + 1).padStart(3, '0')}`,
+    position: childKeys[Math.floor(i / SYNTHETIC_PARENTS)]!,
+    statusId: status.id,
+    createdBy: manager.id,
+  }))
+  const leaves = leafValues.length
+    ? await db.insert(tasks).values(leafValues).returning({ id: tasks.id })
+    : []
+  const assignments = leaves.length
+    ? await db
+        .insert(taskAssignments)
+        .values(
+          leaves.map((t, i) => ({
+            taskId: t.id,
+            userId: idOf(SYNTHETIC_PEOPLE[i % SYNTHETIC_PEOPLE.length]!),
+          })),
+        )
+        .returning({ id: taskAssignments.id })
+    : []
+  const weeks = Array.from({ length: o.weeks }, (_, i) => addWeeks(o.from, i))
+  const rows: NewAllocation[] = assignments.flatMap((a) =>
+    weeks.map((week) => ({
+      taskAssignmentId: a.id,
+      granularity: 'WEEK' as const,
+      periodStart: week,
+      weekStart: week,
+      personDays: cdToNumeric(100),
+    })),
+  )
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK)
+    await db.insert(allocations).values(rows.slice(i, i + INSERT_CHUNK))
+  return { projectId }
 }
 
 // ---------------------------------------------------------------------------------------------------------------

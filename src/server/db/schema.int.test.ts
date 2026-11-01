@@ -731,3 +731,153 @@ describe('M5 schema (SPEC §6.2 holidays / leave_types / time_off + time_off_no_
     expect(r?.n).toBe(0)
   })
 })
+
+describe('M6 schema (SPEC §6.2 allocations, §6.3 trigger + allocations_one_resolution_per_week)', () => {
+  let sql: postgres.Sql
+
+  /** Postgres error `{ code, constraint, message }` of a failing statement, or null when it succeeds. */
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string; message?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string; message?: string }
+      return { code: err.code, constraint: err.constraint_name, message: err.message }
+    }
+  }
+
+  /** A fresh live assignment (project → status → task → assignment). */
+  async function seedAssignment(): Promise<string> {
+    const u = await makeUser({ role: 'manager' })
+    const [p] = await sql<{ id: string }[]>`
+      insert into projects (name, created_by) values (${'P'}, ${u.id}) returning id`
+    const [s] = await sql<{ id: string }[]>`
+      insert into task_statuses (project_id, name, category, position)
+      values (${p!.id}, ${'s'}, 'TODO', 'a0') returning id`
+    const [t] = await sql<{ id: string }[]>`
+      insert into tasks (project_id, name, status_id, position, created_by)
+      values (${p!.id}, ${'งาน'}, ${s!.id}, 'a0', ${u.id}) returning id`
+    const [a] = await sql<{ id: string }[]>`
+      insert into task_assignments (task_id, user_id) values (${t!.id}, ${u.id}) returning id`
+    return a!.id
+  }
+
+  function insert(o: { ta: string; g: 'WEEK' | 'DAY'; period: string; week: string; pd: string }) {
+    return sql`
+      insert into allocations (task_assignment_id, granularity, period_start, week_start, person_days)
+      values (${o.ta}, ${o.g}, ${o.period}, ${o.week}, ${o.pd})`
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  it('pins the exclusion constraint and the BR-20b trigger', async () => {
+    const rows = await sql<{ conname: string; contype: string }[]>`
+      select conname, contype from pg_constraint where conname = 'allocations_one_resolution_per_week'`
+    expect(rows).toEqual([{ conname: 'allocations_one_resolution_per_week', contype: 'x' }])
+    const [trg] = await sql<{ n: number }[]>`
+      select count(*)::int as n from pg_trigger
+      where tgname = 'trg_week_day_exclusivity' and tgrelid = 'allocations'::regclass`
+    expect(trg?.n).toBe(1)
+  })
+
+  it('WEEK on a Monday ok; week_start not Monday → 23514', async () => {
+    const ta = await seedAssignment()
+    expect(
+      await pgError(() => insert({ ta, g: 'WEEK', period: '2026-09-28', week: '2026-09-28', pd: '2.50' })),
+    ).toBeNull()
+    expect(
+      await pgError(() => insert({ ta, g: 'WEEK', period: '2026-09-29', week: '2026-09-29', pd: '1.00' })),
+    ).toMatchObject({ code: '23514', constraint: 'allocations_week_start_check' })
+  })
+
+  it('period checks: WEEK period ≠ week, WEEK > 7, DAY > 1, DAY outside the week → 23514', async () => {
+    const ta = await seedAssignment()
+    const bad = { code: '23514', constraint: 'allocations_period_check' }
+    expect(
+      await pgError(() => insert({ ta, g: 'WEEK', period: '2026-10-06', week: '2026-10-05', pd: '1.00' })),
+    ).toMatchObject(bad)
+    expect(
+      await pgError(() => insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '7.25' })),
+    ).toMatchObject(bad)
+    expect(
+      await pgError(() => insert({ ta, g: 'DAY', period: '2026-10-12', week: '2026-10-12', pd: '1.25' })),
+    ).toMatchObject(bad)
+    expect(
+      await pgError(() => insert({ ta, g: 'DAY', period: '2026-10-19', week: '2026-10-12', pd: '0.50' })),
+    ).toMatchObject(bad)
+    // Sunday = week_start + 6 is still inside the week
+    expect(
+      await pgError(() => insert({ ta, g: 'DAY', period: '2026-10-18', week: '2026-10-12', pd: '1.00' })),
+    ).toBeNull()
+  })
+
+  it('person_days 0 → 23514; duplicate (assignment, granularity, period) → 23505', async () => {
+    const ta = await seedAssignment()
+    expect(
+      await pgError(() => insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '0' })),
+    ).toMatchObject({ code: '23514', constraint: 'allocations_person_days_check' })
+    await insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '1.00' })
+    expect(
+      await pgError(() => insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '2.00' })),
+    ).toMatchObject({ code: '23505', constraint: 'allocations_ta_granularity_period_key' })
+  })
+
+  it('DAY in a week that has WEEK → P0001 WEEK_DAY_CONFLICT (trigger fires before the constraint)', async () => {
+    const ta = await seedAssignment()
+    await insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '3.00' })
+    const err = await pgError(() =>
+      insert({ ta, g: 'DAY', period: '2026-10-06', week: '2026-10-05', pd: '0.50' }),
+    )
+    expect(err?.code).toBe('P0001')
+    expect(err?.message).toMatch(/^WEEK_DAY_CONFLICT/)
+    // the other direction too
+    await insert({ ta, g: 'DAY', period: '2026-10-13', week: '2026-10-12', pd: '0.50' })
+    expect(
+      (await pgError(() => insert({ ta, g: 'WEEK', period: '2026-10-12', week: '2026-10-12', pd: '1.00' })))
+        ?.code,
+    ).toBe('P0001')
+  })
+
+  it('DELETE WEEK then INSERT DAY in one transaction succeeds (SPEC §6.3)', async () => {
+    const ta = await seedAssignment()
+    await insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '1.00' })
+    await sql.begin(async (tx) => {
+      await tx`delete from allocations where task_assignment_id = ${ta} and week_start = '2026-10-05'`
+      await tx`
+        insert into allocations (task_assignment_id, granularity, period_start, week_start, person_days)
+        values (${ta}, 'DAY', '2026-10-05', '2026-10-05', '0.50'), (${ta}, 'DAY', '2026-10-06', '2026-10-05', '0.50')`
+    })
+    const rows = await sql<{ g: string; n: number }[]>`
+      select granularity::text as g, count(*)::int as n from allocations
+      where task_assignment_id = ${ta} and week_start >= '2026-10-05' and week_start < '2026-10-12'
+      group by granularity`
+    expect(rows).toEqual([{ g: 'DAY', n: 2 }])
+  })
+
+  it('deleting the assignment cascades its allocations', async () => {
+    const ta = await seedAssignment()
+    await insert({ ta, g: 'WEEK', period: '2026-10-05', week: '2026-10-05', pd: '1.00' })
+    await sql`delete from task_assignments where id = ${ta}`
+    const [r] = await sql<{ n: number }[]>`
+      select count(*)::int as n from allocations
+      where task_assignment_id = ${ta} and week_start >= '2026-10-05' and week_start < '2026-10-12'`
+    expect(r?.n).toBe(0)
+  })
+
+  it('numeric(4,2) rounds 0.125 to 0.13 (documented, harmless: BR-27 values are multiples of 0.25)', async () => {
+    const ta = await seedAssignment()
+    await insert({ ta, g: 'DAY', period: '2026-10-07', week: '2026-10-05', pd: '0.125' })
+    const [r] = await sql<{ pd: string }[]>`
+      select person_days::text as pd from allocations
+      where task_assignment_id = ${ta} and week_start >= '2026-10-05' and week_start < '2026-10-12'`
+    expect(r?.pd).toBe('0.13')
+  })
+})

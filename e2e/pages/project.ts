@@ -8,7 +8,7 @@ import { StatusSettingsPage } from './status-settings'
 import { exactName } from './text'
 import { toastWith } from './toast'
 
-export type ProjectTab = 'overview' | 'tasks' | 'pages' // M4 เอกสาร (X15, X84); M6 adds 'plan'
+export type ProjectTab = 'overview' | 'plan' | 'tasks' | 'pages' // M4 เอกสาร (X15, X84); M6 แผนงาน
 
 /**
  * Project shell + ภาพรวม tab (FR-408, FR-409 part; plan/m02-clients-projects-authz.md S2.3–S2.5 / S3.5).

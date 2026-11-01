@@ -17,6 +17,10 @@ import { auditCount, auditRowsAfter } from '../../../tests/helpers/audit'
 import { makeFile, makePage, makeProject, makeUser } from '../../../tests/helpers/factories'
 import { testCache } from '../../../tests/helpers/request'
 import { createWorld } from '../../../tests/helpers/world'
+import { goldenProjectId, goldenUser, type GoldenProject } from '../../../tests/authz/_support/golden'
+import { seedGolden } from '../../../scripts/lib/fixtures'
+import { completeTask } from '../actions/tasks'
+import { tasks } from '../db/schema'
 import { db } from '../db/client'
 import { auditLog, files, projectMembers, projects } from '../db/schema'
 import { NotFoundError } from '../errors'
@@ -177,7 +181,7 @@ describe('archive / unarchive', () => {
   it('lead archives P: hidden from the sidebar, overview read-only; second archive → 403; unarchive restores', async () => {
     const w = await createWorld()
     asUser(w.lead)
-    expect(await archiveProject({ projectId: w.P.id })).toEqual({ ok: true, changed: true })
+    expect(await archiveProject({ projectId: w.P.id })).toEqual({ ok: true, changed: true, releasedCd: 0 })
     const [p] = await db.select().from(projects).where(eq(projects.id, w.P.id))
     expect(p!.archivedAt).not.toBeNull()
     expect((await getSidebar(db, S(w.member), '2026-09-30')).projects.map((x) => x.id)).not.toContain(w.P.id)
@@ -347,5 +351,36 @@ describe('loaders', () => {
       delete: true,
     })
     expect((await getProjectHeader(db, S(w.lead), w.P.id)).can.manage).toBe(true)
+  })
+})
+
+// ── M6 S2.8 — FR-406 X (X17, M6-D17): archive returns the counted future load (BR-50), this week included ─────────
+describe('archiveProject › archive X (M6)', () => {
+  const archiveAs = async (project: GoldenProject) => {
+    vi.stubEnv('ALLOW_TEST_HOOKS', '1')
+    vi.stubEnv('APP_NOW', '2026-09-30T10:00:00+07:00')
+    asUser(await goldenUser('Manager'))
+    return archiveProject({ projectId: await goldenProjectId(project) })
+  }
+
+  it('golden: POS 2500 · Store 3500 · DW 1625 (week 09-28 included, r8 §6.3)', async () => {
+    await seedGolden(db)
+    expect(await archiveAs('POS Upgrade')).toEqual({ ok: true, changed: true, releasedCd: 2500 })
+    expect(await archiveAs('Store Analytics Dashboard')).toEqual({ ok: true, changed: true, releasedCd: 3500 })
+    expect(await archiveAs('Data Warehouse')).toEqual({ ok: true, changed: true, releasedCd: 1625 })
+  })
+
+  it('BR-50: Rollout สาขา completed first → POS 625; a project without plans → 0', async () => {
+    await seedGolden(db)
+    vi.stubEnv('ALLOW_TEST_HOOKS', '1')
+    vi.stubEnv('APP_NOW', '2026-09-30T10:00:00+07:00')
+    asUser(await goldenUser('Cindy'))
+    const [rollout] = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.name, 'Rollout สาขา'))
+    expect(await completeTask({ taskIds: [rollout!.id] })).toMatchObject({ ok: true })
+    expect(await archiveAs('POS Upgrade')).toEqual({ ok: true, changed: true, releasedCd: 625 })
+    const manager = await goldenUser('Manager')
+    const empty = await makeProject({ name: 'ว่าง', createdBy: manager })
+    asUser(manager)
+    expect(await archiveProject({ projectId: empty.id })).toEqual({ ok: true, changed: true, releasedCd: 0 })
   })
 })

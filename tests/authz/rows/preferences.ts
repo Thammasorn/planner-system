@@ -18,7 +18,29 @@ export const rows: AuthzRow[] = [
     action: 'setPreference',
     mutates: false,
     expect: { M: '400', L: '400', Me: '400', W: '400' },
-    // A key that M1 does not know: zod's discriminated union rejects it.
-    run: () => setPreference({ key: 'grid.unit', value: 'DAYS' } as never),
+    // A key no milestone defines: zod's discriminated union rejects it. (M1 used 'grid.unit', which M6 made a real
+    // key — M6-D21; plan/m06 S0.5 inverts that example, so the row now uses a key that will never exist.)
+    run: () => setPreference({ key: 'test.notAPreference', value: 'x' } as never),
+  }),
+  defineRow({
+    id: 'PREF-03',
+    spec: 'X05 + M6-D21 setPreference grid.unit / load.view (own row, not audited)',
+    action: 'setPreference',
+    mutates: true,
+    audit: false,
+    expect: { M: 'allow', L: 'allow', Me: 'allow', W: 'allow' },
+    run: async () => {
+      const unit = await setPreference({ key: 'grid.unit', value: 'FRACTION' })
+      if (!unit.ok) return unit
+      return setPreference({ key: 'load.view', value: 'COMMITTED' })
+    },
+  }),
+  defineRow({
+    id: 'PREF-04',
+    spec: 'X05 + M6-D21 setPreference grid.unit with a value outside DAYS | FRACTION → VALIDATION',
+    action: 'setPreference',
+    mutates: false,
+    expect: { M: '400', L: '400', Me: '400', W: '400' },
+    run: () => setPreference({ key: 'grid.unit', value: 'MONTH' } as never),
   }),
 ]

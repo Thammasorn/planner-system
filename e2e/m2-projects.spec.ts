@@ -330,7 +330,8 @@ test.describe('E6 (FR-406 part) archive with undo, archived list, unarchive', ()
     await project.goto(crm)
     await expect(sidebar.archivedLink()).toHaveCount(0)
 
-    const archived = th.projects.toasts.archived('CRM Migration')
+    // FR-406 X (M6-D17): CRM's whole golden plan (25 days, weeks 10-05…11-02) is in the future
+    const archived = th.projects.toasts.archivedReleased('CRM Migration', '25.0')
     let answered = waitForServerAction(page)
     await project.archiveButton().click()
     await answered
@@ -418,8 +419,8 @@ test.describe('E8 (FR-408 part) project tabs', () => {
     await resetDb()
   })
 
-  // M3 (X15, S5.3): the งาน tab joins ภาพรวม; M4 (X15, X84) appends เอกสาร; M6 (แผนงาน) updates this list.
-  test('/projects/<id> redirects to the overview; only built tabs (ภาพรวม, งาน, เอกสาร), overview selected, none disabled', async ({
+  // M3 (X15, S5.3): the งาน tab joins ภาพรวม; M4 (X15, X84) appends เอกสาร; M6 inserts แผนงาน at order 1.
+  test('/projects/<id> redirects to the overview; only built tabs (ภาพรวม, แผนงาน, งาน, เอกสาร), overview selected, none disabled', async ({
     page,
   }) => {
     const mobile = await idOf('project', 'Mobile App Revamp')
@@ -430,10 +431,13 @@ test.describe('E8 (FR-408 part) project tabs', () => {
     await project.shell.waitForHydration()
     await expect(project.tabs()).toHaveText([
       th.projects.tabs.overview,
+      th.projects.tabs.plan,
       th.projects.tabs.tasks,
       th.projects.tabs.pages,
     ])
     await expect(project.tab('overview')).toHaveAttribute('aria-selected', 'true')
+    await expect(project.tab('plan')).toHaveAttribute('aria-selected', 'false')
+    await expect(project.tab('plan')).toHaveAttribute('href', `/projects/${mobile}/plan`)
     await expect(project.tab('tasks')).toHaveAttribute('aria-selected', 'false')
     await expect(project.tab('tasks')).toHaveAttribute('href', `/projects/${mobile}/tasks`)
     await expect(project.tab('pages')).toHaveAttribute('aria-selected', 'false')

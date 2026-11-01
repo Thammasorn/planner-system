@@ -79,6 +79,24 @@ describe('mapDbError / pgErrorInfo', () => {
     expect(mapDbError({ cause: { code: '23505', constraint_name: 'task_assignments_active' } })?.code).toBe('CONFLICT')
   })
 
+  it('M6-D5 / G23: 23P01 on allocations_one_resolution_per_week → INTERNAL; other exclusions stay OVERLAP', () => {
+    expect(
+      mapDbError({ cause: { code: '23P01', constraint_name: 'allocations_one_resolution_per_week' } })?.code,
+    ).toBe('INTERNAL')
+    expect(mapDbError({ cause: { code: '23P01', constraint_name: 'time_off_no_overlap' } })?.code).toBe('OVERLAP')
+  })
+
+  it('M6: ValidationError carries an extra payload (issues) next to fieldErrors', () => {
+    const e = new ValidationError({}, 'x', { issues: [{ reason: 'DAY_WEEK' }] })
+    expect(toActionError(e)).toEqual({
+      ok: false,
+      code: 'VALIDATION',
+      message: 'x',
+      fieldErrors: {},
+      issues: [{ reason: 'DAY_WEEK' }],
+    })
+  })
+
   it('pgErrorInfo reads code and constraint from the cause first', () => {
     expect(pgErrorInfo({ cause: { code: '23505', constraint_name: 'positions_name_unique' } })).toEqual({
       code: '23505',

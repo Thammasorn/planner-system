@@ -1,7 +1,8 @@
 // src/server/services/taskStatus.ts — the one status writer (SPEC v3.1 X71, BR-80–83, BR-87, FR-607/608/626/628,
 // M3-D5, M3-D28, M3-D38). Checkbox (BR-82), board drag, status menu, bulk bar and undo all go through it. Called only
 // after the action's authz (requireTasks(…, 'edit')); the action writes one audit row per changed task (M3-D4/D43).
-// Never touches task_assignments (BR-87). Never reads the clock: `today` is a required trailing parameter (X90).
+// Never touches task_assignments (BR-87) nor allocations (BR-51). Never reads the clock: `today` is a required trailing
+// parameter (X90). M6 (BR-52, X19/X71, M6-D16): `released` = the load after this week of tasks newly entering DONE.
 import { compareISO } from '@/domain/dates'
 import { completionTransition, defaultStatus, firstDoneStatus } from '@/domain/status'
 import type { ISODate } from '@/domain/types'
@@ -11,6 +12,7 @@ import type { DbOrTx } from '../db/types'
 import { NotFoundError, ValidationError } from '../errors'
 import * as repo from '../repo'
 import type { SessionUser } from '../session'
+import { releasedLoadForTasks } from './allocations'
 
 export async function setStatus(
   tx: DbOrTx,
@@ -30,24 +32,33 @@ export async function setStatus(
   const extra = a.withChildren && toDone ? await repo.tasks.openLiveDescendantIds(tx, a.taskIds) : []
   const rows = await repo.tasks.lockWithCategory(tx, a.projectId, [...new Set([...a.taskIds, ...extra])])
   const changed: SetTaskStatusResult['changed'] = []
+  const newlyCompleted: string[] = []
   for (const r of rows) {
     if (a.only === 'open' && r.category === 'DONE') continue
     if (a.only === 'completed' && r.category !== 'DONE') continue
     if (r.statusId === target.id) continue
-    const t = completionTransition({ from: r.category, to: target.category, completedOn: r.completedOn, today })
+    const t = completionTransition({
+      from: r.category,
+      to: target.category,
+      completedOn: r.completedOn,
+      today,
+    })
     await repo.tasks.setStatusRow(tx, r.id, {
       statusId: target.id,
       completedOn: t.completedOn,
       completedBy: t.completedOn === null ? null : t.changed ? user.id : r.completedBy,
     })
     changed.push({ taskId: r.id, previous: { statusId: r.statusId, completedOn: r.completedOn } })
+    if (r.completedOn === null && t.completedOn === today) newlyCompleted.push(r.id)
   }
   // FR-608: a single task moved to DONE without its children → the client asks about the open ones (M3-D38).
   const openDescendantIds =
     a.taskIds.length === 1 && toDone && !a.withChildren
       ? await repo.tasks.openLiveDescendantIds(tx, a.taskIds)
       : []
-  return { projectId: a.projectId, statusId: target.id, changed, openDescendantIds }
+  // BR-52 (M6-D16): X = plans after this week of the newly completed tasks' live assignments; null when 0.
+  const released = await releasedLoadForTasks(tx, newlyCompleted, today)
+  return { projectId: a.projectId, statusId: target.id, changed, openDescendantIds, released }
 }
 
 /** BR-82: checkbox on → the first DONE status, for the open ids (+ open descendants with `withChildren`). */
@@ -102,7 +113,10 @@ export async function revertStatuses(
     const isDone = categories.get(i.statusId) === 'DONE'
     if (isDone !== (i.completedOn !== null)) throw new ValidationError({ items: [th.errors.VALIDATION] })
     if (i.completedOn !== null && compareISO(i.completedOn, today) > 0) {
-      throw new ValidationError({ items: [th.tasks.errors.completedInFuture] }, th.tasks.errors.completedInFuture)
+      throw new ValidationError(
+        { items: [th.tasks.errors.completedInFuture] },
+        th.tasks.errors.completedInFuture,
+      )
     }
   }
   const rows = await repo.tasks.lockWithCategory(tx, a.projectId, [...items.keys()])
@@ -118,5 +132,5 @@ export async function revertStatuses(
     })
     changed.push({ taskId: r.id, previous: { statusId: r.statusId, completedOn: r.completedOn } })
   }
-  return { projectId: a.projectId, statusId: null, changed, openDescendantIds: [] }
+  return { projectId: a.projectId, statusId: null, changed, openDescendantIds: [], released: null }
 }

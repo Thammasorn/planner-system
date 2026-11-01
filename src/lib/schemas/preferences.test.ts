@@ -3,6 +3,8 @@ import {
   DEFAULT_PREFERENCES,
   preferenceInput,
   preferencesSchema,
+  GRID_PREFERENCE_DEFAULTS,
+  gridPreference,
   TASK_PREFERENCE_DEFAULTS,
   taskPreference,
 } from './preferences'
@@ -18,7 +20,7 @@ describe('preferences (X05, M1-D17)', () => {
       theme: 'dark',
       'sidebar.collapsed': true,
     })
-    expect(preferenceInput.safeParse({ key: 'grid.unit', value: 'DAYS' }).success).toBe(false)
+    expect(preferenceInput.safeParse({ key: 'grid.zoom', value: 'WEEK' }).success).toBe(false) // M7 key
     expect(preferenceInput.safeParse({ key: 'theme', value: 'neon' }).success).toBe(false)
     expect(preferenceInput.safeParse({ key: 'sidebar.collapsed', value: true }).success).toBe(true)
   })
@@ -71,5 +73,26 @@ describe('preferences (X05, M1-D17)', () => {
       'tasks.board.leafOnly': false,
       'tasks.board.hideDone': false,
     })
+  })
+})
+
+describe('grid preferences (M6-D21)', () => {
+  it('grid.unit DAYS|FRACTION and load.view ALL|COMMITTED|AT_RISK parse; other values fail', () => {
+    expect(preferenceInput.safeParse({ key: 'grid.unit', value: 'DAYS' }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'grid.unit', value: 'FRACTION' }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'grid.unit', value: 'MONTH' }).success).toBe(false)
+    expect(preferenceInput.safeParse({ key: 'load.view', value: 'AT_RISK' }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'load.view', value: 'SOME' }).success).toBe(false)
+  })
+
+  it('absent or invalid stored values read as the defaults', () => {
+    const prefs = preferencesSchema.parse({ 'grid.unit': 'MONTH' })
+    expect(prefs['grid.unit']).toBeUndefined()
+    expect(gridPreference(prefs, 'grid.unit')).toBe('DAYS')
+    expect(gridPreference(prefs, 'load.view')).toBe('ALL')
+    expect(GRID_PREFERENCE_DEFAULTS).toEqual({ 'grid.unit': 'DAYS', 'load.view': 'ALL' })
+    const stored = preferencesSchema.parse({ 'grid.unit': 'FRACTION', 'load.view': 'COMMITTED' })
+    expect(gridPreference(stored, 'grid.unit')).toBe('FRACTION')
+    expect(gridPreference(stored, 'load.view')).toBe('COMMITTED')
   })
 })

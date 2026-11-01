@@ -7,7 +7,7 @@ import { PID, STATUSES, T } from '../fixtures.test.data'
 import { renderTasks } from '../render.test.helper'
 import { TeamTasks } from './TeamTasks'
 
-const m = vi.hoisted(() => ({ getJson: vi.fn(), setTaskStatus: vi.fn(), push: vi.fn() }))
+const m = vi.hoisted(() => ({ getJson: vi.fn(), setTaskStatus: vi.fn(), push: vi.fn(), dropOn: 'category:WAITING' }))
 vi.mock('@/lib/api', () => ({ getJson: m.getJson }))
 vi.mock('@/server/actions/tasks', () => ({
   setTaskStatus: m.setTaskStatus,
@@ -23,9 +23,9 @@ vi.mock('../board/TaskBoard', async (importOriginal) => {
   const orig = await importOriginal<typeof import('../board/TaskBoard')>()
   return {
     ...orig,
-    // dnd-kit cannot measure in jsdom: the stub drops the first card on the WAITING column
+    // dnd-kit cannot measure in jsdom: the stub drops the first card on the column `m.dropOn` (WAITING by default)
     TaskBoard: (p: { columns: { cards: { id: string }[] }[]; onMove(id: string, key: string): void }) => (
-      <button type="button" onClick={() => p.onMove(p.columns[0]!.cards[0]!.id, 'category:WAITING')}>
+      <button type="button" onClick={() => p.onMove(p.columns[0]!.cards[0]!.id, m.dropOn)}>
         drop
       </button>
     ),
@@ -55,6 +55,7 @@ const page: TeamTasksResponse = {
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/tasks')
+  m.dropOn = 'category:WAITING'
   m.getJson.mockResolvedValue(page)
 })
 
@@ -105,5 +106,23 @@ describe('TeamTasks (FR-665/666, M3-D33/D41)', () => {
       ),
     ).toBeInTheDocument()
     expect(m.setTaskStatus).not.toHaveBeenCalled()
+  })
+
+  it('BR-52: a board drop into เสร็จ shows the released load instead of the status toast', async () => {
+    const user = userEvent.setup()
+    m.dropOn = 'category:DONE'
+    const done = noWaiting.find((s) => s.category === 'DONE')!
+    m.setTaskStatus.mockResolvedValue({
+      ok: true,
+      projectId: PID,
+      statusId: done.id,
+      changed: [{ taskId: T.c, previous: { statusId: STATUSES[0]!.id, completedOn: null } }],
+      openDescendantIds: [],
+      released: { cd: 1500, weeks: 5 },
+    })
+    renderTasks(<TeamTasks />, { prefs: { 'tasks.view': 'BOARD' } })
+    await user.click(await screen.findByRole('button', { name: 'drop' }))
+    await waitFor(() => expect(m.setTaskStatus).toHaveBeenCalled())
+    expect(await screen.findByText(th.tasks.toast.released('15.0', 5))).toBeInTheDocument()
   })
 })

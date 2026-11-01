@@ -61,8 +61,9 @@ export class ValidationError extends AppError {
     return new ValidationError(fieldErrors)
   }
 
-  constructor(fieldErrors: Record<string, string[]>, message?: string) {
-    super('VALIDATION', message, { fieldErrors })
+  /** `extra` (M6): additional fields for the action result, e.g. `issues` of a refused plan batch (M6-D34). */
+  constructor(fieldErrors: Record<string, string[]>, message?: string, extra?: Record<string, unknown>) {
+    super('VALIDATION', message, { ...extra, fieldErrors })
   }
 }
 
@@ -132,7 +133,8 @@ export function pgErrorInfo(e: unknown): { code?: string; constraint?: string } 
  * 23505 → CONFLICT · 23503 → IN_USE · 23P01 → OVERLAP · 23514 → VALIDATION · P0001 → INTERNAL · otherwise null.
  * Constraint-specific backstops (services catch these first): 23505 on task_statuses_name → VALIDATION (name) ·
  * 23503 on a task/status composite FK → NOT_FOUND (the referenced row is in another project or gone — BR-83, D12).
- * (M6 adds a constraint-specific branch before OVERLAP: 23P01 on allocations_one_resolution_per_week → INTERNAL.)
+ * M6 (M6-D5, G23): 23P01 on allocations_one_resolution_per_week → INTERNAL (every plan writer locks first, so it
+ * must never fire), checked before the generic OVERLAP.
  */
 const NOT_FOUND_FKS: ReadonlySet<string> = new Set([
   'tasks_status_fk',
@@ -153,6 +155,7 @@ export function mapDbError(e: unknown): AppError | null {
       if (constraint !== undefined && NOT_FOUND_FKS.has(constraint)) return new NotFoundError()
       return new ConflictError('IN_USE')
     case '23P01':
+      if (constraint === 'allocations_one_resolution_per_week') return new AppError('INTERNAL')
       return new ConflictError('OVERLAP')
     case '23514':
       return new ValidationError({})

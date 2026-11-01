@@ -8,7 +8,7 @@ import {
   invalidateStatuses,
   invalidateTasks,
 } from './invalidate'
-import { qk } from './query-keys'
+import { type GridChunk, qk } from './query-keys'
 import { teamTasksQuerySchema } from './schemas/tasks'
 
 const LOAD_KEYS = [
@@ -64,9 +64,14 @@ describe('invalidate (X18)', () => {
     expect(invalidated(qc, ['home'])).toBe(false)
   })
 
-  it('invalidateTasks invalidates projectTasks(id), myTasks, sidebar and teamTasksAll only', async () => {
+  it('invalidateTasks invalidates projectTasks(id), myTasks, sidebar, teamTasksAll and the project’s grid only', async () => {
     const qc = seeded()
+    const chunk: GridChunk = { from: '2026-08-31', includeOthers: false, expand: [], zoom: 'WEEK' }
+    qc.setQueryData(qk.gridChunk({ kind: 'project', id: 'p1' }, chunk), {})
+    qc.setQueryData(qk.gridChunk({ kind: 'project', id: 'p2' }, chunk), {})
     await invalidateTasks(qc, 'p1')
+    expect(invalidated(qc, qk.gridChunk({ kind: 'project', id: 'p1' }, chunk))).toBe(true)
+    expect(invalidated(qc, qk.gridChunk({ kind: 'project', id: 'p2' }, chunk))).toBe(false)
     for (const key of TASK_KEYS) expect(invalidated(qc, key), JSON.stringify(key)).toBe(true)
     expect(invalidated(qc, qk.teamTasks(TEAM_FILTER))).toBe(true)
     expect(invalidated(qc, qk.projectTasks('p2'))).toBe(false)
@@ -108,5 +113,31 @@ describe('invalidate (X18)', () => {
     expect(invalidated(qc, ['leaveTypes'])).toBe(true)
     expect(invalidated(qc, qk.calendar('2026-08-31', '2026-10-12'))).toBe(true)
     expect(invalidated(qc, qk.sidebar())).toBe(false)
+  })
+})
+
+describe('grid keys (M6, X18, X82)', () => {
+  const ctx = { kind: 'project', id: 'p' } as const
+  const chunk: GridChunk = { from: '2026-09-28', expand: [], zoom: 'WEEK', includeOthers: false }
+
+  it('qk.gridAll is the prefix of qk.gridChunk', () => {
+    expect(qk.gridAll(ctx)).toEqual(['grid', 'project', 'p'])
+    expect(qk.gridChunk(ctx, chunk)).toEqual(['grid', 'project', 'p', chunk])
+    expect(qk.gridChunk({ kind: 'person', id: 'u' }, chunk).slice(0, 3)).toEqual(
+      qk.gridAll({ kind: 'person', id: 'u' }),
+    )
+  })
+
+  it('invalidateLoad invalidates every grid chunk but not the project tasks', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(qk.gridChunk(ctx, chunk), 1)
+    qc.setQueryData(qk.gridChunk(ctx, { ...chunk, from: '2026-11-23', includeOthers: true }), 1)
+    qc.setQueryData(qk.projectTasks('p'), 1)
+    await invalidateLoad(qc)
+    expect(invalidated(qc, qk.gridChunk(ctx, chunk))).toBe(true)
+    expect(invalidated(qc, qk.gridChunk(ctx, { ...chunk, from: '2026-11-23', includeOthers: true }))).toBe(
+      true,
+    )
+    expect(invalidated(qc, qk.projectTasks('p'))).toBe(false)
   })
 })

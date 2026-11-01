@@ -18,6 +18,7 @@ import { getJson } from '@/lib/api'
 import type { MyTaskDTO, MyTasksResponse } from '@/lib/contracts/tasks'
 import { formatThaiDate } from '@/lib/format'
 import { invalidateLoad, invalidateTasks } from '@/lib/invalidate'
+import { statusToastMessage } from './statusToast'
 import { qk } from '@/lib/query-keys'
 import { completeTask, revertTaskStatus } from '@/server/actions/tasks'
 import { StatusChip } from './status/StatusChip'
@@ -76,7 +77,7 @@ export function MyTasks() {
             await settle(t.projectId)
           },
         },
-        { toast: th.tasks.toast.completed },
+        { toast: statusToastMessage(r, th.tasks.toast.completed) },
       )
     },
     onSettled: (_r, _e, t) => void settle(t.projectId),

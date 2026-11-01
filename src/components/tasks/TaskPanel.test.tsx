@@ -29,6 +29,7 @@ vi.mock('@/server/actions/assignments', () => ({
   restoreAssignmentBatch: vi.fn(),
 }))
 vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
+vi.mock('@/server/actions/allocations', () => ({ planAssignmentRange: vi.fn(), saveAllocations: vi.fn() }))
 vi.mock('@/lib/api', () => ({ getJson: vi.fn(() => new Promise(() => {})) }))
 
 const panel = () => screen.getByRole('complementary', { name: th.tasks.panel.label })
@@ -151,5 +152,24 @@ describe('TaskPanel (FR-601, FR-611, BR-36)', () => {
     open(T.c)
     await userEvent.click(within(panel()).getByRole('button', { name: th.tasks.panel.close }))
     expect(screen.queryByRole('complementary')).toBeNull()
+  })
+
+  it('FR-612: a leaf lists "วางแผน" per assignee; it opens the plan dialog with the task dates as defaults', async () => {
+    const data = response()
+    data.tasks = data.tasks.map((t) =>
+      t.id === T.c ? { ...t, startDate: '2026-11-11', dueDate: '2026-11-24' } : t,
+    )
+    open(T.c, data)
+    await userEvent.click(within(panel()).getByRole('button', { name: th.plan.buttonFor('Ivy') }))
+    const dialog = await screen.findByRole('dialog', { name: th.plan.title('Ivy', 'งาน C') })
+    expect(within(dialog).getByRole('textbox', { name: th.plan.totalLabel })).toHaveValue('')
+    expect(within(dialog).getByRole('button', { name: th.plan.apply })).toBeDisabled()
+  })
+
+  it('FR-612: no "วางแผน" on an unassigned leaf or a parent', () => {
+    open(T.d)
+    expect(within(panel()).queryByTestId('plan-buttons')).toBeNull()
+    open(T.a)
+    expect(screen.queryAllByTestId('plan-buttons')).toHaveLength(0)
   })
 })

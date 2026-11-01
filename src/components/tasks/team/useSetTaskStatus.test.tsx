@@ -59,17 +59,19 @@ it('FR-608 "ติ๊กทั้งหมด" on /tasks pushes its own undo ent
               { taskId: T.c, previous: prev },
             ],
             openDescendantIds: [],
+            released: null,
           }
         : {
             projectId: PID,
             statusId: S.done,
             changed: [{ taskId: T.a, previous: prev }],
             openDescendantIds: [T.b, T.c],
+            released: null,
           },
     ),
   )
   m.revertTaskStatus.mockImplementation(() =>
-    ok<SetTaskStatusResult>({ projectId: PID, statusId: null, changed: [], openDescendantIds: [] }),
+    ok<SetTaskStatusResult>({ projectId: PID, statusId: null, changed: [], openDescendantIds: [], released: null }),
   )
   renderTasks(<Harness />)
   await user.click(screen.getByRole('button', { name: 'set' }))
@@ -91,4 +93,35 @@ it('FR-608 "ติ๊กทั้งหมด" on /tasks pushes its own undo ent
       ],
     }),
   )
+})
+
+it('BR-52: the "ติ๊กทั้งหมด" follow-up on /tasks shows the released load of the cascade', async () => {
+  const user = userEvent.setup()
+  m.setTaskStatus.mockImplementation((input: { withChildren?: boolean }) =>
+    ok<SetTaskStatusResult>(
+      input.withChildren
+        ? {
+            projectId: PID,
+            statusId: S.done,
+            changed: [
+              { taskId: T.b, previous: prev },
+              { taskId: T.c, previous: prev },
+            ],
+            openDescendantIds: [],
+            released: { cd: 300, weeks: 2 },
+          }
+        : {
+            projectId: PID,
+            statusId: S.done,
+            changed: [{ taskId: T.a, previous: prev }],
+            openDescendantIds: [T.b, T.c],
+            released: null,
+          },
+    ),
+  )
+  renderTasks(<Harness />)
+  await user.click(screen.getByRole('button', { name: 'set' }))
+  await user.click(await screen.findByRole('button', { name: th.tasks.toast.completeAll }))
+  expect(await screen.findByText(th.tasks.toast.released('3.0', 2))).toBeInTheDocument()
+  expect(screen.queryByText(th.tasks.toast.completedMany(2))).toBeNull()
 })

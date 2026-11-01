@@ -2,7 +2,7 @@
 // DB row types cross the wire. Forward compatibility (M3-D42): later milestones extend these types additively
 // (M6 `SetTaskStatusResult.released`, M8 `TaskDTO.milestoneId`/`lateForMilestone`, `ProjectTasksResponse.milestones`,
 // `TaskCard.milestoneId`, `TeamTasksResponse.milestonesByProject`). Keep every result an object.
-import type { Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
+import type { Cd, Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
 
 export type TaskDepth = 0 | 1 | 2
 
@@ -95,7 +95,14 @@ export interface SetTaskStatusResult {
   changed: { taskId: string; previous: { statusId: string; completedOn: ISODate | null } }[]
   /** FR-608 prompt (single task, DONE target, !withChildren). */
   openDescendantIds: string[]
-  // M6 appends `released: ReleasedLoad | null` (M6-D16, C21) — do not add it here
+  /** BR-52 (M6-D16): load released by tasks newly entering DONE in this call; null when 0 and for revert/uncomplete. */
+  released: ReleasedLoad | null
+}
+
+/** BR-52: X = future cd after the completion week, N = distinct weeks (M6-D16). */
+export interface ReleasedLoad {
+  cd: Cd
+  weeks: number
 }
 
 export interface DeleteTaskTreeResult {

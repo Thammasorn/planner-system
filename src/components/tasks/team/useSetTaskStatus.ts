@@ -7,6 +7,7 @@ import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
 import type { SetTaskStatusResult, TaskCard, TaskStatusDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
 import { invalidateLoad, invalidateTasks } from '@/lib/invalidate'
+import { statusToastMessage } from '../statusToast'
 import { qk } from '@/lib/query-keys'
 import { completeTask, revertTaskStatus, setTaskStatus, uncompleteTask } from '@/server/actions/tasks'
 import { errorMessage } from '../useTaskMutations'
@@ -104,7 +105,7 @@ export function useSetTaskStatus() {
             : v.card.completed
               ? th.tasks.toast.uncompleted
               : th.tasks.toast.completed
-      undo.push(entry, { toast: message })
+      undo.push(entry, { toast: statusToastMessage(r, message) })
     },
     onSettled: (_r, _e, v) => void settle(v.card.projectId),
   })

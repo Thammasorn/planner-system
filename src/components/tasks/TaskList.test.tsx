@@ -28,12 +28,17 @@ vi.mock('@/server/actions/assignments', () => ({
 vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
 vi.mock('@/lib/api', () => ({ getJson: vi.fn(() => new Promise(() => {})) }))
 
-const statusResult = (taskIds: string[], statusId: string) =>
+const statusResult = (
+  taskIds: string[],
+  statusId: string,
+  released: { cd: number; weeks: number } | null = null,
+) =>
   ok({
     projectId: PID,
     statusId,
     changed: taskIds.map((taskId) => ({ taskId, previous: { statusId: S.todo, completedOn: null } })),
     openDescendantIds: [],
+    released,
   })
 
 const row = (name: string) => screen.getByRole('row', { name })
@@ -113,6 +118,82 @@ describe('TaskList (FR-603/606/607/614, §8.6)', () => {
       expect(a.completeTask).toHaveBeenCalledWith({ taskIds: [T.c, T.d], withChildren: false }),
     )
     expect(await screen.findByText(th.tasks.toast.completedMany(2))).toBeInTheDocument()
+  })
+
+  it('BR-52: Mod+Enter on a task with future load shows the released load instead of "ติ๊กเสร็จแล้ว"', async () => {
+    const user = userEvent.setup()
+    a.completeTask.mockImplementation((v: { taskIds: string[] }) =>
+      statusResult(v.taskIds, S.done, { cd: 1875, weeks: 5 }),
+    )
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    await user.click(row('งาน C'))
+    act(() => row('งาน C').focus())
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    await waitFor(() => expect(a.completeTask).toHaveBeenCalledWith({ taskIds: [T.c], withChildren: false }))
+    expect(await screen.findByText(th.tasks.toast.released('18.8', 5))).toBeInTheDocument()
+    expect(screen.queryByText(th.tasks.toast.completed)).toBeNull()
+  })
+
+  it('BR-52: the FR-608 "ติ๊กทั้งหมด" follow-up shows the released load of the cascade', async () => {
+    const user = userEvent.setup()
+    a.completeTask.mockImplementation((v: { taskIds: string[] }) =>
+      ok({
+        projectId: PID,
+        statusId: S.done,
+        changed: v.taskIds.map((taskId) => ({ taskId, previous: { statusId: S.todo, completedOn: null } })),
+        openDescendantIds: [T.b],
+        released: null,
+      }),
+    )
+    a.setTaskStatus.mockImplementation((v: { taskIds: string[]; statusId: string }) =>
+      statusResult([T.b], v.statusId, { cd: 300, weeks: 2 }),
+    )
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    act(() => row('ออกแบบ').focus())
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    await user.click(await screen.findByRole('button', { name: th.tasks.toast.completeAll }))
+    await waitFor(() =>
+      expect(a.setTaskStatus).toHaveBeenCalledWith({ taskIds: [T.a], statusId: S.done, withChildren: true }),
+    )
+    expect(await screen.findByText(th.tasks.toast.released('3.0', 2))).toBeInTheDocument()
+  })
+
+  it('BR-52: bulk เปลี่ยนสถานะ → เสร็จ shows the released load', async () => {
+    const user = userEvent.setup()
+    a.setTaskStatus.mockImplementation((v: { taskIds: string[]; statusId: string }) =>
+      statusResult(v.taskIds, v.statusId, { cd: 300, weeks: 2 }),
+    )
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    await user.click(row('งาน C'))
+    await user.keyboard('{Control>}')
+    await user.click(row('งาน D'))
+    await user.keyboard('{/Control}')
+    await user.click(screen.getByRole('button', { name: th.tasks.bulk.setStatus }))
+    await user.click(await screen.findByRole('option', { name: new RegExp(th.tasks.status.defaults.done) }))
+    await waitFor(() =>
+      expect(a.setTaskStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ taskIds: [T.c, T.d], statusId: S.done }),
+      ),
+    )
+    expect(await screen.findByText(th.tasks.toast.released('3.0', 2))).toBeInTheDocument()
+  })
+
+  it('BR-52: the status chip → เสร็จ shows the released load', async () => {
+    const user = userEvent.setup()
+    a.setTaskStatus.mockImplementation((v: { taskIds: string[]; statusId: string }) =>
+      statusResult(v.taskIds, v.statusId, { cd: 300, weeks: 2 }),
+    )
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    await user.click(
+      within(row('งาน C')).getByRole('button', { name: new RegExp(th.tasks.status.defaults.todo) }),
+    )
+    await user.click(await screen.findByRole('option', { name: new RegExp(th.tasks.status.defaults.done) }))
+    await waitFor(() =>
+      expect(a.setTaskStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ taskIds: [T.c], statusId: S.done }),
+      ),
+    )
+    expect(await screen.findByText(th.tasks.toast.released('3.0', 2))).toBeInTheDocument()
   })
 
   it('Delete with a parent and its child selected deletes only the parent', async () => {

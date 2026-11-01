@@ -17,6 +17,7 @@ import {
   timeOff,
 } from '@/server/db/schema'
 import { visibleUserIds } from '@/server/authz'
+import { allocationRows, assignmentVersion } from './factories'
 import { assertCompletionInvariant } from './invariants'
 import { toSessionUser } from './as-user'
 import { createWorld, expandParts } from './world'
@@ -55,8 +56,8 @@ describe('world fixture (X91)', () => {
   })
 
   it('parts without a builder throw; part fields of an unbuilt part throw on access', async () => {
-    await expect(createWorld({ with: ['allocations'] })).rejects.toThrow(
-      'world part allocations has no builder yet',
+    await expect(createWorld({ with: ['dayAllocations'] })).rejects.toThrow(
+      'world part dayAllocations has no builder yet',
     )
     const w = await createWorld()
     expect(() => w.tasks.pLeaf).toThrow("needs createWorld({ with: ['tasks'] })")
@@ -67,6 +68,14 @@ describe('world fixture (X91)', () => {
     expect(() => w.leaveTypes.vacation).toThrow("needs createWorld({ with: ['timeOff'] })")
     expect(() => w.timeOff.coworker).toThrow("needs createWorld({ with: ['timeOff'] })")
     expect(() => w.batches.coworkerDeletedTimeOff).toThrow("needs createWorld({ with: ['timeOff'] })")
+    expect(() => w.allocations.pLeafLead).toThrow("needs createWorld({ with: ['allocations'] })")
+  })
+
+  it("M6: keys the allocations part adds to the tasks part's objects trap until it ran", async () => {
+    const t = await createWorld({ with: ['tasks'] })
+    expect(t.assignments.pLeafLead.id).toBeTruthy()
+    expect(() => t.assignments.pDoneMember).toThrow("needs createWorld({ with: ['allocations'] })")
+    expect(() => t.tasks.pCoworker).toThrow("needs createWorld({ with: ['allocations'] })")
   })
 
   it('M3 with tasks: tree shape, statuses, assignments, batches, blockers (plan/m03 S0.15)', async () => {
@@ -299,5 +308,48 @@ describe('world fixture (X91)', () => {
     expect(w.holidays.h1).toMatchObject({ date: '2026-11-20', name: 'วันหยุดโลก' })
     const [h] = await db.select({ n: count() }).from(holidays)
     expect(h?.n).toBe(1)
+  })
+
+  it('M6 with allocations: implies tasks + timeOff; plan rows per assignment; versions stay 1 (plan/m06 S0.11)', async () => {
+    expect([...expandParts(['allocations'])].sort()).toEqual(['allocations', 'tasks', 'timeOff'])
+    const w = await createWorld({ with: ['allocations'] })
+    const a = w.assignments
+    const coworker = w.users.coworker!
+    const W = (cd: number, week: string) => ({ granularity: 'WEEK', periodStart: week, cd })
+    const D = (cd: number, day: string) => ({ granularity: 'DAY', periodStart: day, cd })
+
+    expect(await allocationRows(a.pLeafLead.id, '2026-09-28')).toEqual([W(250, '2026-09-28')])
+    expect(await allocationRows(a.pLeafLead.id, '2026-10-05')).toEqual([W(500, '2026-10-05')])
+    expect(await allocationRows(a.pChildAMember.id, '2026-09-28')).toEqual([W(100, '2026-09-28')])
+    expect(await allocationRows(a.pChildAMember.id, '2026-10-12')).toEqual([
+      D(50, '2026-10-12'),
+      D(50, '2026-10-13'),
+    ])
+    expect(a.pDoneMember).toMatchObject({ taskId: w.tasks.pDone.id, userId: w.member.id })
+    expect(await allocationRows(a.pDoneMember.id, '2026-09-28')).toEqual([W(100, '2026-09-28')])
+    expect(await allocationRows(a.pDoneMember.id, '2026-10-05')).toEqual([W(200, '2026-10-05')])
+    expect(await allocationRows(a.qTaskOutsider.id, '2026-09-28')).toEqual([W(300, '2026-09-28')])
+    expect(await allocationRows(a.aTaskMember.id, '2026-10-05')).toEqual([W(200, '2026-10-05')])
+    expect(w.tasks.pCoworker).toMatchObject({
+      projectId: w.P.id,
+      parentId: null,
+      depth: 0,
+      name: 'งานร่วม P-ลับ03',
+    })
+    expect(w.tasks.pCoworker.position > w.tasks.pDone.position).toBe(true)
+    expect(a.pCoworker).toMatchObject({ taskId: w.tasks.pCoworker.id, userId: coworker.id })
+    expect(await allocationRows(a.pCoworker.id, '2026-10-05')).toEqual([W(100, '2026-10-05')])
+    expect(a.qTaskCoworker).toMatchObject({ taskId: w.tasks.qTask.id, userId: coworker.id })
+    expect(await allocationRows(a.qTaskCoworker.id, '2026-10-05')).toEqual([W(300, '2026-10-05')])
+    // no November 2026 week on pLeafLead / aTaskMember (M7's dayAllocations uses 11-02 / 11-09)
+    for (const rows of [w.allocations.pLeafLead, w.allocations.aTaskMember])
+      expect(rows.every((r) => r.weekStart < '2026-11-01')).toBe(true)
+    expect(w.allocations.pChildAMember.map((r) => [r.granularity, r.weekStart, r.cd])).toEqual([
+      ['WEEK', '2026-09-28', 100],
+      ['DAY', '2026-10-12', 50],
+      ['DAY', '2026-10-12', 50],
+    ])
+    for (const id of Object.values(a).map((x) => x.id)) expect(await assignmentVersion(id)).toBe(1)
+    await assertCompletionInvariant()
   })
 })

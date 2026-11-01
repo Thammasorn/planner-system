@@ -32,3 +32,6 @@ export * as capacity from './capacity'
 export * as holidays from './holidays'
 export * as leaveTypes from './leave-types'
 export * as timeOff from './time-off'
+// M6 (PLAN §3.10: services.grid.buildChunk, services.allocations.save)
+export * as allocations from './allocations'
+export * as grid from './grid'

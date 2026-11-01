@@ -101,6 +101,7 @@ describe('TaskBoard (FR-660–664)', () => {
         statusId: S.waitData,
         changed: [{ taskId: T.c, previous: { statusId: S.doing, completedOn: null } }],
         openDescendantIds: [],
+        released: null,
       }),
     )
     renderBoard()
@@ -114,6 +115,26 @@ describe('TaskBoard (FR-660–664)', () => {
         withChildren: false,
       }),
     )
+  })
+
+  it('BR-52: S → เสร็จ on a card shows the released load instead of the status toast', async () => {
+    const user = userEvent.setup()
+    const done = STATUSES.find((s) => s.category === 'DONE')!
+    a.setTaskStatus.mockReturnValue(
+      ok({
+        projectId: PID,
+        statusId: done.id,
+        changed: [{ taskId: T.c, previous: { statusId: S.doing, completedOn: null } }],
+        openDescendantIds: [],
+        released: { cd: 125, weeks: 1 },
+      }),
+    )
+    renderBoard()
+    act(() => screen.getByRole('article', { name: 'งาน C' }).focus())
+    await user.keyboard('s')
+    await user.click(await screen.findByRole('option', { name: new RegExp(done.name) }))
+    expect(await screen.findByText(th.tasks.toast.released('1.3', 1))).toBeInTheDocument()
+    expect(screen.queryByText(th.tasks.status.toast.changed(done.name))).toBeNull()
   })
 
   it("a column's + เพิ่มงาน creates the task in that column's status", async () => {

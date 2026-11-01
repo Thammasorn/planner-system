@@ -5,6 +5,7 @@
 // M3 (plan/m03 S4.3): project tasks, project statuses, /api/tasks/my, team tasks /api/tasks, sidebar count, and the
 // error body of a cross-project blocker. Later milestones append describe blocks (M5 calendar, M6 grid, M9
 // workload/person, M10 search/home). plan/m02-clients-projects-authz.md S3.4.
+// M6 (plan/m06 S5.2): project grid (leave labels, otherProjects numbers only) and plan-save error bodies.
 import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { GET as getClientOptions } from '@/app/api/clients/options/route'
@@ -21,6 +22,7 @@ import type {
   CalendarTimeOffFull,
   CalendarTimeOffMasked,
 } from '@/lib/contracts/calendar'
+import type { GridPerson, GridResponse, SaveItemResult } from '@/lib/contracts/grid'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
 import type { SearchResponse } from '@/lib/contracts/search'
@@ -38,7 +40,7 @@ import {
 import * as services from '@/server/services'
 import { applyFixture, GOLDEN_PATH, seedGolden } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
-import { makeBlocker, makePage, type TestUser } from '../helpers/factories'
+import { allocationRows, makeBlocker, makePage, type TestUser } from '../helpers/factories'
 import { outcomeOf } from '../helpers/outcome'
 import { createWorld, type World } from '../helpers/world'
 import { goldenProjectId, goldenTaskNames, goldenUser, type GoldenProject } from './_support/golden'
@@ -46,6 +48,7 @@ import { callRoute, okJson } from './_support/http'
 import { assertContains, assertNoLeak } from './_support/leak'
 import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './rows/_m4'
 import { calendarGet } from './rows/_m5'
+import { gridGet, save, weekItem } from './rows/_m6'
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -824,5 +827,176 @@ describe('masking — calendar golden (M5, plan/m05 S4.3, r8 §4.3)', () => {
       expect(body.holidays, viewer).toEqual(F2_HOLIDAYS)
       expect(body.timeOff, viewer).toEqual([])
     }
+  })
+})
+
+// ── M6 grid (plan/m06 S5.2, MASK-5 / MASK-7, X29, X43) ─────────────────────────────────────────────────────────────
+// GET /api/grid/project/[projectId]: the project must be visible (PERM-06); people are co-members (BR-60) whose leave
+// labels are masked through canSeeLeaveDetails (th.masking.leave unless manager or self); `otherProjects` carries
+// per-period { total, committed } only — never a project, task, status or assignment of another project.
+
+const W6 = ['allocations'] as const
+
+async function gridAs(u: TestUser, projectId: string, qs = ''): Promise<{ status: number; body: unknown }> {
+  asUser(u)
+  return bodyOf(await gridGet(projectId, qs))
+}
+
+async function gridOk(u: TestUser, projectId: string, qs = ''): Promise<GridResponse> {
+  const { status, body } = await gridAs(u, projectId, qs)
+  expect(status, JSON.stringify(body)).toBe(200)
+  return body as GridResponse
+}
+
+function personOf(body: GridResponse, userId: string): GridPerson {
+  const p = body.people[userId]
+  expect(p, `people[${userId}]`).toBeDefined()
+  return p!
+}
+
+/** GridTimeOff is an explicit literal (S2.2): no id, type id, colour or note may ride along. */
+const TIME_OFF_KEYS = ['end', 'half', 'label', 'start']
+
+describe('masking — grid (M6, plan/m06 S5.2)', () => {
+  it('outsider: P’s grid is a 404 whose body has nothing of P (names, task names, task and assignment ids)', async () => {
+    const w = await createWorld({ with: W6 })
+    const t = w.tasks
+    const a = w.assignments
+    const secrets = [
+      w.P.name,
+      w.P.id,
+      ...[t.pParent, t.pChildA, t.pChildB, t.pLeaf, t.pDone, t.pCoworker].flatMap((x) => [x.name, x.id]),
+      ...[a.pChildAMember, a.pLeafLead, a.pDoneMember, a.pCoworker].map((x) => x.id),
+    ]
+    expect(t.pCoworker.name).toBe('งานร่วม P-ลับ03')
+    for (const qs of ['from=2026-09-28&to=2026-11-23', '', 'from=2026-09-28&to=2026-11-23&includeOthers=1']) {
+      const { status, body } = await gridAs(w.outsider, w.P.id, qs)
+      expect(status, qs).toBe(404)
+      assertNoLeak(body, secrets)
+    }
+    const archived = await gridAs(w.outsider, w.A.id, 'from=2026-09-28&to=2026-11-23')
+    expect(archived.status).toBe(404)
+    assertNoLeak(archived.body, [w.A.name, w.A.id, t.aTask.name, t.aTask.id, a.aTaskMember.id])
+  })
+
+  it('lead (not manager): the member’s leave is only "ลา" — no type, note, colour or id', async () => {
+    const w = await createWorld({ with: W6 })
+    const s = leaveSecrets(w)
+    const body = await gridOk(w.lead, w.P.id, 'from=2026-10-26&to=2026-11-09')
+    const leave = personOf(body, w.member.id).timeOff
+    expect(leave).toStrictEqual([{ start: '2026-11-02', end: '2026-11-02', half: null, label: th.masking.leave }])
+    assertNoLeak(body, [...s.member, ...s.coworker, ...s.pOnly])
+  })
+
+  it('member (self) and the manager see the leave type name; no entry carries more than start/end/half/label', async () => {
+    const w = await createWorld({ with: W6 })
+    for (const viewer of [w.member, w.manager]) {
+      const body = await gridOk(viewer, w.P.id, 'from=2026-10-26&to=2026-11-09')
+      const leave = personOf(body, w.member.id).timeOff
+      expect(leave, viewer.nickname ?? viewer.id).toStrictEqual([
+        { start: '2026-11-02', end: '2026-11-02', half: null, label: w.leaveTypes.training.name },
+      ])
+      for (const p of Object.values(body.people))
+        for (const e of p.timeOff) expect(Object.keys(e).sort()).toEqual(TIME_OFF_KEYS)
+      assertNoLeak(body, [w.timeOff.member.id, w.leaveTypes.training.id, w.leaveTypes.training.color])
+    }
+  })
+
+  it('member + includeOthers=1: coworker’s Q load is numbers only — nothing of Q, its task, status or assignments', async () => {
+    const w = await createWorld({ with: W6 })
+    const coworker = w.users.coworker!
+    const body = await gridOk(w.member, w.P.id, 'from=2026-09-28&to=2026-10-26&includeOthers=1')
+    // P's own 100 (pCoworker) is excluded (excludeProjectId) → week 10-05 is Q's 300 only; Q is CONFIRMED
+    expect(personOf(body, coworker.id).otherProjects?.['W:2026-10-05']).toEqual({ total: 300, committed: 300 })
+    assertContains(body, [w.P.name])
+    assertNoLeak(body, [
+      w.Q.name,
+      w.Q.id,
+      w.C2.name,
+      w.C2.id,
+      w.tasks.qTask.name,
+      w.tasks.qTask.id,
+      w.assignments.qTaskCoworker.id,
+      w.assignments.qTaskOutsider.id,
+      w.statuses.Q.waitData.name,
+      w.statuses.Q.waitData.id,
+      w.outsider.id,
+      w.outsider.name,
+    ])
+    expect(w.statuses.Q.waitData.name).toBe('สถานะลับ Q-04')
+    // switch off → no other-projects aggregate at all (X29)
+    const off = await gridOk(w.member, w.P.id, 'from=2026-09-28&to=2026-10-26')
+    for (const p of Object.values(off.people)) expect(p.otherProjects).toBeUndefined()
+  })
+
+  it('save errors: a batch touching Q is a 404 without Q data; VERSION_CONFLICT `current` holds only request items', async () => {
+    const w = await createWorld({ with: W6 })
+    const a = w.assignments
+    const qSecrets = [w.Q.name, w.Q.id, w.tasks.qTask.name, w.tasks.qTask.id, w.C2.name]
+    asUser(w.lead)
+    const cross = await save({
+      items: [weekItem(a.pLeafLead.id, '2026-11-16', 200), weekItem(a.qTaskOutsider.id, '2026-11-16', 100)],
+      clientOpId: 'mask-cross',
+    })
+    expect(outcomeOf(cross)).toBe('404')
+    assertNoLeak(cross, qSecrets)
+    expect(await allocationRows(a.pLeafLead.id, '2026-11-16'), 'all-or-nothing').toEqual([])
+
+    // [archived-but-visible A, invisible Q] as member: the invisible project wins (404), whatever the id order —
+    // a 403 here would tell the member that the Q assignment id exists (CLAUDE.md › สิทธิ์, SPEC §3.3)
+    asUser(w.member)
+    const archivedHidden = await save({
+      items: [weekItem(a.aTaskMember.id, '2026-10-12', 100), weekItem(a.qTaskOutsider.id, '2026-11-16', 100)],
+      clientOpId: 'mask-arch-hidden',
+    })
+    expect(outcomeOf(archivedHidden)).toBe('404')
+    assertNoLeak(archivedHidden, qSecrets)
+    asUser(w.lead)
+
+    const requested = [a.pLeafLead.id, a.pCoworker.id]
+    const stale = await save({
+      items: [weekItem(a.pLeafLead.id, '2026-10-05', 100, 99), weekItem(a.pCoworker.id, '2026-10-05', 150, 1)],
+      clientOpId: 'mask-stale',
+    })
+    expect(outcomeOf(stale)).toBe('409')
+    const current = (stale as { current?: SaveItemResult[] }).current ?? []
+    expect(current.map((c) => c.taskAssignmentId)).toContain(a.pLeafLead.id)
+    for (const c of current) {
+      expect(requested).toContain(c.taskAssignmentId)
+      expect(Object.keys(c.weeks)).toEqual(['2026-10-05'])
+    }
+    assertNoLeak(stale, [
+      ...qSecrets,
+      a.qTaskCoworker.id,
+      a.qTaskOutsider.id,
+      a.pChildAMember.id,
+      a.pDoneMember.id,
+    ])
+  })
+})
+
+describe('masking — grid golden (M6, plan/m06 S5.2, r8 §4.3)', () => {
+  const OTHERS: GoldenProject[] = ['Data Warehouse', 'Mobile App Revamp', 'CRM Migration', 'Store Analytics Dashboard']
+
+  it('Ivy, POS with includeOthers=1: Mint’s Mobile and Cindy’s CRM load are numbers only (no project/task name or id)', async () => {
+    await seedGolden(db)
+    const posId = await goldenProjectId('POS Upgrade')
+    const body = await gridOk(await goldenUser('Ivy'), posId, 'from=2026-09-28&to=2026-10-26&includeOthers=1')
+    const mint = await goldenUser('Mint')
+    const cindy = await goldenUser('Cindy')
+    expect(personOf(body, mint.id).otherProjects?.['W:2026-09-28']).toEqual({ total: 250, committed: 250 })
+    expect(personOf(body, cindy.id).otherProjects?.['W:2026-10-05']).toEqual({ total: 250, committed: 0 })
+    assertContains(body, ['POS Upgrade', ...goldenTaskNames(['POS Upgrade'])])
+    const hidden: string[] = [...goldenTaskNames(OTHERS)]
+    for (const n of OTHERS) hidden.push(n, await goldenProjectId(n))
+    assertNoLeak(body, hidden)
+  })
+
+  it('Peter (not in POS): the POS grid is a 404 without POS names or ids', async () => {
+    await seedGolden(db)
+    const posId = await goldenProjectId('POS Upgrade')
+    const { status, body } = await gridAs(await goldenUser('Peter'), posId, 'from=2026-09-28&to=2026-11-23')
+    expect(status).toBe(404)
+    assertNoLeak(body, ['POS Upgrade', posId, ...goldenTaskNames(['POS Upgrade'])])
   })
 })

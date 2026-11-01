@@ -50,6 +50,20 @@
       "when": 1793476368845,
       "tag": "0006_time_off_no_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793485246825,
+      "tag": "0007_m6_allocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793485251022,
+      "tag": "0008_allocations_week_day_guard",
+      "breakpoints": true
     }
   ]
 }

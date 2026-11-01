@@ -23,3 +23,5 @@ export * as pages from './pages'
 export * as holidays from './holidays'
 export * as leaveTypes from './leave-types'
 export * as timeOff from './time-off'
+// M6 (M6-D24): the only module that touches `allocations`
+export * as allocations from './allocations'

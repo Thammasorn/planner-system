@@ -13,7 +13,7 @@ import path from 'node:path'
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
-import { applyFixture, seedGolden, type FixtureId } from '../scripts/lib/fixtures'
+import { addSyntheticGridProject, applyFixture, seedGolden, type FixtureId } from '../scripts/lib/fixtures'
 import { clients, pages, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
@@ -94,7 +94,11 @@ export { expect }
 // ---------------------------------------------------------------------------------------------------------------
 
 /** Later milestones add option fields only (M6 syntheticGrid, M7 dayExample, M8 milestones, M9 alsoFixtures). */
-export type ResetDbOptions = { extras?: (tx: Tx) => Promise<unknown> }
+export type ResetDbOptions = {
+  extras?: (tx: Tx) => Promise<unknown>
+  /** M6-D22 / G15: adds the "Perf grid" project (200 leaf tasks × 16 WEEK rows from 2026-09-28) after the seed. */
+  syntheticGrid?: boolean
+}
 
 /**
  * Truncate every table + `seedGolden` (+ `applyFixture` for F2/F3/F4, M5) + extras in ONE transaction against `planner_e2e`, then empty
@@ -108,6 +112,7 @@ export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): P
       await truncateAll(tx)
       await seedGolden(tx)
       if (fixture !== undefined) await applyFixture(tx, fixture) // M5 (X11): F1 + that fixture's own setup only
+      if (opts.syntheticGrid) await addSyntheticGridProject(tx, { tasks: 200, weeks: 16, from: '2026-09-28' }) // M6
       await opts.extras?.(tx)
     })
   } finally {
@@ -141,7 +146,10 @@ export interface GuardedPage {
  * A second browser context ("another device") with the same guards and pinned clock as the auto fixture.
  * Options are passed explicitly so they never depend on config inheritance.
  */
-export async function openGuardedPage(browser: Browser, allowedConsoleErrors: readonly RegExp[] = []): Promise<GuardedPage> {
+export async function openGuardedPage(
+  browser: Browser,
+  allowedConsoleErrors: readonly RegExp[] = [],
+): Promise<GuardedPage> {
   const context = await browser.newContext({
     baseURL: E2E.baseUrl,
     locale: 'th-TH',
@@ -167,7 +175,9 @@ export async function openGuardedPage(browser: Browser, allowedConsoleErrors: re
 
 /** Resolves when the next server-action POST (header `next-action`) has answered. Start it before the click. */
 export function waitForServerAction(page: Page) {
-  return page.waitForResponse((r) => r.request().method() === 'POST' && !!r.request().headers()['next-action'])
+  return page.waitForResponse(
+    (r) => r.request().method() === 'POST' && !!r.request().headers()['next-action'],
+  )
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -202,6 +212,11 @@ export async function idOf(kind: IdKind, name: string): Promise<string> {
   } finally {
     await close()
   }
+}
+
+/** M6 (plan/m06 S0.13): id of the project with that name in `planner_e2e` (golden names are unique). */
+export function projectIdByName(name: string): Promise<string> {
+  return idOf('project', name)
 }
 
 // ---------------------------------------------------------------------------------------------------------------

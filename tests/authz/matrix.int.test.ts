@@ -86,6 +86,25 @@ describe('authz matrix', () => {
     for (const r of m5) expect(r.with ?? [], `${r.id} needs the timeOff world`).toContain('timeOff')
   })
 
+  it('M6 meta (plan/m06 §7.2): every GR-*, AL-*, PR-* row exists, cites PERM-06/PERM-12 or its X ruling, needs the allocations world', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...['READ', 'ARCH', 'OTHERS', 'DEFAULT', 'MISSING', 'BADID', 'BADQ', 'SPAN'].map((k) => `GR-${k}`),
+      ...['SAVE', 'CLEAR', 'COLLAPSE', 'DAYWEEK', 'STALE', 'ARCH', 'MIXED-ARCH', 'MISSING', 'BAD'].map((k) => `AL-${k}`),
+      ...['PREVIEW', 'APPLY', 'UNREP', 'ARCH'].map((k) => `PR-${k}`),
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M6 rows').toEqual([])
+    const m6 = rows.filter((r) => /^(GR|AL|PR)-/.test(r.id))
+    for (const perm of ['PERM-06', 'PERM-12'])
+      expect(m6.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M6 row`).toBe(true)
+    for (const r of m6) expect(r.with ?? [], `${r.id} needs the allocations world`).toContain('allocations')
+    // X44: every allowed single-item plan write audits one `allocation` row of P
+    for (const r of m6.filter((x) => x.mutates)) expect(r.audit, r.id).toMatchObject({ entity: 'allocation' })
+    expect(new Set(m6.map((r) => r.action))).toEqual(
+      new Set(['GET /api/grid/project/[projectId]', 'saveAllocations', 'planAssignmentRange']),
+    )
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })

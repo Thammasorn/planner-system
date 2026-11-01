@@ -6,15 +6,17 @@ import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
 import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
-import { addDays } from '@/domain/dates'
+import { addDays, weekStart } from '@/domain/dates'
 import { DEFAULT_STATUSES, type DefaultStatusKey } from '@/domain/status'
-import type { Certainty, HalfDay, ISODate, TaskStatusCategory } from '@/domain/types'
+import type { Cd, Certainty, HalfDay, ISODate, TaskStatusCategory } from '@/domain/types'
+import { cdToNumeric, numericToCd } from '@/domain/units'
 import { th } from '@/i18n/th'
 import type { PageSpace } from '@/lib/contracts/pages'
 import { extractContentText } from '@/lib/editor/content-text'
 import { db } from '@/server/db/client'
 import {
   account,
+  allocations,
   clients,
   files,
   holidays,
@@ -40,6 +42,7 @@ import {
   type ProjectMemberRow,
   type TimeOffRow,
 } from '@/server/db/schema'
+import type { AllocRow } from '@/server/repo/allocations'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
 import type { TaskBlockerRow } from '@/server/repo/task-blockers'
@@ -706,4 +709,68 @@ export async function makeTimeOff(o: MakeTimeOffOptions): Promise<TimeOffRow> {
     })
     .returning()
   return row!
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M6 — allocations (plan/m06 S0.11, PLAN §4.3). Plain Drizzle (X59): no lock / version bump; tests that need
+// BR-20b behaviour go through services.allocations. numeric ↔ cd with the domain converters only.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** One allocation row: WEEK (default) on the Monday of `period`, or DAY on `period`; weekStart = weekStart(period). */
+export async function makeAllocation(o: {
+  assignment: { id: string }
+  period: ISODate
+  cd: Cd
+  granularity?: 'WEEK' | 'DAY'
+}): Promise<AllocRow> {
+  const granularity = o.granularity ?? 'WEEK'
+  const week = weekStart(o.period)
+  const [row] = await db
+    .insert(allocations)
+    .values({
+      taskAssignmentId: o.assignment.id,
+      granularity,
+      periodStart: granularity === 'WEEK' ? week : o.period,
+      weekStart: week,
+      personDays: cdToNumeric(o.cd),
+    })
+    .returning()
+  return {
+    taskAssignmentId: row!.taskAssignmentId,
+    granularity: row!.granularity,
+    periodStart: row!.periodStart,
+    weekStart: row!.weekStart,
+    cd: numericToCd(row!.personDays),
+  }
+}
+
+/** The rows of one (assignment, week) — bounded by `week_start = week` (SPEC §6.5) — sorted by granularity, period. */
+export async function allocationRows(
+  assignmentId: string,
+  week: ISODate,
+): Promise<{ granularity: 'WEEK' | 'DAY'; periodStart: ISODate; cd: Cd }[]> {
+  const rows = await db
+    .select({
+      granularity: allocations.granularity,
+      periodStart: allocations.periodStart,
+      personDays: allocations.personDays,
+    })
+    .from(allocations)
+    .where(and(eq(allocations.taskAssignmentId, assignmentId), eq(allocations.weekStart, week)))
+    .orderBy(asc(allocations.granularity), asc(allocations.periodStart))
+  return rows.map((r) => ({
+    granularity: r.granularity,
+    periodStart: r.periodStart,
+    cd: numericToCd(r.personDays),
+  }))
+}
+
+/** Current `task_assignments.version` (BR-20b optimistic concurrency). */
+export async function assignmentVersion(assignmentId: string): Promise<number> {
+  const [row] = await db
+    .select({ version: taskAssignments.version })
+    .from(taskAssignments)
+    .where(eq(taskAssignments.id, assignmentId))
+  if (!row) throw new Error(`assignmentVersion: assignment ${assignmentId} not found`)
+  return row.version
 }

@@ -19,6 +19,7 @@ import type {
 } from '@/lib/contracts/tasks'
 import { displayName } from '@/lib/display-name'
 import { invalidateLoad, invalidateTasks } from '@/lib/invalidate'
+import { statusToastMessage } from './statusToast'
 import { qk } from '@/lib/query-keys'
 import type { TaskPatch } from '@/lib/schemas/tasks'
 import {
@@ -411,7 +412,7 @@ export function useTaskMutations(projectId: string): TaskMutations {
           : items.length === 1
             ? th.tasks.status.toast.changed(statusName)
             : th.tasks.status.toast.changedMany(items.length, statusName)
-    undo.push(entry, { toast: message })
+    undo.push(entry, { toast: statusToastMessage(r, message) })
   }
 
   const withDescendants = (d: ProjectTasksResponse, ids: readonly string[], on: boolean | undefined) => {

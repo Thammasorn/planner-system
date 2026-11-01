@@ -12,6 +12,10 @@ export const TASK_GROUP_BY = ['none', 'status', 'assignee', 'certainty'] as cons
 export const TASK_SORT = ['manual', 'due'] as const
 export const TASK_VIEWS = ['LIST', 'BOARD'] as const
 
+/** M6 grid / load keys (plan/m06 S0.5, M6-D21, X59). `load.view` is reused by M9's workload. */
+export const GRID_UNITS = ['DAYS', 'FRACTION'] as const
+export const LOAD_VIEWS = ['ALL', 'COMMITTED', 'AT_RISK'] as const
+
 export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('theme'), value: z.enum(THEMES) }),
   z.object({ key: z.literal('sidebar.collapsed'), value: z.boolean() }),
@@ -24,6 +28,9 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('tasks.view'), value: z.enum(TASK_VIEWS) }),
   z.object({ key: z.literal('tasks.board.leafOnly'), value: z.boolean() }),
   z.object({ key: z.literal('tasks.board.hideDone'), value: z.boolean() }),
+  // M6
+  z.object({ key: z.literal('grid.unit'), value: z.enum(GRID_UNITS) }),
+  z.object({ key: z.literal('load.view'), value: z.enum(LOAD_VIEWS) }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -42,6 +49,10 @@ export const preferencesSchema = z.object({
   'tasks.view': z.enum(TASK_VIEWS).optional().catch(undefined),
   'tasks.board.leafOnly': z.boolean().optional().catch(undefined),
   'tasks.board.hideDone': z.boolean().optional().catch(undefined),
+  // M6 keys (M6-D21): optional like the M3 keys (absent or invalid = GRID_PREFERENCE_DEFAULTS), so stored rows and
+  // DEFAULT_PREFERENCES stay valid unchanged. Read with gridPreference(prefs, key).
+  'grid.unit': z.enum(GRID_UNITS).optional().catch(undefined),
+  'load.view': z.enum(LOAD_VIEWS).optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 
@@ -70,4 +81,19 @@ export function taskPreference<K extends TaskPreferenceKey>(
   key: K,
 ): NonNullable<Preferences[K]> {
   return (prefs[key] ?? TASK_PREFERENCE_DEFAULTS[key]) as NonNullable<Preferences[K]>
+}
+
+/** Defaults of the optional M6 keys (M6-D21: days, all load). */
+export const GRID_PREFERENCE_DEFAULTS = {
+  'grid.unit': 'DAYS',
+  'load.view': 'ALL',
+} as const satisfies { [K in GridPreferenceKey]-?: NonNullable<Preferences[K]> }
+export type GridPreferenceKey = 'grid.unit' | 'load.view'
+
+/** The stored value of an M6 key, or its default. */
+export function gridPreference<K extends GridPreferenceKey>(
+  prefs: Preferences,
+  key: K,
+): NonNullable<Preferences[K]> {
+  return (prefs[key] ?? GRID_PREFERENCE_DEFAULTS[key]) as NonNullable<Preferences[K]>
 }

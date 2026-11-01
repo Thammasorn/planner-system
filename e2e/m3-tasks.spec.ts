@@ -445,7 +445,8 @@ test.describe('E9 ⟲ (FR-614, Cmd+Enter) multi-select and bulk actions', () => 
     const tasks = await openPos(page)
     await tasks.pressAndWait(ROLLOUT, 'ControlOrMeta+Enter')
     await tasks.expectCompleted(ROLLOUT, true)
-    await expect(toastWith(page, th.tasks.toast.completed)).toBeVisible() // M6 adds BR-52 numbers to this toast
+    // BR-52 (M6-D16): Rollout's whole plan (18.75 days over 5 weeks) is after this week
+    await expect(toastWith(page, th.tasks.toast.released('18.8', 5))).toBeVisible()
     await tasks.pressAndWait(ROLLOUT, 'ControlOrMeta+Enter')
     await tasks.expectCompleted(ROLLOUT, false)
     await expect(toastWith(page, th.tasks.toast.uncompleted)).toBeVisible()
@@ -458,7 +459,8 @@ test.describe('E9 ⟲ (FR-614, Cmd+Enter) multi-select and bulk actions', () => 
     await answered
     await tasks.expectCompleted(R1, true)
     await tasks.expectCompleted(R2, true)
-    await expect(toastWith(page, th.tasks.toast.completedMany(2))).toBeVisible() // M6 adds BR-52 numbers
+    // BR-52: only UAT has a later week (10-05 = 1.25 days); R1's plan ends this week
+    await expect(toastWith(page, th.tasks.toast.released('1.3', 1))).toBeVisible()
 
     await tasks.bulkButton(2, th.tasks.bulk.clear).click()
     await expect(tasks.bulkBar(2)).toHaveCount(0)
@@ -573,7 +575,7 @@ test.describe('E13 ⟲ (FR-1009 basic, sidebar count, NFR-07b) งานขอ�
     await main.getByRole('checkbox', { name: th.tasks.completeCheckbox('ตั้งค่า automation') }).click()
     await answered
     await expect(sidebar.myTaskCount()).toHaveText('1')
-    await undoByToast(page, th.tasks.toast.completed)
+    await undoByToast(page, th.tasks.toast.released('10.0', 4)) // BR-52: 4 future weeks × 2.5 days
     await expect(sidebar.myTaskCount()).toHaveText('2')
 
     await page.setViewportSize({ width: 390, height: 844 })
