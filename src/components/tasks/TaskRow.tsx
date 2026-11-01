@@ -8,7 +8,6 @@ import ChevronRight from '@mui/icons-material/ChevronRight'
 import DragIndicator from '@mui/icons-material/DragIndicator'
 import ExpandMore from '@mui/icons-material/ExpandMore'
 import MoreHoriz from '@mui/icons-material/MoreHoriz'
-import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined'
 import { CertaintyBadge } from '@/components/common/CertaintyBadge'
 import { InlineEditText } from '@/components/common/InlineEditText'
 import { TREE_INDENT, type HandleRef } from '@/components/tree/SortableTree'
@@ -21,6 +20,7 @@ import type { TaskRowModel } from '@/lib/tasks/tree'
 import { AssigneeChips } from './AssigneeChips'
 import { AssigneeAddButton } from './AssigneePicker'
 import { BlockerBadge } from './blockers/BlockerBadge'
+import { HasBodyMark, OpenAsPageLink } from './OpenAsPage'
 import { StatusChip } from './status/StatusChip'
 import styles from './TaskRow.module.css'
 
@@ -31,6 +31,8 @@ export interface TaskRowActions {
   rename: (id: string, name: string) => Promise<void>
   openStatus: (anchor: HTMLElement, id: string) => void
   openPanel: (id: string) => void
+  /** Row menu "เปิดเป็นหน้า" (FR-685): navigate to /t/<id>, remembering the list's scroll position. */
+  openPage: (id: string) => void
   unassign: (assignmentId: string, label: string) => void
   addSubtask: (row: TaskRowModel) => void
   moveUp: (id: string) => void
@@ -129,7 +131,7 @@ export function TaskRow(p: TaskRowProps) {
               aria-label={th.tasks.dragHandle}
               tabIndex={-1}
             >
-              <DragIndicator sx={{ fontSize: 18 }} />
+              <DragIndicator sx={{ fontSize: 'var(--font-lg)' }} />
             </button>
           ) : (
             <span className={styles.spacer} />
@@ -144,7 +146,11 @@ export function TaskRow(p: TaskRowProps) {
               tabIndex={-1}
               onClick={() => a.toggleExpand(row.id)}
             >
-              {p.expanded ? <ExpandMore sx={{ fontSize: 18 }} /> : <ChevronRight sx={{ fontSize: 18 }} />}
+              {p.expanded ? (
+                <ExpandMore sx={{ fontSize: 'var(--font-lg)' }} />
+              ) : (
+                <ChevronRight sx={{ fontSize: 'var(--font-lg)' }} />
+              )}
             </button>
           ) : (
             <span className={styles.spacer} />
@@ -196,10 +202,11 @@ export function TaskRow(p: TaskRowProps) {
                 })
               }
             />
+            {row.hasBody ? <HasBodyMark /> : null}
           </span>
           {p.invalid ? (
             <span className={styles.invalid}>
-              <BlockOutlined sx={{ fontSize: 16 }} aria-hidden="true" />
+              <BlockOutlined sx={{ fontSize: 'var(--font-lg)' }} aria-hidden="true" />
               {th.tasks.dropInvalid}
             </span>
           ) : null}
@@ -244,15 +251,7 @@ export function TaskRow(p: TaskRowProps) {
             {done && row.completedOn ? (
               <span className={styles.muted}>{th.tasks.completedOn(formatThaiDate(row.completedOn))}</span>
             ) : null}
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label={th.tasks.openPanel}
-              tabIndex={-1}
-              onClick={() => a.openPanel(row.id)}
-            >
-              <OpenInNewOutlined sx={{ fontSize: 16 }} />
-            </button>
+            <OpenAsPageLink taskId={row.id} tabIndex={-1} />
             <button
               type="button"
               className={styles.iconButton}
@@ -262,7 +261,7 @@ export function TaskRow(p: TaskRowProps) {
               data-row-menu=""
               onClick={(e) => setMenu(e.currentTarget)}
             >
-              <MoreHoriz sx={{ fontSize: 18 }} />
+              <MoreHoriz sx={{ fontSize: 'var(--font-lg)' }} />
             </button>
           </span>
           {p.showPath && row.parentPath.length > 0 ? (
@@ -272,6 +271,7 @@ export function TaskRow(p: TaskRowProps) {
       </div>
       <Menu anchorEl={menu} open={menu !== null} onClose={close}>
         {menuItem(th.tasks.rowMenu.open, () => a.openPanel(row.id))}
+        {menuItem(th.tasks.rowMenu.openPage, () => a.openPage(row.id))}
         {p.canEdit && row.depth < 2 ? menuItem(th.tasks.rowMenu.addSubtask, () => a.addSubtask(row)) : null}
         {menuItem(th.tasks.rowMenu.moveUp, () => a.moveUp(row.id), !p.ops)}
         {menuItem(th.tasks.rowMenu.moveDown, () => a.moveDown(row.id), !p.ops)}

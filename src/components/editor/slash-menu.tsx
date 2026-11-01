@@ -2,7 +2,7 @@
 // src/components/editor/slash-menu.tsx — Thai slash menu (FR-506/520/528, AC-501/504, M4-D14, r3 §5.2).
 // From plan/research/snippets/r3/harness/src/slashMenu.tsx: BlockNote's default items (titles come from the Thai
 // dictionary, English aliases stay searchable), `/ตาราง` → 3×3, custom `/หน้า` (create a child page, insert its
-// card) when allowed, ranked filter, word-start guard, stable getItems (r3 G23).
+// card) when allowed (never in a TASK body, M6.1-D9), ranked filter, word-start guard, stable getItems (r3 G23).
 import { insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
 import {
   type DefaultReactSuggestionItem,
@@ -11,6 +11,7 @@ import {
 } from '@blocknote/react'
 import { type JSX, useCallback } from 'react'
 import { th } from '@/i18n/th'
+import type { PageKind } from '@/lib/contracts/pages'
 import { rankSuggestionItems, slashShouldOpen } from '@/lib/editor/suggest'
 import type { AppEditor } from './schema'
 
@@ -19,6 +20,8 @@ export interface SlashCtx {
   createSubpage: () => Promise<string | null>
   /** canEdit && depth < 9 (FR-502: at most 10 levels). */
   canCreateSubpage: boolean
+  /** M6.1-D9 (FR-680): a TASK body has no page tree → never the sub-page item. Default 'DOC'. */
+  kind?: PageKind
 }
 
 const EMPTY_ROW = (): { cells: string[] } => ({ cells: ['', '', ''] })
@@ -61,7 +64,7 @@ export function getSlashMenuItems(editor: AppEditor, ctx: SlashCtx): DefaultReac
         },
       })
       // Right after the table so the "ขั้นสูง" group stays contiguous.
-      if (ctx.canCreateSubpage) out.push(subpageItem(editor, ctx))
+      if (ctx.canCreateSubpage && (ctx.kind ?? 'DOC') === 'DOC') out.push(subpageItem(editor, ctx))
       continue
     }
     out.push(item)

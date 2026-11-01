@@ -74,7 +74,7 @@ export function ColorSwatchPicker({
       <Typography id={labelId} variant="subtitle2" sx={{ mb: 0.5 }}>
         {label}
       </Typography>
-      <Box role="radiogroup" aria-labelledby={labelId} sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+      <Box role="radiogroup" aria-labelledby={labelId} sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         {items.map((c, i) => {
           const isSelected = c === current
           return (
@@ -95,11 +95,11 @@ export function ColorSwatchPicker({
                 width: SIZE,
                 height: SIZE,
                 p: 0,
-                borderRadius: '6px',
+                borderRadius: 'var(--radius-md)',
                 border: c === null ? '1px dashed' : 'none',
                 borderColor: 'text.secondary',
                 bgcolor: c ?? 'transparent',
-                color: c === null ? 'text.secondary' : '#FFFFFF',
+                color: c === null ? 'text.secondary' : 'common.white',
                 display: 'grid',
                 placeItems: 'center',
                 cursor: 'pointer',
@@ -110,9 +110,9 @@ export function ColorSwatchPicker({
               }}
             >
               {isSelected ? (
-                <Check sx={{ fontSize: 18 }} />
+                <Check sx={{ fontSize: 'var(--font-lg)' }} />
               ) : c === null ? (
-                <Block sx={{ fontSize: 16 }} />
+                <Block sx={{ fontSize: 'var(--font-md)' }} />
               ) : null}
             </Box>
           )

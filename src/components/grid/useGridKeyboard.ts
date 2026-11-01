@@ -16,7 +16,7 @@ export interface GridKeyHandlers {
   deleteRow: () => void
   /** Shift+Space: select the focused row */
   selectRow: () => void
-  /** Enter on a selected row header: open the task panel (same as ↗) */
+  /** Enter on a selected row header: open the task panel (same as double-click; ↗ is the page link, M6.1-D17) */
   openRow: () => void
   rowDeletable: () => boolean
 }
@@ -34,7 +34,8 @@ export function useGridKeyboard(
     const target = e.target as HTMLElement
     const inEditor = target.closest('[data-cell-editor]') !== null
     const inCell = target.closest('[data-cell]') !== null
-    const inRowHeader = target.closest('[data-row-header]') !== null && target.closest('button') === null
+    // the row header's own controls (▸/▾, ↗ link, ×, + คน) keep their native keys: Enter on ↗ follows the link
+    const inRowHeader = target.closest('[data-row-header]') !== null && target.closest('button, a[href]') === null
     const onRoot = target === e.currentTarget
     if (!inEditor && !inCell && !inRowHeader && !onRoot) return
     const s = a.store.get()

@@ -7,6 +7,7 @@ import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import ArrowDownward from '@mui/icons-material/ArrowDownward'
 import ArrowUpward from '@mui/icons-material/ArrowUpward'
+import Check from '@mui/icons-material/Check'
 import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import FormatIndentDecrease from '@mui/icons-material/FormatIndentDecrease'
@@ -48,6 +49,8 @@ export interface PageActionsMenuProps {
   tabIndex?: number
   /** After the server deleted the page, before its row disappears (the tree moves focus to a neighbour row). */
   onDeleted?: () => void
+  /** The page header's "เต็มความกว้าง" switch (FR-1602, M6.1-D15): passed only when the viewer may edit the page. */
+  fullWidth?: { checked: boolean; onToggle: () => void }
 }
 
 const MOVE_ITEMS = [
@@ -72,11 +75,12 @@ export function PageActionsMenu({
   className,
   tabIndex,
   onDeleted,
+  fullWidth,
 }: PageActionsMenuProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const canDelete = can.delete && !page.isCharter
   const anyMove = moves !== undefined && MOVE_ITEMS.some((m) => moves[m.key] !== undefined)
-  if (!can.duplicate && !canDelete && !can.protect && !anyMove) return null
+  if (!can.duplicate && !canDelete && !can.protect && !anyMove && !fullWidth) return null
   const title = page.title || th.pages.untitled
   const menuId = `page-menu-${page.id}`
 
@@ -106,6 +110,7 @@ export function PageActionsMenu({
           onProtectedSaved={onProtectedSaved}
           moves={moves}
           onDeleted={onDeleted}
+          fullWidth={fullWidth}
         />
       ) : null}
     </>
@@ -125,6 +130,7 @@ function PageMenu({
   onProtectedSaved,
   moves,
   onDeleted,
+  fullWidth,
 }: Omit<PageActionsMenuProps, 'className' | 'tabIndex'> & {
   id: string
   anchor: HTMLElement
@@ -134,6 +140,20 @@ function PageMenu({
   const canDelete = can.delete
   return (
     <Menu id={id} anchorEl={anchor} open onClose={close}>
+      {fullWidth ? (
+        // ✓ + aria-checked: the state is never shown by colour alone (§8.9)
+        <MenuItem
+          role="menuitemcheckbox"
+          aria-checked={fullWidth.checked}
+          onClick={() => {
+            close()
+            fullWidth.onToggle()
+          }}
+        >
+          <ListItemIcon>{fullWidth.checked ? <Check fontSize="small" /> : null}</ListItemIcon>
+          <ListItemText>{th.layout.fullWidth}</ListItemText>
+        </MenuItem>
+      ) : null}
       {can.duplicate ? (
         <MenuItem
           onClick={() => {

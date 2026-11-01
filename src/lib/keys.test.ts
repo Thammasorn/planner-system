@@ -25,6 +25,17 @@ describe('matchesHotkey', () => {
   })
 })
 
+describe('HOTKEYS.openPage (M6.1, FR-685, X49)', () => {
+  it.each([
+    ['Shift+Space (Kedmanee: key is still a space)', ev({ code: 'Space', key: ' ', shiftKey: true }), true],
+    ['Space alone opens the panel instead', ev({ code: 'Space', key: ' ' }), false],
+    ['Cmd+Shift+Space', ev({ code: 'Space', key: ' ', shiftKey: true, metaKey: true }), false],
+    ['Shift+Enter', ev({ code: 'Enter', key: 'Enter', shiftKey: true }), false],
+  ] as const)('%s → %s', (_label, e, expected) => {
+    expect(matchesHotkey(e, HOTKEYS.openPage)).toBe(expected)
+  })
+})
+
 describe('isUndoKey / isRedoKey (SPEC §8.6, X49)', () => {
   it('U-KEY-01 Ctrl+Z on the Thai Kedmanee layout is undo', () => {
     const e = ev({ code: 'KeyZ', key: 'ผ', ctrlKey: true })

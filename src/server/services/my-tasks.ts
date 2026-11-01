@@ -3,14 +3,18 @@
 // caller is a member of — BR-60 makes every legitimate assignment a member's, and the membership filter keeps a
 // stray one (e.g. on a task restored after its assignee left) from leaking a project the caller cannot see (§3.3).
 // M9 adds buckets and redefines the count (M9-D17).
+// M6.1: rows carry `hasBody` (FR-691) and the response the live statuses of the listed projects only (FR-1606 "/my
+// เปลี่ยนสถานะ", M6.1-D12/D25) — every group is a member project, so nothing outside the viewer's projects leaks.
 import { and, asc, eq, exists, isNull, notExists, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { compareThai } from '@/lib/collate'
-import type { MyTaskDTO, MyTasksResponse } from '@/lib/contracts/tasks'
+import type { MyTaskDTO, MyTasksResponse, TaskStatusDTO } from '@/lib/contracts/tasks'
 import * as authz from '../authz'
 import { projectMembers, projects, taskAssignments, taskStatuses, tasks } from '../db/schema'
 import type { DbOrTx } from '../db/types'
+import * as repo from '../repo'
 import type { SessionUser } from '../session'
+import { toStatusDTO } from './taskStatuses'
 
 const parentTask = alias(tasks, 'par')
 const childTask = alias(tasks, 'c')
@@ -54,6 +58,7 @@ export async function listMyTasks(tx: DbOrTx, user: SessionUser): Promise<MyTask
       statusName: taskStatuses.name,
       statusColor: taskStatuses.color,
       statusCategory: taskStatuses.category,
+      hasBody: repo.tasks.hasBodySql,
     })
     .from(taskAssignments)
     .innerJoin(tasks, taskJoin)
@@ -80,13 +85,20 @@ export async function listMyTasks(tx: DbOrTx, user: SessionUser): Promise<MyTask
       startDate: r.startDate,
       dueDate: r.dueDate,
       status: { id: r.statusId, name: r.statusName, color: r.statusColor, category: r.statusCategory },
+      hasBody: r.hasBody,
     }
     g.tasks.push(t)
   }
   const sorted = [...groups.values()].sort(
     (a, b) => compareThai(a.project.name, b.project.name) || compareThai(a.project.id, b.project.id),
   )
-  return { groups: sorted, count: rows.length }
+  const statusesByProject: Record<string, TaskStatusDTO[]> = {}
+  const statusRows = await repo.statuses.listLiveForProjects(
+    tx,
+    sorted.map((g) => g.project.id),
+  )
+  for (const s of statusRows) (statusesByProject[s.projectId] ??= []).push(toStatusDTO(s))
+  return { groups: sorted, count: rows.length, statusesByProject }
 }
 
 /** Sidebar "งานของฉัน N" (X22): the number of tasks on `/my`. */

@@ -1,19 +1,14 @@
-import Button from '@mui/material/Button'
-import Link from '@/components/Link'
-import { EmptyState } from '@/components/common/EmptyState'
+import { NotFoundScreen } from '@/components/common/NotFoundScreen'
 import { th } from '@/i18n/th'
 
 /** 404 for invisible, unknown or malformed client ids (X41, X61). */
 export default function ClientNotFound() {
   return (
-    <EmptyState
+    <NotFoundScreen
       title={th.clients.notFound.title}
       description={th.clients.notFound.body}
-      action={
-        <Button variant="contained" component={Link} href="/clients">
-          {th.clients.notFound.back}
-        </Button>
-      }
+      backHref="/clients"
+      backLabel={th.clients.notFound.back}
     />
   )
 }

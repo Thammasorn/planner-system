@@ -6,6 +6,8 @@
 // error body of a cross-project blocker. Later milestones append describe blocks (M5 calendar, M6 grid, M9
 // workload/person, M10 search/home). plan/m02-clients-projects-authz.md S3.4.
 // M6 (plan/m06 S5.2): project grid (leave labels, otherProjects numbers only) and plan-save error bodies.
+// M6.1 (plan/m06.1 S6.3): task bodies — task search group, page trees/titles without TASK pages, body/page/lease/file
+// 404 bodies, hasBody without body text, /my statusesByProject of the viewer's projects only.
 import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { GET as getClientOptions } from '@/app/api/clients/options/route'
@@ -49,6 +51,7 @@ import { assertContains, assertNoLeak } from './_support/leak'
 import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './rows/_m4'
 import { calendarGet } from './rows/_m5'
 import { gridGet, save, weekItem } from './rows/_m6'
+import { bodyGet } from './rows/_m6_1'
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -998,5 +1001,166 @@ describe('masking — grid golden (M6, plan/m06 S5.2, r8 §4.3)', () => {
     const { status, body } = await gridAs(await goldenUser('Peter'), posId, 'from=2026-09-28&to=2026-11-23')
     expect(status).toBe(404)
     assertNoLeak(body, ['POS Upgrade', posId, ...goldenTaskNames(['POS Upgrade'])])
+  })
+})
+
+describe('masking — task bodies (M6.1, plan/m06.1 S6.3; FR-682, FR-687, FR-690, AC-624, AC-628)', () => {
+  const q = (s: string) => encodeURIComponent(s)
+
+  /** Body texts, ids and the TASK pages of P and A the outsider must never receive (task names: M3 block). */
+  const pBodies = (w: World): string[] => [
+    'P-ลับ', // every P secret, incl. the body text 'รายละเอียด P-ลับ11'
+    'A-ลับ',
+    w.P.name,
+    w.P.id,
+    w.A.name,
+    w.A.id,
+    w.tasks.pLeaf.id,
+    w.tasks.aTask.id,
+    w.taskBodies.pLeafBody.id,
+    w.taskBodies.aTaskBody.id,
+    w.taskBodies.pLeafBodyImage.id,
+  ]
+  /** Everything of Q P's team must never receive. */
+  const qBodies = (w: World): string[] => [
+    'Q-ลับ',
+    w.Q.name,
+    w.Q.id,
+    w.tasks.qTask.id,
+    w.taskBodies.qTaskBody.id,
+  ]
+  const search = async (query: string): Promise<SearchResponse> => okJson<SearchResponse>(await searchGet(query))
+
+  it('fixture sanity: the body texts are the distinctive ones S0.15 promised', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    expect(w.taskBodies.pLeafBody.contentText).toContain('รายละเอียด P-ลับ11')
+    expect(w.taskBodies.aTaskBody.contentText).toBe('รายละเอียด A-ลับ12')
+    expect(w.taskBodies.qTaskBody.contentText).toBe('รายละเอียด Q-ลับ13')
+    expect(w.taskBodies.pLeafBody).toMatchObject({ kind: 'TASK', taskId: w.tasks.pLeaf.id, projectId: w.P.id })
+  })
+
+  it('outsider: GET /api/search?q=รายละเอียด P-ลับ11 → nothing of P (no “P-ลับ”, no task or page id)', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.outsider)
+    const body = await search(`q=${q('รายละเอียด P-ลับ11')}`)
+    expect(body.tasks ?? []).toEqual([])
+    assertNoLeak(body, pBodies(w))
+  })
+
+  it('outsider: q=รายละเอียด → only the Q body hit (opens /t/<qTask>), nothing of P or A', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.outsider)
+    const body = await search(`q=${q('รายละเอียด')}`)
+    expect(body.tasks).toEqual([
+      expect.objectContaining({ id: w.tasks.qTask.id, href: `/t/${w.tasks.qTask.id}`, matchedIn: 'content' }),
+    ])
+    assertNoLeak(body, pBodies(w))
+  })
+
+  it('member: q=รายละเอียด → P and archived A body hits (projectArchived chip), nothing of Q; no TASK page in `pages`', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.member)
+    const body = await search(`q=${q('รายละเอียด')}`)
+    const ids = (body.tasks ?? []).map((t) => t.id)
+    expect(ids).toEqual(expect.arrayContaining([w.tasks.pLeaf.id, w.tasks.aTask.id]))
+    expect(body.tasks?.find((t) => t.id === w.tasks.aTask.id)).toMatchObject({ projectArchived: true })
+    assertNoLeak(body, qBodies(w))
+    // FR-682 / AC-628: TASK pages never appear in the pages group
+    const pageIds = body.pages.map((p) => p.id)
+    for (const b of [w.taskBodies.pLeafBody, w.taskBodies.aTaskBody, w.taskBodies.qTaskBody])
+      expect(pageIds).not.toContain(b.id)
+  })
+
+  it('member: P and A page trees contain no TASK page id (AC-628; TASK pages sit at the project root with key a0)', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.member)
+    const pTree = await okJson<PageTreeResponse>(await treeGet(`space=PROJECT&projectId=${w.P.id}`))
+    assertContains(pTree, [w.pages.pPage.id, w.pages.pCharter.id])
+    assertNoLeak(pTree, [w.taskBodies.pLeafBody.id, w.tasks.pLeaf.id])
+    expect(pTree.nodes.every((n) => n.title !== '')).toBe(true)
+    const aTree = await okJson<PageTreeResponse>(await treeGet(`space=PROJECT&projectId=${w.A.id}`))
+    assertContains(aTree, [w.pages.aPage.id])
+    assertNoLeak(aTree, [w.taskBodies.aTaskBody.id])
+  })
+
+  it('GET /api/pages/titles?ids=<pLeafBody> → { id, visible:false } for the member and the outsider (S1.2)', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    for (const u of [w.member, w.outsider, w.manager]) {
+      asUser(u)
+      const body = await okJson<PageTitlesResponse>(await titlesGet([w.taskBodies.pLeafBody.id]))
+      expect(body.items, u.nickname ?? u.id).toEqual([{ id: w.taskBodies.pLeafBody.id, visible: false }])
+    }
+  })
+
+  it('member: Q body, its TASK page and its lease → 404 without “Q-ลับ” or a Q id', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.member)
+    for (const res of [
+      await bodyGet(w.tasks.qTask.id),
+      await pageGet(w.taskBodies.qTaskBody.id),
+      await lockCall('GET', w.taskBodies.qTaskBody.id),
+    ]) {
+      const { status, body } = await bodyOf(res)
+      expect(status).toBe(404)
+      assertNoLeak(body, qBodies(w))
+    }
+  })
+
+  it('outsider: P body, TASK page, lease and the body image → 404 without bytes, names or ids (AC-624)', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.outsider)
+    for (const res of [
+      await bodyGet(w.tasks.pLeaf.id),
+      await pageGet(w.taskBodies.pLeafBody.id),
+      await lockCall('GET', w.taskBodies.pLeafBody.id),
+    ]) {
+      const { status, body } = await bodyOf(res)
+      expect(status).toBe(404)
+      assertNoLeak(body, pBodies(w))
+    }
+    const file = await fileGet(w.taskBodies.pLeafBodyImage.id)
+    expect(file.status).toBe(404)
+    expect(file.headers.get('content-disposition')).toBeNull()
+    assertNoLeak(await file.text(), pBodies(w))
+  })
+
+  it('member: GET /api/projects/{P}/tasks carries hasBody, never the body text (FR-687 / FR-691)', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.member)
+    const body = await okJson<ProjectTasksResponse>(
+      await callRoute(getProjectTasks, `/api/projects/${w.P.id}/tasks`, { id: w.P.id }),
+    )
+    const byId = new Map(body.tasks.map((t) => [t.id, t]))
+    expect(byId.get(w.tasks.pLeaf.id)?.hasBody).toBe(true)
+    expect(byId.get(w.tasks.pChildB.id)?.hasBody).toBe(false)
+    assertNoLeak(body, ['รายละเอียด', w.taskBodies.pLeafBody.id, w.taskBodies.pLeafBodyImage.id])
+  })
+
+  it('outsider: GET /api/tasks/my statusesByProject has only Q’s statuses; member: none of Q (M6.1-D12)', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.outsider)
+    const out = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
+    expect(out.statusesByProject, 'S1.10 fills statusesByProject').toBeDefined()
+    expect(Object.keys(out.statusesByProject ?? {})).toEqual([w.Q.id])
+    assertNoLeak(out, [...pBodies(w), w.statuses.P.pSecret.name, w.statuses.P.todo.id, w.statuses.A.todo.id])
+    asUser(w.member)
+    const mine = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
+    expect(Object.keys(mine.statusesByProject ?? {}).sort()).toEqual(mine.groups.map((g) => g.project.id).sort())
+    expect(mine.groups.length).toBeGreaterThan(0)
+    assertNoLeak(mine, [...qBodies(w), w.statuses.Q.waitData.name, w.statuses.Q.todo.id])
+  })
+
+  it('team tasks: hasBody only on visible cards — outsider sees qTask (true) and nothing of P; member none of Q', async () => {
+    const w = await createWorld({ with: ['taskBodies'] })
+    asUser(w.outsider)
+    const out = await okJson<TeamTasksResponse>(await callRoute(getTeamTasks, '/api/tasks'))
+    expect(out.cards.map((c) => [c.id, c.hasBody])).toEqual([[w.tasks.qTask.id, true]])
+    assertNoLeak(out, pBodies(w))
+    asUser(w.member)
+    const mine = await okJson<TeamTasksResponse>(await callRoute(getTeamTasks, '/api/tasks'))
+    const byId = new Map(mine.cards.map((c) => [c.id, c]))
+    expect(byId.get(w.tasks.pLeaf.id)?.hasBody).toBe(true)
+    expect(byId.get(w.tasks.pChildB.id)?.hasBody).toBe(false)
+    assertNoLeak(mine, qBodies(w))
   })
 })

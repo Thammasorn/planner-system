@@ -14,7 +14,6 @@ import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -213,7 +212,7 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
       {list.length === 0 ? (
         <EmptyState title={th.positions.empty} />
       ) : (
-        <Paper variant="outlined">
+        <Box data-light-form="" sx={{ borderBlock: '1px solid var(--border-subtle)' }}>
           <List ref={listEl} aria-label={th.positions.title} disablePadding>
             {list.map((row, i) => {
               const isEditing = editing?.id === row.id
@@ -290,7 +289,7 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
               )
             })}
           </List>
-        </Paper>
+        </Box>
       )}
       <Stack
         component="form"
@@ -313,13 +312,7 @@ export function PositionsList({ rows }: { rows: PositionRow[] }) {
           helperText={helperText(addErrors)}
           slotProps={{ htmlInput: { 'aria-label': th.positions.namePlaceholder, maxLength: 100 } }}
         />
-        <Button
-          type="submit"
-          variant="contained"
-          startIcon={<Add />}
-          disabled={adding}
-          sx={{ flex: 'none', mt: '2px' }}
-        >
+        <Button type="submit" variant="contained" startIcon={<Add />} disabled={adding} sx={{ flex: 'none' }}>
           {th.positions.add}
         </Button>
       </Stack>

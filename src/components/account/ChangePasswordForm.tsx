@@ -65,7 +65,7 @@ export function ChangePasswordForm({ email, next }: { email: string; next: strin
 
   return (
     <Stack component="form" spacing={2} noValidate onSubmit={onSubmit}>
-      <Typography variant="h6" component="h2">
+      <Typography variant="h4" component="h2">
         {th.account.changePasswordTitle}
       </Typography>
       {error ? <Alert severity="error">{error}</Alert> : null}

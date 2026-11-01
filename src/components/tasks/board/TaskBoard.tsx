@@ -175,7 +175,7 @@ function Column<C>({
         ) : (
           <Box
             component="span"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontWeight: 600 }}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontWeight: 'var(--weight-bold)' }}
           >
             <CategoryIcon category={column.category} />
             {name}
@@ -221,7 +221,7 @@ function DraggableCard({
           className={styles.handle}
           aria-label={th.tasks.board.cardDragHandle(label)}
         >
-          <DragIndicator sx={{ fontSize: 16 }} />
+          <DragIndicator sx={{ fontSize: 'var(--font-lg)' }} />
         </button>
       ) : null}
       <div className={styles.slotBody}>{children}</div>

@@ -35,3 +35,5 @@ export * as timeOff from './time-off'
 // M6 (PLAN §3.10: services.grid.buildChunk, services.allocations.save)
 export * as allocations from './allocations'
 export * as grid from './grid'
+// M6.1 (task bodies, task page, full width)
+export * as taskPages from './task-pages'

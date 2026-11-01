@@ -21,12 +21,14 @@ import { getJson } from '@/lib/api'
 import { addMonths, monthGrid, monthTitle, yearMonthOf, type YearMonth } from '@/lib/calendar/month-grid'
 import type { CalendarResponse } from '@/lib/contracts/calendar'
 import { qk } from '@/lib/query-keys'
+import { PageHeaderBar } from '@/components/layout/PageHeaderBar'
 import { AgendaList } from './AgendaList'
 import { useLeaveDialog } from './LeaveDialogProvider'
 import { MonthGrid } from './MonthGrid'
 
 /**
- * /calendar (FR-907/908, M5-D8/D13): month header with ‹ เดือนนี้ › and "แจ้งลา", the month grid (or the agenda list
+ * /calendar (FR-907/908, M5-D8/D13): the header bar (ปฏิทินทีม as the <h1>; ‹ month › · เดือนนี้ · "แจ้งลา" on the
+ * right — FR-1603, M6.1 S4.4), the month grid (or the agenda list
  * under 600 px) fed by GET /api/calendar for the month's 6-week range. The month lives in the URL (`?month=`,
  * replaceState — no localStorage, X53). Selecting days or an own chip opens the shared leave dialog.
  */
@@ -54,87 +56,93 @@ export function TeamCalendar({ initialMonth }: { initialMonth: YearMonth }) {
   const stale = q.isPlaceholderData
 
   return (
-    <Stack spacing={2} sx={{ minWidth: 0 }}>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <Typography variant="h4" component="h1" sx={{ mr: 1 }}>
-          {title}
-        </Typography>
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <Tooltip title={th.calendar.prevMonth}>
-            <IconButton aria-label={th.calendar.prevMonth} onClick={() => setMonth(addMonths(month, -1))}>
-              <ChevronLeft />
-            </IconButton>
-          </Tooltip>
-          <Button variant="outlined" size="small" onClick={() => setMonth(yearMonthOf(today))}>
-            {th.calendar.thisMonth}
-          </Button>
-          <Tooltip title={th.calendar.nextMonth}>
-            <IconButton aria-label={th.calendar.nextMonth} onClick={() => setMonth(addMonths(month, 1))}>
-              <ChevronRight />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-        <Box sx={{ flex: 1 }} />
-        <Button
-          variant="contained"
-          startIcon={<EventBusyOutlined />}
-          onClick={() => dialog.open({ mode: 'create' })}
-        >
-          {th.calendar.reportLeave}
-        </Button>
-      </Stack>
-
-      {q.data ? (
-        <Stack
-          spacing={2}
-          data-testid="calendar-view"
-          aria-busy={stale ? true : undefined}
-          sx={{ minWidth: 0 }}
-        >
-          {/* Fixed 4 px slot so the bar appearing never shifts the grid. */}
-          <Box sx={{ height: 4 }}>{stale ? <LinearProgress aria-label={th.calendar.loading} /> : null}</Box>
-          {narrow ? (
-            <AgendaList
-              month={month}
-              data={q.data}
-              today={today}
-              onOpenEntry={(entry, returnFocus) => dialog.open({ mode: 'edit', entry, returnFocus })}
-            />
-          ) : (
-            <>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {th.calendar.selectHint}
-              </Typography>
-              <MonthGrid
+    <>
+      <PageHeaderBar
+        crumbs={[{ label: th.calendar.title, asHeading: true }]}
+        actions={
+          <>
+            <Tooltip title={th.calendar.prevMonth}>
+              <IconButton aria-label={th.calendar.prevMonth} onClick={() => setMonth(addMonths(month, -1))}>
+                <ChevronLeft />
+              </IconButton>
+            </Tooltip>
+            <Box
+              component="span"
+              aria-live="polite"
+              data-testid="calendar-month"
+              sx={{ fontWeight: 'var(--weight-medium)', minWidth: '7.5em', textAlign: 'center' }}
+            >
+              {title}
+            </Box>
+            <Tooltip title={th.calendar.nextMonth}>
+              <IconButton aria-label={th.calendar.nextMonth} onClick={() => setMonth(addMonths(month, 1))}>
+                <ChevronRight />
+              </IconButton>
+            </Tooltip>
+            <Button onClick={() => setMonth(yearMonthOf(today))}>{th.calendar.thisMonth}</Button>
+            <Button
+              variant="contained"
+              startIcon={<EventBusyOutlined />}
+              onClick={() => dialog.open({ mode: 'create' })}
+            >
+              {th.calendar.reportLeave}
+            </Button>
+          </>
+        }
+      />
+      <Stack spacing={2} sx={{ minWidth: 0 }}>
+        {q.data ? (
+          <Stack
+            spacing={2}
+            data-testid="calendar-view"
+            aria-busy={stale ? true : undefined}
+            sx={{ minWidth: 0 }}
+          >
+            {/* Fixed 4 px slot so the bar appearing never shifts the grid. */}
+            <Box sx={{ height: 4 }}>{stale ? <LinearProgress aria-label={th.calendar.loading} /> : null}</Box>
+            {narrow ? (
+              <AgendaList
                 month={month}
                 data={q.data}
                 today={today}
-                onSelectRange={(r) => dialog.open({ mode: 'create', ...r })}
                 onOpenEntry={(entry, returnFocus) => dialog.open({ mode: 'edit', entry, returnFocus })}
-                onMonthChange={setMonth}
               />
-            </>
-          )}
-        </Stack>
-      ) : q.isError ? (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => void q.refetch()}>
-              {th.calendar.retry}
-            </Button>
-          }
-        >
-          {th.calendar.loadError}
-        </Alert>
-      ) : (
-        <Box aria-busy="true">
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-            {th.calendar.loading}
-          </Typography>
-          <Skeleton variant="rounded" height={480} />
-        </Box>
-      )}
-    </Stack>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {th.calendar.selectHint}
+                </Typography>
+                <MonthGrid
+                  month={month}
+                  data={q.data}
+                  today={today}
+                  onSelectRange={(r) => dialog.open({ mode: 'create', ...r })}
+                  onOpenEntry={(entry, returnFocus) => dialog.open({ mode: 'edit', entry, returnFocus })}
+                  onMonthChange={setMonth}
+                />
+              </>
+            )}
+          </Stack>
+        ) : q.isError ? (
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={() => void q.refetch()}>
+                {th.calendar.retry}
+              </Button>
+            }
+          >
+            {th.calendar.loadError}
+          </Alert>
+        ) : (
+          <Box aria-busy="true">
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+              {th.calendar.loading}
+            </Typography>
+            <Skeleton variant="rounded" height={480} />
+          </Box>
+        )}
+      </Stack>
+    </>
   )
 }

@@ -1,11 +1,9 @@
-/* Dense outliner rows (PLAN §3.9): plain elements + CSS variables; state via aria/data attributes. */
+/* Dense outliner rows (PLAN §3.9): plain elements + CSS variables; state via aria/data attributes. Token scale only
+   (SPEC §8.12, FR-1605): light rows — a subtle 1 px separator, `--hover-bg` on hover, no heavy borders. */
 .list {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--mui-palette-divider);
-}
-
-.list {
+  border-top: 1px solid var(--border-subtle);
   container: tasklist / inline-size;
 }
 
@@ -14,15 +12,16 @@
   display: flex;
   align-items: center;
   min-height: 40px;
-  padding: 2px 8px 2px 4px;
-  border-bottom: 1px solid var(--mui-palette-divider);
-  background: var(--mui-palette-background-paper);
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
   color: var(--mui-palette-text-primary);
+  font-size: var(--font-md);
   outline: none;
 }
 
 .row:hover {
-  background: var(--mui-palette-action-hover);
+  background: var(--hover-bg);
 }
 
 /* Selection: background + a left bar (not colour only, SPEC §8.9). */
@@ -40,7 +39,7 @@
   display: flex;
   flex: 1;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -58,8 +57,8 @@
   flex: 1;
   flex-wrap: wrap;
   align-items: center;
-  column-gap: 12px;
-  row-gap: 2px;
+  column-gap: var(--space-3);
+  row-gap: 0;
   min-width: 0;
   min-height: 36px;
 }
@@ -73,14 +72,43 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
+  text-decoration: none;
 }
 
 .iconButton:hover {
-  background: var(--mui-palette-action-hover);
+  background: var(--hover-bg);
+  color: var(--mui-palette-text-primary);
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+/* ↗ "เปิดเป็นหน้า" (FR-685, M6.1-D17): a real link that appears on hover / keyboard focus of its row or card and is
+   always visible on touch screens. Hidden by opacity (not display) so the row keeps its width and the link stays
+   reachable for assistive technology. */
+.open {
+  opacity: 0;
+}
+
+.row:hover .open,
+.row:focus-within .open,
+.row[aria-selected='true'] .open,
+.open:focus-visible,
+[data-open-host]:hover .open,
+[data-open-host]:focus-within .open {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .open {
+    opacity: 1;
+  }
 }
 
 .handle {
@@ -95,21 +123,32 @@
 }
 
 .name {
+  display: inline-flex;
   flex: 1 1 200px;
+  align-items: center;
+  gap: var(--space-1);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .row[data-completed='true'] .name {
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   text-decoration: line-through;
+}
+
+/* 📄 (FR-691): the body is not blank — an emoji with a text name and tooltip, never colour only. */
+.bodyMark {
+  flex: none;
+  font-size: var(--font-sm);
+  line-height: 1;
+  cursor: default;
 }
 
 .meta {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -142,7 +181,7 @@
   }
 
   .body {
-    padding-bottom: 4px;
+    padding-bottom: var(--space-1);
   }
 }
 
@@ -158,15 +197,15 @@
 }
 
 .muted {
-  color: var(--mui-palette-text-secondary);
-  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
   white-space: nowrap;
 }
 
 .path {
   flex-basis: 100%;
-  color: var(--mui-palette-text-secondary);
-  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
   order: 10;
 }
 
@@ -174,12 +213,12 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   height: 24px;
-  padding: 0 4px 0 2px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 12px;
-  font-size: 0.8125rem;
+  padding: 0 var(--space-1) 0 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-sm);
   white-space: nowrap;
 }
 
@@ -188,11 +227,11 @@
   display: inline-flex;
   align-items: center;
   height: 24px;
-  padding: 0 8px;
-  border: 1px dashed var(--mui-palette-text-secondary);
-  border-radius: 12px;
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--text-secondary);
+  border-radius: var(--radius-lg);
   color: var(--mui-palette-text-primary);
-  font-size: 0.8125rem;
+  font-size: var(--font-sm);
   white-space: nowrap;
 }
 
@@ -204,19 +243,20 @@
 .invalid {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--mui-palette-error-main);
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: var(--font-xs);
+  font-weight: var(--weight-bold);
 }
 
 .groupHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 36px;
-  padding: 8px 12px 4px;
-  border-bottom: 1px solid var(--mui-palette-divider);
-  background: var(--mui-palette-background-default);
-  font-weight: 600;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-bold);
 }

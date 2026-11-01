@@ -14,7 +14,7 @@ export interface UserAvatarData {
  * Solid grey for deactivated users (MUI grey.700, ≈ 6.2:1 with white text). Not dimmed with opacity: blending with
  * the page background would drop the initial below the 4.5:1 that SPEC §8.9 / X51 require in light and dark mode.
  */
-export const INACTIVE_AVATAR_BG = '#616161'
+export const INACTIVE_AVATAR_BG = '#616161' // token-scale-ok: data colour (MUI grey.700), contrast-tested with white
 
 /**
  * Initial on the user's palette colour (M1-D20; every colour ≥ 4.5:1 with white text). Decorative: the name is
@@ -34,8 +34,8 @@ export function UserAvatar({ user, size = 28 }: { user: UserAvatarData; size?: n
         width: size,
         height: size,
         fontSize: Math.round(size * 0.5),
-        fontWeight: 600,
-        color: '#FFFFFF',
+        fontWeight: 'var(--weight-bold)',
+        color: 'common.white',
         bgcolor: inactive ? INACTIVE_AVATAR_BG : color,
       }}
     >

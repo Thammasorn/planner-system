@@ -5,6 +5,7 @@
 import type { Dictionary } from '@blocknote/core'
 import { en } from '@blocknote/core/locales'
 import { th } from '@/i18n/th'
+import type { PageKind } from '@/lib/contracts/pages'
 
 type SlashKey = keyof Dictionary['slash_menu']
 
@@ -29,3 +30,13 @@ export function buildThaiDictionary(): Dictionary {
 }
 
 export const thaiDictionary: Dictionary = buildThaiDictionary()
+
+/** M6.1 (FR-681, S2.4): task bodies show "เพิ่มรายละเอียด… พิมพ์ / เพื่อแทรก" while the document is empty. */
+export const taskDictionary: Dictionary = {
+  ...thaiDictionary,
+  placeholders: { ...thaiDictionary.placeholders, emptyDocument: th.editor.taskPlaceholder },
+}
+
+export function dictionaryFor(kind: PageKind): Dictionary {
+  return kind === 'TASK' ? taskDictionary : thaiDictionary
+}

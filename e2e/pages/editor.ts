@@ -208,6 +208,24 @@ export class EditorPage {
   async pokeLease(): Promise<void> {
     await this.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
   }
+  /** M6.1-D26: the compact holder chip ("Cindy กำลังแก้" + "แก้ต่อจากนี้") in the header bar of `/t`. */
+  leaseBadge(): Locator {
+    return this.page.getByTestId('lease-badge')
+  }
+  /**
+   * The editor's empty-state placeholders as rendered (BlockNote 0.55 paints them with
+   * `.bn-block-content[data-is-only-empty-block]::after { content: … }` rules from an injected stylesheet, so they are
+   * not DOM text): the `::after` contents of the editor's block-content nodes.
+   */
+  async placeholders(): Promise<string[]> {
+    await this.waitReady()
+    return this.content().evaluate((root) =>
+      [...root.querySelectorAll('.bn-block-content')]
+        .map((el) => getComputedStyle(el, '::after').content)
+        .filter((c) => c !== 'none' && c !== 'normal' && c !== '')
+        .map((c) => c.replace(/^"|"$/g, '')),
+    )
+  }
   conflictBanner(): Locator {
     return this.page.getByText(th.editor.conflict.banner, { exact: true })
   }

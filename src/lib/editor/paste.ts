@@ -4,7 +4,9 @@
 // paragraph and hot-links external images (r3 G2/G3).
 import type { AppEditor } from '@/components/editor/schema'
 import { th } from '@/i18n/th'
+import type { PageKind } from '@/lib/contracts/pages'
 import type { UploadLimits } from '@/lib/files/upload-rules'
+import { replaceSubpagesWithMentions } from './task-body'
 import { gridToHtmlTable, parseTsvGrid } from './tsv'
 import { insertFilesAtCursor, type Notify } from './upload'
 
@@ -62,8 +64,20 @@ export function htmlHasText(html: string, doc: Document = document): boolean {
  *   4 TSV-only grid (≥ 2×2) → pasteHTML(table) (pastes into an existing table when the cursor is in one);
  *   5 other HTML with images → external images become links;
  *   6 everything else → default, preferring HTML over markdown-sniffed text (M4-D13).
+ * TASK bodies (M6.1-D9, FR-680): whatever was pasted, sub-page cards become paragraphs with a page mention right
+ * after the (synchronous) insertion — a task body has no page tree and the server rejects `subpage` there.
  */
-export function makePasteHandler(o: { notify: Notify; limits: UploadLimits }): PasteHandler {
+export function makePasteHandler(o: { notify: Notify; limits: UploadLimits; kind?: PageKind }): PasteHandler {
+  const route = routePaste(o)
+  if ((o.kind ?? 'DOC') === 'DOC') return route
+  return (ctx) => {
+    const handled = route(ctx)
+    replaceSubpagesWithMentions(ctx.editor)
+    return handled
+  }
+}
+
+function routePaste(o: { notify: Notify; limits: UploadLimits }): PasteHandler {
   return ({ event, editor, defaultPasteHandler }) => {
     const dt = event.clipboardData
     if (!dt) return defaultPasteHandler()

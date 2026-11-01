@@ -35,8 +35,23 @@ export class PageScreen {
     await saved
     await expect(this.titleInput()).toHaveValue(text)
   }
+  /** M6.1 (FR-1603): the crumbs live in the 48 px header bar (`nav` th.layout.breadcrumb). */
   breadcrumb(): Locator {
-    return this.page.getByRole('navigation', { name: th.pages.breadcrumbLabel, exact: true })
+    return this.page.getByTestId('page-header').getByRole('navigation', { name: th.layout.breadcrumb, exact: true })
+  }
+  /** The reading column (FR-1602, `data-full-width`). */
+  column(): Locator {
+    return this.page.getByTestId('page-column')
+  }
+  /** ⋯ › เต็มความกว้าง (`menuitemcheckbox`, only for editors — M6.1-D15). */
+  fullWidthItem(): Locator {
+    return this.page.getByRole('menu').getByRole('menuitemcheckbox', { name: th.layout.fullWidth, exact: true })
+  }
+  async toggleFullWidth(title: string): Promise<void> {
+    await this.openMenu(title)
+    const saved = waitForServerAction(this.page)
+    await this.fullWidthItem().click()
+    await saved
   }
   iconButton(): Locator {
     return this.page.getByRole('button', { name: th.pages.icon.button, exact: true })

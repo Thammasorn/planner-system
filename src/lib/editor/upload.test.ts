@@ -107,6 +107,39 @@ describe('makeUploadFile', () => {
     expect(notify).toHaveBeenCalledWith(th.editor.upload.failed)
   })
 
+  it('M6.1-D8: getPageId is awaited before the POST (a task body creates its row first)', async () => {
+    let resolveId!: (id: string) => void
+    const getPageId = vi.fn(() => new Promise<string>((r) => (resolveId = r)))
+    const lazy = makeUploadFile({ getPageId, notify, limits: DEFAULT_UPLOAD_LIMITS, getEditor: () => editor })
+    fetchMock.mockResolvedValue(json(201, dto('IMAGE')))
+    const p = lazy(file('a.png', 'image/png'), 'b1')
+    await Promise.resolve()
+    expect(getPageId).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+    resolveId(PAGE)
+    await expect(p).resolves.toEqual({ type: 'image', props: { url: `/api/files/${ID}`, name: 'a.png' } })
+    expect((fetchMock.mock.calls[0]![1]?.body as FormData).get('pageId')).toBe(PAGE)
+  })
+
+  it('M6.1-D8: getPageId rejecting → resolves {} + failed, no POST', async () => {
+    const lazy = makeUploadFile({
+      getPageId: () => Promise.reject(new Error('ensure failed')),
+      notify,
+      limits: DEFAULT_UPLOAD_LIMITS,
+      getEditor: () => editor,
+    })
+    await expect(lazy(file('a.png', 'image/png'), 'b1')).resolves.toEqual({})
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(notify).toHaveBeenCalledWith(th.editor.upload.failed)
+  })
+
+  it('a rejected file never asks for the page id (no row for a refused upload)', async () => {
+    const getPageId = vi.fn(() => Promise.resolve(PAGE))
+    const lazy = makeUploadFile({ getPageId, notify, limits: DEFAULT_UPLOAD_LIMITS, getEditor: () => editor })
+    await lazy(file('setup.exe', 'application/x-msdownload'), 'b1')
+    expect(getPageId).not.toHaveBeenCalled()
+  })
+
   it('11 MB png → no fetch, tooLargeImage(10)', async () => {
     await expect(upload(file('big.png', 'image/png', 11 * MB), 'b1')).resolves.toEqual({})
     expect(fetchMock).not.toHaveBeenCalled()

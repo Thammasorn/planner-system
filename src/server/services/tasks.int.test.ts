@@ -238,23 +238,37 @@ describe('createTask', () => {
 })
 
 describe('updateTask', () => {
-  it('rename, clear notes, start only, due before start → VALIDATION, certainty override; W → NOT_FOUND', async () => {
+  it('rename + dates + certainty, start only, due before start → VALIDATION, certainty override; W → NOT_FOUND', async () => {
     const w = await plainWorld()
     const t = await makeTask({ project: w.P, name: 'Old', createdBy: w.manager, startDate: '2026-10-05' })
-    await db.update(tasks).set({ notes: 'n' }).where(eq(tasks.id, t.id))
     asUser(w.member)
     const mark = await auditCount()
-    const r = await updateAction({ taskId: t.id, patch: { name: 'New', notes: '  ' } })
-    expect(r).toMatchObject({ ok: true, task: { name: 'New', notes: null } })
+    const r = await updateAction({
+      taskId: t.id,
+      patch: { name: 'New', dueDate: '2026-10-09', certaintyOverride: 'TENTATIVE' },
+    })
+    expect(r).toMatchObject({
+      ok: true,
+      task: { name: 'New', dueDate: '2026-10-09', certaintyOverride: 'TENTATIVE', hasBody: false },
+    })
+    expect(r.ok && 'notes' in r.task).toBe(false)
     expect(await auditRowsAfter(mark)).toEqual([
       expect.objectContaining({
         entity: 'task',
         action: 'update',
         summary: th.audit.taskUpdated('New'),
-        before: { name: 'Old', notes: 'n' },
-        after: { name: 'New', notes: null },
+        before: { name: 'Old', dueDate: null, certaintyOverride: null },
+        after: { name: 'New', dueDate: '2026-10-09', certaintyOverride: 'TENTATIVE' },
       }),
     ])
+    // M6.1-D12 (FR-692): notes are no longer accepted — a notes-only patch is a VALIDATION error, nothing written
+    const mark2 = await auditCount()
+    expect(await updateAction({ taskId: t.id, patch: { notes: 'x' } as never })).toMatchObject({
+      ok: false,
+      code: 'VALIDATION',
+    })
+    expect(await auditRowsAfter(mark2)).toEqual([])
+    await updateAction({ taskId: t.id, patch: { dueDate: null, certaintyOverride: null } })
     expect(await updateAction({ taskId: t.id, patch: { startDate: '2026-10-06' } })).toMatchObject({
       ok: true,
       task: { startDate: '2026-10-06' },
@@ -581,8 +595,8 @@ describe('listProjectTasks', () => {
         'depth',
         'dueDate',
         'id',
+        'hasBody',
         'name',
-        'notes',
         'parentId',
         'position',
         'projectId',

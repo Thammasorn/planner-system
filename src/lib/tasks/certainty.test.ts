@@ -9,7 +9,7 @@ const task = (id: string, parentId: string | null, x: Partial<TaskDTO> = {}): Ta
   depth: 0,
   position: 'a0',
   name: `name-${id}`,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate: null,
   certaintyOverride: null,

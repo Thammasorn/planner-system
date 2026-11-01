@@ -39,7 +39,7 @@ export function task(over: Partial<TaskDTO> & Pick<TaskDTO, 'id' | 'name' | 'pos
     projectId: PID,
     parentId: null,
     depth: 0,
-    notes: null,
+    hasBody: false,
     startDate: null,
     dueDate: null,
     certaintyOverride: null,

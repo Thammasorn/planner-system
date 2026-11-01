@@ -76,8 +76,8 @@ export function PageTitle({ pageId, value, canEdit, scope, onChange, onEnter, in
       }}
       slotProps={{ input: { 'aria-label': th.pages.titleLabel, maxLength: PAGE_TITLE_MAX } }}
       sx={{
-        fontSize: { xs: '1.75rem', sm: '2.25rem' },
-        fontWeight: 700,
+        fontSize: { xs: 'var(--font-2xl)', sm: 'var(--font-3xl)' },
+        fontWeight: 'var(--weight-bold)',
         lineHeight: 1.25,
         '& textarea::placeholder': { color: 'text.disabled', opacity: 1 },
       }}

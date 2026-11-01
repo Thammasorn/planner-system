@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitForElementToBeRemoved, within } from '@test
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { PageHeaderBar } from '@/components/layout/PageHeaderBar'
 import { installCmdkShims } from '@/components/palette/jsdom.test.helper'
 import { PreferencesProvider } from '@/components/providers/PreferencesProvider'
 import { UndoProvider } from '@/components/undo/UndoProvider'
@@ -125,10 +126,21 @@ describe('AppShell', () => {
     expect(sidebar()).toHaveAttribute('data-collapsed', 'false')
   })
 
-  it('opens a named modal drawer with the same navigation and closes it with Escape', async () => {
-    const user = userEvent.setup()
+  it('M6.1-D19: no separate mobile bar — ☰ lives in the screen header bar', () => {
     renderWithProviders(<AppShell>x</AppShell>)
-    await user.click(screen.getByRole('button', { name: th.nav.openMenu }))
+    expect(screen.queryByRole('banner')).toBeNull()
+    expect(screen.queryByRole('button', { name: th.layout.openMenu })).toBeNull()
+  })
+
+  it('opens a named modal drawer from ☰ in the header bar and closes it with Escape', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <AppShell>
+        <PageHeaderBar crumbs={[{ label: th.nav.home, asHeading: true }]} />
+      </AppShell>,
+    )
+    const bar = screen.getByTestId('page-header')
+    await user.click(within(bar).getByRole('button', { name: th.layout.openMenu }))
     // WAI-ARIA: every role="dialog" needs an accessible name (PLAN.md §3.9).
     const dialog = await screen.findByRole('dialog', { name: th.nav.sidebarLabel })
     expect(dialog).toHaveAttribute('aria-modal', 'true')

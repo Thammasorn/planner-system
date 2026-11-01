@@ -180,6 +180,19 @@ export function waitForServerAction(page: Page) {
   )
 }
 
+/**
+ * The server action whose request body contains `needle` (e.g. the final ISO date). A date typed section by section
+ * emits valid intermediate dates (day "2" → 02, then "23"), each saved — wait for the save of the final value.
+ */
+export function waitForServerActionWith(page: Page, needle: string) {
+  return page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' &&
+      !!r.request().headers()['next-action'] &&
+      (r.request().postData() ?? '').includes(needle),
+  )
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // M2: id lookups in planner_e2e (plan/m02-clients-projects-authz.md S3.5)
 // ---------------------------------------------------------------------------------------------------------------

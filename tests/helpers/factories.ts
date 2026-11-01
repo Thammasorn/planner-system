@@ -403,7 +403,6 @@ export interface MakeTaskOptions {
   completedOn?: ISODate | null
   startDate?: ISODate | null
   dueDate?: ISODate | null
-  notes?: string | null
   /** Default: the project's default TODO status (BR-81), or its first DONE status when completedOn is set. */
   status?: { id: string }
   deleted?: DeletedAs
@@ -451,7 +450,6 @@ export async function makeTask(o: MakeTaskOptions): Promise<TaskRow> {
       parentId,
       depth,
       name: o.name ?? `Task ${taskSeq}`,
-      notes: o.notes ?? null,
       startDate: o.startDate ?? null,
       dueDate: o.dueDate ?? null,
       certaintyOverride: o.certaintyOverride ?? null,
@@ -615,6 +613,55 @@ export async function makeFile(o: MakeFileOptions): Promise<FileRow> {
       pageId: o.page.id,
       projectId: o.page.projectId,
       uploadedBy: o.uploadedBy.id,
+    })
+    .returning()
+  return row!
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M6.1 — task bodies (plan/m06.1 S0.15): TASK pages inserted with plain Drizzle (never through src/server/repo/**).
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface MakeTaskBodyOptions {
+  task: {
+    id: string
+    projectId: string
+    createdBy: string
+    deletedAt?: Date | null
+    deletedBatch?: string | null
+  }
+  /** Default [] (an empty body row, as ensureTaskBody creates it). A string = one paragraph. */
+  content?: unknown[] | string
+  fullWidth?: boolean
+  /** Default: the task's created_by. */
+  createdBy?: { id: string }
+  /** Soft-deleted with this batch (e.g. the task delete batch, FR-689). */
+  deleted?: DeletedAs
+  version?: number
+}
+
+/** A TASK page for `task` (kind 'TASK', key 'a0', title '', space PROJECT, content_text via extractContentText). */
+export async function makeTaskBody(o: MakeTaskBodyOptions): Promise<PageRow> {
+  const content: unknown[] =
+    typeof o.content === 'string' ? [{ type: 'paragraph', content: o.content }] : (o.content ?? [])
+  const by = o.createdBy?.id ?? o.task.createdBy
+  const [row] = await db
+    .insert(pages)
+    .values({
+      space: 'PROJECT',
+      projectId: o.task.projectId,
+      kind: 'TASK',
+      taskId: o.task.id,
+      title: '',
+      content,
+      contentText: extractContentText(content),
+      fullWidth: o.fullWidth ?? false,
+      version: o.version ?? 1,
+      position: 'a0',
+      createdBy: by,
+      updatedBy: by,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
     })
     .returning()
   return row!

@@ -20,7 +20,6 @@ import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -91,7 +90,7 @@ function Swatch({ color, size = 20 }: { color: string; size?: number }) {
         display: 'inline-block',
         width: size,
         height: size,
-        borderRadius: '4px',
+        borderRadius: 'var(--radius-sm)',
         bgcolor: color,
         flex: 'none',
       }}
@@ -318,7 +317,7 @@ export function LeaveTypesList({ rows }: { rows: LeaveTypeAdminDTO[] }) {
       {list.length === 0 ? (
         <EmptyState title={th.leaveTypes.title} />
       ) : (
-        <Paper variant="outlined">
+        <Box data-light-form="" sx={{ borderBlock: '1px solid var(--border-subtle)' }}>
           <List ref={listEl} aria-label={th.leaveTypes.title} disablePadding>
             {list.map((row, i) => {
               const isEditing = editing?.id === row.id
@@ -363,7 +362,7 @@ export function LeaveTypesList({ rows }: { rows: LeaveTypeAdminDTO[] }) {
                           sx={{
                             font: 'inherit',
                             px: 0.5,
-                            borderRadius: 0.5,
+                            borderRadius: 'var(--radius-sm)',
                             maxWidth: '100%',
                             justifyContent: 'flex-start',
                             textAlign: 'start',
@@ -418,7 +417,7 @@ export function LeaveTypesList({ rows }: { rows: LeaveTypeAdminDTO[] }) {
               )
             })}
           </List>
-        </Paper>
+        </Box>
       )}
 
       <Menu
@@ -450,7 +449,7 @@ export function LeaveTypesList({ rows }: { rows: LeaveTypeAdminDTO[] }) {
         })}
       </Menu>
 
-      <Paper variant="outlined" sx={{ p: 2 }}>
+      <Box sx={{ pt: 1 }}>
         <Stack component="form" spacing={1.5} noValidate onSubmit={onAdd} aria-label={th.leaveTypes.add}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
             <TextField
@@ -480,7 +479,7 @@ export function LeaveTypesList({ rows }: { rows: LeaveTypeAdminDTO[] }) {
           </Stack>
           <ColorSwatchPicker label={th.leaveTypes.color} value={color} onChange={(c) => setNewColor(c)} />
         </Stack>
-      </Paper>
+      </Box>
     </Stack>
   )
 }

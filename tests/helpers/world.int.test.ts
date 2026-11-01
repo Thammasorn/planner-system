@@ -69,6 +69,7 @@ describe('world fixture (X91)', () => {
     expect(() => w.timeOff.coworker).toThrow("needs createWorld({ with: ['timeOff'] })")
     expect(() => w.batches.coworkerDeletedTimeOff).toThrow("needs createWorld({ with: ['timeOff'] })")
     expect(() => w.allocations.pLeafLead).toThrow("needs createWorld({ with: ['allocations'] })")
+    expect(() => w.taskBodies.pLeafBody).toThrow("needs createWorld({ with: ['taskBodies'] })")
   })
 
   it("M6: keys the allocations part adds to the tasks part's objects trap until it ran", async () => {
@@ -242,6 +243,48 @@ describe('world fixture (X91)', () => {
     }
     const [n] = await db.select({ n: count() }).from(files)
     expect(n?.n).toBe(5)
+  })
+
+  it('M6.1 with taskBodies: implies tasks + pages; TASK pages of pLeaf, aTask, qTask (plan/m06.1 S0.15)', async () => {
+    expect(expandParts(['taskBodies'])).toEqual(new Set(['taskBodies', 'tasks', 'pages']))
+    const w = await createWorld({ with: ['taskBodies'] })
+    const b = w.taskBodies
+    const shape = {
+      kind: 'TASK',
+      space: 'PROJECT',
+      title: '',
+      position: 'a0',
+      parentId: null,
+      depth: 0,
+      version: 1,
+    }
+    expect(b.pLeafBody).toMatchObject({
+      ...shape,
+      taskId: w.tasks.pLeaf.id,
+      projectId: w.P.id,
+      fullWidth: false,
+    })
+    expect(b.aTaskBody).toMatchObject({ ...shape, taskId: w.tasks.aTask.id, projectId: w.A.id })
+    expect(b.qTaskBody).toMatchObject({ ...shape, taskId: w.tasks.qTask.id, projectId: w.Q.id })
+    expect([b.aTaskBody.contentText, b.qTaskBody.contentText]).toEqual([
+      'รายละเอียด A-ลับ12',
+      'รายละเอียด Q-ลับ13',
+    ])
+    expect(b.pLeafBodyImage).toMatchObject({ kind: 'IMAGE', pageId: b.pLeafBody.id, projectId: w.P.id })
+    const [stored] = await db.select().from(pages).where(eq(pages.id, b.pLeafBody.id))
+    expect(stored?.content).toEqual([
+      { type: 'paragraph', content: 'รายละเอียด P-ลับ11' },
+      { type: 'image', props: { url: `/api/files/${b.pLeafBodyImage.id}`, name: 'image.png' } },
+    ])
+    expect(stored?.contentText).toBe('รายละเอียด P-ลับ11 image.png')
+    expect(stored).toEqual(b.pLeafBody)
+    // tasks without a body (rows use them for ensure / "page: null")
+    const bodies = await db.select({ taskId: pages.taskId }).from(pages).where(eq(pages.kind, 'TASK'))
+    expect(bodies.map((r) => r.taskId).sort()).toEqual(
+      [w.tasks.pLeaf.id, w.tasks.aTask.id, w.tasks.qTask.id].sort(),
+    )
+    expect(bodies.map((r) => r.taskId)).not.toContain(w.tasks.pChildB.id)
+    expect(bodies.map((r) => r.taskId)).not.toContain(w.tasks.aTask2.id)
   })
 
   it('M5 with timeOff: leave types, coworker / pOnly visibility, entries, holiday (plan/m05 S0.15)', async () => {

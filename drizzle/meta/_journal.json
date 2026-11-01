@@ -64,6 +64,27 @@
       "when": 1793485251022,
       "tag": "0008_allocations_week_day_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793505564604,
+      "tag": "0009_m6_1_task_pages",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793505689128,
+      "tag": "0010_task_notes_to_body",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793505732314,
+      "tag": "0011_m6_1_drop_task_notes",
+      "breakpoints": true
     }
   ]
 }

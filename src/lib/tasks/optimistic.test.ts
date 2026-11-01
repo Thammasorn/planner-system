@@ -22,7 +22,7 @@ const task = (id: string, parentId: string | null, depth: number, x: Partial<Tas
   depth: depth as TaskDepth,
   position: 'a0',
   name: id,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate: null,
   certaintyOverride: null,

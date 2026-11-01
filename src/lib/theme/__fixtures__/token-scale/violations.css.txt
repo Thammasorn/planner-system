@@ -1,0 +1,16 @@
+.a {
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 20px;
+  border-radius: 6px;
+  gap: 12px;
+  margin-top: -1px;
+  color: #fff;
+  background: rgb(0 0 0 / 50%);
+  border: 1px solid hsl(0, 0%, 80%);
+  padding-inline: var(--space-2, 8px);
+}
+.b { margin: 0 2rem; }
+.c {
+  column-gap: 0.5em; /* token-scale-ok: x */
+}

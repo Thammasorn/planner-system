@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
@@ -9,6 +9,7 @@ import { PID, projectTasksResponse, stubScrollTo } from './grid.test.mocks'
 import { deleteTaskTree } from '@/server/actions/tasks'
 import { assign, unassign } from '@/server/actions/assignments'
 import { resetVersions } from '@/lib/grid/versions'
+import { resetScrollMemory } from '@/lib/nav/scroll-memory'
 import { PlanGrid } from './PlanGrid'
 import { renderGrid, stubViewport } from './render.test.helper'
 
@@ -80,6 +81,45 @@ beforeEach(() => {
 })
 
 describe('PlanGrid (S3.9, S3.15)', () => {
+  describe('↗ and the history return (FR-686, M6.1-D18): the grid scrolls in its own box', () => {
+    beforeEach(() => {
+      resetScrollMemory()
+      window.history.replaceState(null, '', `/projects/${PID}/plan`)
+      vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    })
+
+    async function leaveViaArrow(): Promise<void> {
+      const view = renderPos()
+      const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
+      const header = await screen.findByRole('rowheader', { name: 'Rollout สาขา · Mint' })
+      grid.scrollTop = 420
+      grid.scrollLeft = 1234
+      const link = within(header).getByRole('link', { name: th.grid.row.openTaskPage('Rollout สาขา') })
+      link.addEventListener('click', (e) => e.preventDefault()) // stay in jsdom (no app router)
+      fireEvent.click(link)
+      view.unmount()
+    }
+
+    it('a plain ↗ click then a popstate return puts the grid back at the same rows and weeks', async () => {
+      await leaveViaArrow()
+      window.dispatchEvent(new PopStateEvent('popstate'))
+      renderPos()
+      const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
+      await screen.findByRole('rowheader', { name: 'Rollout สาขา · Mint' })
+      await waitFor(() => expect(grid.scrollTop).toBe(420))
+      expect(grid.scrollLeft).toBe(1234)
+    })
+
+    it('a fresh visit (no history return) opens at the default week, not the remembered place', async () => {
+      await leaveViaArrow()
+      renderPos()
+      const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
+      await screen.findByRole('rowheader', { name: 'Rollout สาขา · Mint' })
+      expect(grid.scrollTop).toBe(0)
+      expect(grid.scrollLeft).not.toBe(1234)
+    })
+  })
+
   it('renders the labelled grid with three merged POS rows', async () => {
     renderPos()
     const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
@@ -265,7 +305,7 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(screen.getByRole('button', { name: th.grid.reload })).toBeInTheDocument()
   })
 
-  it('Shift+Space → Tab reaches ↗, × and + คน; Enter on the row header opens the task (§8.9)', async () => {
+  it('Shift+Space → Tab reaches ↗ (page link), × and + คน; Enter on the row header opens the panel (§8.9, M6.1-D17)', async () => {
     const onOpenTask = vi.fn()
     const user = userEvent.setup()
     renderPos({ onOpenTask })
@@ -282,7 +322,12 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     await user.keyboard('{Enter}')
     expect(onOpenTask).toHaveBeenCalledWith('t-rollout')
     await user.tab()
-    expect(within(header).getByRole('button', { name: th.grid.row.openTask('Rollout สาขา') })).toHaveFocus()
+    const link = within(header).getByRole('link', { name: th.grid.row.openTaskPage('Rollout สาขา') })
+    expect(link).toHaveFocus()
+    expect(link).toHaveAttribute('href', '/t/t-rollout')
+    // Enter on the focused ↗ is the link's (native activation → the task page), not the grid's "open panel"
+    expect(fireEvent.keyDown(link, { key: 'Enter', code: 'Enter' })).toBe(true)
+    expect(onOpenTask).toHaveBeenCalledTimes(1)
     await user.tab()
     expect(within(header).getByRole('button', { name: th.grid.row.removeAssignee('Mint') })).toHaveFocus()
     await user.tab()

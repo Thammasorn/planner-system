@@ -17,7 +17,6 @@ function task(id: string, o: Partial<TaskListRow> = {}): TaskListRow {
     depth: 0,
     position: 'a0',
     name: `task ${id}`,
-    notes: null,
     startDate: null,
     dueDate: null,
     certaintyOverride: null,

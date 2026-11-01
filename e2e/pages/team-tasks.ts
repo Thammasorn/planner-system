@@ -39,9 +39,25 @@ export class TeamTasksPage {
   projectSection(name: string): Locator {
     return this.shell.main().getByRole('region', { name, exact: true })
   }
-  /** One link per task in the list view (→ /projects/<id>/tasks?task=<id>). */
+  /**
+   * One link per task in the list view (→ /projects/<id>/tasks?task=<id>). Since M6.1 every item also has the ↗ page
+   * link (`data-open-page`, named th.tasks.openAsPage), which is not a task-name link.
+   */
   taskLinks(): Locator {
-    return this.shell.main().getByRole('listitem').getByRole('link')
+    return this.shell.main().getByRole('listitem').locator('a[href]:not([data-open-page])')
+  }
+  /** The list item of `name` (its row: ☐, name link, 📄, ↗, meta line). */
+  item(name: string): Locator {
+    return this.shell
+      .main()
+      .getByRole('listitem')
+      .filter({ has: this.page.getByRole('link', { name, exact: true }) })
+  }
+  openAsPageLink(name: string): Locator {
+    return this.item(name).getByRole('link', { name: th.tasks.openAsPage, exact: true })
+  }
+  hasBodyMarker(name: string): Locator {
+    return this.item(name).getByRole('img', { name: th.tasks.hasBody, exact: true })
   }
   taskLink(name: string): Locator {
     return this.shell.main().getByRole('listitem').getByRole('link', { name, exact: true })

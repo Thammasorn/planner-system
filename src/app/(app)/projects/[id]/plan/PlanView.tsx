@@ -5,8 +5,8 @@ import { PlanGrid } from '@/components/grid/PlanGrid'
 import { openTaskPanel } from '@/components/tasks/task-param'
 import { TaskPanel } from '@/components/tasks/TaskPanel'
 
-/** Space kept under the grid inside the viewport (the shell's bottom padding). */
-const BOTTOM_GAP = 24
+/** Space kept under the grid inside the viewport (the shell's bottom padding, --space-8 since M6.1-D20). */
+const BOTTOM_GAP = 32
 const MIN_HEIGHT = 420
 
 /**

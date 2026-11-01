@@ -22,11 +22,19 @@ export interface EditorBannersProps {
   }
   blocked: SaveBlock
   onReload: () => void
+  /** M6.1-D26: the held / view-only holder notice is the header's LeaseBadge instead of an inline banner. */
+  leaseInHeader?: boolean
 }
 
-export function EditorBanners({ lease, blocked, onReload }: EditorBannersProps): JSX.Element {
+export function EditorBanners({
+  lease,
+  blocked,
+  onReload,
+  leaseInHeader = false,
+}: EditorBannersProps): JSX.Element {
+  const headerHasIt = leaseInHeader && (lease.mode === 'held' || lease.mode === 'viewOnly')
   return (
-    <Stack spacing={1} sx={{ mb: 1 }}>
+    <Stack spacing={1} sx={{ mb: 1, '&:empty': { display: 'none' } }}>
       {blocked === 'conflict' && (
         <Alert
           severity="warning"
@@ -50,7 +58,7 @@ export function EditorBanners({ lease, blocked, onReload }: EditorBannersProps):
           {th.editor.forbiddenBanner}
         </Alert>
       )}
-      {blocked === false && (
+      {blocked === false && !headerHasIt && (
         <LeaseBanner
           mode={lease.mode}
           lease={lease.lease}

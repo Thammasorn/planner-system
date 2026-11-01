@@ -152,15 +152,25 @@ export function CoverImage({ pageId, cover, canEdit, uploadLimits, onChange }: C
   }
 
   return (
-    <Box sx={{ position: 'relative', mx: { xs: -2, sm: 0 } }}>
+    <Box sx={{ position: 'relative', mx: { xs: 'calc(-1 * var(--page-gutter))', sm: 0 } }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- authorised same-origin /api/files URL; next/image would proxy it */}
       <img
         src={cover.url}
         alt={th.pages.cover.alt}
-        style={{ display: 'block', width: '100%', height: 200, objectFit: 'cover', borderRadius: 8 }}
+        style={{
+          display: 'block',
+          width: '100%',
+          height: 200,
+          objectFit: 'cover',
+          borderRadius: 'var(--radius-lg)',
+        }}
       />
       {canEdit ? (
-        <Stack direction="row" spacing={1} sx={{ position: 'absolute', right: 8, bottom: 8 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ position: 'absolute', right: 'var(--space-2)', bottom: 'var(--space-2)' }}
+        >
           {busy ? (
             <Typography
               role="status"

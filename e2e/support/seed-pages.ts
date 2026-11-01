@@ -5,7 +5,7 @@
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
 import { extractContentText } from '../../src/lib/editor/content-text'
-import { pages, projects, user } from '../../src/server/db/schema'
+import { pages, projects, tasks, user } from '../../src/server/db/schema'
 import type { DbOrTx } from '../../src/server/db/types'
 
 export interface InsertPageOptions {
@@ -87,3 +87,66 @@ export async function insertPage(db: DbOrTx, o: InsertPageOptions): Promise<stri
 
 /** One partial paragraph block. */
 export const paragraph = (text: string): unknown[] => [{ type: 'paragraph', content: text }]
+
+// ---------------------------------------------------------------------------------------------------------------
+// M6.1 (plan/m06.1-task-page-ui.md S7.1): task bodies — `pages` rows of kind TASK (FR-681, M6.1-D3)
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface InsertTaskBodyOptions {
+  /** Golden project name (POS Upgrade, …). */
+  projectName: string
+  /** Live task of that project (names are unique per project in golden + spec extras). */
+  taskName: string
+  /** BlockNote (partial) blocks; content_text is derived with the server's walker (same rule as the migration). */
+  content: unknown[]
+  fullWidth?: boolean
+}
+
+/**
+ * Inserts the TASK body of a live task (shape of M6.1-D3 / `pages_kind_shape`: no parent, depth 0, title '', position
+ * 'a0', PROJECT space, creator = the task's creator) and returns its ids. Test data the scenario is not about — the
+ * lazy-create path (ensureTaskBody) is exercised through the UI in T1/T7.
+ */
+export async function insertTaskBody(
+  db: DbOrTx,
+  o: InsertTaskBodyOptions,
+): Promise<{ pageId: string; taskId: string; projectId: string }> {
+  const t = await one(
+    await db
+      .select({ id: tasks.id, projectId: tasks.projectId, createdBy: tasks.createdBy })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(eq(projects.name, o.projectName), eq(tasks.name, o.taskName), isNull(tasks.deletedAt))),
+    `task ${o.projectName} › ${o.taskName}`,
+  )
+  const [row] = await db
+    .insert(pages)
+    .values({
+      space: 'PROJECT',
+      projectId: t.projectId,
+      kind: 'TASK',
+      taskId: t.id,
+      title: '',
+      content: o.content,
+      contentText: extractContentText(o.content),
+      position: 'a0',
+      fullWidth: o.fullWidth ?? false,
+      createdBy: t.createdBy,
+      updatedBy: t.createdBy,
+    })
+    .returning({ id: pages.id })
+  return { pageId: row!.id, taskId: t.id, projectId: t.projectId }
+}
+
+/** A 12-column, 2-row table block (AC-1602 "ตาราง 12 คอลัมน์") — wider than the 760 px column at 140 px a column. */
+export function wideTable12(): unknown {
+  const cols = Array.from({ length: 12 }, (_, i) => i + 1)
+  return {
+    type: 'table',
+    content: {
+      type: 'tableContent',
+      columnWidths: cols.map(() => 140),
+      rows: [{ cells: cols.map((c) => `คอลัมน์ ${c}`) }, { cells: cols.map((c) => `ค่า ${c}`) }],
+    },
+  }
+}

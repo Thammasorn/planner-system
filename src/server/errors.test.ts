@@ -79,6 +79,12 @@ describe('mapDbError / pgErrorInfo', () => {
     expect(mapDbError({ cause: { code: '23505', constraint_name: 'task_assignments_active' } })?.code).toBe('CONFLICT')
   })
 
+  it('M6.1 (S1.13): 23514 on the task-page shape checks → INTERNAL (services never build such rows)', () => {
+    for (const constraint of ['pages_kind_task', 'pages_kind_shape', 'pages_task_space'])
+      expect(mapDbError({ cause: { code: '23514', constraint_name: constraint } })?.code, constraint).toBe('INTERNAL')
+    expect(mapDbError({ cause: { code: '23514', constraint_name: 'pages_depth_check' } })?.code).toBe('VALIDATION')
+  })
+
   it('M6-D5 / G23: 23P01 on allocations_one_resolution_per_week → INTERNAL; other exclusions stay OVERLAP', () => {
     expect(
       mapDbError({ cause: { code: '23P01', constraint_name: 'allocations_one_resolution_per_week' } })?.code,

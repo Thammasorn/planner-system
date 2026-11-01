@@ -1,10 +1,11 @@
-/* Board layout (§8.10): columns scroll horizontally inside the board, never the page (NFR-07b). */
+/* Board layout (§8.10): columns scroll horizontally inside the board, never the page (NFR-07b). Token scale only
+   (SPEC §8.12, FR-1605): columns on `--surface-muted`, cards `--radius-lg` + `--border-subtle`, no shadow. */
 .board {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: flex-start;
   max-width: 100%;
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
   overflow-x: auto;
 }
 
@@ -12,12 +13,11 @@
   display: flex;
   flex: 0 0 272px;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 120px;
-  padding: 8px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 8px;
-  background: var(--mui-palette-background-default);
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
 }
 
 .column[data-over='true'] {
@@ -29,24 +29,25 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
+  font-size: var(--font-sm);
 }
 
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .empty {
-  color: var(--mui-palette-text-secondary);
-  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
 }
 
 .slot {
   display: flex;
   align-items: flex-start;
-  gap: 2px;
+  gap: 0;
 }
 
 .slot[data-dragging='true'] {
@@ -65,19 +66,23 @@
   justify-content: center;
   width: 20px;
   height: 28px;
-  margin-top: 6px;
+  margin-top: var(--space-1);
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   cursor: grab;
   touch-action: none;
 }
 
+.handle:hover {
+  background: var(--hover-bg);
+}
+
 .overlay {
   width: 250px;
-  box-shadow: var(--mui-shadows-6);
+  box-shadow: var(--mui-shadows-2);
 }
 
 .footer {
@@ -89,13 +94,17 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 6px;
-  background: var(--mui-palette-background-paper);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
   color: var(--mui-palette-text-primary);
   cursor: pointer;
+}
+
+.card:hover {
+  background: var(--hover-bg);
 }
 
 .card:focus-visible {
@@ -103,14 +112,24 @@
   outline-offset: 2px;
 }
 
+/* name + ↗ on one line; ↗ appears on hover / focus (TaskRow.module.css `.open`, M6.1-D17) */
+.cardTitle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
 .cardName {
-  font-size: 0.875rem;
-  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-ui);
   overflow-wrap: anywhere;
 }
 
 .card[data-completed='true'] .cardName {
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   text-decoration: line-through;
 }
 
@@ -118,7 +137,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  color: var(--mui-palette-text-secondary);
-  font-size: 0.75rem;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
 }

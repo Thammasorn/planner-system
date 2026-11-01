@@ -52,6 +52,17 @@ describe('StatusSettings (FR-622–624, PERM-23)', () => {
     ).toBeGreaterThan(0)
   })
 
+  it('LEAD: the name cell has a bounded width so category / colour line up across rows (no flex-grow)', () => {
+    renderSettings(true)
+    const cells = document.querySelectorAll<HTMLElement>('[data-status-name]')
+    expect(cells.length).toBeGreaterThan(1)
+    for (const cell of cells) {
+      const st = getComputedStyle(cell)
+      expect(st.flexGrow).toBe('0')
+      expect(st.flexBasis).toBe('320px')
+    }
+  })
+
   it('LEAD: deleting an unused status calls deleteTaskStatus right away (no dialog)', async () => {
     const user = userEvent.setup()
     a.deleteTaskStatus.mockReturnValue(ok({ projectId: PID, batch: BATCH, moveToStatusId: null, moved: [] }))

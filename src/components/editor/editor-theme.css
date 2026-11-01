@@ -2,12 +2,14 @@
    Imported by PageEditor BEFORE BlockNote's CSS; the doubled selectors win by specificity regardless of order.
    .bn-root is set on the editor container AND on every portal root (menus, toolbars), so these variables reach the
    floating UI too. MUI exposes --mui-palette-* (cssVariables, colorSchemeSelector: 'class'). No url(), no remote
-   fonts: the content font is the self-hosted IBM Plex stack from src/app/fonts/fonts.ts. */
+   fonts: the content font is the self-hosted IBM Plex stack from src/app/fonts/fonts.ts.
+   M6.1 (FR-1605, SPEC §8.12): sizes, spacing, radii and leading come from the token scale in src/app/tokens.css;
+   `.app-editor[data-variant]` (PageEditor) picks the document (page) or UI (compact, task panel) type scale. */
 
 .bn-root.bn-root[data-color-scheme] {
   --bn-ui-base-z-index: 1150; /* above the MUI AppBar (1100), below MUI Modal (1300) / Snackbar / Tooltip */
   --bn-font-family: var(--font-plex-latin), var(--font-plex-thai), system-ui, sans-serif;
-  --bn-border-radius: 8px;
+  --bn-border-radius: var(--radius-lg);
   --bn-colors-editor-text: var(--mui-palette-text-primary);
   --bn-colors-editor-background: var(--mui-palette-background-paper);
   --bn-colors-menu-text: var(--mui-palette-text-primary);
@@ -25,9 +27,102 @@
 }
 
 /* Inline gutter (BlockNote's side menu lives in it): the page shell sets --page-gutter so the body lines up with the
-   title and shrinks on phones (SPEC §7 browser support); 54 px is BlockNote's own default. */
+   title and shrinks on phones (SPEC §7 browser support: --space-2 on phones, --space-12 from sm, kept from 8882a26). */
+.app-editor {
+  --editor-gutter: var(--page-gutter, var(--space-12)); /* the shell's gutter, else the token default */
+}
 .bn-root .bn-editor.bn-editor {
-  padding-inline: var(--page-gutter, 54px);
+  padding-inline: var(--editor-gutter);
+}
+
+/* ---- Variants (M6.1-D8): documents read at 16 px / 1.7, the task panel body at the 14 px UI scale ---- */
+.app-editor[data-variant='page'] .bn-root .bn-default-styles.bn-default-styles {
+  font-size: var(--font-lg);
+}
+.app-editor[data-variant='page'] .bn-root .bn-block-outer {
+  line-height: var(--leading-doc);
+}
+.app-editor[data-variant='compact'] .bn-root .bn-default-styles.bn-default-styles {
+  font-size: var(--font-md);
+}
+.app-editor[data-variant='compact'] .bn-root .bn-block-outer {
+  line-height: var(--leading-ui);
+}
+/* The whole compact box is the click target of an empty body (first focus creates its row, FR-681). The side menu
+   keeps the start gutter; the end gutter is small in the narrow panel. 120 px = COMPACT_MIN_HEIGHT (EditorClient). */
+.app-editor[data-variant='compact'] .bn-root .bn-editor.bn-editor {
+  min-height: 120px;
+  padding-inline: var(--editor-gutter) var(--space-2);
+}
+
+/* ---- Heading scale (SPEC §8.12, §4.16 AFFiNE-like hierarchy, FR-1606) ----
+   Core sizes headings in em of the body (3em / 2em / 1.3em) through --level (and --prev-level while a block changes
+   type), which made a 32 px heading-1 as big as — or, on phones, bigger than — the page title. Mapped onto the token
+   scale below the title (--font-3xl; --font-2xl below 600 px; PageTitle / TaskPageScreen) so the title stays the largest
+   text in the column. VERIFIED 0.55.0: level 1 is the prop default, so its block carries no data-level attribute
+   (internal.ts omits default-valued props). Each later group (task panel, phones) repeats every level, so it beats the
+   generic one on order. Levels 4–6 keep core's em sizes (≤ the body). */
+.app-editor .bn-root [data-content-type='heading']:is(:not([data-level]), [data-level='1']) {
+  --level: var(--font-2xl);
+}
+.app-editor .bn-root [data-content-type='heading'][data-level='2'] {
+  --level: var(--font-xl);
+}
+.app-editor .bn-root [data-content-type='heading'][data-level='3'] {
+  --level: var(--font-lg);
+}
+.app-editor .bn-root [data-prev-level='1'] {
+  --prev-level: var(--font-2xl);
+}
+.app-editor .bn-root [data-prev-level='2'] {
+  --prev-level: var(--font-xl);
+}
+.app-editor .bn-root [data-prev-level='3'] {
+  --prev-level: var(--font-lg);
+}
+/* the task panel body (14 px UI scale, M6.1-D8): one step down from the document scale */
+.app-editor[data-variant='compact']
+  .bn-root
+  [data-content-type='heading']:is(:not([data-level]), [data-level='1']) {
+  --level: var(--font-xl);
+}
+.app-editor[data-variant='compact'] .bn-root [data-content-type='heading'][data-level='2'] {
+  --level: var(--font-lg);
+}
+.app-editor[data-variant='compact'] .bn-root [data-content-type='heading'][data-level='3'] {
+  --level: var(--font-md);
+}
+.app-editor[data-variant='compact'] .bn-root [data-prev-level='1'] {
+  --prev-level: var(--font-xl);
+}
+.app-editor[data-variant='compact'] .bn-root [data-prev-level='2'] {
+  --prev-level: var(--font-lg);
+}
+.app-editor[data-variant='compact'] .bn-root [data-prev-level='3'] {
+  --prev-level: var(--font-md);
+}
+@media (max-width: 599.95px) {
+  /* phones: the title is --font-2xl, so headings move one step down (h3 stays bold at the 16 px body size) */
+  .app-editor[data-variant='page']
+    .bn-root
+    [data-content-type='heading']:is(:not([data-level]), [data-level='1']) {
+    --level: var(--font-xl);
+  }
+  .app-editor[data-variant='page'] .bn-root [data-content-type='heading'][data-level='2'] {
+    --level: var(--font-lg);
+  }
+  .app-editor[data-variant='page'] .bn-root [data-content-type='heading'][data-level='3'] {
+    --level: var(--font-lg);
+  }
+  .app-editor[data-variant='page'] .bn-root [data-prev-level='1'] {
+    --prev-level: var(--font-xl);
+  }
+  .app-editor[data-variant='page'] .bn-root [data-prev-level='2'] {
+    --prev-level: var(--font-lg);
+  }
+  .app-editor[data-variant='page'] .bn-root [data-prev-level='3'] {
+    --prev-level: var(--font-lg);
+  }
 }
 
 /* Wide tables scroll inside their block (BlockNote's .tableWrapper is overflow-x: auto) instead of widening the
@@ -38,6 +133,12 @@
 .bn-root .bn-block-content[data-content-type='table'] > .tableWrapper {
   min-width: 0;
   max-width: 100%;
+}
+/* VERIFIED 0.55.0: core's editor.css hard-codes `border: 1px solid #ddd` on table cells, which stays light grey in
+   dark mode. SPEC §8.12: borders are --border-subtle 1 px only (light + dark tokens). One more class than core's
+   `.bn-editor [data-content-type="table"] td` so this wins regardless of import order. */
+.bn-root .bn-editor [data-content-type='table'] :is(th, td) {
+  border-color: var(--border-subtle);
 }
 /* VERIFIED 0.55.0: when every column has a stored width, prosemirror-tables writes the sum as an inline `width:` on
    the table (otherwise an inline `min-width:`), but BlockNote forces `width: auto !important`, which squeezes such a
@@ -60,21 +161,21 @@
 .bn-root .subpage-card {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   max-width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 8px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   color: var(--mui-palette-text-primary);
   text-decoration: none;
   cursor: pointer;
   user-select: none;
 }
 .bn-root .subpage-card:hover {
-  background: var(--mui-palette-action-hover);
+  background: var(--hover-bg);
 }
 .bn-root .subpage-card .subpage-title {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   text-decoration: underline;
   text-decoration-color: var(--mui-palette-divider);
   text-underline-offset: 3px;
@@ -85,7 +186,7 @@
 /* States are spelled out in text (deleted / no access / creating); styling only supports it. */
 .bn-root .subpage-card[aria-disabled='true'] {
   cursor: default;
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   border-style: dashed;
 }
 .bn-root .subpage-card[aria-disabled='true'] .subpage-title {
@@ -95,8 +196,8 @@
 
 /* ---- Mention chips (FR-529) ---- */
 .bn-root .mention {
-  padding: 0 4px;
-  border-radius: 4px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
   background: var(--mui-palette-action-selected);
   color: var(--mui-palette-text-primary);
   text-decoration: none;
@@ -110,7 +211,7 @@
 }
 .bn-root .mention[aria-disabled='true'],
 .bn-root .mention-inactive {
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -119,32 +220,32 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   color: var(--mui-palette-text-primary);
 }
 .bn-root .att .att-name {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   color: var(--mui-palette-primary-main);
   overflow-wrap: anywhere;
 }
 .bn-root .att .att-size {
-  color: var(--mui-palette-text-secondary);
-  font-size: 0.875em;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
 }
 .bn-root .att .att-caption {
   flex-basis: 100%;
-  color: var(--mui-palette-text-secondary);
-  font-size: 0.875em;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
 }
 .bn-root .att-empty {
   cursor: pointer;
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   border-style: dashed;
 }
 .bn-root .att-uploading {
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   font-style: italic;
 }

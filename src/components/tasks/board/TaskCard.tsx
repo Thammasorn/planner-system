@@ -10,6 +10,7 @@ import type { TaskCard as TaskCardDTO, TaskStatusDTO } from '@/lib/contracts/tas
 import { formatThaiDate } from '@/lib/format'
 import { personOf } from '../AssigneeChips'
 import { BlockerBadge } from '../blockers/BlockerBadge'
+import { HasBodyMark, OpenAsPageLink } from '../OpenAsPage'
 import { StatusChip } from '../status/StatusChip'
 import { StatusMenu } from '../status/StatusMenu'
 import styles from './TaskBoard.module.css'
@@ -79,6 +80,7 @@ export function TaskCard({
       role="article"
       aria-label={card.name}
       className={styles.card}
+      data-open-host=""
       data-completed={card.completed ? 'true' : undefined}
       onKeyDown={onKeyDown}
       onClick={(e) => {
@@ -92,8 +94,19 @@ export function TaskCard({
       {card.parentPath.length > 0 ? (
         <span className={styles.cardMeta}>{th.tasks.groups.parentPath(card.parentPath.join(' › '))}</span>
       ) : null}
-      <span className={styles.cardName}>
-        {card.name} {card.certainty === 'TENTATIVE' ? <CertaintyBadge certainty="TENTATIVE" /> : null}
+      <span className={styles.cardTitle}>
+        <span className={styles.cardName}>
+          {card.name}
+          {card.hasBody ? (
+            <>
+              {' '}
+              <HasBodyMark />
+            </>
+          ) : null}{' '}
+          {card.certainty === 'TENTATIVE' ? <CertaintyBadge certainty="TENTATIVE" /> : null}
+        </span>
+        {/* FR-685: ↗ = the task page; the card itself opens the panel (M6.1-D17) */}
+        <OpenAsPageLink taskId={card.id} tabIndex={-1} />
       </span>
       <span className={styles.cardMeta}>
         <span ref={chipRef} style={{ display: 'inline-flex' }}>

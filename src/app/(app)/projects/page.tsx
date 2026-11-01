@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import Button from '@mui/material/Button'
 import Stack from '@mui/material/Stack'
-import Typography from '@mui/material/Typography'
 import Link from '@/components/Link'
 import { EmptyState } from '@/components/common/EmptyState'
+import { PageHeaderBar } from '@/components/layout/PageHeaderBar'
 import { CreateProjectButton } from '@/components/projects/CreateProjectButton'
 import { ProjectsTable } from '@/components/projects/ProjectsTable'
 import { th } from '@/i18n/th'
@@ -25,31 +25,30 @@ export default async function ProjectsPage(props: PageProps<'/projects'>) {
   const items = await services.projects.listProjectsForViewer(db, user, { archived })
   const manager = isManager(user)
   const empty = archived ? th.projects.emptyArchived : manager ? th.projects.empty : th.projects.emptyWorker
+  const title = archived ? th.projects.archivedListTitle : th.projects.listTitle
   return (
-    <Stack spacing={2}>
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 1 }}
-      >
-        <Typography variant="h4" component="h1">
-          {archived ? th.projects.archivedListTitle : th.projects.listTitle}
-        </Typography>
-        <Stack direction="row" spacing={1}>
-          <Button component={Link} href={archived ? '/projects' : '/projects?archived=1'}>
-            {archived ? th.projects.showActive : th.projects.showArchived}
-          </Button>
-          {manager && !archived ? <CreateProjectButton /> : null}
-        </Stack>
+    <>
+      <PageHeaderBar
+        crumbs={
+          archived
+            ? [
+                { label: th.nav.projects, href: '/projects' },
+                { label: title, asHeading: true },
+              ]
+            : [{ label: title, asHeading: true }]
+        }
+        actions={
+          <>
+            <Button component={Link} href={archived ? '/projects' : '/projects?archived=1'}>
+              {archived ? th.projects.showActive : th.projects.showArchived}
+            </Button>
+            {manager && !archived ? <CreateProjectButton /> : null}
+          </>
+        }
+      />
+      <Stack spacing={2}>
+        {items.length === 0 ? <EmptyState title={empty} /> : <ProjectsTable items={items} label={title} />}
       </Stack>
-      {items.length === 0 ? (
-        <EmptyState title={empty} />
-      ) : (
-        <ProjectsTable
-          items={items}
-          label={archived ? th.projects.archivedListTitle : th.projects.listTitle}
-        />
-      )}
-    </Stack>
+    </>
   )
 }

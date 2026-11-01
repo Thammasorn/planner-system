@@ -4,6 +4,9 @@ import type { BlockInput } from '@/lib/schemas/page-content'
 
 export type PageSpace = 'WORKSPACE' | 'PROJECT'
 
+/** SPEC §6.2 page_kind (M6.1): DOC = a document in a tree; TASK = the 1:1 body of a task. M11 adds 'DB_ROW'. */
+export type PageKind = 'DOC' | 'TASK'
+
 /** Sidebar / project-tab tree row (lazy children per node, M4-D23). */
 export interface PageTreeNode {
   id: string
@@ -60,6 +63,13 @@ export interface PageDTO {
   /** ISO timestamp. */
   updatedAt: string
   updatedBy: { id: string; name: string }
+  // ── M6.1 (M6.1-D5).
+  /** 'TASK' pages are task bodies: title = tasks.name, no breadcrumb, no tree actions. */
+  kind: PageKind
+  /** Set when kind = 'TASK'. */
+  taskId: string | null
+  /** FR-1602: shared page property (every viewer sees the same width). */
+  fullWidth: boolean
 }
 
 /** Everything `/p/[pageId]` needs (RSC) and `GET /api/pages/[id]` returns. */
@@ -142,7 +152,8 @@ export interface ApplyTemplateResult {
 }
 
 export interface PageEditorProps {
-  pageId: string
+  /** null until the first edit of a TASK body (FR-681); DOC pages always have one. */
+  pageId: string | null
   space: PageSpace
   projectId: string | null
   depth: number
@@ -152,6 +163,23 @@ export interface PageEditorProps {
   uploadLimits: UploadLimits
   /** The page shell increments it after applyTemplate → the editor re-fetches and re-creates. */
   reloadToken: number
+  // ── M6.1-D8. Optional with DOC defaults inside PageEditor (kind 'DOC', editorKey = pageId, leaseAcquire 'mount',
+  //    variant 'page') so M4 call sites compile unchanged; S4 passes them explicitly.
+  kind?: PageKind
+  /** Stable identity of the editor instance (DOC: pageId; TASK: 'task:' + taskId) — never changes when the id arrives. */
+  editorKey?: string
+  /** TASK: creates the row (ensureTaskBody) — memoised by the editor. */
+  ensurePageId?: () => Promise<string>
+  /** DOC 'mount' (M4); TASK 'focus' (M6.1-D8). */
+  leaseAcquire?: 'mount' | 'focus'
+  variant?: 'page' | 'compact'
+}
+
+/** `setPageFullWidth` result (M6.1-D15): `changed: false` = the value was already set (no audit row). */
+export interface SetPageFullWidthResult {
+  pageId: string
+  fullWidth: boolean
+  changed: boolean
 }
 
 /** Templates are partial BlockNote blocks (M4-D8). */

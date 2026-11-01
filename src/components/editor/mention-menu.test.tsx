@@ -39,6 +39,7 @@ const SEARCH: SearchResponse = {
       matchedIn: 'title',
     },
   ],
+  tasks: [],
 }
 
 const ok = (body: unknown) =>

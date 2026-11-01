@@ -13,7 +13,7 @@ export function projectTasksResponse(): ProjectTasksResponse {
     depth: 0 as const,
     position: 'a0',
     name,
-    notes: null,
+    hasBody: false,
     startDate: null,
     dueDate: null,
     certaintyOverride: null,

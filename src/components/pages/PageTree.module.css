@@ -4,7 +4,7 @@
 .tree {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .row {
@@ -12,17 +12,17 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   min-height: 30px;
-  padding-right: 4px;
-  border-radius: 6px;
-  font-size: 0.875rem;
+  padding-right: var(--space-1);
+  border-radius: var(--radius-md);
+  font-size: var(--font-md);
 }
 
 .tree[data-variant='full'] .row {
   --indent: 24px;
   min-height: 36px;
-  font-size: 0.9375rem;
+  font-size: var(--font-md);
 }
 
 .row:hover,
@@ -41,7 +41,7 @@
   bottom: 6px;
   left: 0;
   width: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--brand-navy);
   content: '';
 }
@@ -61,7 +61,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--mui-palette-text-secondary);
   cursor: pointer;
@@ -125,18 +125,18 @@
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 6px;
+  gap: calc(var(--space-1) * 1.5);
   min-width: 0;
   min-height: 26px;
-  padding: 0 4px;
-  border-radius: 4px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
   color: var(--mui-palette-text-primary);
   text-decoration: none;
 }
 
 .link[aria-current='page'] {
   color: var(--brand-navy);
-  font-weight: 600;
+  font-weight: var(--weight-bold);
 }
 
 .icon {
@@ -156,48 +156,48 @@
   flex: none;
   color: var(--mui-palette-text-secondary);
   display: inline-flex;
-  font-size: 15px;
+  font-size: var(--font-md);
 }
 
 .actions {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 1px;
+  gap: 0;
 }
 
 .invalid {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--mui-palette-error-main);
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
 }
 
 .status {
-  padding: 4px 8px 4px 40px;
+  padding: var(--space-1) var(--space-2) var(--space-1) calc(var(--space-8) + var(--space-2));
   color: var(--mui-palette-text-secondary);
-  font-size: 0.8125rem;
+  font-size: var(--font-sm);
 }
 
 .tree[data-variant='full'] + .status,
 .statusFull {
-  padding-left: 8px;
+  padding-left: var(--space-2);
 }
 
 .skeleton {
-  padding: 4px 12px 4px 40px;
+  padding: var(--space-1) var(--space-3) var(--space-1) calc(var(--space-8) + var(--space-2));
 }
 
 /* Under an expanded row whose children are loading / failed (indent set inline from the row depth). */
 .childStatus {
   --indent: 16px;
-  padding-top: 2px;
-  padding-right: 8px;
-  padding-bottom: 2px;
+  padding-top: calc(var(--space-1) / 2);
+  padding-right: var(--space-2);
+  padding-bottom: calc(var(--space-1) / 2);
   color: var(--mui-palette-text-secondary);
-  font-size: 0.8125rem;
+  font-size: var(--font-sm);
 }
 
 .tree[data-variant='full'] .childStatus {
@@ -205,7 +205,7 @@
 }
 
 .retry {
-  margin-left: 4px;
+  margin-left: var(--space-1);
   padding: 0;
   border: 0;
   background: none;
@@ -218,13 +218,13 @@
 .overlay {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(var(--space-1) * 1.5);
   min-height: 30px;
-  padding: 0 8px;
-  border-radius: 6px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
   background: var(--mui-palette-background-paper);
   box-shadow: var(--mui-shadows-4);
-  font-size: 0.875rem;
+  font-size: var(--font-md);
 }
 
 .srOnly {

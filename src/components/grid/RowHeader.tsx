@@ -1,22 +1,36 @@
 'use client'
-// src/components/grid/RowHeader.tsx — the sticky name column of one row (SPEC §8.3, FR-805/808, FR-643, AC-203,
-// M6-D18/D19/D31/D33). Indent by depth, ▸/▾ for parents, name (click selects the row, double-click or ↗ opens the
-// panel), assignee via M1 UserName ("(ปิดใช้งาน)" for deactivated people), × unassigns, "+ คน" (hover and
-// focus-within) opens PlanGrid's AddPersonPopover (M3's AssigneePicker; owned by PlanGrid so it survives the row
-// re-keying t:<task> → a:<assignment> after the first pick), ⛔ via M3's BlockerBadge, ◐ + "*" for tentative.
+// src/components/grid/RowHeader.tsx — the sticky name column of one row (SPEC §8.3, FR-805/808, FR-643, FR-685, AC-203,
+// M6-D18/D19/D31/D33, M6.1-D17). Indent by depth, ▸/▾ for parents, name (click selects the row, double-click — or
+// Enter on the selected row header, PlanGrid — opens the panel), ↗ = a real link to the task page `/t/<id>` (hover /
+// focus-within, always on touch; Cmd/Ctrl/middle click open a new tab natively), assignee via M1 UserName
+// ("(ปิดใช้งาน)" for deactivated people), × unassigns, "+ คน" (hover and focus-within) opens PlanGrid's
+// AddPersonPopover (M3's AssigneePicker; owned by PlanGrid so it survives the row re-keying t:<task> → a:<assignment>
+// after the first pick), ⛔ via M3's BlockerBadge, ◐ + "*" for tentative.
 import { memo, useCallback, useId, type MouseEvent } from 'react'
 import Tooltip from '@mui/material/Tooltip'
+import Link from '@/components/Link'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { UserName } from '@/components/common/UserName'
 import { BlockerBadge } from '@/components/tasks/blockers/BlockerBadge'
 import { blockerBadge } from '@/domain/blockers'
 import { th } from '@/i18n/th'
 import { NAME_COL_W } from '@/lib/grid/columns'
+import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
+import { isPlainClick } from '@/lib/nav/task-href'
 import type { ViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
 import styles from './grid.module.css'
 
-const INDENT = 16
+/** Indent per depth level and the left gutter, from the §8.12 spacing scale (FR-1605). */
+/** ↗: no row selection; a plain click records the grid's own scroll box (it scrolls inside, not the window). */
+function rememberGridScroll(e: MouseEvent<HTMLElement>): void {
+  e.stopPropagation()
+  if (!isPlainClick(e)) return
+  const box = e.currentTarget.closest<HTMLElement>('[role="grid"]')
+  if (box) rememberBoxScroll(box)
+}
+
+const indent = (depth: number): string => `calc(var(--space-2) + ${depth} * var(--space-4))`
 
 export interface RowHeaderProps {
   store: GridStore
@@ -96,7 +110,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       aria-selected={selected}
       tabIndex={selected ? 0 : -1}
       className={styles.rowHeader}
-      style={{ width: NAME_COL_W, height: p.height, paddingLeft: 6 + row.depth * INDENT }}
+      style={{ width: NAME_COL_W, height: p.height, paddingLeft: indent(row.depth) }}
       data-row-header=""
       data-row-key={row.key}
       data-r={p.r}
@@ -168,18 +182,20 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       ) : null}
       <span className={styles.actions} onClick={stop} onDoubleClick={stop}>
         {row.kind !== 'assignee' ? (
-          <button
-            type="button"
-            className={styles.iconButton}
+          // M6.1-D17: the page link. The click only stops propagation (no row selection), so Next's Link navigates
+          // in-app and modified / middle clicks stay native; no prefetch per visible row (dense surface, §9). A plain
+          // click remembers the grid box's scroll (both axes) so ← / Esc on /t come back to this place (FR-686).
+          <Link
+            href={`/t/${task.id}`}
+            prefetch={false}
+            className={styles.openPage}
             tabIndex={tab}
-            aria-label={th.grid.row.openTask(task.name)}
-            onClick={(e) => {
-              stop(e)
-              p.onOpenTask(task.id)
-            }}
+            aria-label={th.grid.row.openTaskPage(task.name)}
+            data-open-page=""
+            onClick={rememberGridScroll}
           >
             ↗
-          </button>
+          </Link>
         ) : null}
         {row.kind !== 'task' && p.canEdit && row.assignee.editable ? (
           <button

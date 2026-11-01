@@ -2,7 +2,7 @@
 import { en } from '@blocknote/core/locales'
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import { buildThaiDictionary, thaiDictionary } from './dictionary'
+import { buildThaiDictionary, dictionaryFor, taskDictionary, thaiDictionary } from './dictionary'
 
 describe('thaiDictionary', () => {
   it('every slash item has the Thai title, subtext and group', () => {
@@ -30,5 +30,22 @@ describe('thaiDictionary', () => {
     const d = buildThaiDictionary()
     expect(d.placeholders).toBe(th.editor.blocknote.placeholders)
     expect(d.table_handle).toBe(th.editor.blocknote.table_handle)
+  })
+})
+
+describe('taskDictionary (M6.1 S2.4, FR-681)', () => {
+  it('the empty-document placeholder of a task body is th.editor.taskPlaceholder', () => {
+    expect(taskDictionary.placeholders.emptyDocument).toBe(th.editor.taskPlaceholder)
+  })
+
+  it('everything else is the page dictionary (DOC keeps the M4 placeholders)', () => {
+    expect(taskDictionary.slash_menu).toBe(thaiDictionary.slash_menu)
+    expect(taskDictionary.placeholders.default).toBe(thaiDictionary.placeholders.default)
+    expect(thaiDictionary.placeholders.emptyDocument).toBeUndefined()
+  })
+
+  it('dictionaryFor picks by page kind', () => {
+    expect(dictionaryFor('TASK')).toBe(taskDictionary)
+    expect(dictionaryFor('DOC')).toBe(thaiDictionary)
   })
 })

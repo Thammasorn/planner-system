@@ -10,7 +10,7 @@ const task = (id: string, parentId: string | null, position: string, x: Partial<
   depth: 0,
   position,
   name: `name-${id}`,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate: null,
   certaintyOverride: null,
@@ -45,8 +45,8 @@ describe('buildTaskRows', () => {
   })
 
   it('keeps every TaskDTO field', () => {
-    const row = buildTaskRows([task('A', null, 'a0', { notes: 'n', dueDate: '2026-10-05' })])[0]
-    expect(row).toMatchObject({ notes: 'n', dueDate: '2026-10-05', statusId: 'todo', projectId: 'p1' })
+    const row = buildTaskRows([task('A', null, 'a0', { hasBody: true, dueDate: '2026-10-05' })])[0]
+    expect(row).toMatchObject({ hasBody: true, dueDate: '2026-10-05', statusId: 'todo', projectId: 'p1' })
   })
 })
 

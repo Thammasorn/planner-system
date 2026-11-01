@@ -1,0 +1,18 @@
+export const a = { p: 2.5 }
+export const b = { fontSize: 13 }
+export const c = { color: '#fff' }
+export const d = { padding: '4px 8px' }
+export const e = { mt: -0.75 }
+export const f = { lineHeight: '20px' }
+export const g = { borderRadius: '6px' }
+export const h = { gap: { xs: 1, md: 2.5 } }
+export const i = { mx: open ? 2 : 5 }
+export const j = { background: 'rgba(0, 0, 0, 0.5)' }
+export const k = { 'margin-top': '1rem' }
+export const l = { px: 7 }
+export const m = { borderRadius: 3 }
+export const n = { fontSize: '0.875rem' }
+export const o = { columnGap: `${x}px` }
+export const P = () => <div style={{ color: 'hsl(0 0% 50%)' }} />
+export const q = { p: 2.5 } // token-scale-ok: short
+export const r = { rowGap: [1, 2.25] }

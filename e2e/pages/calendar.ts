@@ -15,7 +15,7 @@ export function chipLabel(name: string, label: string, half: 'AM' | 'PM' | null 
 }
 
 /**
- * `/calendar` (plan/m05 S3.2/S3.3, S5.1). DOM contract (S3): the month title is the `h1`; ‹ / เดือนนี้ / › buttons and
+ * `/calendar` (plan/m05 S3.2/S3.3, S5.1). DOM contract (S3; M6.1 header bar): the month title is `calendar-month`; ‹ / เดือนนี้ / › buttons and
  * "แจ้งลา" sit in the header; the month view is `role="grid"` (6 Monday-first weeks) whose days are
  * `data-testid="day-<iso>"` gridcells holding the day number, "วันนี้", "🎌 <holiday>" and chips (full = `<button>`,
  * masked = `<span>`); below 600 px the grid is replaced by `data-testid="calendar-agenda"` with `agenda-<iso>` items.
@@ -36,8 +36,12 @@ export class CalendarPage {
   main(): Locator {
     return this.shell.main()
   }
+  /**
+   * The month title (M6.1: the header bar's <h1> is th.calendar.title; the month label sits between ‹ and › in the
+   * bar's actions, `data-testid="calendar-month"`, aria-live).
+   */
   title(): Locator {
-    return this.main().getByRole('heading', { level: 1 })
+    return this.page.getByTestId('calendar-month')
   }
   grid(): Locator {
     return this.page.getByRole('grid')

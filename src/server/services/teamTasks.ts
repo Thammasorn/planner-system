@@ -98,6 +98,7 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
         from task_assignments a where a.task_id = ${tasks.id} and a.deleted_at is null), '[]'::json)`,
       blockersTotal: repo.tasks.blockerCountSql.total,
       blockersOpen: repo.tasks.blockerCountSql.open,
+      hasBody: repo.tasks.hasBodySql, // FR-691 (M6.1-D11): only on cards of visible projects
     })
     .from(tasks)
     .innerJoin(
@@ -128,6 +129,7 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
     certainty: r.certainty,
     completed: r.completedOn !== null,
     blockers: { open: r.blockersOpen, total: r.blockersTotal },
+    hasBody: r.hasBody,
   }))
   const projectIds = [...new Set(cards.map((c) => c.projectId))]
   const projectRows = await repo.projects.listProjects(tx, { ids: new Set(projectIds) })

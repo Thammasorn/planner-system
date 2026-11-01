@@ -21,7 +21,7 @@ export const CATEGORY_ICONS: Record<TaskStatusCategory, typeof CheckCircleOutlin
 
 export function CategoryIcon({ category }: { category: TaskStatusCategory }) {
   const Icon = CATEGORY_ICONS[category]
-  return <Icon aria-hidden="true" sx={{ fontSize: 16 }} data-category={category} />
+  return <Icon aria-hidden="true" sx={{ fontSize: 'var(--font-lg)' }} data-category={category} />
 }
 
 /** Decorative 8 px dot in the status colour (M3-D25: text stays in the default foreground). */
@@ -55,7 +55,7 @@ export function StatusChip({
   tabIndex?: number | undefined
 }) {
   const label = (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
       <ColorDot color={status.color} />
       <span>{status.name}</span>
       <VisuallyHidden>{th.tasks.status.categories[status.category]}</VisuallyHidden>
@@ -68,7 +68,14 @@ export function StatusChip({
     label,
     'data-status-id': status.id,
     'data-category': status.category,
-    sx: { height: size === 'small' ? 24 : 32, maxWidth: 220, color: 'text.primary' },
+    sx: {
+      height: size === 'small' ? 24 : 32,
+      maxWidth: 220,
+      color: 'text.primary',
+      fontSize: size === 'small' ? 'var(--font-sm)' : 'var(--font-md)',
+      borderColor: 'var(--border-subtle)',
+      borderRadius: 'var(--radius-md)',
+    },
   }
   if (onClick && !disabled) {
     return (

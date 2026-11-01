@@ -307,7 +307,7 @@ export const tasks = pgTable(
     parentId: uuid('parent_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
     depth: smallint('depth').notNull().default(0),
     name: text('name').notNull(),
-    notes: text('notes'),
+    // notes: dropped in M6.1 (FR-692) — migrated into the task's TASK page by 0010_task_notes_to_body
     startDate: date('start_date', { mode: 'string' }),
     dueDate: date('due_date', { mode: 'string' }),
     certaintyOverride: certainty('certainty_override'),
@@ -420,6 +420,9 @@ export const taskBlockers = pgTable(
 
 export const pageSpace = pgEnum('page_space', ['WORKSPACE', 'PROJECT'])
 
+/** SPEC §6.2: M6.1 creates DOC + TASK; M11 adds 'DB_ROW' with `alter type page_kind add value` (custom migration). */
+export const pageKind = pgEnum('page_kind', ['DOC', 'TASK'])
+
 /** FR-501…510: one page system for the team wiki (WORKSPACE) and project documents (PROJECT); depth 0..9 (FR-502). */
 export const pages = pgTable(
   'pages',
@@ -435,6 +438,10 @@ export const pages = pgTable(
     content: jsonb('content').$type<unknown[]>().notNull().default([]), // BlockNote Block[] (§7.7)
     contentText: text('content_text').notNull().default(''), // extractContentText(content) (DM-16, M4-D10)
     isCharter: boolean('is_charter').notNull().default(false),
+    // M6.1 (§4.6.4, FR-681): a TASK page is the 1:1 body of a task — never in a tree, fixed key 'a0' (X48).
+    kind: pageKind('kind').notNull().default('DOC'),
+    taskId: uuid('task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
+    fullWidth: boolean('full_width').notNull().default(false), // FR-1602: shared page property, every kind
     locked: boolean('locked').notNull().default(false), // FR-510 "protected" (WORKSPACE only, service-enforced)
     version: integer('version').notNull().default(1), // FR-543 (content saves only, M4-D4)
     position: orderKey('position').notNull(), // text COLLATE "C" (X48)
@@ -452,9 +459,17 @@ export const pages = pgTable(
   (t) => [
     check('pages_depth_check', sql`${t.depth} between 0 and 9`),
     check('pages_space_project_check', sql`(${t.space} = 'PROJECT') = (${t.projectId} is not null)`),
+    // M6.1 (SPEC §6.2 verbatim + pages_task_space, M6.1-D3)
+    check('pages_kind_task', sql`(${t.kind} = 'TASK') = (${t.taskId} is not null)`),
+    check(
+      'pages_kind_shape',
+      sql`${t.kind} = 'DOC' or (${t.parentId} is null and ${t.depth} = 0 and not ${t.isCharter} and not ${t.locked} and ${t.title} = '')`,
+    ),
+    check('pages_task_space', sql`${t.kind} <> 'TASK' or ${t.space} = 'PROJECT'`),
+    uniqueIndex('pages_task_id_unique').on(t.taskId),
     index('pages_tree_idx')
       .on(t.space, t.projectId, t.parentId, t.position)
-      .where(sql`${t.deletedAt} is null`),
+      .where(sql`${t.deletedAt} is null and ${t.kind} = 'DOC'`),
     uniqueIndex('one_charter_per_project')
       .on(t.projectId)
       .where(sql`${t.isCharter} and ${t.deletedAt} is null`),

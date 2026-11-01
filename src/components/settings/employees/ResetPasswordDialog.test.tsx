@@ -54,7 +54,10 @@ describe('ResetPasswordDialog', () => {
     await user.click(within(dialog).getByRole('button', { name: th.employees.actions.resetPassword }))
     expect(await within(dialog).findByRole('button', { name: th.common.saving })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: th.common.cancel })).toBeDisabled()
-    expect(mocks.resetEmployeePassword).toHaveBeenCalledWith({ userId: employee.id, password: 'Kx7#mPq2vR9w' })
+    expect(mocks.resetEmployeePassword).toHaveBeenCalledWith({
+      userId: employee.id,
+      password: 'Kx7#mPq2vR9w',
+    })
 
     await user.keyboard('{Escape}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()

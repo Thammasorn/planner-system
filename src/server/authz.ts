@@ -6,7 +6,7 @@ import { alias } from 'drizzle-orm/pg-core'
 import { th } from '@/i18n/th'
 import type { ProjectAccessRole } from '@/lib/contracts/projects'
 import { z } from '@/lib/z'
-import type { PageSpace } from '@/lib/contracts/pages'
+import type { PageKind, PageSpace } from '@/lib/contracts/pages'
 import {
   clients,
   type FileRow,
@@ -327,6 +327,10 @@ export type PageNeed = 'view' | 'edit' | 'protect'
 
 export interface PageAccess {
   page: PageRow
+  /** M6.1-D4: DOC = a document; TASK = a task body (authorised through requireTask). */
+  kind: PageKind
+  /** The live task of a TASK page; null for DOC pages. */
+  task: TaskRow | null
   /** MANAGER for managers everywhere; LEAD/MEMBER on PROJECT pages; WIKI for workers on WORKSPACE pages. */
   role: 'MANAGER' | 'LEAD' | 'MEMBER' | 'WIKI'
   archived: boolean
@@ -336,7 +340,9 @@ export interface PageAccess {
 }
 
 /** Live page → PROJECT: requireProject(view|edit) · WORKSPACE: any user; edit blocked by effective protection for
- *  workers. Missing/deleted/malformed id → NotFoundError (X86). */
+ *  workers. Missing/deleted/malformed id → NotFoundError (X86).
+ *  M6.1-D4: TASK → requireTask(tx, user, page.taskId, view|edit) (live task, archived edit → 403); protect on a TASK
+ *  page → NotFoundError. */
 export async function requirePage(
   tx: DbOrTx,
   user: SessionUser,
@@ -357,6 +363,20 @@ export async function accessForPage(
 ): Promise<PageAccess> {
   requireUser(user)
   const manager = isManager(user)
+  if (page.kind === 'TASK') {
+    // M6.1-D4 / FR-687: a task body is exactly as visible / editable as its task. Never protectable (no wiki).
+    if (need === 'protect' || page.taskId === null) throw new NotFoundError()
+    const t = await requireTask(tx, user, page.taskId, need === 'view' ? 'view' : 'edit') // W → 404, archived → 403
+    return {
+      page,
+      kind: 'TASK',
+      task: t.task,
+      role: t.role,
+      archived: t.archived,
+      effectiveProtected: false,
+      isManager: manager,
+    }
+  }
   if (page.space === 'PROJECT') {
     const acc = await requireProject(tx, user, page.projectId!, need === 'view' ? 'view' : 'edit') // W → 404
     if (need === 'protect') {
@@ -364,18 +384,44 @@ export async function accessForPage(
       const msg = th.pages.errors.protectWikiOnly
       throw new ValidationError({ pageId: [msg] }, msg)
     }
-    return { page, role: acc.role, archived: acc.archived, effectiveProtected: false, isManager: manager }
+    return {
+      page,
+      kind: page.kind,
+      task: null,
+      role: acc.role,
+      archived: acc.archived,
+      effectiveProtected: false,
+      isManager: manager,
+    }
   }
   const prot = await effectiveProtection(tx, page.id)
   if (need === 'protect' && !manager) throw new ForbiddenError()
   if (need === 'edit' && prot && !manager) throw new ForbiddenError(th.pages.errors.protectedReadOnly)
   return {
     page,
+    kind: page.kind,
+    task: null,
     role: manager ? 'MANAGER' : 'WIKI',
     archived: false,
     effectiveProtected: prot,
     isManager: manager,
   }
+}
+
+/**
+ * M6.1-D4: `requirePage` for document-only operations (tree, title, icon, cover, protect, template, move, duplicate,
+ * delete, create-child, tree parentId, page batches): a TASK page → NotFoundError for everyone (leaks nothing).
+ */
+export async function requireDocPage(
+  tx: DbOrTx,
+  user: SessionUser,
+  pageId: string,
+  need: PageNeed,
+): Promise<PageAccess> {
+  requireUser(user)
+  const page = await pagesRepo.getLivePageOrNotFound(tx, pageId)
+  if (page.kind !== 'DOC') throw new NotFoundError()
+  return accessForPage(tx, user, page, need)
 }
 
 const crossSpace = (): ValidationError => {
@@ -390,7 +436,7 @@ export async function assertSecondPage(
   otherId: string,
   scope: { space: PageSpace; projectId: string | null },
 ): Promise<PageAccess> {
-  const seen = await requirePage(tx, user, otherId, 'view') // invisible / deleted → 404
+  const seen = await requireDocPage(tx, user, otherId, 'view') // invisible / deleted / TASK page → 404 (M6.1-D4)
   if (seen.page.space !== scope.space || seen.page.projectId !== scope.projectId) throw crossSpace()
   return accessForPage(tx, user, seen.page, 'edit') // protected (workers) / archived → 403
 }

@@ -50,6 +50,28 @@ describe('AZ-2 route coverage', () => {
     )
   })
 
+  it('M6.1 (plan/m06.1 S6.5): GET /api/tasks/[id]/body is exported and has rows; ensureTaskBody / setPageFullWidth have rows', async () => {
+    const routes = await exportedRoutes()
+    expect(routes).toContain('GET /api/tasks/[id]/body')
+    const covered = new Set(rows.map((r) => r.action))
+    for (const name of ['GET /api/tasks/[id]/body', 'ensureTaskBody', 'setPageFullWidth', 'services.taskPages.getTaskPageView'])
+      expect(covered.has(name), `${name} has no authz row`).toBe(true)
+    // SPEC §7.7: the M4 routes that now receive TASK page ids (save, lease, files) carry TASK-page rows too
+    const taskRows = rows.filter((r) => /^TB-/.test(r.id)).map((r) => r.action)
+    for (const name of [
+      'GET /api/pages/[id]',
+      'PUT /api/pages/[id]/content',
+      'GET /api/pages/[id]/lock',
+      'POST /api/pages/[id]/lock',
+      'DELETE /api/pages/[id]/lock',
+      'POST /api/files',
+      'GET /api/files/[id]',
+      'GET /api/pages/tree',
+      'savePageContent',
+    ])
+      expect(taskRows, `no TASK-page row for ${name}`).toContain(name)
+  })
+
   it('every exported route handler method has an authz row', async () => {
     const covered = new Set(rows.map((r) => r.action))
     const missing = (await exportedRoutes()).filter((r) => !covered.has(r))

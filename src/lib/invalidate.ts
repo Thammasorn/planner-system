@@ -1,6 +1,7 @@
 // src/lib/invalidate.ts — grouped TanStack invalidations so features don't forget views (PLAN.md §3.5, X18).
 import type { QueryClient } from '@tanstack/react-query'
 import type { PageSpace } from './contracts/pages'
+import type { ProjectTasksResponse } from './contracts/tasks'
 import { qk, qkPrefix } from './query-keys'
 
 async function invalidateAll(qc: QueryClient, keys: readonly (readonly unknown[])[]): Promise<void> {
@@ -72,4 +73,29 @@ export function invalidateCalendar(qc: QueryClient): Promise<void> {
 /** After any leave-type write (M5): the dialog's options and every calendar range (names / colours of entries). */
 export function invalidateLeaveTypes(qc: QueryClient): Promise<void> {
   return invalidateAll(qc, [qkPrefix.leaveTypes, qkPrefix.calendar])
+}
+
+// ── M6.1 (plan/m06.1 S0.8) ──────────────────────────────────────────────────────────────────────────────────────────
+
+/** After a task-body write that the open editor did not make itself (ensure from elsewhere, full width): its view. */
+export function invalidateTaskBody(qc: QueryClient, taskId: string): Promise<void> {
+  return invalidateAll(qc, [qk.taskBody(taskId)])
+}
+
+/**
+ * M6.1-D11: the open body patches `hasBody` (📄, FR-691) of its task in the project's task list from its own blank
+ * check — no refetch per autosave. No-op when the list is not cached or the value is unchanged (same reference).
+ */
+export function patchTaskHasBody(qc: QueryClient, projectId: string, taskId: string, hasBody: boolean): void {
+  qc.setQueryData<ProjectTasksResponse>(qk.projectTasks(projectId), (d) => {
+    if (!d) return d
+    const t = d.tasks.find((x) => x.id === taskId)
+    if (!t || t.hasBody === hasBody) return d
+    return { ...d, tasks: d.tasks.map((x) => (x.id === taskId ? { ...x, hasBody } : x)) }
+  })
+}
+
+/** Every list view that shows 📄 / task names of a project: its task list, /my and every /tasks page. */
+export function invalidateTaskViews(qc: QueryClient, projectId: string): Promise<void> {
+  return invalidateAll(qc, [qk.projectTasks(projectId), qkPrefix.myTasks, qkPrefix.teamTasks])
 }

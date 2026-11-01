@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
@@ -7,7 +7,12 @@ import { PID, STATUSES, T } from '../fixtures.test.data'
 import { renderTasks } from '../render.test.helper'
 import { TeamTasks } from './TeamTasks'
 
-const m = vi.hoisted(() => ({ getJson: vi.fn(), setTaskStatus: vi.fn(), push: vi.fn(), dropOn: 'category:WAITING' }))
+const m = vi.hoisted(() => ({
+  getJson: vi.fn(),
+  setTaskStatus: vi.fn(),
+  push: vi.fn(),
+  dropOn: 'category:WAITING',
+}))
 vi.mock('@/lib/api', () => ({ getJson: m.getJson }))
 vi.mock('@/server/actions/tasks', () => ({
   setTaskStatus: m.setTaskStatus,
@@ -46,6 +51,7 @@ const page: TeamTasksResponse = {
       certainty: 'CONFIRMED',
       completed: false,
       blockers: { open: 0, total: 0 },
+      hasBody: true,
     },
   ],
   projects: [{ id: PID, name: 'POS Upgrade', color: '#B45309' }],
@@ -72,6 +78,14 @@ describe('TeamTasks (FR-665/666, M3-D33/D41)', () => {
     await waitFor(() =>
       expect(m.getJson).toHaveBeenLastCalledWith('/api/tasks?blocked=true', expect.anything()),
     )
+  })
+
+  it('FR-685/691 (M6.1): the name keeps opening the project panel; ↗ opens /t/<id>; 📄 marks the body', async () => {
+    renderTasks(<TeamTasks />)
+    const name = await screen.findByRole('link', { name: 'งาน C' })
+    const li = name.closest('li')!
+    expect(within(li).getByRole('link', { name: th.tasks.openAsPage })).toHaveAttribute('href', `/t/${T.c}`)
+    expect(within(li).getByRole('img', { name: th.tasks.hasBody })).toBeInTheDocument()
   })
 
   it('reads the initial filters from the URL', async () => {

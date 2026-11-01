@@ -2,6 +2,8 @@
 // `a` is the caller's authz.requirePage result. Services never read the clock (X56): `today` comes from the action.
 // Audit (M4-D38): renamePage and savePageContent never audit (their action/route does, X96); the others write
 // their own row as their last statement. Page saves are audited without content (X44).
+// M6.1 (§4.6.4, M6.1-D5/D9/D10): getPageView and savePageContent also serve task bodies (kind TASK) — title = the task
+// name, no tree actions, `subpage` blocks refused; saveAuditInput is the one audit row of a save (action + keepalive).
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import type { ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
@@ -22,6 +24,7 @@ import { isBlankPage } from '@/lib/pages/blank'
 import { PAGE_TITLE_MAX } from '@/lib/schemas/pages'
 import { sanitizeContent, type PageContent } from '@/lib/schemas/page-content'
 import * as audit from '../audit'
+import type { AuditInput } from '../audit'
 import * as authz from '../authz'
 import type { PageAccess } from '../authz'
 import { pages } from '../db/schema'
@@ -38,8 +41,12 @@ import { getBreadcrumb, PAGE_MAX_DEPTH_INDEX } from './page-tree'
 const versionConflict = (version: number): ConflictError =>
   new ConflictError('VERSION_CONFLICT', undefined, { current: { version } })
 
-/** What the viewer may do on the page, computed without throwing (mirrors requirePage / requirePageCreate). */
+/** What the viewer may do on the page, computed without throwing (mirrors requirePage / requirePageCreate). A task
+ *  body (M6.1-D5) can only be edited — it has no tree, no protection, no copy and is deleted with its task. */
 async function pageCan(tx: DbOrTx, a: PageAccess): Promise<PageCan> {
+  if (a.kind === 'TASK') {
+    return { edit: !a.archived, protect: false, delete: false, createChild: false, move: false, duplicate: false }
+  }
   const p = a.page
   const edit = !a.archived && (!a.effectiveProtected || a.isManager)
   const subtreeOk = a.isManager || !(await pagesRepo.subtreeHasLocked(tx, p.id))
@@ -72,7 +79,7 @@ export async function getPageView(tx: DbOrTx, user: SessionUser, pageId: string)
       projectArchived: a.archived,
       parentId: p.parentId,
       depth: p.depth,
-      title: p.title,
+      title: a.task ? a.task.name : p.title, // FR-682: a body has no title of its own
       icon: p.icon,
       cover: p.coverFileId ? { fileId: p.coverFileId, url: fileUrl(p.coverFileId) } : null,
       isCharter: p.isCharter,
@@ -83,8 +90,11 @@ export async function getPageView(tx: DbOrTx, user: SessionUser, pageId: string)
       isBlank: isBlankPage(p),
       updatedAt: p.updatedAt.toISOString(),
       updatedBy: { id: p.updatedBy, name: updater ? displayName(updater) : '' },
+      kind: a.kind,
+      taskId: p.taskId,
+      fullWidth: p.fullWidth,
     },
-    breadcrumb: await getBreadcrumb(tx, p.id),
+    breadcrumb: a.kind === 'TASK' ? [] : await getBreadcrumb(tx, p.id),
     can: await pageCan(tx, a),
     uploadLimits: uploadLimits(),
   }
@@ -219,17 +229,46 @@ export async function applyTemplate(
   return { version, title: t.title, icon: t.icon }
 }
 
+/** True when a `subpage` block appears at any depth (validated content: nesting ≤ PAGE_MAX_NESTING). */
+export function containsSubpage(content: readonly unknown[]): boolean {
+  const stack: unknown[] = [...content]
+  while (stack.length > 0) {
+    const b = stack.pop()
+    if (typeof b !== 'object' || b === null) continue
+    const block = b as { type?: unknown; children?: unknown }
+    if (block.type === 'subpage') return true
+    if (Array.isArray(block.children)) stack.push(...(block.children as unknown[]))
+  }
+  return false
+}
+
 /** FR-543: `UPDATE … WHERE version = baseVersion`; mismatch → VERSION_CONFLICT. Content is sanitised (M4-D9).
- *  The lease is not required (X63): anyone who may edit and has the current version saves. */
+ *  The lease is not required (X63): anyone who may edit and has the current version saves.
+ *  FR-680 / M6.1-D9: a task body never holds a `subpage` block (no page tree) → VALIDATION subpageNotAllowed. */
 export async function savePageContent(
   tx: Tx,
   user: SessionUser,
   a: PageAccess,
   i: { baseVersion: number; content: PageContent },
 ): Promise<SavePageResult> {
+  if (a.kind === 'TASK' && containsSubpage(i.content)) {
+    const msg = th.editor.errors.subpageNotAllowed
+    throw new ValidationError({ content: [msg] }, msg)
+  }
   const content = sanitizeContent(i.content)
   const version = await bumpContent(tx, user, a.page.id, i.baseVersion, { content })
   return { version, lease: await getLease(tx, user, a.page.id) }
+}
+
+/** The one audit row of a content save (M4-D38, X44 — never the content): DOC `pageSaved(title)`; a task body
+ *  (FR-693, M6.1-D10) `taskBodySaved(task name)` with the task's project and `after.taskId`. Used by the
+ *  savePageContent action and the keepalive `PUT /api/pages/[id]/content`. */
+export function saveAuditInput(a: PageAccess, version: number): AuditInput {
+  const base = { entity: 'page', entityId: a.page.id, action: 'update', projectId: a.page.projectId } as const
+  if (a.task) {
+    return { ...base, summary: th.audit.taskBodySaved(a.task.name), after: { version, taskId: a.task.id } }
+  }
+  return { ...base, summary: th.audit.pageSaved(a.page.title), after: { version } }
 }
 
 /** Mention/sub-page chips (M4-D20, M4-D32): invisible → `{ id, visible: false }` only. */
@@ -244,7 +283,7 @@ export async function getPageTitles(
   const vis = await authz.visibleProjectIds(tx, user)
   const items = unique.map((id): PageTitleItem => {
     const p = rows.get(id)
-    if (!p) return { id, visible: false }
+    if (!p || p.kind !== 'DOC') return { id, visible: false } // FR-682: a task body is never a page chip
     if (p.space === 'PROJECT' && vis !== 'ALL' && !vis.has(p.projectId!)) return { id, visible: false }
     if (p.deletedAt !== null) return { id, visible: true, deleted: true }
     return { id, visible: true, deleted: false, title: p.title, icon: p.icon }

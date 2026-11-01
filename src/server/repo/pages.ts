@@ -2,6 +2,8 @@
 // Malformed ids never reach SQL (callers parse with z.uuid(); getPage/getLivePageOrNotFound guard themselves). Sibling
 // filters use isNull(...) for null projectId/parentId, eq otherwise. Every tree query orders by position, id (X48).
 // Recursive CTEs carry a level counter (≤ 10 levels, FR-502) so a corrupt parent chain can never loop.
+// M6.1 (FR-682, M6.1-D4/D13, X48): TASK pages (task bodies) sit at their project's root with the fixed key 'a0'; every
+// tree / sibling-scope / subtree / batch query here sees kind = 'DOC' only. Task bodies have their own helpers below.
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import type { PageSpace } from '@/lib/contracts/pages'
 import { z } from '@/lib/z'
@@ -26,9 +28,15 @@ export const uuidArray = (ids: readonly string[]): SQL =>
         sql`, `,
       )}]::uuid[]`
 
-/** Live siblings of a scope (space + project + parent). */
+/** `<alias>.kind = 'DOC'` — documents only (FR-682). For raw SQL over `pages` (M10 recent pages, M11 databases). */
+export function docOnly(alias = 'pages'): SQL {
+  return sql`${sql.identifier(alias)}.kind = 'DOC'`
+}
+
+/** Live DOC siblings of a scope (space + project + parent); task bodies never join a scope (X48, FR-682). */
 export function scopeWhere(s: PageScope): SQL {
   return and(
+    eq(pages.kind, 'DOC'),
     eq(pages.space, s.space),
     s.projectId === null ? isNull(pages.projectId) : eq(pages.projectId, s.projectId),
     s.parentId === null ? isNull(pages.parentId) : eq(pages.parentId, s.parentId),
@@ -114,7 +122,7 @@ export async function listLevel(tx: DbOrTx, s: PageScope): Promise<TreeRow[]> {
     select p.id, p.parent_id, p.title, p.icon, p.depth::int as depth, p.position, p.locked, p.is_charter,
            exists (select 1 from pages c where c.parent_id = p.id and c.deleted_at is null) as has_children
     from pages p
-    where p.deleted_at is null and p.space = ${s.space}
+    where p.deleted_at is null and p.kind = 'DOC' and p.space = ${s.space}
       and ${s.projectId === null ? sql`p.project_id is null` : sql`p.project_id = ${s.projectId}`}
       and ${s.parentId === null ? sql`p.parent_id is null` : sql`p.parent_id = ${s.parentId}`}
     order by p.position, p.id`)
@@ -196,11 +204,11 @@ export async function subtreeHasLocked(tx: DbOrTx, pageId: string): Promise<bool
   return row?.locked ?? false
 }
 
-/** The live subtree of `rootId` (root included), parents before children (depth, position, id). */
+/** The live subtree of `rootId` (root included), parents before children (depth, position, id). A TASK root → []. */
 export async function liveSubtree(tx: DbOrTx, rootId: string): Promise<PageRow[]> {
   const rows = await tx.execute<{ id: string }>(sql`
     with recursive sub as (
-      select id, 0 as lvl from pages where id = ${rootId} and deleted_at is null
+      select id, 0 as lvl from pages where id = ${rootId} and deleted_at is null and kind = 'DOC'
       union all
       select p.id, sub.lvl + 1 from pages p join sub on p.parent_id = sub.id
       where p.deleted_at is null and sub.lvl < 10
@@ -241,11 +249,11 @@ export async function updatePlacement(
   return row!
 }
 
-/** Soft-deletes the live subtree of `rootId` under `batch`; returns the ids it deleted (root first). */
+/** Soft-deletes the live DOC subtree of `rootId` under `batch`; returns the ids it deleted (root first). */
 export async function softDeleteSubtree(tx: DbOrTx, rootId: string, batch: string): Promise<string[]> {
   const rows = await tx.execute<{ id: string; depth: number }>(sql`
     with recursive sub as (
-      select id, 0 as lvl from pages where id = ${rootId} and deleted_at is null
+      select id, 0 as lvl from pages where id = ${rootId} and deleted_at is null and kind = 'DOC'
       union all
       select p.id, sub.lvl + 1 from pages p join sub on p.parent_id = sub.id
       where p.deleted_at is null and sub.lvl < 10
@@ -256,7 +264,8 @@ export async function softDeleteSubtree(tx: DbOrTx, rootId: string, batch: strin
   return [...rows].sort((a, b) => a.depth - b.depth || (a.id < b.id ? -1 : 1)).map((r) => r.id)
 }
 
-/** Rows of one deletion batch + whether each is past the 30-day window (DB time, M4-D21). */
+/** DOC rows of one deletion batch + whether each is past the 30-day window (DB time, M4-D21). A task delete batch
+ *  (whose TASK bodies share the batch id, M6.1-D13) → [] so restorePageBatch answers 404. */
 export async function listBatch(
   tx: DbOrTx,
   batch: string,
@@ -268,7 +277,7 @@ export async function listBatch(
       expired: sql<boolean>`${pages.deletedAt} <= now() - interval '30 days'`,
     })
     .from(pages)
-    .where(eq(pages.deletedBatch, batch))
+    .where(and(eq(pages.deletedBatch, batch), eq(pages.kind, 'DOC')))
     .orderBy(asc(pages.depth), asc(pages.position), asc(pages.id))
 }
 
@@ -279,4 +288,86 @@ export async function restoreRows(tx: DbOrTx, ids: readonly string[], delta: num
     .update(pages)
     .set({ deletedAt: null, deletedBatch: null, depth: sql`${pages.depth} + ${delta}` })
     .where(inArray(pages.id, [...ids]))
+}
+
+// ── M6.1 task bodies (TASK pages, SPEC §4.6.4 FR-681/689, M6.1-D6/D13/D15) ──────────────────────────────────────
+
+/** The TASK page of `taskId` (live or soft-deleted) or null; `forUpdate` locks it until the transaction ends. */
+export async function getTaskBodyRow(
+  tx: DbOrTx,
+  taskId: string,
+  o?: { forUpdate?: boolean },
+): Promise<PageRow | null> {
+  if (!isUuid(taskId)) return null
+  const q = tx.select().from(pages).where(eq(pages.taskId, taskId))
+  const [row] = o?.forUpdate ? await q.for('update') : await q
+  return row ?? null
+}
+
+/** Inserts the empty body of a task (`on conflict (task_id) do nothing`, pages_task_id_unique); null when a row
+ *  already existed (a concurrent insert waits for the other transaction, then does nothing — R7). */
+export async function insertTaskBodyIfMissing(
+  tx: DbOrTx,
+  v: { taskId: string; projectId: string; userId: string },
+): Promise<PageRow | null> {
+  const [row] = await tx
+    .insert(pages)
+    .values({
+      space: 'PROJECT',
+      projectId: v.projectId,
+      kind: 'TASK',
+      taskId: v.taskId,
+      title: '',
+      content: [],
+      contentText: '',
+      position: 'a0', // X48: fixed key, never part of a sibling scope
+      createdBy: v.userId,
+      updatedBy: v.userId,
+    })
+    .onConflictDoNothing({ target: pages.taskId })
+    .returning()
+  return row ?? null
+}
+
+/** Clears deleted_at / deleted_batch of one TASK page (ensureTaskBody's defensive revive). */
+export async function reviveTaskBody(tx: DbOrTx, id: string): Promise<PageRow> {
+  const [row] = await tx
+    .update(pages)
+    .set({ deletedAt: null, deletedBatch: null })
+    .where(and(eq(pages.id, id), eq(pages.kind, 'TASK')))
+    .returning()
+  return row!
+}
+
+/** FR-689 / M6.1-D13: soft-deletes the live bodies of `taskIds` under the task delete `batch`; returns their ids. */
+export async function softDeleteTaskBodies(
+  tx: DbOrTx,
+  taskIds: readonly string[],
+  batch: string,
+): Promise<string[]> {
+  if (taskIds.length === 0) return []
+  const rows = await tx.execute<{ id: string }>(sql`
+    update pages set deleted_at = now(), deleted_batch = ${batch}
+    where kind = 'TASK' and task_id = any(${uuidArray(taskIds)}) and deleted_at is null
+    returning id`)
+  return rows.map((r) => r.id)
+}
+
+/** Undo of softDeleteTaskBodies: the bodies of `batch` whose task is among `taskIds` (the restored tasks). */
+export async function restoreTaskBodies(
+  tx: DbOrTx,
+  batch: string,
+  taskIds: readonly string[],
+): Promise<string[]> {
+  if (taskIds.length === 0 || !isUuid(batch)) return []
+  const rows = await tx.execute<{ id: string }>(sql`
+    update pages set deleted_at = null, deleted_batch = null
+    where deleted_batch = ${batch} and kind = 'TASK' and task_id = any(${uuidArray(taskIds)})
+    returning id`)
+  return rows.map((r) => r.id)
+}
+
+/** FR-1602: the shared "เต็มความกว้าง" flag (never touches content or version). */
+export async function setFullWidth(tx: DbOrTx, id: string, fullWidth: boolean, updatedBy: string): Promise<void> {
+  await tx.update(pages).set({ fullWidth, updatedBy }).where(eq(pages.id, id))
 }

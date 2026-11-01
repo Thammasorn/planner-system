@@ -32,17 +32,28 @@ const type = (e: FakeEditor, text: string) => {
   e.document = [{ id: 'a', type: 'paragraph', content: [{ type: 'text', text, styles: {} }] }]
 }
 
-function setup(over: { enabled?: boolean } = {}) {
+function setup(
+  over: {
+    enabled?: boolean
+    pageId?: string | null
+    getPageId?: () => Promise<string>
+    onSaved?: (r: { content: unknown[]; version: number }) => void
+  } = {},
+) {
   const editor = fakeEditor()
   const onLease = vi.fn()
-  const hook = renderHook(() =>
-    useAutosave({
-      editor: editor as unknown as AutosaveEditor,
-      pageId: PAGE,
-      version: 1,
-      enabled: over.enabled ?? true,
-      onLease,
-    }),
+  const hook = renderHook(
+    (p: { pageId: string | null }) =>
+      useAutosave({
+        editor: editor as unknown as AutosaveEditor,
+        pageId: p.pageId,
+        getPageId: over.getPageId,
+        version: 1,
+        enabled: over.enabled ?? true,
+        onLease,
+        onSaved: over.onSaved,
+      }),
+    { initialProps: { pageId: over.pageId === undefined ? PAGE : over.pageId } },
   )
   return { editor, onLease, hook }
 }
@@ -294,5 +305,91 @@ describe('useAutosave', () => {
     })
     expect(save).toHaveBeenCalledTimes(2)
     expect(save.mock.calls[1]![0].baseVersion).toBe(2)
+  })
+
+  describe('M6.1-D8 lazy page id (TASK body without a row)', () => {
+    function deferredId() {
+      let resolve!: (id: string) => void
+      let reject!: (e: Error) => void
+      const promise = new Promise<string>((res, rej) => {
+        resolve = res
+        reject = rej
+      })
+      return { promise, resolve, reject }
+    }
+
+    it('typing marks pending but sends nothing until the id resolves; then saves what was typed, baseVersion 1', async () => {
+      const d = deferredId()
+      const getPageId = vi.fn(() => d.promise)
+      const { editor, hook } = setup({ pageId: null, getPageId })
+      type(editor, 'ก่อนมีแถว')
+      act(() => hook.result.current.schedule())
+      expect(hook.result.current.pending).toBe(true)
+      await tick(800)
+      expect(save).not.toHaveBeenCalled()
+      expect(hook.result.current.isDirty()).toBe(true)
+      d.resolve(PAGE)
+      await tick(0)
+      expect(save).toHaveBeenCalledTimes(1)
+      expect(save.mock.calls[0]![0]).toEqual({ pageId: PAGE, baseVersion: 1, content: editor.document })
+      expect(hook.result.current.status).toBe('saved')
+      expect(hook.result.current.pending).toBe(false)
+    })
+
+    it('an id that arrives through props is used directly (no getPageId call)', async () => {
+      const getPageId = vi.fn(() => Promise.resolve(PAGE))
+      const { editor, hook } = setup({ pageId: null, getPageId })
+      hook.rerender({ pageId: PAGE })
+      type(editor, 'x')
+      act(() => hook.result.current.schedule())
+      await tick(800)
+      expect(getPageId).not.toHaveBeenCalled()
+      expect(save.mock.calls[0]![0]).toMatchObject({ pageId: PAGE, baseVersion: 1 })
+    })
+
+    it('a rejected ensure → status error, no save, no timer retry; the next change tries again', async () => {
+      const getPageId = vi.fn((): Promise<string> => Promise.reject(new Error('ensure')))
+      const { editor, hook } = setup({ pageId: null, getPageId })
+      type(editor, 'x')
+      act(() => hook.result.current.schedule())
+      await tick(800)
+      expect(hook.result.current.status).toBe('error')
+      expect(save).not.toHaveBeenCalled()
+      await tick(10_000)
+      expect(getPageId).toHaveBeenCalledTimes(1)
+      getPageId.mockImplementation(() => Promise.resolve(PAGE))
+      type(editor, 'xy')
+      act(() => hook.result.current.schedule())
+      await tick(800)
+      expect(save).toHaveBeenCalledTimes(1)
+    })
+
+    it('without an id nothing goes out on pagehide (no keepalive to a page that does not exist)', () => {
+      const fetchMock = vi.fn<typeof fetch>()
+      vi.stubGlobal('fetch', fetchMock)
+      const { editor } = setup({ pageId: null, getPageId: () => new Promise(() => {}) })
+      type(editor, 'x')
+      window.dispatchEvent(new Event('pagehide'))
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('read-only never asks for an id', async () => {
+      const getPageId = vi.fn(() => Promise.resolve(PAGE))
+      const { editor, hook } = setup({ pageId: null, getPageId, enabled: false })
+      type(editor, 'x')
+      act(() => hook.result.current.schedule())
+      await act(() => hook.result.current.flush())
+      await tick(800)
+      expect(getPageId).not.toHaveBeenCalled()
+    })
+  })
+
+  it('onSaved receives the saved content and the new version', async () => {
+    const onSaved = vi.fn()
+    const { editor, hook } = setup({ onSaved })
+    type(editor, 'x')
+    act(() => hook.result.current.schedule())
+    await tick(800)
+    expect(onSaved).toHaveBeenCalledWith({ content: editor.document, version: 2 })
   })
 })

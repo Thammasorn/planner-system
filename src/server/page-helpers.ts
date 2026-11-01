@@ -13,3 +13,9 @@ export async function orNotFound<T>(p: Promise<T>): Promise<T> {
     throw e
   }
 }
+
+/** M6.1-D5 / R15: `/p/<id>` of a task body redirects to `/t/<taskId>` — call it after the loader authorised the view
+ *  (an invisible body is a 404 before this). DOC pages → null. */
+export function taskIdOfTaskPage(view: { page: { kind?: string; taskId?: string | null } }): string | null {
+  return view.page.kind === 'TASK' && view.page.taskId ? view.page.taskId : null
+}

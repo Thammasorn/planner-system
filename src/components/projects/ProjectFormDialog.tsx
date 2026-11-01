@@ -227,7 +227,7 @@ function ProjectForm({
       <DialogTitle id={titleId}>
         {mode === 'create' ? th.projects.createTitle : th.projects.editTitle}
       </DialogTitle>
-      <DialogContent dividers>
+      <DialogContent dividers data-light-form="">
         <Stack spacing={2.5}>
           <TextField
             label={th.projects.fields.name}
@@ -337,7 +337,7 @@ function ProjectForm({
             >
               <ToggleButton value="CONFIRMED">{th.projects.certainty.CONFIRMED}</ToggleButton>
               <ToggleButton value="TENTATIVE" aria-label={th.projects.certainty.TENTATIVE}>
-                <Box component="span" aria-hidden="true" sx={{ mr: 0.75 }}>
+                <Box component="span" aria-hidden="true" sx={{ mr: 0.5 }}>
                   {th.projects.tentativeGlyph}
                 </Box>
                 {th.projects.certainty.TENTATIVE}

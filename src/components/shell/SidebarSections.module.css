@@ -3,22 +3,22 @@
 .search {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   width: 100%;
   height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 6px;
-  background: var(--mui-palette-background-default);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface);
   color: var(--mui-palette-text-secondary);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--font-md);
   text-align: left;
   cursor: pointer;
 }
 
 .search:hover {
-  background: var(--mui-palette-action-hover);
+  background: var(--hover-bg);
   color: var(--mui-palette-text-primary);
 }
 
@@ -37,7 +37,7 @@
 
 .searchIcon {
   flex: none;
-  font-size: 20px;
+  font-size: var(--font-xl);
 }
 
 .searchLabel {
@@ -50,43 +50,43 @@
 
 .kbd {
   flex: none;
-  padding: 0 6px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 4px;
+  padding: 0 calc(var(--space-1) * 1.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 0.75rem;
-  line-height: 18px;
+  font-size: var(--font-xs);
+  line-height: 1.5;
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   min-height: 36px;
-  padding: 0 4px 0 12px;
+  padding: 0 var(--space-1) 0 var(--space-3);
 }
 
 .heading {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
   margin: 0;
-  color: var(--mui-palette-text-primary);
-  font-size: 0.875rem;
-  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
 }
 
 .headingIcon {
   flex: none;
-  font-size: 20px;
+  font-size: var(--font-lg);
 }
 
 .add {
@@ -97,7 +97,7 @@
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--mui-palette-text-secondary);
   cursor: pointer;

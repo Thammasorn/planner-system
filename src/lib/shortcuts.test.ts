@@ -48,3 +48,19 @@ describe('grid scope (M6, X07)', () => {
     expect(SHORTCUT_SCOPE_LABELS.grid).toBe(th.shortcuts.scopes.grid)
   })
 })
+
+describe('task page (M6.1, FR-685/686)', () => {
+  it('Shift+Space opens the page from the list; the taskPage scope has Esc and Enter', () => {
+    expect(SHORTCUTS.find((s) => s.id === 'list.openPage')).toMatchObject({
+      scope: 'taskList',
+      combos: [['Shift', 'Space']],
+      label: th.shortcuts.items.listOpenPage,
+    })
+    expect(SHORTCUTS.filter((s) => s.scope === 'taskPage').map((s) => [s.id, s.combos])).toEqual([
+      ['taskPage.back', [['Esc']]],
+      ['taskPage.titleEnter', [['Enter']]],
+    ])
+    expect(SHORTCUT_SCOPES.indexOf('taskPage')).toBe(SHORTCUT_SCOPES.indexOf('taskList') + 1)
+    expect(SHORTCUT_SCOPE_LABELS.taskPage).toBe(th.shortcuts.scopes.taskPage)
+  })
+})

@@ -42,7 +42,7 @@ export function PasswordField({
           },
         }}
       />
-      <Button variant="outlined" sx={{ flex: 'none', mt: '2px' }} onClick={() => onChange(randomPassword())}>
+      <Button variant="outlined" sx={{ flex: 'none' }} onClick={() => onChange(randomPassword())}>
         {th.employees.generatePassword}
       </Button>
     </Stack>

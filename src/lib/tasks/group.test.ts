@@ -10,7 +10,7 @@ const task = (id: string, parentId: string | null, position: string, x: Partial<
   depth: 0,
   position,
   name: id,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate: null,
   certaintyOverride: null,

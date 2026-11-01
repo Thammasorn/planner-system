@@ -87,7 +87,8 @@ describe('listTeamTasks (world)', () => {
       completed: false,
     })
     expect(Object.keys(all.cards[0]!).sort()).toEqual(
-      ['assigneeIds', 'blockers', 'certainty', 'completed', 'dueDate', 'id', 'name', 'parentPath', 'projectId', 'status'].sort(),
+      // M6.1 adds hasBody (FR-691, M6.1-D11)
+      ['assigneeIds', 'blockers', 'certainty', 'completed', 'dueDate', 'hasBody', 'id', 'name', 'parentPath', 'projectId', 'status'].sort(),
     )
     // outsider: Q only
     const out = await list(toSessionUser(w.outsider), { ...Q0, includeDone: true })

@@ -18,6 +18,7 @@ import { rows as preferences } from './preferences'
 import { rows as projects } from './projects'
 import { rows as search } from './search'
 import { rows as taskBlockers } from './task-blockers'
+import { rows as taskPages } from './task-pages'
 import { rows as taskStatuses } from './task-statuses'
 import { rows as tasks } from './tasks'
 import { rows as timeOff } from './time-off'
@@ -51,4 +52,6 @@ export const rows: AuthzRow[] = [
   ...calendar,
   // M6
   ...allocations,
+  // M6.1
+  ...taskPages,
 ]

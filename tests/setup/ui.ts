@@ -5,6 +5,8 @@ import { afterEach } from 'vitest'
 
 // jsdom has no pointer capture; sonner calls it when a toast is pressed.
 Element.prototype.setPointerCapture ??= () => {}
+// jsdom has no scrollIntoView; the task list keeps the panel's row in view with it (M6.1).
+Element.prototype.scrollIntoView ??= () => {}
 
 // RTL only auto-registers cleanup when `afterEach` is a global (test.globals: true). We keep globals off.
 afterEach(() => {

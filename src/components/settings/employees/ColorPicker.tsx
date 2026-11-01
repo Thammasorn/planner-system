@@ -19,7 +19,7 @@ function Swatch({ color, checked }: { color: string; checked: boolean }) {
         height: 24,
         borderRadius: '50%',
         bgcolor: color,
-        color: '#FFFFFF',
+        color: 'common.white',
         display: 'grid',
         placeItems: 'center',
         outline: checked ? '2px solid' : 'none',
@@ -28,7 +28,7 @@ function Swatch({ color, checked }: { color: string; checked: boolean }) {
       }}
     >
       {/* the check mark carries the selection, not the colour */}
-      {checked ? <Check sx={{ fontSize: 16 }} /> : null}
+      {checked ? <Check sx={{ fontSize: 'var(--font-lg)' }} /> : null}
     </Box>
   )
 }

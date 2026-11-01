@@ -1,4 +1,4 @@
-import { ProjectHeaderBar } from '@/components/projects/ProjectHeaderBar'
+import { ProjectArchivedBanner, ProjectHeaderBar } from '@/components/projects/ProjectHeaderBar'
 import { ProjectTabs } from '@/components/projects/ProjectTabs'
 import { db } from '@/server/db/client'
 import { orNotFound } from '@/server/page-helpers'
@@ -18,6 +18,7 @@ export default async function ProjectLayout(props: LayoutProps<'/projects/[id]'>
     <>
       <ProjectHeaderBar header={header} />
       <ProjectTabs projectId={header.id} />
+      <ProjectArchivedBanner archived={header.archived} />
       {props.children}
     </>
   )

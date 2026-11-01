@@ -373,19 +373,20 @@ test.describe('E7 ⟲ (FR-611, BR-36, Esc, deep link) task panel', () => {
     expect(panel.width).toBeGreaterThanOrEqual(420)
     expect(panel.width).toBeLessThanOrEqual(460)
     expect(list.x + list.width).toBeLessThanOrEqual(panel.x) // beside the list, never over it
-    await expect(tasks.certaintyButton('tentative')).toHaveAttribute('aria-pressed', 'true')
-    await expect(tasks.panel().getByText(th.tasks.certainty.source.task, { exact: true })).toBeVisible()
+    // M6.1-D16: certainty is a light value + its source, opening a menu of three menuitemradio choices
+    await tasks.panelProps().expectCertaintyChoice('tentative')
+    await expect(tasks.panel().getByTestId('certainty-source')).toContainText(th.tasks.certainty.source.task)
 
     const SUB = 'ย่อย R'
     await tasks.addSubtaskInPanel(SUB)
     await tasks.panel().getByRole('button', { name: SUB, exact: true }).click()
     await expect(tasks.panelTitle(SUB)).toBeVisible()
-    await expect(
-      tasks.panel().getByText(th.tasks.certainty.source.ancestor(ROLLOUT), { exact: true }),
-    ).toBeVisible()
+    await expect(tasks.panel().getByTestId('certainty-source')).toContainText(
+      th.tasks.certainty.source.ancestor(ROLLOUT),
+    )
 
     await tasks.openPanel(R1)
-    await expect(tasks.panel().getByText(th.tasks.certainty.source.project, { exact: true })).toBeVisible()
+    await expect(tasks.panel().getByTestId('certainty-source')).toContainText(th.tasks.certainty.source.project)
     await page.keyboard.press('Escape')
     await expect(tasks.panel()).toHaveCount(0)
     expect(new URL(page.url()).searchParams.has('task')).toBe(false)
@@ -568,8 +569,11 @@ test.describe('E13 ⟲ (FR-1009 basic, sidebar count, NFR-07b) งานขอ�
     await expect(main.getByRole('region')).toHaveCount(2)
     await expect(main.getByRole('region').first()).toHaveAccessibleName(CRM) // M3-D8: by project name (Thai collation)
     await expect(main.getByRole('region').last()).toHaveAccessibleName(POS)
-    await expect(main.getByRole('region', { name: CRM }).getByRole('link')).toHaveText(['ตั้งค่า automation'])
-    await expect(main.getByRole('region', { name: POS }).getByRole('link')).toHaveText([R2])
+    // M6.1 (FR-685): each item also has the ↗ page link (`data-open-page`); the task-name links are the others
+    const nameLinks = (project: string) =>
+      main.getByRole('region', { name: project }).locator('a[href]:not([data-open-page])')
+    await expect(nameLinks(CRM)).toHaveText(['ตั้งค่า automation'])
+    await expect(nameLinks(POS)).toHaveText([R2])
 
     const answered = waitForServerAction(page)
     await main.getByRole('checkbox', { name: th.tasks.completeCheckbox('ตั้งค่า automation') }).click()

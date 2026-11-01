@@ -79,6 +79,28 @@ export class GridPage {
     return this.root().getByRole('rowheader', { name, exact: true })
   }
 
+  /**
+   * M6.1 (M6.1-D17, FR-685): the ↗ of a task / merged row — a real `<a href="/t/<id>">` named
+   * th.grid.row.openTaskPage(task); assignee rows have none.
+   */
+  openTaskPageLink(taskName: string, personName?: string): Locator {
+    return this.rowHeader(taskName, personName).getByRole('link', {
+      name: th.grid.row.openTaskPage(taskName),
+      exact: true,
+    })
+  }
+  /** Clicks the row's ↗ and waits for `/t/<id>`. */
+  async openTaskPage(taskName: string, personName?: string): Promise<void> {
+    await this.rowHeader(taskName, personName).hover()
+    await this.openTaskPageLink(taskName, personName).click()
+    await this.page.waitForURL(/\/t\/[0-9a-f-]{36}$/)
+  }
+  /** Double-click on the row header (not on ↗) keeps opening the task panel (M6-D18, M6.1-D17). */
+  async openPanelByDoubleClick(taskName: string, personName?: string): Promise<void> {
+    await this.rowHeader(taskName, personName).getByText(taskName, { exact: true }).first().dblclick()
+    await this.page.waitForURL((u) => u.searchParams.has('task'))
+  }
+
   /** ★ The row key ('t:…' | 'a:…') of the row named '<task>' or '<task> · <person>'. */
   async rowKeyOf(taskName: string, personName?: string): Promise<string> {
     const header = this.rowHeader(taskName, personName)

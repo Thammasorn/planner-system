@@ -143,7 +143,11 @@ describe('HolidaysTable (FR-901)', () => {
     // Enter from the name field saves the picked date.
     await user.click(within(table()).getByRole('textbox', { name: th.holidays.name }))
     await user.keyboard('{Enter}')
-    expect(m.updateHoliday).toHaveBeenCalledWith({ id: hid(2), date: '2026-10-14', name: 'วันคล้ายวันสวรรคต' })
+    expect(m.updateHoliday).toHaveBeenCalledWith({
+      id: hid(2),
+      date: '2026-10-14',
+      name: 'วันคล้ายวันสวรรคต',
+    })
   })
 
   it('an empty year shows the empty state', () => {

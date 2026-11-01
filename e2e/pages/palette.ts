@@ -46,6 +46,14 @@ export class Palette {
   pageResults(): Locator {
     return this.group(th.palette.groups.pages).getByRole('option')
   }
+  /** M6.1 (FR-690, X88): the งาน group's options (before หน้าเอกสาร). */
+  taskResults(): Locator {
+    return this.group(th.palette.groups.tasks).getByRole('option')
+  }
+  /** A task hit by its name (the option's name also carries the project and the chips). */
+  taskResult(name: string): Locator {
+    return this.taskResults().filter({ hasText: name })
+  }
   option(name: string | RegExp): Locator {
     return this.dialog().getByRole('option', { name })
   }

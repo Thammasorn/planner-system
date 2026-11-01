@@ -60,8 +60,16 @@ describe('task schemas (plan/m03 S0.4, M3-D15)', () => {
       startDate: '2026-10-01',
       dueDate: '2026-10-01',
     })
-    expect(taskPatchSchema.parse({ notes: '   ' })).toEqual({ notes: null })
+    expect(taskPatchSchema.parse({ certaintyOverride: 'TENTATIVE' })).toEqual({
+      certaintyOverride: 'TENTATIVE',
+    })
     expect(taskPatchSchema.parse({ certaintyOverride: null })).toEqual({ certaintyOverride: null })
+  })
+
+  it('M6.1-D12: notes-only patch fails (notes removed, FR-692); notes beside a field is stripped', () => {
+    expect(taskPatchSchema.safeParse({ notes: 'x' }).success).toBe(false)
+    expect(updateTaskSchema.safeParse({ taskId: T, patch: { notes: 'x' } }).success).toBe(false)
+    expect(taskPatchSchema.parse({ name: 'ก', notes: 'x' })).toEqual({ name: 'ก' })
   })
 
   it('ids are strict RFC uuids (Zod 4 z.uuid())', () => {

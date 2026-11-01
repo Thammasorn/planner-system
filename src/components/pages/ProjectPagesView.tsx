@@ -15,7 +15,7 @@ export function ProjectPagesView({ projectId, projectName }: { projectId: string
   return (
     <Stack spacing={2}>
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h6" component="h2">
+        <Typography variant="h4" component="h2">
           {th.pages.projectTab.heading}
         </Typography>
         {roots.data?.canCreate ? (

@@ -65,7 +65,16 @@ describe('design tokens', () => {
   })
 
   it('defines every SPEC §8.7 token in light and dark', () => {
-    const expected = [...SPEC_TOKENS, 'surface', 'faded-fg']
+    const expected = [
+      ...SPEC_TOKENS,
+      'surface',
+      'faded-fg',
+      // M6.1 (SPEC §8.12)
+      'border-subtle',
+      'hover-bg',
+      'text-secondary',
+      'surface-muted',
+    ]
     for (const name of expected) {
       expect(blocks.light, `light --${name}`).toHaveProperty([name])
       expect(blocks.dark, `dark --${name}`).toHaveProperty([name])
@@ -90,6 +99,18 @@ describe('design tokens', () => {
     expect(f).toBeDefined()
     expect(b).toBeDefined()
     expect(contrastRatio(f ?? '', b ?? '')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('M6.1 §8.12 light values verbatim except the M6.1-D21 --text-secondary deviation', () => {
+    expect(blocks.light).toMatchObject({
+      'border-subtle': '#e5e7eb',
+      'hover-bg': '#f3f4f6',
+      surface: '#ffffff',
+      'surface-muted': '#f9fafb',
+      'text-secondary': '#646a75',
+    })
+    // why the deviation exists: the SPEC sample fails 4.5:1 on the hover background
+    expect(contrastRatio('#6B7280', '#F3F4F6')).toBeLessThan(4.5)
   })
 
   it('rejects malformed colours', () => {

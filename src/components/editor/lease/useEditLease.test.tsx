@@ -288,4 +288,119 @@ describe('useEditLease', () => {
     expect(o.onRemoteVersion).not.toHaveBeenCalled()
     spy.mockRestore()
   })
+
+  describe("acquire 'focus' (TASK bodies, FR-688, M6.1-D8)", () => {
+    const free = (version = 1): LeaseState => ({ mine: false, holder: null, expiresAt: null, version })
+    const focusSetup = (over: Partial<EditLeaseOptions> = {}) => setup({ acquire: 'focus', ...over })
+
+    it('no POST on mount: GET the state only → idle (editable, nobody holds it); GET again every 30 s', async () => {
+      answer(free())
+      const { hook } = focusSetup()
+      expect(hook.result.current.mode).toBe('idle')
+      await settle()
+      expect(calls()).toEqual([`GET /api/pages/${PAGE}/lock`])
+      expect(hook.result.current.mode).toBe('idle')
+      await act(async () => void (await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_MS)))
+      expect(calls()).toEqual([`GET /api/pages/${PAGE}/lock`, `GET /api/pages/${PAGE}/lock`])
+    })
+
+    it('held by Cindy on open → held (read-only + badge holder); released later → idle again', async () => {
+      answer(theirs('Cindy'), free())
+      const { hook } = focusSetup()
+      await settle()
+      expect(hook.result.current.mode).toBe('held')
+      expect(hook.result.current.lease?.holder?.name).toBe('Cindy')
+      await act(async () => void (await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_MS)))
+      expect(hook.result.current.mode).toBe('idle')
+      expect(calls().every((c) => c.startsWith('GET'))).toBe(true)
+    })
+
+    it('activate() (first focus) → POST → editing; the heartbeat POSTs from then on', async () => {
+      answer(free(), mine(2))
+      const { hook } = focusSetup()
+      await settle()
+      act(() => hook.result.current.activate())
+      await settle()
+      expect(hook.result.current.mode).toBe('editing')
+      expect(calls()).toEqual([`GET /api/pages/${PAGE}/lock`, `POST /api/pages/${PAGE}/lock`])
+      await act(async () => void (await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_MS)))
+      expect(calls()[2]).toBe(`POST /api/pages/${PAGE}/lock`)
+      act(() => hook.result.current.activate()) // idempotent
+      await settle()
+      expect(calls()).toHaveLength(3)
+    })
+
+    it('stays editable (idle) while the activation POST is in flight', async () => {
+      answer(free())
+      const { hook } = focusSetup()
+      await settle()
+      fetchMock.mockImplementation(() => new Promise(() => {}))
+      act(() => hook.result.current.activate())
+      await settle()
+      expect(hook.result.current.mode).toBe('idle')
+    })
+
+    it('activation answered by another holder → held (dirty work flushed first, X63)', async () => {
+      answer(free(), theirs('Cindy'))
+      const { hook, o, order } = focusSetup({ isDirty: () => true })
+      await settle()
+      act(() => hook.result.current.activate())
+      await settle()
+      expect(hook.result.current.mode).toBe('held')
+      expect(order).toContain('flush')
+      expect(o.onRemoteVersion).not.toHaveBeenCalled()
+    })
+
+    it('pageId null (no row yet): no request at all; activate() then the id arrives → POST', async () => {
+      answer(mine(1))
+      const { hook, o } = focusSetup({ pageId: null })
+      await settle()
+      await act(async () => void (await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_MS)))
+      expect(calls()).toEqual([])
+      expect(hook.result.current.mode).toBe('idle')
+      act(() => hook.result.current.activate())
+      await settle()
+      expect(calls()).toEqual([])
+      hook.rerender({ ...o, pageId: PAGE })
+      await settle()
+      expect(calls()).toEqual([`POST /api/pages/${PAGE}/lock`])
+      expect(hook.result.current.mode).toBe('editing')
+    })
+
+    it('a newer version seen before editing (clean) reloads silently', async () => {
+      answer(free(5))
+      const { o } = focusSetup()
+      await settle()
+      expect(o.onRemoteVersion).toHaveBeenCalledWith(5)
+    })
+
+    it('takeover from held → editing (counts as activation: the heartbeat POSTs)', async () => {
+      answer(theirs('Cindy', 2))
+      const { hook } = focusSetup()
+      await settle()
+      answer(mine(2))
+      await act(() => hook.result.current.takeover())
+      expect(hook.result.current.mode).toBe('editing')
+      await act(async () => void (await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_MS)))
+      expect(calls().at(-1)).toBe(`POST /api/pages/${PAGE}/lock`)
+    })
+
+    it('unmount without ever editing → no DELETE', async () => {
+      answer(free())
+      const { hook } = focusSetup()
+      await settle()
+      hook.unmount()
+      expect(calls().some((c) => c.startsWith('DELETE'))).toBe(false)
+    })
+
+    it('cannot edit → viewOnly GET polling as M4 (acquire is irrelevant)', async () => {
+      answer(theirs('Cindy'))
+      const { hook } = focusSetup({ canEdit: false })
+      await settle()
+      expect(hook.result.current.mode).toBe('viewOnly')
+      act(() => hook.result.current.activate())
+      await settle()
+      expect(calls().every((c) => c.startsWith('GET'))).toBe(true)
+    })
+  })
 })

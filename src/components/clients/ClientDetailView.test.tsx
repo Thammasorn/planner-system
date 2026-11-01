@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
@@ -39,5 +39,17 @@ describe('ClientDetailView — archive focus (SPEC §8.9, KEY-03)', () => {
     expect(again).toBe(button)
     await waitFor(() => expect(again).not.toHaveAttribute('aria-disabled'))
     expect(again).toHaveFocus()
+  })
+})
+
+describe('ClientDetailView — header bar (FR-1603, M6.1 S4.4)', () => {
+  it('ลูกค้า › Coral (the <h1>); แก้ไข and archive sit in the bar', () => {
+    renderWithProviders(<ClientDetailView detail={detail(false)} />)
+    const bar = screen.getByTestId('page-header')
+    const nav = within(bar).getByRole('navigation', { name: th.layout.breadcrumb })
+    expect(within(nav).getByRole('link', { name: th.clients.listTitle })).toHaveAttribute('href', '/clients')
+    expect(within(bar).getByRole('heading', { level: 1 })).toHaveTextContent('Coral')
+    expect(within(bar).getByRole('button', { name: th.clients.edit })).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: th.clients.archive })).toBeInTheDocument()
   })
 })

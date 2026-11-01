@@ -28,6 +28,7 @@ const card: TaskCard = {
   certainty: 'CONFIRMED',
   completed: false,
   blockers: { open: 0, total: 0 },
+  hasBody: false,
 }
 const prev = { statusId: S.todo, completedOn: null }
 

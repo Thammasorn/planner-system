@@ -283,7 +283,7 @@ export function PageTree({ space, projectId, label, variant, emptyLabel, onNavig
     const level = isOpen ? levelOf.get(n.id) : undefined
     const childrenPending = level?.isPending === true
     const childrenFailed = level !== undefined && level.isError && !level.data
-    const childStyle = { paddingLeft: `calc(var(--indent) * ${s.depth + 1} + 40px)` }
+    const childStyle = { paddingLeft: `calc(var(--indent) * ${s.depth + 1} + var(--space-8) + var(--space-2))` }
     /** Inner controls are reachable with Tab only on the tab-stop row (one tab stop per tree; all stay clickable). */
     const inner = n.id === activeId ? 0 : -1
     return (

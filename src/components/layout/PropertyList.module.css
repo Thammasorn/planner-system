@@ -1,0 +1,61 @@
+/* src/components/layout/PropertyList.module.css — FR-1604 light property rows (SPEC §8.12). */
+
+.list {
+  /* Rows touch; their --space-1 block padding gives the --space-2 rhythm between values. */
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(96px, 160px) minmax(0, 1fr);
+  /* Label and value both start at the top of a 32px line box and centre their first line in it, so the label
+     lines up with the first line of a taller value (dates, assignee chips, lists) — not with its middle. */
+  align-items: start;
+  column-gap: var(--space-4);
+  min-height: 32px;
+  padding-block: var(--space-1);
+  padding-inline: var(--space-1);
+  margin-inline: calc(-1 * var(--space-1));
+  border-radius: var(--radius-sm);
+}
+
+.row:hover,
+.row:focus-within {
+  background: var(--hover-bg);
+}
+
+.label {
+  min-height: 32px;
+  align-content: center;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: var(--leading-ui);
+}
+
+.value {
+  min-width: 0;
+  min-height: 32px;
+  align-content: center;
+  font-size: var(--font-md);
+  line-height: var(--leading-ui);
+}
+
+/* A control that starts a value line (text button, checkbox, light input) keeps its hover/focus padding but hangs
+   it outside the column, so every value's text starts at the same x (FR-1604). Mark it with `data-lead`; a light
+   outlined input group with `data-lead-input`. */
+.value [data-lead] {
+  padding-inline-start: var(--space-1);
+  margin-inline-start: calc(-1 * var(--space-1));
+}
+
+.value [data-lead-input] {
+  margin-inline-start: -14px; /* token-scale-ok: the MUI outlined input's own start inset */
+}
+
+@media (max-width: 599.95px) {
+  .row {
+    grid-template-columns: 96px minmax(0, 1fr);
+    column-gap: var(--space-2);
+  }
+}

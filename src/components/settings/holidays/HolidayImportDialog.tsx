@@ -178,7 +178,7 @@ export function HolidayImportDialog({ existing }: { existing: readonly HolidayDT
             {result && result.errors.length > 0 ? (
               <Alert severity="error" data-testid="import-errors">
                 <AlertTitle>{t.errorsTitle(result.errors.length)}</AlertTitle>
-                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                <Box component="ul" sx={{ m: 0, pl: 3 }}>
                   {result.errors.map((e) => (
                     <li key={`${e.line}:${e.code}`}>{holidayCsvErrorMessage(e)}</li>
                   ))}

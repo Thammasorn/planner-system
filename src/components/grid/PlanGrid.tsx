@@ -29,6 +29,12 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
 import { formatWeekHeader } from '@/lib/format'
+import {
+  type BoxScroll,
+  consumePopNavigation,
+  currentScrollKey,
+  takeBoxScroll,
+} from '@/lib/nav/scroll-memory'
 import { footerTotals, rowTotalView, taskRowTotals, taskTotals } from '@/lib/grid/aggregate'
 import {
   buildColumns,
@@ -425,14 +431,36 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     [store, save],
   )
 
-  // ── initial scroll + perf marks (M6-D15, M6-D22) ──
+  // ── initial scroll + perf marks (M6-D15, M6-D22); history return → the remembered place (FR-686) ──
+  // undefined = not decided yet; null = open at the default week; a value = back from /t via ← / Esc / browser back
+  const restore = useRef<BoxScroll | null | undefined>(undefined)
   useLayoutEffect(() => {
+    if (restore.current === undefined) {
+      const pos = takeBoxScroll(currentScrollKey())
+      restore.current = consumePopNavigation() ? pos : null
+    }
+    const back = restore.current
+    if (back) {
+      gridRef.current?.element()?.scrollTo({ left: back.left })
+      return
+    }
     // a narrow grid (phone) that cannot show the 4 weeks of history still opens with this week in view (SPEC §7)
     const fit = gridRef.current?.fittingColumns() ?? 0
     const start = fit > 0 && todayIdx >= 0 ? Math.max(initialIdx, todayIdx - fit + 1) : initialIdx
     gridRef.current?.scrollToColumn(start)
   }, [initialIdx, todayIdx])
   const hasData = model !== null
+  useLayoutEffect(() => {
+    const back = restore.current
+    if (!hasData || !back) return
+    // after the rows are laid out (the commit that rendered them); cleared only once applied (StrictMode re-runs)
+    const raf = window.requestAnimationFrame(() => {
+      restore.current = null
+      gridRef.current?.element()?.scrollTo({ top: back.top, left: back.left })
+      window.scrollTo({ top: back.windowY })
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [hasData])
   useEffect(() => {
     if (!hasData || typeof performance === 'undefined') return
     performance.mark('grid:first-data')

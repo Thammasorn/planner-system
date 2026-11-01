@@ -3,7 +3,7 @@
 // the widgets' own key handlers (e.code, X49).
 import { th } from '@/i18n/th'
 
-export type ShortcutScope = 'global' | 'taskList' | 'calendar' | 'grid'
+export type ShortcutScope = 'global' | 'taskList' | 'taskPage' | 'calendar' | 'grid'
 export type KeyToken =
   | 'Mod'
   | 'Shift'
@@ -41,12 +41,13 @@ export interface ShortcutDef {
   label: string
 }
 
-export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList', 'calendar', 'grid']
+export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList', 'taskPage', 'calendar', 'grid']
 
 /** Section heading of each scope in the `?` help (M5: the calendar heading lives in its own namespace). */
 export const SHORTCUT_SCOPE_LABELS: Readonly<Record<ShortcutScope, string>> = {
   global: th.shortcuts.scopes.global,
   taskList: th.shortcuts.scopes.taskList,
+  taskPage: th.shortcuts.scopes.taskPage,
   calendar: th.calendar.shortcuts.scope,
   grid: th.shortcuts.scopes.grid,
 }
@@ -83,6 +84,13 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   },
   { id: 'list.delete', scope: 'taskList', combos: [['Delete']], label: th.shortcuts.items.listDelete },
   { id: 'list.open', scope: 'taskList', combos: [['Space']], label: th.shortcuts.items.listOpen },
+  // M6.1 (FR-685): Shift+Space opens the task page (matched on e.code === 'Space' + shiftKey, X49)
+  {
+    id: 'list.openPage',
+    scope: 'taskList',
+    combos: [['Shift', 'Space']],
+    label: th.shortcuts.items.listOpenPage,
+  },
   {
     id: 'list.multi',
     scope: 'taskList',
@@ -105,6 +113,14 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     label: th.shortcuts.items.listMove,
   },
   { id: 'list.menu', scope: 'taskList', combos: [['Shift', 'F10']], label: th.shortcuts.items.listMenu },
+  // M6.1 task page /t/[taskId] (FR-683, FR-686): Esc outside inputs/editor/menus = back; Enter in the title = body
+  { id: 'taskPage.back', scope: 'taskPage', combos: [['Esc']], label: th.shortcuts.items.taskPageBack },
+  {
+    id: 'taskPage.titleEnter',
+    scope: 'taskPage',
+    combos: [['Enter']],
+    label: th.shortcuts.items.taskPageTitleEnter,
+  },
   // M5 calendar month grid (FR-908, X49/X58): roving focus, Shift extends the range, Enter/Space opens the leave dialog
   {
     id: 'calendar.move',

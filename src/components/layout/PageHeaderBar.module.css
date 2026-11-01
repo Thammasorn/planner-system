@@ -1,0 +1,176 @@
+/* src/components/layout/PageHeaderBar.module.css — the 48 px header bar (FR-1603, SPEC §8.12, M6.1-D19).
+   Sticky at the top of the document; it bleeds over main's inline padding (AppShell sets --main-gutter) so its
+   bottom border runs from the sidebar to the window edge, and its content lines up with the page content. */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 1100; /* MUI appBar: below drawers, menus and dialogs */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--header-height);
+  min-width: 0;
+  margin-inline: calc(-1 * var(--main-gutter));
+  margin-bottom: var(--space-4);
+  padding-inline: var(--main-gutter);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+  font-size: var(--font-md);
+  line-height: var(--leading-ui);
+}
+
+.menuButton {
+  display: none;
+  margin-inline-start: calc(-1 * var(--space-2));
+}
+
+@media (max-width: 899.95px) {
+  .menuButton {
+    display: inline-flex;
+  }
+}
+
+.crumbs {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-1);
+  /* the screen's name stays readable when the actions need the room (narrow screens) */
+  min-width: min(40%, 12em);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.crumbList {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crumbItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Earlier crumbs shrink first; the last one (the screen's name) keeps as much room as possible. */
+.crumbItem:not(:last-child) {
+  flex-shrink: 1;
+}
+
+.crumbItem:last-child {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.sep {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.crumb,
+.crumbLink,
+.heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crumbLink {
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-1);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.crumbLink:hover {
+  background: var(--hover-bg);
+  color: var(--mui-palette-text-primary);
+}
+
+.crumbLink:focus-visible {
+  outline: 2px solid var(--mui-palette-primary-main);
+  outline-offset: 1px;
+}
+
+.crumb {
+  padding-inline: var(--space-1);
+  color: var(--mui-palette-text-primary);
+}
+
+.heading {
+  margin: 0;
+  padding-inline: var(--space-1);
+  color: var(--mui-palette-text-primary);
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-ui);
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  /* never widen the page (FR-1606); below 600 px the actions wrap onto a second row instead (see the media query) */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.actions > * {
+  flex: none;
+}
+
+.slot:empty {
+  display: none;
+}
+
+@media (max-width: 599.95px) {
+  /* Phones (FR-1606, AC-1604): every action stays on screen. When the actions do not fit beside the screen's name
+     they move to a second row of the bar (right-aligned) and wrap there, instead of scrolling away out of sight —
+     the bar grows past 48 px only in that case. */
+  .bar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--header-height);
+    row-gap: 0;
+  }
+
+  /* The first row (☰ · ← · the screen's name) is always a full 48 px row, so ☰ and the name sit at the same height on
+     every screen whether or not the actions wrapped below it (FR-1603). */
+  .crumbs {
+    min-height: var(--header-height);
+  }
+
+  .actions {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 100%;
+    min-height: var(--header-height);
+    margin-inline-start: auto;
+    overflow-x: visible;
+  }
+
+  /* Only the screen's own crumb stays readable; earlier crumbs become short ellipses. */
+  .crumbItem:not(:last-child) .crumbLink,
+  .crumbItem:not(:last-child) .crumb {
+    max-width: 6em;
+  }
+}

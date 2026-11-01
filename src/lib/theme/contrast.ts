@@ -16,6 +16,11 @@ export const TEXT_PAIRS: ReadonlyArray<readonly [fg: string, bg: string]> = [
   // sidebar (M0): active row text and the app name
   ['brand-navy', 'brand-light'],
   ['brand-navy', 'surface'],
+  // M6.1 (SPEC §8.12, M6.1-D21): property labels, secondary text, sidebar sections, hovered rows
+  ['text-secondary', 'surface'],
+  ['text-secondary', 'hover-bg'],
+  ['text-secondary', 'surface-muted'],
+  ['faded-fg', 'hover-bg'],
 ]
 
 const HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i

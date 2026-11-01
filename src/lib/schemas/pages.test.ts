@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createPageSchema,
   pageTitleSchema,
+  setPageFullWidthSchema,
   titlesQuerySchema,
   treeQuerySchema,
   uploadFieldsSchema,
@@ -11,6 +12,21 @@ const A = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const B = '9b2e7f1c-1d2a-4c3b-8e4f-5a6b7c8d9e0f'
 
 describe('page schemas', () => {
+  it('setPageFullWidth: exactly one of pageId / taskId (M6.1-D15)', () => {
+    expect(setPageFullWidthSchema.parse({ pageId: A, fullWidth: true })).toEqual({
+      pageId: A,
+      fullWidth: true,
+    })
+    expect(setPageFullWidthSchema.parse({ taskId: B, fullWidth: false })).toEqual({
+      taskId: B,
+      fullWidth: false,
+    })
+    expect(setPageFullWidthSchema.safeParse({ pageId: A, taskId: B, fullWidth: true }).success).toBe(false)
+    expect(setPageFullWidthSchema.safeParse({ fullWidth: true }).success).toBe(false)
+    expect(setPageFullWidthSchema.safeParse({ pageId: 'x', fullWidth: true }).success).toBe(false)
+    expect(setPageFullWidthSchema.safeParse({ pageId: A }).success).toBe(false)
+  })
+
   it('createPageSchema ties space to projectId', () => {
     expect(createPageSchema.safeParse({ space: 'PROJECT', projectId: null, parentId: null }).success).toBe(
       false,

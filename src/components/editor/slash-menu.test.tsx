@@ -107,3 +107,27 @@ describe('getSlashMenuItems', () => {
     expect(editor.document.some((b) => b.type === 'subpage')).toBe(false)
   })
 })
+
+describe('getSlashMenuItems › TASK (FR-680, M6.1-D9)', () => {
+  it('TASK has no หน้าย่อย item (even with canCreateSubpage) — "/หน้า" finds no sub-page', () => {
+    const items = getSlashMenuItems(makeEditor(), ctx({ kind: 'TASK' }))
+    const t = items.map((i) => i.title)
+    expect(t).not.toContain(th.editor.slash.subpage.title)
+    expect(rankSuggestionItems(items, th.editor.slash.subpage.title).map((i) => i.title)).not.toContain(
+      th.editor.slash.subpage.title,
+    )
+  })
+
+  it('TASK keeps every other item (table, image, attachment, headings, lists)', () => {
+    const doc = titles(makeEditor())
+    const task = titles(makeEditor(), ctx({ kind: 'TASK' }))
+    expect(task).toEqual(doc.filter((x) => x !== th.editor.slash.subpage.title))
+    expect(task).toEqual(expect.arrayContaining([slash.table.title, slash.image.title, slash.file.title]))
+  })
+
+  it('"/ตาราง" and "/table" still find the table in a TASK body', () => {
+    const items = getSlashMenuItems(makeEditor(), ctx({ kind: 'TASK' }))
+    expect(rankSuggestionItems(items, 'table')[0]?.title).toBe(slash.table.title)
+    expect(rankSuggestionItems(items, slash.table.title)[0]?.title).toBe(slash.table.title)
+  })
+})

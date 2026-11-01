@@ -1,16 +1,16 @@
 'use client'
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import AlertTitle from '@mui/material/AlertTitle'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import EditOutlined from '@mui/icons-material/EditOutlined'
 import Link from '@/components/Link'
 import { CertaintyBadge } from '@/components/common/CertaintyBadge'
 import { ColorSquare } from '@/components/common/ProjectChip'
+import { PropertyList, PropertyRow } from '@/components/layout/PropertyList'
 import { th } from '@/i18n/th'
 import type { ProjectHeader, ProjectOverview as ProjectOverviewData } from '@/lib/contracts/projects'
 import { ArchiveProjectButton } from './ArchiveProjectButton'
@@ -22,35 +22,15 @@ import { StatusSettings } from './StatusSettings'
 
 const EMPTY = '—'
 
-function InfoRow({ label, labelId, children }: { label: string; labelId?: string; children: ReactNode }) {
-  return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: '180px 1fr' },
-        gap: { xs: 0.25, sm: 2 },
-        py: 0.75,
-      }}
-    >
-      <Typography component="dt" id={labelId} variant="body2" sx={{ color: 'text.secondary' }}>
-        {label}
-      </Typography>
-      <Box component="dd" sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        {children}
-      </Box>
-    </Box>
-  )
-}
-
 /** Section 1 — ข้อมูลโปรเจค (FR-409 part). No load / progress / milestones in M2 (X15). */
 function ProjectInfoSection({ project }: { project: ProjectHeader }) {
   const [editing, setEditing] = useState(false)
   const headingId = useId()
-  const certaintyLabelId = useId()
+  const certaintyId = useId()
   return (
-    <Paper variant="outlined" component="section" aria-labelledby={headingId} sx={{ p: 2 }}>
+    <Box component="section" aria-labelledby={headingId}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-        <Typography id={headingId} variant="h6" component="h2">
+        <Typography id={headingId} variant="h4" component="h2">
           {th.projects.overview.infoHeading}
         </Typography>
         {project.can.manage ? (
@@ -59,8 +39,9 @@ function ProjectInfoSection({ project }: { project: ProjectHeader }) {
           </Button>
         ) : null}
       </Stack>
-      <Box component="dl" sx={{ m: 0 }}>
-        <InfoRow label={th.projects.fields.client}>
+      {/* FR-1604 light rows: read-only values; edits go through the (restyled) edit dialog (M6.1-D23) */}
+      <PropertyList aria-label={th.projects.overview.infoHeading}>
+        <PropertyRow label={th.projects.fields.client}>
           {project.client ? (
             <Box component={Link} href={`/clients/${project.client.id}`} sx={{ color: 'primary.main' }}>
               {project.client.name}
@@ -70,40 +51,42 @@ function ProjectInfoSection({ project }: { project: ProjectHeader }) {
               {th.projects.fields.noClient}
             </Typography>
           )}
-        </InfoRow>
-        <InfoRow label={th.projects.fields.code}>{project.code ?? EMPTY}</InfoRow>
-        <InfoRow label={th.projects.fields.color}>
-          <ColorSquare color={project.color} size={14} />
-          <Typography variant="body2" component="span">
-            {project.color}
-          </Typography>
-        </InfoRow>
-        <InfoRow label={th.projects.fields.certainty} labelId={certaintyLabelId}>
+        </PropertyRow>
+        <PropertyRow label={th.projects.fields.code}>{project.code ?? EMPTY}</PropertyRow>
+        <PropertyRow label={th.projects.fields.color}>
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+            <ColorSquare color={project.color} size={14} />
+            <Typography variant="body2" component="span">
+              {project.color}
+            </Typography>
+          </Box>
+        </PropertyRow>
+        <PropertyRow label={th.projects.fields.certainty} id={certaintyId}>
           {project.can.manage ? (
             <CertaintyToggle
               projectId={project.id}
               certainty={project.certainty}
-              labelledBy={certaintyLabelId}
+              labelledBy={`${certaintyId}-label`}
             />
           ) : (
-            <>
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
               <CertaintyBadge certainty={project.certainty} />
               <span>{th.projects.certainty[project.certainty]}</span>
-            </>
+            </Box>
           )}
-        </InfoRow>
+        </PropertyRow>
         {project.certaintyNote ? (
-          <InfoRow label={th.projects.fields.certaintyNote}>
+          <PropertyRow label={th.projects.fields.certaintyNote}>
             <Typography variant="body2" component="span" sx={{ whiteSpace: 'pre-wrap' }}>
               {project.certaintyNote}
             </Typography>
-          </InfoRow>
+          </PropertyRow>
         ) : null}
-      </Box>
+      </PropertyList>
       {project.can.manage ? (
         <ProjectFormDialog open={editing} mode="edit" project={project} onClose={() => setEditing(false)} />
       ) : null}
-    </Paper>
+    </Box>
   )
 }
 

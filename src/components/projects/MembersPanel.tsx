@@ -5,7 +5,6 @@ import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
 import Stack from '@mui/material/Stack'
 import Tooltip from '@mui/material/Tooltip'
@@ -249,14 +248,8 @@ export function MembersPanel({
   }
 
   return (
-    <Paper
-      variant="outlined"
-      component="section"
-      aria-labelledby={headingId}
-      data-testid="members-panel"
-      sx={{ p: 2 }}
-    >
-      <Typography id={headingId} ref={headingRef} tabIndex={-1} variant="h6" component="h2" sx={{ mb: 1.5 }}>
+    <Box component="section" aria-labelledby={headingId} data-testid="members-panel">
+      <Typography id={headingId} ref={headingRef} tabIndex={-1} variant="h4" component="h2" sx={{ mb: 1 }}>
         {th.members.heading}
       </Typography>
       <Box
@@ -278,7 +271,7 @@ export function MembersPanel({
                   flex: 1,
                   minWidth: 0,
                   display: 'flex',
-                  gap: 0.75,
+                  gap: 1,
                   alignItems: 'baseline',
                   flexWrap: 'wrap',
                 }}
@@ -343,6 +336,6 @@ export function MembersPanel({
           />
         </Stack>
       ) : null}
-    </Paper>
+    </Box>
   )
 }

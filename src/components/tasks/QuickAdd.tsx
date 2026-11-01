@@ -63,7 +63,7 @@ export function QuickAdd({
       fullWidth
       size="small"
       data-testid="task-quick-add"
-      sx={{ pl: `${depth * TREE_INDENT + inset}px`, py: 0.5 }}
+      sx={{ pl: `${depth * TREE_INDENT + inset}px`, py: 0.5, fontSize: 'var(--font-md)' }} // token-scale-ok: tree-row indent (layout constant)
       slotProps={{
         htmlInput: { 'aria-label': label ?? th.tasks.quickAdd.label, maxLength: 500, autoComplete: 'off' },
         input: { disableUnderline: true },

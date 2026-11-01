@@ -10,7 +10,7 @@ const task = (id: string, parentId: string | null, position: string): TaskDTO =>
   depth: 0,
   position,
   name: id,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate: null,
   certaintyOverride: null,

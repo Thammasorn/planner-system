@@ -24,6 +24,8 @@ export const qk = {
   teamTasksAll: () => ['tasks', 'team'] as const,
   /** GET /api/tasks with the parsed filters (M3, v3.1, X75). */
   teamTasks: (filters: TeamTasksQuery) => ['tasks', 'team', filters] as const,
+  /** GET /api/tasks/[id]/body — the task body view (M6.1-D7). Under 'tasks' but never invalidated by task writes. */
+  taskBody: (taskId: string) => ['tasks', 'body', taskId] as const,
   /** GET /api/pages/tree — children of one node (parentId) or the space root (null) (M4). */
   pagesTree: (space: PageSpace, projectId: string | null, parentId: string | null) =>
     ['pages', 'tree', space, projectId, parentId] as const,

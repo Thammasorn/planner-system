@@ -3,21 +3,21 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--mui-palette-background-paper);
+  background: var(--surface-muted);
   color: var(--mui-palette-text-primary);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 52px;
-  padding: 8px 8px 8px 16px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
 }
 
 .root[data-collapsed='true'] .header {
   justify-content: center;
-  padding: 8px;
+  padding: var(--space-2);
 }
 
 .appName {
@@ -25,7 +25,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--brand-navy);
-  font-weight: 600;
+  font-weight: var(--weight-bold);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -35,21 +35,21 @@
   flex: 1;
   flex-direction: column;
   justify-content: space-between;
-  gap: 16px;
-  padding: 4px 8px 12px;
+  gap: var(--space-4);
+  padding: var(--space-1) var(--space-2) var(--space-3);
   overflow-y: auto;
 }
 
 .top {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -59,24 +59,24 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 6px;
+  gap: var(--space-3);
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
   color: var(--mui-palette-text-primary);
-  font-size: 0.875rem;
+  font-size: var(--font-md);
   text-decoration: none;
 }
 
 .row:hover {
-  background: var(--mui-palette-action-hover);
+  background: var(--hover-bg);
 }
 
 /* Active state: background + bold text + a left bar, so it is not conveyed by colour alone (SPEC §8.9). */
 .row[aria-current='page'] {
   background: var(--brand-light);
   color: var(--brand-navy);
-  font-weight: 600;
+  font-weight: var(--weight-bold);
 }
 
 .row[aria-current='page']::before {
@@ -85,7 +85,7 @@
   bottom: 6px;
   left: 0;
   width: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--brand-navy);
   content: '';
 }
@@ -98,7 +98,7 @@
 .rowWithAction {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .rowWithAction > .row {
@@ -108,7 +108,7 @@
 
 .icon {
   flex: none;
-  font-size: 20px;
+  font-size: var(--font-xl);
 }
 
 .label {
@@ -123,17 +123,17 @@
 .badge {
   flex: none;
   min-width: 20px;
-  padding: 0 6px;
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 18px;
+  padding: 0 calc(var(--space-1) * 1.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-bold);
+  line-height: 1.5;
   text-align: center;
 }
 
 /* User menu at the bottom ("○ Cindy · ออกจากระบบ", SPEC §8.1). */
 .footer {
-  padding: 8px;
-  border-top: 1px solid var(--mui-palette-divider);
+  padding: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
 }

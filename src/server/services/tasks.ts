@@ -47,7 +47,6 @@ export function toTaskDTO(row: TaskListRow, assignees: readonly TaskAssigneeDTO[
     depth: toDepth(row.depth),
     position: row.position,
     name: row.name,
-    notes: row.notes,
     startDate: row.startDate,
     dueDate: row.dueDate,
     certaintyOverride: row.certaintyOverride,
@@ -55,6 +54,7 @@ export function toTaskDTO(row: TaskListRow, assignees: readonly TaskAssigneeDTO[
     assignees: [...assignees],
     statusId: row.statusId,
     blockers: { open: row.blockersOpen, total: row.blockersTotal },
+    hasBody: row.hasBody ?? false, // M6.1-D11: listColumns always sets it; hand-built rows may omit it
   }
 }
 
@@ -140,7 +140,7 @@ export async function createTask(
 // ── fields (FR-601) ──────────────────────────────────────────────────────────────────────────────────────────────
 
 type Field = keyof TaskFieldPatch
-const FIELDS: readonly Field[] = ['name', 'notes', 'startDate', 'dueDate', 'certaintyOverride']
+const FIELDS: readonly Field[] = ['name', 'startDate', 'dueDate', 'certaintyOverride'] // no notes (M6.1-D12)
 
 /** Only changed fields are written; `before`/`after` hold exactly those (audit). */
 export async function updateTask(
@@ -233,7 +233,8 @@ export interface DeletedRoot {
 }
 
 /** Soft-deletes the selected subtrees under one batch (descendants of selected rows deduplicated, M3-D23) and the
- *  blocker edges touching them (FR-645); assignments are not touched (X13). `transfer` = undo of FR-610. */
+ *  blocker edges touching them (FR-645); assignments are not touched (X13). `transfer` = undo of FR-610.
+ *  FR-689 / M6.1-D13: the bodies (TASK pages) of every deleted task join the same batch and lose their leases. */
 export async function deleteTaskTree(
   tx: DbOrTx,
   _user: SessionUser,
@@ -263,6 +264,8 @@ export async function deleteTaskTree(
     roots.push({ id: r.id, name: r.name, descendants: Math.max(0, ids.length - 1) })
   }
   await repo.blockers.softDeleteTouching(tx, deletedIds, batch)
+  const bodyIds = await repo.pages.softDeleteTaskBodies(tx, deletedIds, batch)
+  await repo.pageLocks.clearLocks(tx, bodyIds)
   if (a.transfer) await applyTransfer(tx, a.projectId, a.transfer, { allowDeletedFrom: true })
   return {
     projectId: a.projectId,
@@ -275,7 +278,8 @@ export async function deleteTaskTree(
 }
 
 /** Undo of deleteTaskTree (M3-D12): 30 days, live parent, depth still fits, parent not an assigned leaf unless the
- *  given transfer re-points its assignments (redo of FR-610); edges whose other task is live come back too. */
+ *  given transfer re-points its assignments (redo of FR-610); edges whose other task is live come back too, and so do
+ *  the bodies of the restored tasks (FR-689, M6.1-D13). */
 export async function restoreTaskBatch(
   tx: DbOrTx,
   _user: SessionUser,
@@ -315,6 +319,7 @@ export async function restoreTaskBatch(
     roots.push({ id: root.id, name: root.name, descendants: ids.length - 1 })
   }
   await repo.blockers.restoreBatch(tx, a.batch)
+  await repo.pages.restoreTaskBodies(tx, a.batch, restoredIds)
   if (a.transfer) await applyTransfer(tx, a.projectId, a.transfer)
   return { projectId: a.projectId, restoredIds, transfer: a.transfer ?? null, roots }
 }

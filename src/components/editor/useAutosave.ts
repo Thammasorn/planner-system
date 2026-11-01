@@ -7,6 +7,9 @@
 // - Leaving the page: a dirty document of ≤ 60 KB goes out as a keepalive PUT (M4-D2); larger → beforeunload prompt.
 // - `pending` is true from a scheduled change until a save leaves the editor clean, so "saved" alone never stands
 //   for an edit still waiting out its debounce (SaveStatus renders it as `data-dirty` for e2e, M4-D26).
+// - M6.1-D8 (task bodies): `pageId` may be null until the body's row exists. A save then awaits `getPageId()` (the
+//   editor's memoised ensureTaskBody) and goes out with what was typed meanwhile; a failed ensure is an `error` state
+//   without a timer retry (the next change / blur / focus tries again); leave paths skip the keepalive without an id.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActionFailure, unwrap } from '@/lib/action-result'
 import type { LeaseState } from '@/lib/contracts/pages'
@@ -26,12 +29,17 @@ export type AutosaveEditor = Pick<AppEditor, 'document' | 'onFocusChange'>
 
 export interface AutosaveOptions {
   editor: AutosaveEditor
-  pageId: string
+  /** null = a task body without a row yet (M6.1-D8). */
+  pageId: string | null
+  /** Resolves (creating it if needed) the page id when `pageId` is null. */
+  getPageId?: () => Promise<string>
   /** Version the current editor instance was created from. */
   version: number
   /** false while read-only (no lease, protected, archived): nothing is scheduled or flushed. */
   enabled: boolean
   onLease: (lease: LeaseState) => void
+  /** After every successful save: the saved document and its new version (TaskBody keeps qk.taskBody in step). */
+  onSaved?: (r: { content: unknown[]; version: number }) => void
 }
 
 export interface Autosave {
@@ -57,7 +65,7 @@ const blockFor = (code: string): SaveBlock =>
 const byteLength = (s: string): number => new TextEncoder().encode(s).length
 
 export function useAutosave(o: AutosaveOptions): Autosave {
-  const { editor, pageId } = o
+  const { editor } = o
   // State is keyed by the editor instance: a re-created editor (reload) starts clean without a reset effect.
   const [state, setState] = useState<{
     editor: AutosaveEditor
@@ -76,6 +84,9 @@ export function useAutosave(o: AutosaveOptions): Autosave {
   const enabledRef = useRef(o.enabled)
   const blockedRef = useRef<SaveBlock>(false)
   const onLeaseRef = useRef(o.onLease)
+  const onSavedRef = useRef(o.onSaved)
+  const pageIdRef = useRef(o.pageId)
+  const getPageIdRef = useRef(o.getPageId)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inFlight = useRef<Promise<void> | null>(null)
   const flushRef = useRef<() => Promise<void>>(() => Promise.resolve())
@@ -91,6 +102,9 @@ export function useAutosave(o: AutosaveOptions): Autosave {
   useEffect(() => {
     enabledRef.current = o.enabled
     onLeaseRef.current = o.onLease
+    onSavedRef.current = o.onSaved
+    pageIdRef.current = o.pageId
+    getPageIdRef.current = o.getPageId
   })
 
   const clearTimer = (): void => {
@@ -123,6 +137,19 @@ export function useAutosave(o: AutosaveOptions): Autosave {
     async (json: string): Promise<void> => {
       const forEditor = editorRef.current
       set({ status: 'saving' })
+      let pageId = pageIdRef.current
+      if (pageId === null) {
+        const getPageId = getPageIdRef.current
+        try {
+          if (!getPageId) throw new Error('no page id')
+          pageId = await getPageId()
+        } catch {
+          // ensure failed (already toasted by the editor): keep the work dirty; the next change / blur / focus retries
+          if (editorRef.current === forEditor) set({ status: 'error' })
+          return
+        }
+        if (editorRef.current !== forEditor) return
+      }
       try {
         const res = await unwrap(
           savePageContent({
@@ -137,6 +164,7 @@ export function useAutosave(o: AutosaveOptions): Autosave {
         // A newer change typed while this save was in flight keeps `pending` (its own timer saves it next).
         set({ status: 'saved', pending: JSON.stringify(forEditor.document) !== json })
         onLeaseRef.current(res.lease)
+        onSavedRef.current?.({ content: JSON.parse(json) as unknown[], version: res.version })
       } catch (err) {
         if (editorRef.current !== forEditor) return
         const blocked = err instanceof ActionFailure ? blockFor(err.code) : false
@@ -151,7 +179,7 @@ export function useAutosave(o: AutosaveOptions): Autosave {
         timer.current = setTimeout(() => void flushRef.current(), AUTOSAVE_RETRY_MS)
       }
     },
-    [pageId, set],
+    [set],
   )
 
   const flush = useCallback(async (): Promise<void> => {
@@ -210,8 +238,9 @@ export function useAutosave(o: AutosaveOptions): Autosave {
       if (document.visibilityState === 'hidden') void flushRef.current()
     }
     const onPageHide = (): void => {
+      const pageId = pageIdRef.current
       const body = leaveBody()
-      if (body === null || byteLength(body) > KEEPALIVE_MAX_BYTES) return
+      if (pageId === null || body === null || byteLength(body) > KEEPALIVE_MAX_BYTES) return
       clearTimer()
       void fetch(`/api/pages/${pageId}/content`, {
         method: 'PUT',
@@ -232,7 +261,7 @@ export function useAutosave(o: AutosaveOptions): Autosave {
       window.removeEventListener('pagehide', onPageHide)
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [pageId])
+  }, [])
 
   // In-app navigation (unmount): fire-and-forget flush; the server action completes in the same JS context.
   useEffect(

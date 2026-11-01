@@ -67,7 +67,11 @@ afterEach(() => {
 describe('TeamCalendar (FR-907, M5-D8/D13)', () => {
   it('shows the month title "กันยายน 2569" and fetches the 6-week range', async () => {
     renderCalendarUi(<TeamCalendar initialMonth="2026-09" />)
-    expect(screen.getByRole('heading', { level: 1, name: 'กันยายน 2569' })).toBeInTheDocument()
+    expect(screen.getByTestId('calendar-month')).toHaveTextContent('กันยายน 2569')
+    // M6.1 header bar: ปฏิทินทีม is the screen's one <h1>; month navigation and แจ้งลา sit on the right
+    const bar = screen.getByTestId('page-header')
+    expect(within(bar).getByRole('heading', { level: 1, name: th.calendar.title })).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: th.calendar.reportLeave })).toBeInTheDocument()
     expect(await screen.findByRole('grid')).toBeInTheDocument()
     expect(api.getJson).toHaveBeenCalledWith('/api/calendar?from=2026-08-31&to=2026-10-12', expect.anything())
     expect(screen.getByText(th.calendar.selectHint)).toBeInTheDocument()
@@ -78,14 +82,14 @@ describe('TeamCalendar (FR-907, M5-D8/D13)', () => {
     renderCalendarUi(<TeamCalendar initialMonth="2026-09" />)
     await screen.findByRole('grid')
     await user.click(screen.getByRole('button', { name: th.calendar.nextMonth }))
-    expect(screen.getByRole('heading', { level: 1, name: 'ตุลาคม 2569' })).toBeInTheDocument()
+    expect(screen.getByTestId('calendar-month')).toHaveTextContent('ตุลาคม 2569')
     expect(api.getJson).toHaveBeenCalledWith('/api/calendar?from=2026-09-28&to=2026-11-09', expect.anything())
     expect(window.location.search).toBe('?month=2026-10')
     expect(await screen.findByText(`${th.calendar.holidayPrefix} วันปิยมหาราช`)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: th.calendar.thisMonth }))
-    expect(screen.getByRole('heading', { level: 1, name: 'กันยายน 2569' })).toBeInTheDocument()
+    expect(screen.getByTestId('calendar-month')).toHaveTextContent('กันยายน 2569')
     await user.click(screen.getByRole('button', { name: th.calendar.prevMonth }))
-    expect(screen.getByRole('heading', { level: 1, name: 'สิงหาคม 2569' })).toBeInTheDocument()
+    expect(screen.getByTestId('calendar-month')).toHaveTextContent('สิงหาคม 2569')
     expect(window.location.search).toBe('?month=2026-08')
   })
 
@@ -101,7 +105,7 @@ describe('TeamCalendar (FR-907, M5-D8/D13)', () => {
     )
     await user.click(screen.getByRole('button', { name: th.calendar.nextMonth }))
     // The October grid is drawn over September's response (keepPreviousData), so the view must say it is loading.
-    expect(screen.getByRole('heading', { level: 1, name: 'ตุลาคม 2569' })).toBeInTheDocument()
+    expect(screen.getByTestId('calendar-month')).toHaveTextContent('ตุลาคม 2569')
     expect(screen.getByTestId('calendar-view')).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('progressbar', { name: th.calendar.loading })).toBeInTheDocument()
     release()

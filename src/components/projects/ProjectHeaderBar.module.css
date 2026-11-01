@@ -1,0 +1,15 @@
+/* The wrapper only carries the M2 test id: no box, so the header bar stays sticky relative to <main>. */
+.contents {
+  display: contents;
+}
+
+.client {
+  max-width: 220px;
+}
+
+@media (max-width: 599.95px) {
+  /* Phones: the project name keeps the room; the client stays one tap away on the overview tab. */
+  .client {
+    display: none;
+  }
+}

@@ -27,6 +27,8 @@ vi.mock('@/server/actions/assignments', () => ({
 }))
 vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
 vi.mock('@/lib/api', () => ({ getJson: vi.fn(() => new Promise(() => {})) }))
+const nav = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push, back: vi.fn() }) }))
 
 const statusResult = (
   taskIds: string[],
@@ -45,6 +47,7 @@ const row = (name: string) => screen.getByRole('row', { name })
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/projects/p/tasks')
+  nav.push.mockReset()
   a.indentTask.mockReturnValue(ok({ changed: false }))
   a.completeTask.mockImplementation((v: { taskIds: string[] }) => statusResult(v.taskIds, S.done))
   a.setTaskStatus.mockImplementation((v: { taskIds: string[]; statusId: string }) =>
@@ -255,6 +258,56 @@ describe('TaskList (FR-603/606/607/614, §8.6)', () => {
     act(() => row('งาน C').focus())
     await user.keyboard(' ')
     expect(new URLSearchParams(window.location.search).get('task')).toBe(T.c)
+  })
+
+  it('M6.1-D17: Shift+Space opens the task page; Space alone still opens the panel', async () => {
+    const user = userEvent.setup()
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    act(() => row('งาน C').focus())
+    await user.keyboard('{Shift>} {/Shift}')
+    expect(nav.push).toHaveBeenCalledWith(`/t/${T.c}`)
+    expect(new URLSearchParams(window.location.search).get('task')).toBeNull()
+  })
+
+  it('M6.1-D17: a plain row click selects the row and opens the panel; Cmd/Ctrl/Shift+click only select', async () => {
+    const user = userEvent.setup()
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    await user.click(row('งาน C'))
+    expect(row('งาน C')).toHaveAttribute('aria-selected', 'true')
+    expect(new URLSearchParams(window.location.search).get('task')).toBe(T.c)
+    window.history.replaceState(null, '', '/projects/p/tasks')
+    await user.keyboard('{Meta>}')
+    await user.click(row('งาน D'))
+    await user.keyboard('{/Meta}')
+    expect(row('งาน D')).toHaveAttribute('aria-selected', 'true')
+    expect(new URLSearchParams(window.location.search).get('task')).toBeNull()
+    await user.keyboard('{Shift>}')
+    await user.click(row('ออกแบบ'))
+    await user.keyboard('{/Shift}')
+    expect(new URLSearchParams(window.location.search).get('task')).toBeNull()
+  })
+
+  it('FR-685: ↗ on every row is a real link to /t/<id>; the row menu has "เปิดเป็นหน้า"', async () => {
+    const user = userEvent.setup()
+    renderTasks(<TaskList projectId={PID} />, { data: response() })
+    expect(within(row('งาน C')).getByRole('link', { name: th.tasks.openAsPage })).toHaveAttribute(
+      'href',
+      `/t/${T.c}`,
+    )
+    await user.click(within(row('งาน C')).getByRole('button', { name: th.tasks.rowMenu.label }))
+    await user.click(await screen.findByRole('menuitem', { name: th.tasks.rowMenu.openPage }))
+    expect(nav.push).toHaveBeenCalledWith(`/t/${T.c}`)
+  })
+
+  it('FR-691: 📄 beside the name only when the task has a body', () => {
+    const data = response()
+    data.tasks = data.tasks.map((t) => (t.id === T.c ? { ...t, hasBody: true } : t))
+    renderTasks(<TaskList projectId={PID} />, { data })
+    expect(within(row('งาน C')).getByRole('img', { name: th.tasks.hasBody })).toHaveAttribute(
+      'title',
+      th.tasks.hasBody,
+    )
+    expect(within(row('งาน D')).queryByRole('img', { name: th.tasks.hasBody })).toBeNull()
   })
 
   it('S opens the status menu; picking calls setTaskStatus', async () => {

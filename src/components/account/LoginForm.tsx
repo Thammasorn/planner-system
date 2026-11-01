@@ -48,7 +48,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <Stack component="form" spacing={2} noValidate onSubmit={onSubmit}>
-      <Typography variant="h5" component="h1">
+      <Typography variant="h3" component="h1">
         {th.auth.loginTitle}
       </Typography>
       {error ? <Alert severity="error">{error}</Alert> : null}

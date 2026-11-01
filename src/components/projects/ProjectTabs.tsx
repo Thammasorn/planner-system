@@ -15,7 +15,7 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
     <Tabs
       value={value}
       aria-label={th.projects.tabsLabel}
-      sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+      sx={{ mb: 3 }}
     >
       {tabs.map((t) => (
         <Tab

@@ -1,6 +1,9 @@
 /* PlanGrid (SPEC §8.3, FR-804/807/808, PLAN §3.9): dense surfaces are plain elements with one class and data-* state,
    reading token (src/app/tokens.css) and MUI CSS variables. No load colours in M6 (M6-D20). State is never colour
-   alone: glyphs (⋯ ◐ ลา ▨) carry hidden text. */
+   alone: glyphs (⋯ ◐ ลา ▨) carry hidden text.
+   M6.1 (SPEC §8.12, FR-1605): font sizes, spacing, radii and colours come from the token scale only (checked by
+   ./token-scale.test.ts); 1 px --border-subtle lines, --surface-muted header, --hover-bg row hover. Cell widths and
+   heights are layout constants (src/lib/grid/columns.ts) and stay as they are. */
 
 .root {
   display: flex;
@@ -21,9 +24,10 @@
   overflow: auto;
   contain: strict;
   background: var(--surface);
-  border: 1px solid var(--mui-palette-divider);
-  border-radius: 4px;
-  font-size: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-sm);
+  line-height: var(--leading-ui);
   font-variant-numeric: tabular-nums;
   outline: none;
 }
@@ -38,8 +42,8 @@
   top: 0;
   z-index: 3;
   display: flex;
-  background: var(--surface);
-  border-bottom: 1px solid var(--mui-palette-divider);
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .corner,
@@ -50,18 +54,19 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
   background: var(--surface);
-  border-right: 1px solid var(--mui-palette-divider);
+  border-right: 1px solid var(--border-subtle);
   box-sizing: border-box;
 }
 
 .corner {
   z-index: 4;
-  font-weight: 600;
-  color: var(--mui-palette-text-secondary);
+  font-weight: var(--weight-bold);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
 }
 
 .colHeader {
@@ -72,8 +77,8 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  border-right: 1px solid var(--mui-palette-divider);
-  color: var(--mui-palette-text-secondary);
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
   user-select: none;
   cursor: default;
 }
@@ -99,21 +104,22 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   box-sizing: border-box;
   background: var(--surface);
-  border-left: 1px solid var(--mui-palette-divider);
+  border-left: 1px solid var(--border-subtle);
 }
 
 .totalHeader {
   z-index: 4;
-  font-weight: 600;
-  color: var(--mui-palette-text-secondary);
+  font-weight: var(--weight-bold);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
 }
 
 .totalCell {
   z-index: 1;
-  font-weight: 600;
+  font-weight: var(--weight-bold);
 }
 
 /* narrow frozen column (phones, SPEC §7): the person label and the footer switch caption give way to the task name;
@@ -141,13 +147,13 @@
   position: absolute;
   left: 0;
   display: flex;
-  border-bottom: 1px solid var(--mui-palette-divider);
+  border-bottom: 1px solid var(--border-subtle);
   box-sizing: border-box;
 }
 
 .row:hover .rowHeader,
 .row:hover .cell {
-  background-color: var(--nonworking);
+  background-color: var(--hover-bg);
 }
 
 .rowHeader {
@@ -172,7 +178,7 @@
 }
 
 .row[data-kind='task'] .name {
-  font-weight: 600;
+  font-weight: var(--weight-bold);
 }
 
 .name {
@@ -189,7 +195,7 @@
 
 .person {
   flex: none;
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,7 +205,7 @@
 .muted {
   flex: none;
   color: var(--faded-fg);
-  font-size: 12px;
+  font-size: var(--font-xs);
 }
 
 .toggle,
@@ -210,12 +216,13 @@
   justify-content: center;
   min-width: 20px;
   height: 22px;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--mui-palette-text-secondary);
+  color: var(--text-secondary);
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -226,6 +233,7 @@
 
 .toggle:focus-visible,
 .iconButton:focus-visible,
+.openPage:focus-visible,
 .addPerson:focus-visible {
   outline: 2px solid var(--brand-blue);
   outline-offset: 1px;
@@ -235,8 +243,14 @@
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   flex: none;
+}
+
+/* ↗ = the task page link (M6.1-D17, FR-685): an <a> styled like the icon buttons */
+.openPage {
+  composes: iconButton;
+  opacity: 0;
 }
 
 /* "+ คน" is visible on hover and focus-within (keyboard reachable, §8.9) */
@@ -246,10 +260,22 @@
   color: var(--brand-blue);
 }
 
+/* ↗ and "+ คน" show on hover, keyboard focus inside the row and on the selected row header; always on touch screens,
+   which cannot hover (M6.1-D17) */
+.row:hover .openPage,
+.row:focus-within .openPage,
+.rowHeader[aria-selected='true'] .openPage,
 .row:hover .addPerson,
 .row:focus-within .addPerson,
 .addPerson[aria-expanded='true'] {
   opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .openPage,
+  .addPerson {
+    opacity: 1;
+  }
 }
 
 .cell {
@@ -259,10 +285,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
-  padding: 0 6px;
+  gap: calc(var(--space-1) / 2);
+  padding: 0 var(--space-1);
   box-sizing: border-box;
-  border-right: 1px solid var(--mui-palette-divider);
+  border-right: 1px solid var(--border-subtle);
   outline: none;
   cursor: cell;
   user-select: none;
@@ -297,8 +323,8 @@
    `inherit` follows the cell's surface / hover / selection colour */
 .cell[data-leave='true'] > [data-cell-value]:not(:empty) {
   background-color: inherit;
-  padding: 0 2px;
-  border-radius: 2px;
+  padding: 0 calc(var(--space-1) / 2);
+  border-radius: var(--radius-sm);
 }
 
 .cell[data-no-capacity='true'] {
@@ -316,7 +342,7 @@
 }
 
 .row[data-kind='task'] .cell {
-  font-weight: 600;
+  font-weight: var(--weight-bold);
 }
 
 /* selection / fill preview: a 1px ring as well as the tint (never colour alone, §8.9); `.row .cell[…]` outranks the
@@ -360,8 +386,9 @@
   width: 100%;
   height: 100%;
   border: 0;
-  padding: 0 4px;
-  margin: 0 -6px;
+  /* spans the cell's inner width: the typed number sits where the shown number was (cell padding --space-1) */
+  padding: 0 var(--space-1);
+  margin: 0 calc(-1 * var(--space-1));
   box-sizing: content-box;
   font: inherit;
   text-align: right;
@@ -388,8 +415,8 @@
 .message {
   position: sticky;
   left: 0;
-  padding: 12px 16px;
-  color: var(--mui-palette-text-secondary);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-secondary);
   width: max-content;
 }
 
@@ -399,19 +426,19 @@
   bottom: 0;
   z-index: 3;
   background: var(--surface);
-  border-top: 2px solid var(--mui-palette-divider);
+  border-top: 2px solid var(--border-subtle);
 }
 
 .footerRow {
   position: relative;
   display: flex;
-  border-bottom: 1px solid var(--mui-palette-divider);
+  border-bottom: 1px solid var(--border-subtle);
   box-sizing: border-box;
 }
 
 .footerHeader {
   z-index: 4;
-  font-weight: 600;
+  font-weight: var(--weight-bold);
   overflow: hidden;
   white-space: nowrap;
 }
@@ -423,43 +450,89 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 6px;
+  padding: 0 var(--space-1);
   box-sizing: border-box;
-  border-right: 1px solid var(--mui-palette-divider);
-  font-weight: 600;
+  border-right: 1px solid var(--border-subtle);
+  font-weight: var(--weight-bold);
 }
 
-/* ── toolbar ── */
+/* ── toolbar (directly under the page header bar, M6.1 S5.2) ── */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+/* light toggles: hairline --border-subtle, --radius-md, --hover-bg on hover; the pressed one is --brand-navy on
+   --brand-light (the sidebar's active pair, ≥ 4.5:1 in both themes) and aria-pressed, never colour alone */
+.toolbarToggle {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  min-height: 30px;
+  background: transparent;
+  color: var(--mui-palette-text-primary);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-ui);
+  text-transform: none;
+}
+
+.toolbarToggle:hover {
+  border-color: var(--border-subtle);
+  background: var(--hover-bg);
+}
+
+.toolbarToggle[aria-pressed='true'],
+.toolbarToggle[aria-pressed='true']:hover {
+  background: var(--brand-light);
+  color: var(--brand-navy);
+}
+
+.toolbarIcon {
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.toolbarIcon:hover {
+  background: var(--hover-bg);
+}
+
+.toolbarSwitch {
+  margin: 0;
+  gap: var(--space-1);
+  color: var(--mui-palette-text-primary);
+}
+
+.toolbarSwitch > :last-child {
+  font-size: var(--font-sm);
 }
 
 .saveState {
   margin-left: auto;
-  font-size: 12px;
-  color: var(--mui-palette-text-secondary);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 6px 2px 0;
-  font-size: 12px;
-  color: var(--mui-palette-text-secondary);
+  gap: var(--space-3);
+  padding: var(--space-2) 0 0;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
 }
 
+/* MUI's own tooltip colours (theme CSS variables), so the cell tooltip matches every other tooltip in both themes */
 .tooltip {
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: var(--mui-palette-grey-800, #424242);
-  color: #fff;
-  font-size: 12px;
-  line-height: 1.5;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--mui-palette-Tooltip-bg);
+  color: var(--mui-palette-common-white);
+  font-size: var(--font-xs);
+  line-height: var(--leading-ui);
   pointer-events: none;
   max-width: 320px;
   z-index: 1500;
@@ -470,7 +543,7 @@
   position: absolute;
   width: 1px;
   height: 1px;
-  margin: -1px;
+  margin: 0;
   padding: 0;
   border: 0;
   overflow: hidden;
@@ -482,5 +555,5 @@
 .legendItem {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }

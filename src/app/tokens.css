@@ -1,7 +1,11 @@
 /* Design tokens (SPEC §8.7) as CSS variables. Light under :root, dark under .dark (matches the MUI theme's
    colorSchemeSelector: 'class'). One `--name: #RRGGBB;` per line: src/lib/theme/contrast.test.ts parses this file.
    Deviations (X51, M0-D22): --load-light-fg and --tentative-fg are #8F5C00 instead of #9C6500 (4.12:1 < 4.5:1);
-   --surface and --faded-fg are added; every token has a dark counterpart. */
+   --surface and --faded-fg are added; every token has a dark counterpart.
+   M6.1 (SPEC §8.12, M6.1-D21): typography / spacing / radius / layout tokens (declared once under :root — the same in
+   dark) and the surface colours --border-subtle, --hover-bg, --text-secondary, --surface-muted (light + dark).
+   DEVIATION (like X51): --text-secondary is #646A75 instead of #6B7280 (4.39:1 on --hover-bg < 4.5:1).
+   src/lib/theme/tokens.ts mirrors this file (tokens.test.ts checks the parity). */
 
 :root {
   --brand-navy: #1f3864;
@@ -27,6 +31,41 @@
   --milestone: #7c3aed;
   --surface: #ffffff;
   --faded-fg: #5b6878;
+  /* M6.1 surfaces (SPEC §8.12) */
+  --border-subtle: #e5e7eb;
+  --hover-bg: #f3f4f6;
+  --text-secondary: #646a75;
+  --surface-muted: #f9fafb;
+  /* M6.1 typography — UI 14 px, documents 16 px */
+  --font-xs: 12px;
+  --font-sm: 13px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 20px;
+  --font-2xl: 24px;
+  --font-3xl: 32px;
+  --leading-ui: 1.5;
+  --leading-doc: 1.7;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  /* M6.1 spacing — 4 px base */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  /* M6.1 shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  /* M6.1 layout */
+  --header-height: 48px;
+  --doc-column: 760px;
+  --panel-width: 440px;
+  --sidebar-width: 248px;
 }
 
 .dark {
@@ -53,4 +92,9 @@
   --milestone: #a78bfa;
   --surface: #121212;
   --faded-fg: #94a3b8;
+  /* M6.1 surfaces (M6.1-D21) */
+  --border-subtle: #2e3238;
+  --hover-bg: #24272c;
+  --text-secondary: #a3a9b4;
+  --surface-muted: #1a1c1f;
 }

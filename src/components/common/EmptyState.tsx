@@ -11,7 +11,8 @@ export function EmptyState({
   action,
   icon,
 }: {
-  title: string
+  /** Omitted when the screen's header bar already names the state (e.g. a not-found screen's <h1>). */
+  title?: string
   description?: string
   action?: ReactNode
   icon?: ReactNode
@@ -19,13 +20,18 @@ export function EmptyState({
   return (
     <Stack spacing={1} sx={{ alignItems: 'center', textAlign: 'center', py: 6, px: 2 }}>
       {icon ? (
-        <Box aria-hidden="true" sx={{ color: 'text.secondary', display: 'flex', fontSize: 40 }}>
+        <Box
+          aria-hidden="true"
+          sx={{ color: 'text.secondary', display: 'flex', fontSize: 'calc(var(--font-3xl) * 1.25)' }}
+        >
           {icon}
         </Box>
       ) : null}
-      <Typography variant="h6" component="p">
-        {title}
-      </Typography>
+      {title ? (
+        <Typography variant="h4" component="p">
+          {title}
+        </Typography>
+      ) : null}
       {description ? (
         <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 480 }}>
           {description}

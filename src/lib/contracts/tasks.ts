@@ -19,7 +19,7 @@ export interface TaskDTO {
   /** Fractional key (COLLATE "C"); compare with `<`, never localeCompare (X48). */
   position: string
   name: string
-  notes: string | null
+  // notes: removed in M6.1 (FR-692, M6.1-D12) — details live in the task body (TASK page)
   startDate: ISODate | null
   dueDate: ISODate | null
   certaintyOverride: Certainty | null
@@ -28,6 +28,8 @@ export interface TaskDTO {
   statusId: string
   /** BR-86 counts from SQL (X73). */
   blockers: { open: number; total: number }
+  /** FR-691 (M6.1-D11): the task has a live, non-blank body (text, image or file) — 📄 marker. */
+  hasBody: boolean
 }
 
 export interface TaskStatusDTO {
@@ -165,12 +167,16 @@ export interface MyTaskDTO {
   startDate: ISODate | null
   dueDate: ISODate | null
   status: StatusRef
+  /** FR-691 (M6.1-D11): the task has a TASK body page. */
+  hasBody: boolean
 }
 
 /** GET /api/tasks/my (X22, M3-D8). */
 export interface MyTasksResponse {
   groups: { project: { id: string; name: string; color: string; certainty: Certainty }; tasks: MyTaskDTO[] }[]
   count: number
+  /** M6.1-D12/D25 (FR-1606 "/my เปลี่ยนสถานะ"): live statuses of the projects in `groups` only. */
+  statusesByProject: Record<string, TaskStatusDTO[]>
 }
 
 // ── SPEC v3.1 ──
@@ -232,6 +238,8 @@ export interface TaskCard {
   completed: boolean
   /** Counts only — names only in the project's own panel. */
   blockers: { open: number; total: number }
+  /** FR-691 (M6.1-D11): the task has a TASK body page. */
+  hasBody: boolean
 }
 
 /** GET /api/tasks (X75, M3-D33). */

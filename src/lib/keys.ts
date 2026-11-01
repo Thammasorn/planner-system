@@ -34,6 +34,8 @@ export const HOTKEYS = {
   toggleSidebar: { code: 'Backslash', key: '\\', mod: true },
   /** Cmd/Ctrl+K command palette (X08, X49); listeners skip events BlockNote already handled (defaultPrevented). */
   palette: { code: 'KeyK', key: 'k', mod: true },
+  /** M6.1 (FR-685, X49): Shift+Space on a focused task row opens the task page /t/<id>. */
+  openPage: { code: 'Space', key: ' ', shift: true },
 } as const satisfies Record<string, Hotkey>
 
 type ModKeyEvent = Pick<KeyboardEvent, 'code' | 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>

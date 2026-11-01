@@ -6,6 +6,7 @@ import { ToasterHost } from '@/components/providers/ToasterHost'
 import { UndoProvider } from '@/components/undo/UndoProvider'
 import { th } from '@/i18n/th'
 import type { EmployeeRow, PositionRow } from '@/lib/contracts/users'
+import { PageHeaderBar } from '@/components/layout/PageHeaderBar'
 import { renderWithProviders } from '../../../../tests/helpers/render'
 import { EmployeesTable } from './EmployeesTable'
 
@@ -60,6 +61,8 @@ const rows: EmployeeRow[] = [
 function setup(list = rows) {
   return renderWithProviders(
     <UndoProvider>
+      {/* the add button is portalled into the settings header bar (M6.1-D23) */}
+      <PageHeaderBar crumbs={[{ label: th.employees.title, asHeading: true }]} />
       <EmployeesTable rows={list} positions={positions} currentUserId={ME} />
       <ToasterHost />
     </UndoProvider>,
@@ -97,7 +100,11 @@ describe('EmployeesTable', () => {
 
   it('U-EMPT-02 LAST_MANAGER / SELF_DEACTIVATE show the server message and push nothing', async () => {
     const user = userEvent.setup()
-    mocks.deactivateEmployee.mockResolvedValue({ ok: false, code: 'LAST_MANAGER', message: th.errors.LAST_MANAGER })
+    mocks.deactivateEmployee.mockResolvedValue({
+      ok: false,
+      code: 'LAST_MANAGER',
+      message: th.errors.LAST_MANAGER,
+    })
     setup()
     await user.click(within(rowOf('Cindy')).getByRole('button', { name: th.common.actions }))
     await user.click(await screen.findByRole('menuitem', { name: th.employees.actions.deactivate }))
@@ -138,9 +145,15 @@ describe('EmployeesTable', () => {
     expect(screen.queryByRole('row', { name: /Manager/ })).toBeNull()
     expect(rowOf('Cindy')).toBeInTheDocument()
     await user.clear(screen.getByRole('searchbox', { name: th.employees.filters.search }))
-    await user.selectOptions(screen.getByRole('combobox', { name: th.employees.filters.position }), 'Designer')
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: th.employees.filters.position }),
+      'Designer',
+    )
     expect(screen.queryByRole('row', { name: /Manager/ })).toBeNull()
-    await user.selectOptions(screen.getByRole('combobox', { name: th.employees.filters.position }), th.employees.filters.allPositions)
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: th.employees.filters.position }),
+      th.employees.filters.allPositions,
+    )
     await user.selectOptions(
       screen.getByRole('combobox', { name: th.employees.filters.status }),
       th.employees.status.deactivated,

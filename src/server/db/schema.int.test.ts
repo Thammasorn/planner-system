@@ -881,3 +881,138 @@ describe('M6 schema (SPEC §6.2 allocations, §6.3 trigger + allocations_one_res
     expect(r?.pd).toBe('0.13')
   })
 })
+
+describe('M6.1 schema (SPEC §6.2 page_kind, pages.kind / task_id / full_width, tasks.notes dropped)', () => {
+  let sql: postgres.Sql
+
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string }
+      return { code: err.code, constraint: err.constraint_name }
+    }
+  }
+
+  /** user → project → status → task; returns ids. */
+  async function seedTask(): Promise<{ projectId: string; userId: string; taskId: string }> {
+    const u = await makeUser({ role: 'manager' })
+    const [p] = await sql<{ id: string }[]>`
+      insert into projects (name, created_by) values ('P', ${u.id}) returning id`
+    const [s] = await sql<{ id: string }[]>`
+      insert into task_statuses (project_id, name, category, position)
+      values (${p!.id}, 's', 'TODO', 'a0') returning id`
+    const [t] = await sql<{ id: string }[]>`
+      insert into tasks (project_id, name, status_id, position, created_by)
+      values (${p!.id}, 'งาน', ${s!.id}, 'a0', ${u.id}) returning id`
+    return { projectId: p!.id, userId: u.id, taskId: t!.id }
+  }
+
+  function insertTaskPage(o: {
+    userId: string
+    projectId: string | null
+    taskId: string | null
+    kind?: 'DOC' | 'TASK'
+    space?: 'WORKSPACE' | 'PROJECT'
+    parentId?: string | null
+    title?: string
+    locked?: boolean
+    depth?: number
+    isCharter?: boolean
+  }) {
+    return sql<{ id: string }[]>`
+      insert into pages (space, project_id, kind, task_id, parent_id, title, locked, depth, is_charter, position,
+                         created_by, updated_by)
+      values (${o.space ?? 'PROJECT'}, ${o.projectId}, ${o.kind ?? 'TASK'}, ${o.taskId}, ${o.parentId ?? null},
+              ${o.title ?? ''}, ${o.locked ?? false}, ${o.depth ?? 0}, ${o.isCharter ?? false}, 'a0',
+              ${o.userId}, ${o.userId})
+      returning id`
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  it('page_kind has exactly DOC, TASK (M11 adds DB_ROW)', async () => {
+    const rows = await sql<{ v: string }[]>`select unnest(enum_range(null::page_kind))::text as v`
+    expect(rows.map((r) => r.v)).toEqual(['DOC', 'TASK'])
+  })
+
+  it('defaults: kind DOC, task_id null, full_width false; pages_tree_idx covers DOC pages only', async () => {
+    const u = await makeUser()
+    const [p] = await sql<{ id: string }[]>`
+      insert into pages (space, position, created_by, updated_by) values ('WORKSPACE', 'a0', ${u.id}, ${u.id})
+      returning id`
+    const [row] = await sql<{ kind: string; task_id: string | null; full_width: boolean }[]>`
+      select kind, task_id, full_width from pages where id = ${p!.id}`
+    expect(row).toEqual({ kind: 'DOC', task_id: null, full_width: false })
+    const [idx] = await sql<{ def: string }[]>`
+      select indexdef as def from pg_indexes where indexname = 'pages_tree_idx'`
+    expect(idx?.def).toMatch(/deleted_at IS NULL\) AND \(kind = 'DOC'/)
+  })
+
+  it('a TASK page is valid at project root; kind ⇔ task_id (pages_kind_task)', async () => {
+    const { projectId, userId, taskId } = await seedTask()
+    expect(await pgError(() => insertTaskPage({ userId, projectId, taskId }))).toBeNull()
+    const other = await seedTask()
+    expect(
+      await pgError(() => insertTaskPage({ userId, projectId: other.projectId, taskId: null })),
+    ).toMatchObject({ code: '23514', constraint: 'pages_kind_task' })
+    expect(
+      await pgError(() =>
+        insertTaskPage({ userId, projectId: other.projectId, taskId: other.taskId, kind: 'DOC' }),
+      ),
+    ).toMatchObject({ code: '23514', constraint: 'pages_kind_task' })
+  })
+
+  it('TASK shape: no parent, depth 0, no charter, not locked, empty title (pages_kind_shape); PROJECT space', async () => {
+    const { projectId, userId, taskId } = await seedTask()
+    const [parent] = await insertTaskPage({ userId, projectId, taskId: null, kind: 'DOC' })
+    const cases: Parameters<typeof insertTaskPage>[0][] = [
+      { userId, projectId, taskId, parentId: parent!.id },
+      { userId, projectId, taskId, title: 'ชื่อ' },
+      { userId, projectId, taskId, locked: true },
+      { userId, projectId, taskId, depth: 1 },
+      { userId, projectId, taskId, isCharter: true },
+    ]
+    for (const c of cases)
+      expect(await pgError(() => insertTaskPage(c))).toMatchObject({
+        code: '23514',
+        constraint: 'pages_kind_shape',
+      })
+    expect(
+      await pgError(() => insertTaskPage({ userId, projectId: null, taskId, space: 'WORKSPACE' })),
+    ).toMatchObject({ code: '23514', constraint: 'pages_task_space' })
+  })
+
+  it('one body per task (pages_task_id_unique, 23505), soft-deleted included', async () => {
+    const { projectId, userId, taskId } = await seedTask()
+    const [first] = await insertTaskPage({ userId, projectId, taskId })
+    await sql`update pages set deleted_at = now() where id = ${first!.id}`
+    expect(await pgError(() => insertTaskPage({ userId, projectId, taskId }))).toMatchObject({
+      code: '23505',
+      constraint: 'pages_task_id_unique',
+    })
+  })
+
+  it('deleting the task row cascades its page', async () => {
+    const { projectId, userId, taskId } = await seedTask()
+    const [p] = await insertTaskPage({ userId, projectId, taskId })
+    await sql`delete from tasks where id = ${taskId}`
+    const [r] = await sql<{ n: number }[]>`select count(*)::int as n from pages where id = ${p!.id}`
+    expect(r?.n).toBe(0)
+  })
+
+  it('tasks has no notes column (FR-692)', async () => {
+    const cols = await sql<{ column_name: string }[]>`
+      select column_name from information_schema.columns where table_name = 'tasks' and column_name = 'notes'`
+    expect(cols).toEqual([])
+  })
+})

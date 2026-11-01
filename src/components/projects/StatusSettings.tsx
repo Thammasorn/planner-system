@@ -19,7 +19,6 @@ import IconButton from '@mui/material/IconButton'
 import InputLabel from '@mui/material/InputLabel'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Popover from '@mui/material/Popover'
 import Select from '@mui/material/Select'
 import Typography from '@mui/material/Typography'
@@ -51,7 +50,7 @@ import { errorMessage } from './errors'
 
 const CATEGORIES: readonly TaskStatusCategory[] = ['TODO', 'IN_PROGRESS', 'WAITING', 'DONE']
 const COLOR_KEYS = ['slate', 'blue', 'teal', 'green', 'amber', 'orange', 'red', 'purple'] as const
-const AMBER: StatusColor = '#B45309'
+const AMBER: StatusColor = STATUS_COLORS[COLOR_KEYS.indexOf('amber')] ?? STATUS_COLORS[0]
 const colorName = (c: string) => {
   const i = STATUS_COLORS.findIndex((x) => x === c)
   return th.tasks.status.settings.colorName[COLOR_KEYS[i] ?? 'slate']
@@ -76,8 +75,8 @@ export function StatusSettings({ projectId }: { projectId: string }) {
   const q = useProjectStatuses(projectId)
   const headingId = useId()
   return (
-    <Paper variant="outlined" component="section" aria-labelledby={headingId} sx={{ p: 2 }}>
-      <Typography id={headingId} variant="h6" component="h2" sx={{ mb: 1 }}>
+    <Box component="section" aria-labelledby={headingId}>
+      <Typography id={headingId} variant="h4" component="h2" sx={{ mb: 1 }}>
         {th.tasks.status.settings.title}
       </Typography>
       {q.isPending ? (
@@ -87,7 +86,7 @@ export function StatusSettings({ projectId }: { projectId: string }) {
       ) : (
         <Body projectId={projectId} data={q.data} />
       )}
-    </Paper>
+    </Box>
   )
 }
 
@@ -453,7 +452,7 @@ function StatusRow({
       ref={setNodeRef}
       data-testid={`status-row-${status.id}`}
       style={{ transform: DndCSS.Translate.toString(transform), transition }}
-      sx={{ display: 'grid', gap: 0.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
+      sx={{ display: 'grid', gap: 0.5, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
         {canManage ? (
@@ -496,7 +495,9 @@ function StatusRow({
         {canManage ? (
           <>
             <CategoryIcon category={status.category} />
-            <Box sx={{ flex: '1 1 140px', minWidth: 0 }}>
+            {/* Bounded name cell (not flex: 1): the category Select and colour start at the same x on every row and
+                stay next to the names on wide full-width screens (SPEC §4.16 — no misaligned controls). */}
+            <Box data-status-name="" sx={{ flex: '0 1 320px', minWidth: 140 }}>
               <InlineEditText
                 value={status.name}
                 label={th.tasks.status.settings.name}
@@ -529,6 +530,7 @@ function StatusRow({
               aria-label={`${th.tasks.status.settings.color}: ${colorName(status.color)}`}
               onClick={(e) => setColorMenu(e.currentTarget)}
               startIcon={<ColorDot color={status.color} />}
+              sx={{ minWidth: 140, justifyContent: 'flex-start' }}
             >
               {colorName(status.color)}
             </Button>

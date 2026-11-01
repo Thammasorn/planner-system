@@ -13,7 +13,12 @@ import Grid from '@mui/material/Grid'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { toast } from 'sonner'
-import { helperText, mergeFieldErrors, zodFieldErrors, type FieldErrors } from '@/components/forms/field-errors'
+import {
+  helperText,
+  mergeFieldErrors,
+  zodFieldErrors,
+  type FieldErrors,
+} from '@/components/forms/field-errors'
 import { th } from '@/i18n/th'
 import type { EmployeeRow, PositionRow, SystemRoleDTO } from '@/lib/contracts/users'
 import { displayName } from '@/lib/display-name'
@@ -52,7 +57,13 @@ export function EmployeeFormDialog(props: EmployeeFormDialogProps) {
   }
   const [busy, setBusy] = useState(false)
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby={titleId}>
+    <Dialog
+      open={open}
+      onClose={busy ? undefined : onClose}
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby={titleId}
+    >
       <EmployeeForm key={session} {...props} titleId={titleId} onBusyChange={setBusy} />
     </Dialog>
   )
@@ -182,8 +193,15 @@ function EmployeeForm({
 
   const err = (k: string) => fieldErrors[k]
   return (
-    <Box component="form" noValidate onSubmit={onSubmit} sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <DialogTitle id={titleId}>{mode === 'create' ? th.employees.createTitle : th.employees.editTitle}</DialogTitle>
+    <Box
+      component="form"
+      noValidate
+      onSubmit={onSubmit}
+      sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
+    >
+      <DialogTitle id={titleId}>
+        {mode === 'create' ? th.employees.createTitle : th.employees.editTitle}
+      </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
           {error ? <Alert severity="error">{error}</Alert> : null}

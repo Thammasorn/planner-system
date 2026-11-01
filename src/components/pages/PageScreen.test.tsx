@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
@@ -17,6 +17,7 @@ const actions = vi.hoisted(() => ({
   duplicatePage: vi.fn(),
   restorePageBatch: vi.fn(),
   setPageProtected: vi.fn(),
+  setPageFullWidth: vi.fn(),
 }))
 vi.mock('@/server/actions/pages', () => actions)
 const editor = vi.hoisted(() => ({ props: [] as unknown[] }))
@@ -82,6 +83,9 @@ const view = (over: Partial<PageView['page']> = {}, can: PageCan = EDIT): PageVi
     isBlank: true,
     updatedAt: '2026-09-30T03:00:00.000Z',
     updatedBy: { id: uuid(1), name: 'Cindy' },
+    kind: 'DOC',
+    taskId: null,
+    fullWidth: false,
     ...over,
   },
   breadcrumb: [],
@@ -244,5 +248,70 @@ describe('PageScreen (FR-504, FR-507, FR-510)', () => {
       'href',
       `/projects/${uuid(5)}/pages`,
     )
+  })
+
+  describe('M6.1: header bar and reading column (FR-1602, FR-1603)', () => {
+    const header = () => screen.getByTestId('page-header')
+
+    it('the header bar carries the breadcrumb (current page as text), 🔗 and ⋯; the title is the one <h1>-level field', () => {
+      renderPages(
+        <PageScreen
+          view={{
+            ...view({
+              space: 'PROJECT',
+              projectId: uuid(5),
+              projectName: 'POS Upgrade',
+              title: 'บันทึก',
+              isBlank: false,
+            }),
+            breadcrumb: [{ id: uuid(20), title: 'Charter', icon: '📘' }],
+          }}
+        />,
+      )
+      const nav = within(header()).getByRole('navigation', { name: th.layout.breadcrumb })
+      expect(within(nav).getByRole('link', { name: 'POS Upgrade' })).toHaveAttribute(
+        'href',
+        `/projects/${uuid(5)}/pages`,
+      )
+      expect(within(nav).getByRole('link', { name: '📘 Charter' })).toHaveAttribute('href', `/p/${uuid(20)}`)
+      expect(within(nav).getByText('บันทึก').closest('[aria-current="page"]')).not.toBeNull()
+      expect(within(header()).queryByRole('heading')).toBeNull()
+      expect(within(header()).getByRole('button', { name: th.layout.copyLink })).toBeInTheDocument()
+      expect(within(header()).getByRole('button', { name: th.pages.menu('บันทึก') })).toBeInTheDocument()
+      expect(screen.getByTestId('page-column')).toHaveAttribute('data-full-width', 'false')
+    })
+
+    it('the editor gets the DOC contract and the header status slot', () => {
+      renderPages(<PageScreen view={view({ title: 'ก', isBlank: false })} />)
+      expect(editor.props.at(-1)).toMatchObject({
+        kind: 'DOC',
+        editorKey: PAGE,
+        leaseAcquire: 'mount',
+        variant: 'page',
+      })
+    })
+
+    it('⋯ › เต็มความกว้าง (✓ when on) toggles the column optimistically and saves it', async () => {
+      actions.setPageFullWidth.mockReturnValue(okResult({ pageId: PAGE, fullWidth: true, changed: true }))
+      renderPages(<PageScreen view={view({ title: 'ก', isBlank: false })} />)
+      await userEvent.click(within(header()).getByRole('button', { name: th.pages.menu('ก') }))
+      const item = screen.getByRole('menuitemcheckbox', { name: th.layout.fullWidth })
+      expect(item).toHaveAttribute('aria-checked', 'false')
+      await userEvent.click(item)
+      expect(screen.getByTestId('page-column')).toHaveAttribute('data-full-width', 'true')
+      expect(actions.setPageFullWidth).toHaveBeenCalledWith({ pageId: PAGE, fullWidth: true })
+      await userEvent.click(within(header()).getByRole('button', { name: th.pages.menu('ก') }))
+      expect(screen.getByRole('menuitemcheckbox', { name: th.layout.fullWidth })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      )
+    })
+
+    it('a page saved full width opens full width; read-only viewers have no switch', async () => {
+      renderPages(<PageScreen view={view({ title: 'นโยบาย', fullWidth: true, isBlank: false }, READ)} />)
+      expect(screen.getByTestId('page-column')).toHaveAttribute('data-full-width', 'true')
+      await userEvent.click(within(header()).getByRole('button', { name: th.pages.menu('นโยบาย') }))
+      expect(screen.queryByRole('menuitemcheckbox', { name: th.layout.fullWidth })).toBeNull()
+    })
   })
 })

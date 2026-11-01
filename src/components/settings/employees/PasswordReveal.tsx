@@ -35,7 +35,10 @@ export function PasswordReveal({ email, password }: { email: string; password: s
               readOnly: true,
               ref: inputRef,
               spellCheck: false,
-              style: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '1.05rem' },
+              style: {
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                fontSize: 'var(--font-lg)',
+              },
             },
           }}
         />

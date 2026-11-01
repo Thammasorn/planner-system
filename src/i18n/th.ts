@@ -678,10 +678,14 @@ export const th = {
     expand: 'ขยายงานย่อย',
     collapse: 'ยุบงานย่อย',
     openPanel: 'เปิดรายละเอียด',
+    /** M6.1 (FR-685/691): ↗ link to /t/<id>; 📄 marker of a non-blank body */
+    openAsPage: 'เปิดเป็นหน้า',
+    hasBody: 'มีรายละเอียด',
     completeCheckbox: (name: string) => `ติ๊กเสร็จ: ${name}`,
     rowMenu: {
       label: 'เมนูงาน',
       open: 'เปิดรายละเอียด',
+      openPage: 'เปิดเป็นหน้า',
       addSubtask: 'เพิ่มงานย่อย',
       moveUp: 'ย้ายขึ้น',
       moveDown: 'ย้ายลง',
@@ -755,7 +759,6 @@ export const th = {
       close: 'ปิด',
       notFound: 'ไม่พบงาน',
       name: 'ชื่องาน',
-      notes: 'หมายเหตุ',
       startDate: 'วันเริ่ม',
       dueDate: 'วันครบกำหนด',
       certainty: 'ความแน่นอน',
@@ -776,6 +779,8 @@ export const th = {
         ancestor: (name: string) => `สืบทอดจาก '${name}'`,
         project: 'ตามโปรเจค',
       },
+      /** M6.1-D16: the light value opens a menu of the three choices. */
+      menuLabel: 'เลือกความแน่นอน',
     },
     bulk: {
       selected: (n: number) => `เลือก ${n} งาน`,
@@ -914,7 +919,7 @@ export const th = {
   shortcuts: {
     title: 'คีย์ลัด',
     close: 'ปิด',
-    scopes: { global: 'ทั่วไป', taskList: 'ลิสต์งาน', grid: 'กริดวางแผน' },
+    scopes: { global: 'ทั่วไป', taskList: 'ลิสต์งาน', grid: 'กริดวางแผน', taskPage: 'หน้างาน' },
     keys: {
       Mod: 'Ctrl',
       ModMac: '⌘',
@@ -958,6 +963,9 @@ export const th = {
       listComplete: 'ติ๊กเสร็จ',
       listDelete: 'ลบ',
       listOpen: 'เปิด panel',
+      listOpenPage: 'เปิดเป็นหน้า',
+      taskPageBack: 'กลับ',
+      taskPageTitleEnter: 'ไปที่เนื้อหา',
       listMultiSelect: 'เลือกหลายงาน',
       listStatus: 'เปลี่ยนสถานะ',
       listMove: 'ย้ายขึ้น/ลงในระดับเดียวกัน',
@@ -1084,6 +1092,12 @@ export const th = {
   editor: {
     blocknote, // the `satisfies Dictionary` const above
     label: 'เนื้อหาของหน้า',
+    /** M6.1 (FR-681): empty-document placeholder of a task body */
+    taskPlaceholder: 'เพิ่มรายละเอียด… พิมพ์ / เพื่อแทรก',
+    errors: {
+      /** M6.1-D9 (FR-680): server rejects sub-page blocks in a TASK body */
+      subpageNotAllowed: 'เนื้อหางานแทรกหน้าย่อยไม่ได้ — ใช้ @ เพื่อลิงก์ไปยังหน้าเอกสาร',
+    },
     slash: {
       subpage: {
         title: 'หน้า',
@@ -1129,6 +1143,8 @@ export const th = {
       lost: 'การเชื่อมต่อหลุดนานเกินไป',
       reacquire: 'แก้ต่อ',
       takeoverFailed: 'แก้ต่อจากนี้ไม่สำเร็จ ลองอีกครั้ง',
+      /** M6.1-D26: compact holder chip in the header bar */
+      badge: (name: string) => `${name} กำลังแก้`,
     },
     conflict: { banner: 'มีการแก้ไขใหม่กว่า', reload: 'โหลดใหม่' },
     deletedBanner: 'หน้านี้ถูกลบแล้ว',
@@ -1151,15 +1167,18 @@ export const th = {
     dialogLabel: 'ค้นหา',
     open: 'ค้นหา…',
     shortcut: '⌘K',
-    placeholder: 'ค้นหาหน้าเอกสาร…',
-    hint: 'พิมพ์เพื่อค้นหาชื่อหรือเนื้อหาของหน้าเอกสาร',
+    placeholder: 'ค้นหางานหรือหน้าเอกสาร…',
+    hint: 'พิมพ์เพื่อค้นหางานและหน้าเอกสาร จากชื่อหรือเนื้อหา',
     loading: 'กำลังค้นหา…',
     empty: 'ไม่พบผลลัพธ์',
     error: 'ค้นหาไม่สำเร็จ',
     retry: 'ลองค้นหาอีกครั้ง',
-    groups: { pages: 'หน้าเอกสาร' },
+    groups: { tasks: 'งาน', pages: 'หน้าเอกสาร' },
     wiki: 'Wiki ทีม',
     matchedInContent: 'พบในเนื้อหา',
+    /** M6.1 (FR-690) chips of a task hit */
+    taskDone: 'เสร็จแล้ว',
+    archived: 'archive แล้ว',
   },
   // M5 (plan/m05 S0.10): calendar, timeOff, capacity, holidays, leaveTypes
   calendar: {
@@ -1394,6 +1413,8 @@ export const th = {
       sourceAncestor: (name: string) => `สืบทอดจาก '${name}'`,
       completed: 'เสร็จแล้ว',
       openTask: (name: string) => `เปิดรายละเอียด ${name}`,
+      /** M6.1-D17: ↗ link to the task page */
+      openTaskPage: (name: string) => `เปิดหน้างาน ${name}`,
       expand: 'ขยายงานย่อย',
       collapse: 'ยุบงานย่อย',
       /** aria-describedby of the rowheader (§8.9): the states its aria-label leaves out */
@@ -1506,6 +1527,41 @@ export const th = {
       unrepresentable: 'ช่วงวันสั้นเกินไปสำหรับจำนวนวันนี้ (เกิน 1 วันต่อวัน) — ขยายช่วงหรือลดจำนวนวัน',
     },
   },
+  // ---------------------------------------------------------------------------------------------------------------
+  // M6.1 — task page + UI (plan/m06.1 S0.9). Build-time owners: S3 → taskPage; S4 → layout.
+  // ---------------------------------------------------------------------------------------------------------------
+  layout: {
+    back: 'กลับ',
+    openMenu: 'เปิดเมนู',
+    breadcrumb: 'เส้นทาง',
+    moreCrumbs: 'เส้นทางที่ซ่อน',
+    copyLink: 'คัดลอกลิงก์',
+    linkCopied: 'คัดลอกลิงก์แล้ว',
+    copyLinkFailed: 'คัดลอกลิงก์ไม่สำเร็จ',
+    fullWidth: 'เต็มความกว้าง',
+    more: 'เพิ่มเติม',
+  },
+  taskPage: {
+    metaTitle: 'งาน',
+    bodyLabel: 'เนื้อหางาน',
+    properties: {
+      status: 'สถานะ',
+      done: 'เสร็จ',
+      dates: 'วันที่',
+      certainty: 'ความแน่นอน',
+      assignees: 'ผู้รับผิดชอบ',
+      blockedBy: 'ถูกขวางโดย',
+      blocking: 'กำลังขวาง',
+      subtasks: 'งานย่อย',
+    },
+    menu: { openInPanel: 'เปิดใน panel', delete: 'ลบงาน' },
+    notFound: 'ไม่พบงาน',
+    // S3 (M6.1): property list name, 404 page, loading skeleton
+    propertiesLabel: 'คุณสมบัติของงาน',
+    notFoundBody: 'งานนี้ไม่มีอยู่ ถูกลบแล้ว หรือคุณไม่มีสิทธิ์เข้าถึง',
+    notFoundBack: 'ไปที่งานของฉัน',
+    dateTo: 'ถึง',
+  },
   masking: { otherProjects: 'งานในโปรเจคอื่น', leave: 'ลา' },
   audit: {
     employeeCreated: (n: string) => `สร้างพนักงาน ${n}`,
@@ -1594,6 +1650,11 @@ export const th = {
     planRangeApplied: (person: string, task: string, days: string, range: string) =>
       `วางแผน ${person} · ${task} ${days} วัน (${range})`,
     allocationsSeeded: (n: number) => `นำเข้าแผนตั้งต้น ${n} สัปดาห์`,
+    // M6.1 (FR-693, M6.1-D6/D10/D15)
+    taskBodyCreated: (name: string) => `สร้างเนื้อหางาน ${name}`,
+    taskBodySaved: (name: string) => `บันทึกเนื้อหางาน ${name}`,
+    pageFullWidthOn: (title: string) => `เปิดเต็มความกว้าง ${quoted(title)}`,
+    pageFullWidthOff: (title: string) => `ปิดเต็มความกว้าง ${quoted(title)}`,
   },
 } as const
 

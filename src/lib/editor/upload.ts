@@ -45,12 +45,13 @@ export const uploadStore = {
 }
 
 /** The live editor of a page, for the failure cleanup of `uploadFile` (which BlockNote calls without the editor).
- *  PageEditor registers it in an effect; the returned function unregisters it. */
+ *  PageEditor registers it in an effect under its stable editor key (M6.1-D8: DOC = page id, TASK = 'task:<id>', so
+ *  a task body without a page row yet is registered too); the returned function unregisters it. */
 const editors = new Map<string, AppEditor>()
-export function registerUploadEditor(pageId: string, editor: AppEditor): () => void {
-  editors.set(pageId, editor)
+export function registerUploadEditor(key: string, editor: AppEditor): () => void {
+  editors.set(key, editor)
   return () => {
-    if (editors.get(pageId) === editor) editors.delete(pageId)
+    if (editors.get(key) === editor) editors.delete(key)
   }
 }
 
@@ -64,13 +65,19 @@ export type UploadResult = AppPartialBlock | Record<string, never>
  * empty placeholder on the next tick — only when its url is still '' (never an existing image on a failed replace).
  */
 export function makeUploadFile(o: {
-  pageId: string
+  /** The page the file belongs to (DOC pages and existing task bodies). */
+  pageId?: string
+  /** M6.1-D8: resolves the page id, creating a task body's row first (ensureTaskBody, memoised). Wins over pageId. */
+  getPageId?: () => Promise<string>
+  /** Key the editor was registered under (registerUploadEditor); defaults to pageId. */
+  editorKey?: string
   notify: Notify
   limits: UploadLimits
-  /** Defaults to the editor registered for the page (registerUploadEditor). */
+  /** Defaults to the editor registered under editorKey / pageId (registerUploadEditor). */
   getEditor?: () => AppEditor | null | undefined
 }): (file: File, blockId?: string) => Promise<UploadResult> {
-  const getEditor = o.getEditor ?? (() => editors.get(o.pageId))
+  const getEditor = o.getEditor ?? (() => editors.get(o.editorKey ?? o.pageId ?? ''))
+  const resolvePageId = o.getPageId ?? (() => Promise.resolve(o.pageId ?? ''))
   const fail = (message: string, blockId?: string): Record<string, never> => {
     o.notify(message)
     setTimeout(() => {
@@ -85,9 +92,16 @@ export function makeUploadFile(o: {
   async function doUpload(file: File, blockId?: string): Promise<UploadResult> {
     const cls = precheckFile(file, o.limits)
     if ('error' in cls) return fail(precheckMessage(cls.error, o.limits), blockId)
+    let pageId: string
+    try {
+      pageId = await resolvePageId() // a task body's first upload creates the row (FR-681)
+    } catch {
+      return fail(th.editor.upload.failed, blockId)
+    }
+    if (pageId === '') return fail(th.editor.upload.failed, blockId)
     const fd = new FormData()
     fd.append('file', file)
-    fd.append('pageId', o.pageId)
+    fd.append('pageId', pageId)
     let res: Response
     try {
       res = await fetch('/api/files', { method: 'POST', body: fd })

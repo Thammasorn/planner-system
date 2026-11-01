@@ -31,7 +31,9 @@ export function scheduleState(days: readonly { weekday: number; fractionCd: numb
 }
 
 /** Editor rows → the action's `schedule` (ticked days only). */
-export function scheduleValue(state: readonly ScheduleRowState[]): { weekday: Weekday; fractionCd: FractionCd }[] {
+export function scheduleValue(
+  state: readonly ScheduleRowState[],
+): { weekday: Weekday; fractionCd: FractionCd }[] {
   return state.filter((r) => r.works).map((r) => ({ weekday: r.weekday, fractionCd: r.fractionCd }))
 }
 
@@ -68,7 +70,11 @@ export function ScheduleEditor({
         {th.employees.fields.schedule}
       </Typography>
       <div
-        style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, auto) minmax(140px, 1fr)', gap: '2px 16px' }}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(120px, auto) minmax(140px, 1fr)',
+          gap: 'calc(var(--space-1) / 2) var(--space-4)',
+        }}
       >
         {value.map((r) => {
           const day = th.employees.schedule.weekdayLong[r.weekday]

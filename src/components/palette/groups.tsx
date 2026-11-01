@@ -1,4 +1,5 @@
-// src/components/palette/groups.tsx — result groups of the command palette (X88, M4-D37e). M4 owns the pages group;
+// src/components/palette/groups.tsx — result groups of the command palette (X88, M4-D37e). M6.1 adds the tasks group
+// before M4's pages group;
 // M8 renders its commands group before these, M10 appends groups (optional `source`/`local` item fields, a superset of
 // the `map` input) — keep the names, `key: keyof SearchResponse` and the `map` input object as they are.
 import type { ReactNode } from 'react'
@@ -22,6 +23,24 @@ export interface PaletteGroupDef {
 }
 
 export const PALETTE_GROUPS: readonly PaletteGroupDef[] = [
+  // FR-690 / M6.1-D14 (X88): tasks by name, then by body — before the pages group; Enter opens /t/<id>
+  {
+    key: 'tasks',
+    heading: th.palette.groups.tasks,
+    map: ({ server }) =>
+      (server?.tasks ?? []).map((h) => ({
+        value: `task:${h.id}`,
+        href: h.href,
+        title: h.name,
+        subtitle: h.projectName,
+        icon: h.completed ? '☑' : '☐',
+        chips: [
+          ...(h.matchedIn === 'content' ? [th.palette.matchedInContent] : []),
+          ...(h.completed ? [th.palette.taskDone] : []),
+          ...(h.projectArchived ? [th.palette.archived] : []),
+        ],
+      })),
+  },
   {
     key: 'pages',
     heading: th.palette.groups.pages,

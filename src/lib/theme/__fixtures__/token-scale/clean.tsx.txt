@@ -1,0 +1,14 @@
+export const a = { p: 2 }
+export const b = { fontSize: 'var(--font-sm)' }
+export const c = { color: 'var(--text-secondary)' }
+export const d = { padding: 'var(--space-1) var(--space-2)' }
+export const e = { mt: -0.5, mb: 0, ml: 1.5, mr: 6, my: -4 }
+export const f = { lineHeight: 1.5 }
+export const g = { borderRadius: 'var(--radius-md)', m: 'auto', margin: '0 auto' }
+export const h = { gap: { xs: 1, md: 3 } }
+export const i = { width: 64, height: '64px', minWidth: '240px', maxWidth: 'var(--doc-column)' }
+export const j = { padding: '0', paddingInline: 'calc(var(--space-2) * 2)', borderRadius: 1 }
+export const k = { p: 2.5 } // token-scale-ok: aligns with the 20 px BlockNote gutter
+export const l = { fontSize: 'inherit', lineHeight: 'var(--leading-doc)' }
+export const m = { href: '/p/abc#section', label: 'งาน #12' }
+export const N = () => <div className="x" data-x="2.5" />

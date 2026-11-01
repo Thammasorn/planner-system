@@ -10,8 +10,8 @@ export const metadata: Metadata = { title: th.errors.notFoundPage.title }
 /** Thai 404 (X41, M0-D21). */
 export default function NotFound() {
   return (
-    <Box component="main" sx={{ py: 8, px: 2, maxWidth: 560, mx: 'auto', textAlign: 'center' }}>
-      <Typography variant="h5" component="h1" gutterBottom>
+    <Box component="main" sx={{ py: 6, px: 2, maxWidth: 560, mx: 'auto', textAlign: 'center' }}>
+      <Typography variant="h2" component="h1" gutterBottom>
         {th.errors.notFoundPage.title}
       </Typography>
       <Typography sx={{ color: 'text.secondary', mb: 3 }}>{th.errors.notFoundPage.body}</Typography>

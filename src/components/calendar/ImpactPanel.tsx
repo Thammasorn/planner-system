@@ -28,7 +28,7 @@ export function ImpactPanel({ impact }: { impact: TimeOffImpact }) {
       {changed.length === 0 ? (
         <Typography variant="body2">{th.capacity.noImpact}</Typography>
       ) : (
-        <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+        <Box component="ul" sx={{ m: 0, pl: 3 }}>
           {changed.map((w) => (
             <Typography key={w.weekStart} component="li" variant="body2">
               {th.capacity.impactLine(

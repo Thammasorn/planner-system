@@ -1,6 +1,4 @@
 import type { Metadata } from 'next'
-import Stack from '@mui/material/Stack'
-import Typography from '@mui/material/Typography'
 import { ClientsView } from '@/components/clients/ClientsView'
 import { th } from '@/i18n/th'
 import { isManager } from '@/server/authz'
@@ -20,12 +18,5 @@ export default async function ClientsPage(props: PageProps<'/clients'>) {
   const manager = isManager(user)
   const showingArchived = manager && sp.archived === '1'
   const items = await services.clients.listClientsForViewer(db, user, { includeArchived: showingArchived })
-  return (
-    <Stack spacing={2}>
-      <Typography variant="h4" component="h1">
-        {th.clients.listTitle}
-      </Typography>
-      <ClientsView items={items} canManage={manager} showingArchived={showingArchived} />
-    </Stack>
-  )
+  return <ClientsView items={items} canManage={manager} showingArchived={showingArchived} />
 }

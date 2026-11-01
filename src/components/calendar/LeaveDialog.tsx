@@ -301,7 +301,8 @@ function LeaveForm({
   return (
     <Box component="form" noValidate onSubmit={onSubmit} onKeyDown={onFormKeyDown}>
       <DialogTitle id={titleId}>{title}</DialogTitle>
-      <DialogContent>
+      {/* light inputs (FR-1604, M6.1 S4.6): no frame until hover / focus */}
+      <DialogContent data-light-form="">
         <Stack spacing={2} sx={{ pt: 1 }}>
           {formError ? (
             <Alert severity="error" role="alert">
@@ -351,7 +352,7 @@ function LeaveForm({
             />
           </Stack>
           <Box>
-            <FormLabel component="div" id={`${titleId}-duration`} sx={{ mb: 0.5, fontSize: '0.875rem' }}>
+            <FormLabel component="div" id={`${titleId}-duration`} sx={{ mb: 0.5, fontSize: 'var(--font-md)' }}>
               {th.timeOff.dialog.duration}
             </FormLabel>
             <ToggleButtonGroup

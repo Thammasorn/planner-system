@@ -2,6 +2,10 @@
 // src/components/editor/PageEditor.tsx — the BlockNote page editor (PLAN §3.11, FR-520…543). Loaded only through
 // EditorClient's next/dynamic({ ssr: false }) chunk (BlockNote needs `window`). From
 // plan/research/snippets/r3/harness/src/Editor.tsx with the app's data layer (TanStack Query, server actions).
+// M6.1-D8 (task bodies): `pageId` may be null until the first focus / input / paste / drop / upload calls
+// `ensurePageId` once (memoised); then the lease is requested (`leaseAcquire 'focus'`) and autosave sends what was
+// typed meanwhile. The BlockNote instance is keyed by `editorKey` (never re-created when the id arrives). TASK bodies:
+// no sub-page item / cards (FR-680), their own empty-document placeholder, `variant` page | compact.
 import './editor-theme.css' // before BlockNote's CSS (doubled selectors win regardless of order, r3 §10)
 import '@blocknote/mantine/style.css' // never BlockNote's bundled Inter font CSS (Thai font stack, r3 §2)
 import { BlockNoteView } from '@blocknote/mantine'
@@ -10,18 +14,28 @@ import Box from '@mui/material/Box'
 import { useColorScheme } from '@mui/material/styles'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type JSX,
+  type Ref,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
 import { getJson } from '@/lib/api'
 import type { PageEditorProps, PageView } from '@/lib/contracts/pages'
-import { thaiDictionary } from '@/lib/editor/dictionary'
+import { dictionaryFor } from '@/lib/editor/dictionary'
 import { resolveLinkTarget } from '@/lib/editor/links'
 import { makePasteHandler } from '@/lib/editor/paste'
 import { findForeignMedia, foreignMediaReplacement, prepareInitialContent } from '@/lib/editor/sanitize'
 import { atWordStart } from '@/lib/editor/suggest'
+import { replaceSubpagesWithMentions } from '@/lib/editor/task-body'
 import { makeUploadFile, registerUploadEditor } from '@/lib/editor/upload'
 import { invalidatePages } from '@/lib/invalidate'
 import { qk } from '@/lib/query-keys'
@@ -29,6 +43,7 @@ import { isBlankPage } from '@/lib/pages/blank'
 import { isSafeHref } from '@/lib/schemas/page-content'
 import { createPage } from '@/server/actions/pages'
 import { EditorBanners } from './EditorBanners'
+import { LeaseBadge } from './lease/LeaseBadge'
 import { useEditLease } from './lease/useEditLease'
 import { MentionMenu } from './mention-menu'
 import { SaveStatus } from './SaveStatus'
@@ -36,6 +51,7 @@ import { type AppEditor, schema } from './schema'
 import { SlashMenu, type SlashCtx } from './slash-menu'
 import { UploadOnlyFilePanel } from './UploadOnlyFilePanel'
 import { type Autosave, useAutosave } from './useAutosave'
+import { useLazyPageId } from './useLazyPageId'
 
 /** The shell-facing props: the contract plus page-shell callbacks (kept out of the shared contract). */
 export interface PageEditorShellProps extends PageEditorProps {
@@ -43,7 +59,18 @@ export interface PageEditorShellProps extends PageEditorProps {
   onBlankChange?: (blank: boolean) => void
   /** Page-header element the save status is portalled into (SPEC §7: it stays with the header); inline when absent. */
   saveStatusSlot?: HTMLElement | null
+  /** M6.1-D26: header element the compact LeaseBadge (held / view-only) is portalled into; inline banner when absent. */
+  leaseSlot?: HTMLElement | null
+  /** After every local document change, with the document (TaskBody derives hasBody from it, FR-691). */
+  onDocumentChange?: (doc: unknown[]) => void
+  /** After every successful save: saved document + new version (TaskBody keeps qk.taskBody in step). */
+  onSaved?: (r: { content: unknown[]; version: number }) => void
+  /** `focus()` puts the caret into the editor (Enter in the task page title, FR-683). */
+  focusHandle?: Ref<{ focus(): void }>
 }
+
+/** Native events that mean "the user starts working in the body" (M6.1-D8). Capture phase: before ProseMirror. */
+const ACTIVATING_EVENTS = ['focusin', 'beforeinput', 'paste', 'drop'] as const
 
 /** FR-502: depth 0…9 → a page at depth 9 cannot get children. */
 const MAX_PARENT_DEPTH = 8
@@ -61,7 +88,14 @@ function fixForeignMedia(editor: AppEditor): void {
 }
 
 export default function PageEditor(props: PageEditorShellProps): JSX.Element {
-  const { pageId, space, projectId, canEdit, uploadLimits } = props
+  const { space, projectId, canEdit, uploadLimits } = props
+  // M6.1-D8 contract with DOC defaults (M4 behaviour) until every call site passes them (PageScreen: S4).
+  const kind = props.kind ?? 'DOC'
+  const leaseAcquire = props.leaseAcquire ?? 'mount'
+  const variant = props.variant ?? 'page'
+  const editorKey = props.editorKey ?? props.pageId ?? ''
+  const lazy = useLazyPageId({ pageId: props.pageId, ensurePageId: props.ensurePageId, canEdit, notify })
+  const { pageId, getPageId } = lazy
   const router = useRouter()
   const qc = useQueryClient()
   const { mode, systemMode } = useColorScheme()
@@ -74,10 +108,11 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
   const editor = useCreateBlockNote(
     {
       schema,
-      dictionary: thaiDictionary,
+      dictionary: dictionaryFor(kind),
       initialContent,
-      uploadFile: makeUploadFile({ pageId, notify, limits: uploadLimits }),
-      pasteHandler: makePasteHandler({ notify, limits: uploadLimits }),
+      // getPageId is stable and resolves the id when it arrives later (uploads of a new task body await it)
+      uploadFile: makeUploadFile({ getPageId, editorKey, notify, limits: uploadLimits }),
+      pasteHandler: makePasteHandler({ notify, limits: uploadLimits, kind }),
       tables: { headers: true, cellBackgroundColor: true, cellTextColor: false, splitCells: false },
       links: {
         isValidLink: isSafeHref, // the same rule the server enforces on save (M4-D9)
@@ -90,11 +125,13 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
         },
       },
     },
-    [pageId, doc.load],
+    [editorKey, doc.load],
   )
-  useEffect(() => registerUploadEditor(pageId, editor), [pageId, editor])
+  useEffect(() => registerUploadEditor(editorKey, editor), [editorKey, editor])
+  useImperativeHandle(props.focusHandle, () => ({ focus: () => editor.focus() }), [editor])
 
   const reload = useCallback(async (): Promise<void> => {
+    if (pageId === null) return // nothing stored yet
     try {
       const view = await qc.query({
         queryKey: qk.page(pageId),
@@ -122,29 +159,56 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
   const lease = useEditLease({
     pageId,
     canEdit,
+    acquire: leaseAcquire,
     getVersion: () => saveRef.current?.getVersion() ?? props.version,
     isDirty: () => saveRef.current?.isDirty() ?? false,
     flush: () => saveRef.current?.flush() ?? Promise.resolve(),
     onRemoteVersion: () => reload(),
   })
+  // 'idle' (TASK, lease not requested yet / in flight): editable and saved like 'editing' (X63: no lease needed).
+  const leaseLetsEdit = lease.mode === 'editing' || lease.mode === 'idle'
   const save = useAutosave({
     editor,
     pageId,
+    getPageId,
     version: doc.version,
     // Displaced with unsaved work: keep saving (and retrying) it — accepted while our version is current (X63, FR-542).
-    enabled: canEdit && (lease.mode === 'editing' || lease.unsaved),
+    enabled: canEdit && (leaseLetsEdit || lease.unsaved),
     onLease: lease.report,
+    onSaved: props.onSaved,
   })
   useEffect(() => {
     saveRef.current = save
   })
 
-  const editable = canEdit && lease.mode === 'editing' && save.blocked === false
+  const editable = canEdit && leaseLetsEdit && save.blocked === false
+
+  // M6.1-D8: first focus / input / paste / drop of a 'focus' body → ensure the row (memoised), then the lease.
+  const activateRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    activateRef.current = () => {
+      if (!editable || leaseAcquire !== 'focus') return
+      getPageId().catch(() => {}) // a failure is toasted by useLazyPageId; the next focus retries
+      lease.activate() // POSTs now, or as soon as the id arrives
+    }
+  })
+  const surface = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = surface.current
+    if (!el) return
+    const on = (): void => activateRef.current()
+    for (const t of ACTIVATING_EVENTS) el.addEventListener(t, on, true)
+    return () => {
+      for (const t of ACTIVATING_EVENTS) el.removeEventListener(t, on, true)
+    }
+  }, [])
 
   const slashCtx = useMemo<SlashCtx>(
     () => ({
-      canCreateSubpage: canEdit && props.depth <= MAX_PARENT_DEPTH,
+      kind,
+      canCreateSubpage: kind === 'DOC' && canEdit && props.depth <= MAX_PARENT_DEPTH,
       createSubpage: async () => {
+        if (pageId === null) return null
         try {
           const res = await unwrap(createPage({ space, projectId, parentId: pageId }))
           void invalidatePages(qc, { space, projectId })
@@ -155,42 +219,66 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
         }
       },
     }),
-    [canEdit, props.depth, space, projectId, pageId, qc],
+    [kind, canEdit, props.depth, space, projectId, pageId, qc],
   )
 
   return (
-    <Box data-testid="page-editor" data-editable={editable} data-lease-mode={lease.mode}>
-      <EditorBanners lease={lease} blocked={save.blocked} onReload={() => void reload()} />
+    <Box
+      className="app-editor"
+      data-testid="page-editor"
+      data-kind={kind}
+      data-variant={variant}
+      data-editable={editable}
+      data-lease-mode={lease.mode}
+    >
+      <EditorBanners
+        lease={lease}
+        blocked={save.blocked}
+        onReload={() => void reload()}
+        leaseInHeader={Boolean(props.leaseSlot)}
+      />
+      {props.leaseSlot
+        ? createPortal(
+            <LeaseBadge mode={lease.mode} lease={lease.lease} onTakeover={() => void lease.takeover()} />,
+            props.leaseSlot,
+          )
+        : null}
       {props.saveStatusSlot ? (
         createPortal(<SaveStatus state={save.status} pending={save.pending} />, props.saveStatusSlot)
       ) : (
         <SaveStatus state={save.status} pending={save.pending} />
       )}
-      <BlockNoteView
-        editor={editor}
-        editable={editable}
-        theme={scheme}
-        aria-label={th.editor.label}
-        slashMenu={false}
-        emojiPicker={false}
-        filePanel={false}
-        comments={false}
-        onChange={() => {
-          if (editor.isEditable) fixForeignMedia(editor)
-          save.schedule()
-          props.onBlankChange?.(isBlankPage({ title: '', content: editor.document }))
-        }}
-      >
-        <SlashMenu editor={editor} ctx={slashCtx} />
-        <GridSuggestionMenuController
-          triggerCharacter=":"
-          columns={10}
-          minQueryLength={2}
-          shouldOpen={atWordStart}
-        />
-        <MentionMenu editor={editor} />
-        <FilePanelController filePanel={UploadOnlyFilePanel} />
-      </BlockNoteView>
+      <div ref={surface} className="app-editor-surface">
+        <BlockNoteView
+          editor={editor}
+          editable={editable}
+          theme={scheme}
+          aria-label={th.editor.label}
+          slashMenu={false}
+          emojiPicker={false}
+          filePanel={false}
+          comments={false}
+          onChange={() => {
+            if (editor.isEditable) {
+              fixForeignMedia(editor)
+              if (kind === 'TASK') replaceSubpagesWithMentions(editor) // dropped / moved cards too (FR-680)
+            }
+            save.schedule()
+            props.onBlankChange?.(isBlankPage({ title: '', content: editor.document }))
+            props.onDocumentChange?.(editor.document)
+          }}
+        >
+          <SlashMenu editor={editor} ctx={slashCtx} />
+          <GridSuggestionMenuController
+            triggerCharacter=":"
+            columns={10}
+            minQueryLength={2}
+            shouldOpen={atWordStart}
+          />
+          <MentionMenu editor={editor} />
+          <FilePanelController filePanel={UploadOnlyFilePanel} />
+        </BlockNoteView>
+      </div>
     </Box>
   )
 }

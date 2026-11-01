@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { asNobody, asUser } from '../helpers/as-user'
 import { auditCount, auditRowsAfter } from '../helpers/audit'
 import { outcomeOf } from '../helpers/outcome'
-import { createWorld, type World } from '../helpers/world'
+import { createWorld, expandParts, type World } from '../helpers/world'
 import { rows } from './rows'
 import type { AuthzRow, Outcome, Role } from './types'
 
@@ -65,7 +65,8 @@ describe('authz matrix', () => {
     const m4 = rows.filter((r) => /^(PG|WK|FL|SR)-/.test(r.id))
     expect(m4.length).toBeGreaterThan(0)
     for (const r of m4) {
-      expect(r.with ?? [], `${r.id} needs the pages world`).toContain('pages')
+      // implied parts count (M6.1 SR-TASKS-* rows run on 'taskBodies', which implies 'pages')
+      expect([...expandParts(r.with ?? [])], `${r.id} needs the pages world`).toContain('pages')
       if (r.mutates) expect(r.audit, `${r.id} must declare audit (or audit: false)`).toBeDefined()
     }
   })
@@ -103,6 +104,37 @@ describe('authz matrix', () => {
     expect(new Set(m6.map((r) => r.action))).toEqual(
       new Set(['GET /api/grid/project/[projectId]', 'saveAllocations', 'planAssignmentRange']),
     )
+  })
+
+  it('M6.1 meta (plan/m06.1 §7.2): every TP-*, TB-*, FW-*, SR-TASKS-* row and T-UPDATE-NOTES exist, PERM-27/28 are cited, rows need the taskBodies world', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...['LOADER', 'LOADER-ARCH', 'LOADER-MISSING', 'LOADER-BAD'].map((k) => `TP-${k}`),
+      ...['GET', 'GET-NONE', 'GET-ARCH', 'GET-BAD', 'GET-DELETED', 'ENSURE', 'ENSURE-EXISTING', 'ENSURE-ARCH', 'ENSURE-BAD']
+        .map((k) => `TB-${k}`),
+      ...['PAGE-GET', 'SAVE', 'SAVE-ARCH', 'SAVE-SUBPAGE', 'KEEPALIVE', 'LOCK-GET', 'LOCK-POST', 'LOCK-POST-ARCH', 'LOCK-DELETE']
+        .map((k) => `TB-${k}`),
+      ...['UPLOAD', 'UPLOAD-ARCH', 'FILE-GET', 'TREE-PARENT', 'RENAME', 'ICON', 'COVER', 'PROTECT', 'TEMPLATE', 'MOVE', 'DUP']
+        .map((k) => `TB-${k}`),
+      ...['DELETE', 'CREATE-CHILD', 'RESTORE-PAGEBATCH'].map((k) => `TB-${k}`),
+      ...['DOC', 'DOC-ARCH', 'WIKI', 'WIKI-PROT', 'TASK', 'TASK-NEW', 'TASK-ARCH', 'BAD'].map((k) => `FW-${k}`),
+      ...['NAME', 'BODY', 'TITLEONLY'].map((k) => `SR-TASKS-${k}`),
+      'T-UPDATE-NOTES',
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M6.1 rows').toEqual([])
+    const m61 = rows.filter((r) => /^(TP|TB|FW|SR-TASKS)-/.test(r.id) || r.id === 'T-UPDATE-NOTES')
+    for (const perm of ['PERM-27', 'PERM-28'])
+      expect(m61.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M6.1 row`).toBe(true)
+    for (const r of m61) {
+      expect(r.with ?? [], `${r.id} needs the taskBodies world`).toContain('taskBodies')
+      if (r.mutates) expect(r.audit, `${r.id} must declare audit (or audit: false)`).toBeDefined()
+    }
+    // FR-682 / M6.1-D4: every page API addressed at a TASK page is a 404 for everyone
+    for (const r of m61.filter((x) => /^TB-(TREE-PARENT|RENAME|ICON|COVER|PROTECT|TEMPLATE|MOVE|DUP|DELETE|CREATE-CHILD|RESTORE-PAGEBATCH)/.test(x.id)))
+      expect(r.expect, r.id).toEqual({ M: '404', L: '404', Me: '404', W: '404' })
+    // PERM-27/28: the outsider never sees a P task body
+    for (const r of m61.filter((x) => /^(TP-LOADER|TB-(GET|ENSURE|PAGE-GET|SAVE|KEEPALIVE|LOCK|UPLOAD|FILE)|FW-TASK)/.test(x.id)))
+      expect(['404', '400'], `${r.id} W`).toContain(r.expect.W)
   })
 
   describe.each(rows)('$id · $action', (row) => {

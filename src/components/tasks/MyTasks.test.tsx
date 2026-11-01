@@ -8,10 +8,16 @@ import { PID, S, STATUSES, T } from './fixtures.test.data'
 import { ok, renderTasks } from './render.test.helper'
 import { MyTasks } from './MyTasks'
 
-const a = vi.hoisted(() => ({ completeTask: vi.fn(), revertTaskStatus: vi.fn(), push: vi.fn() }))
+const a = vi.hoisted(() => ({
+  completeTask: vi.fn(),
+  revertTaskStatus: vi.fn(),
+  setTaskStatus: vi.fn(),
+  push: vi.fn(),
+}))
 vi.mock('@/server/actions/tasks', () => ({
   completeTask: a.completeTask,
   revertTaskStatus: a.revertTaskStatus,
+  setTaskStatus: a.setTaskStatus,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: a.push }) }))
 vi.mock('@/lib/api', () => ({ getJson: vi.fn(() => new Promise(() => {})) }))
@@ -31,6 +37,7 @@ const data: MyTasksResponse = {
           startDate: null,
           dueDate: '2026-10-16',
           status: STATUSES[0]!,
+          hasBody: true,
         },
       ],
     },
@@ -45,10 +52,15 @@ const data: MyTasksResponse = {
           startDate: null,
           dueDate: null,
           status: STATUSES[1]!,
+          hasBody: false,
         },
       ],
     },
   ],
+  statusesByProject: {
+    [CRM]: STATUSES.map((s) => ({ ...s, projectId: CRM })),
+    [PID]: STATUSES,
+  },
 }
 
 function renderMy(d: MyTasksResponse = data) {
@@ -104,8 +116,50 @@ describe('MyTasks (FR-1009 basic, X22, M3-D8)', () => {
     expect(a.push).toHaveBeenCalledWith(`/projects/${PID}/tasks?task=${T.c}`)
   })
 
+  it('FR-685: ↗ is a link to the task page; 📄 only on tasks with a body (FR-691)', () => {
+    renderMy()
+    const [crm, pos] = screen.getAllByRole('region').filter((r) => r.dataset.myProject !== undefined)
+    expect(within(crm!).getByRole('link', { name: th.tasks.openAsPage })).toHaveAttribute('href', `/t/${T.e}`)
+    expect(within(pos!).getByRole('link', { name: th.tasks.openAsPage })).toHaveAttribute('href', `/t/${T.c}`)
+    expect(within(crm!).getByRole('img', { name: th.tasks.hasBody })).toBeInTheDocument()
+    expect(within(pos!).queryByRole('img', { name: th.tasks.hasBody })).toBeNull()
+  })
+
+  it('M6.1-D25 (FR-1606): the status chip opens the menu; picking calls setTaskStatus with undo', async () => {
+    const user = userEvent.setup()
+    a.setTaskStatus.mockReturnValue(
+      ok({
+        projectId: PID,
+        statusId: S.waitData,
+        changed: [{ taskId: T.c, previous: { statusId: S.doing, completedOn: null } }],
+        openDescendantIds: [],
+        released: null,
+      }),
+    )
+    renderMy()
+    await user.click(
+      screen.getByRole('button', { name: th.tasks.status.menuLabel(th.tasks.status.defaults.doing) }),
+    )
+    await user.click(
+      await screen.findByRole('option', { name: new RegExp(th.tasks.status.defaults.waitData) }),
+    )
+    await waitFor(() =>
+      expect(a.setTaskStatus).toHaveBeenCalledWith({ taskIds: [T.c], statusId: S.waitData }),
+    )
+    expect(
+      await screen.findByText(th.tasks.status.toast.changed(th.tasks.status.defaults.waitData)),
+    ).toBeInTheDocument()
+  })
+
+  it('without statusesByProject the chip is plain text', () => {
+    renderMy({ ...data, statusesByProject: {} })
+    expect(
+      screen.queryByRole('button', { name: th.tasks.status.menuLabel(th.tasks.status.defaults.doing) }),
+    ).toBeNull()
+  })
+
   it('empty', () => {
-    renderMy({ groups: [], count: 0 })
+    renderMy({ groups: [], count: 0, statusesByProject: {} })
     expect(screen.getByText(th.my.empty)).toBeInTheDocument()
   })
 })

@@ -5,6 +5,12 @@ body {
   height: 100%;
 }
 
+/* The sticky 48 px header bar (M6.1-D19) must never cover what scrollIntoView / focus / #anchors bring into view
+   (WCAG 2.4.11 focus not obscured): the document's scroll snapport starts below it. */
+html {
+  scroll-padding-top: var(--header-height);
+}
+
 /* Visible keyboard focus everywhere (SPEC §8.9). */
 :focus-visible {
   outline: 2px solid var(--brand-blue);

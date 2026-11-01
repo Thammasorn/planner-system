@@ -177,7 +177,7 @@ function ClientForm({
       <DialogTitle id={titleId}>
         {mode === 'create' ? th.clients.createTitle : th.clients.editTitle}
       </DialogTitle>
-      <DialogContent dividers>
+      <DialogContent dividers data-light-form="">
         <Stack spacing={2.5}>
           <TextField
             label={th.clients.fields.name}

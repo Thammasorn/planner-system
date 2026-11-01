@@ -15,7 +15,7 @@ const task = (
   depth: parentId === null ? 0 : 1,
   position,
   name: id,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate,
   certaintyOverride: null,

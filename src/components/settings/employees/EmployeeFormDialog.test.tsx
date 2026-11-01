@@ -48,7 +48,10 @@ async function openDialog(user: ReturnType<typeof userEvent.setup>, employee?: E
 
 async function fillBasics(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement) {
   await user.type(within(dialog).getByLabelText(th.employees.fields.name, { exact: false }), 'Ploy Test')
-  await user.type(within(dialog).getByLabelText(th.employees.fields.email, { exact: false }), 'ploy@example.com')
+  await user.type(
+    within(dialog).getByLabelText(th.employees.fields.email, { exact: false }),
+    'ploy@example.com',
+  )
 }
 
 const passwordField = (dialog: HTMLElement) =>
@@ -199,9 +202,15 @@ describe('EmployeeFormDialog', () => {
       mustChangePassword: false,
       schedule: [1, 2, 3, 4, 5].map((weekday) => ({ weekday: weekday as 1, fractionCd: 100 })),
     }
-    mocks.updateEmployee.mockResolvedValueOnce({ ok: false, code: 'LAST_MANAGER', message: th.errors.LAST_MANAGER })
+    mocks.updateEmployee.mockResolvedValueOnce({
+      ok: false,
+      code: 'LAST_MANAGER',
+      message: th.errors.LAST_MANAGER,
+    })
     const dialog = await openDialog(user, employee)
-    expect(within(dialog).getByLabelText(th.employees.fields.name, { exact: false })).toHaveValue('Demo Manager')
+    expect(within(dialog).getByLabelText(th.employees.fields.name, { exact: false })).toHaveValue(
+      'Demo Manager',
+    )
     expect(within(dialog).queryByLabelText(th.employees.fields.initialPassword, { exact: false })).toBeNull()
     await user.click(within(dialog).getByRole('button', { name: th.common.save }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(th.errors.LAST_MANAGER)

@@ -8,6 +8,7 @@ import { taskPreference } from '@/lib/schemas/preferences'
 import { buildStatusColumns, toCardModel, type BoardColumn } from '@/lib/tasks/board'
 import { taskCertainty } from '@/lib/tasks/certainty'
 import { buildTaskRows } from '@/lib/tasks/tree'
+import { useScrollRestore } from '@/lib/nav/useScrollRestore'
 import { QuickAdd } from '../QuickAdd'
 import { openTaskPanel } from '../task-param'
 import { useTaskMutations } from '../useTaskMutations'
@@ -32,6 +33,7 @@ export function ProjectBoard({
   const leafOnly = taskPreference(prefs, 'tasks.board.leafOnly')
   const hideDone = taskPreference(prefs, 'tasks.board.hideDone')
   const m = useTaskMutations(projectId)
+  useScrollRestore(true) // FR-686: back from /t (↗ on a card) lands where the board was
   const { canEdit } = data.viewer
   const rows = useMemo(() => buildTaskRows(data.tasks), [data.tasks])
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows])

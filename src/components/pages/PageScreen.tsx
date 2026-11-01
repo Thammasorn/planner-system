@@ -7,12 +7,16 @@ import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined'
 import LockOutlined from '@mui/icons-material/LockOutlined'
 import { useQueryClient } from '@tanstack/react-query'
 import { EditorClient } from '@/components/editor/EditorClient'
+import { CopyLinkButton } from '@/components/layout/CopyLinkButton'
+import { DocColumn, DocInset } from '@/components/layout/DocColumn'
+import { useHeaderSlot } from '@/components/layout/HeaderActions'
+import { PageHeaderBar, type Crumb } from '@/components/layout/PageHeaderBar'
+import { useFullWidth } from '@/components/layout/useFullWidth'
 import { th } from '@/i18n/th'
 import { getJson } from '@/lib/api'
 import type { PageView } from '@/lib/contracts/pages'
 import { invalidatePage, invalidatePages } from '@/lib/invalidate'
 import { qk } from '@/lib/query-keys'
-import { PageBreadcrumbs } from './Breadcrumbs'
 import { CoverImage } from './CoverImage'
 import { IconPicker } from './IconPicker'
 import { PageActionsMenu } from './PageActionsMenu'
@@ -36,20 +40,33 @@ export function headerProtected(locked: boolean, server: { locked: boolean; effe
   return server.locked ? true : server.effective
 }
 
-/** Readable text column on wide screens, full width on phones (NFR-07b, SPEC §7 browser support). */
-export const PAGE_MAX_WIDTH = 900
-
 /**
- * Inline gutter of the page column. BlockNote keeps its side menu (⠿ / +) in the editor's own inline padding, so the
- * header (breadcrumb, title) uses the same gutter and the body text lines up with the title at every width; phones
- * get a narrow gutter (no hover side menu there) instead of BlockNote's fixed 54 px (editor-theme.css reads it).
+ * `/p/[pageId]` crumbs of the header bar (FR-504, FR-1603): Wiki ทีม (text) or the project (→ its เอกสาร tab), the
+ * ancestors (→ /p/<id>), then the current page as text — the big title in the column is the screen's <h1>.
  */
-const PAGE_GUTTER = { xs: '8px', sm: '54px' } as const
+export function pageCrumbs(
+  view: Pick<PageView, 'page' | 'breadcrumb'>,
+  current: { title: string; icon: string | null },
+): Crumb[] {
+  const { page } = view
+  const label = (c: { title: string; icon: string | null }) =>
+    `${c.icon ? `${c.icon} ` : ''}${c.title || th.pages.untitled}`
+  const root: Crumb =
+    page.space === 'PROJECT' && page.projectId
+      ? { label: page.projectName ?? '', href: `/projects/${page.projectId}/pages` }
+      : { label: th.pages.wikiRoot }
+  return [
+    root,
+    ...view.breadcrumb.map((c) => ({ label: label(c), href: `/p/${c.id}` })),
+    { label: label(current) },
+  ]
+}
 
 /**
- * `/p/[pageId]` client shell (FR-504…510): cover, icon + title, breadcrumb, page menu, protected / archived banners,
- * the template chooser on blank pages and the editor. Header fields are local state seeded from the RSC `PageView`
- * and updated from action results (M4-D29: no refresh()).
+ * `/p/[pageId]` client shell (FR-504…510, FR-1602/1603): the 48 px header bar (breadcrumb · save status · lease · 🔗 ·
+ * ⋯ with "เต็มความกว้าง"), then the reading column (760 px, or full width — `pages.full_width`, shared by every
+ * viewer) with cover, icon + title, protected / archived banners, the template chooser on blank pages and the editor.
+ * Header fields are local state seeded from the RSC `PageView` and updated from action results (M4-D29: no refresh()).
  */
 export function PageScreen({ view }: { view: PageView }) {
   const { page, can } = view
@@ -66,7 +83,14 @@ export function PageScreen({ view }: { view: PageView }) {
   const [focusReq, setFocusReq] = useState<{ n: number; to: 'title' | 'editor' }>({ n: 0, to: 'title' })
   const titleRef = useRef<HTMLTextAreaElement>(null)
   const editorBox = useRef<HTMLDivElement>(null)
-  const [statusSlot, setStatusSlot] = useState<HTMLDivElement | null>(null)
+  const statusSlot = useHeaderSlot('status')
+  const leaseSlot = useHeaderSlot('lease')
+  const fw = useFullWidth({
+    target: { pageId: page.id },
+    initial: page.fullWidth ?? false,
+    canEdit: can.edit,
+    label: title || th.pages.untitled,
+  })
   const scope = { space: page.space, projectId: page.projectId }
   const effectiveProtected = headerProtected(locked, serverProt)
 
@@ -98,28 +122,12 @@ export function PageScreen({ view }: { view: PageView }) {
   }
 
   return (
-    <Box sx={{ pb: 8, '--page-gutter': PAGE_GUTTER }}>
-      <Box
-        data-testid="page-column"
-        sx={{ maxWidth: `calc(${PAGE_MAX_WIDTH}px + 2 * var(--page-gutter))`, mx: 'auto' }}
-      >
-        <Box sx={{ px: 'var(--page-gutter)' }}>
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center', justifyContent: 'space-between', minHeight: 40, py: 1 }}
-          >
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <PageBreadcrumbs
-                space={page.space}
-                projectId={page.projectId}
-                projectName={page.projectName}
-                crumbs={view.breadcrumb}
-                current={{ title, icon }}
-              />
-            </Box>
-            {/* the editor portals its save status here, so it stays with the page header at every width */}
-            <Box ref={setStatusSlot} sx={{ flex: 'none', minWidth: 0 }} data-testid="page-status-slot" />
+    <>
+      <PageHeaderBar
+        crumbs={pageCrumbs(view, { title, icon })}
+        actions={
+          <>
+            <CopyLinkButton />
             <PageActionsMenu
               page={{
                 id: page.id,
@@ -133,8 +141,13 @@ export function PageScreen({ view }: { view: PageView }) {
               navigateAfterDelete
               onProtectedChange={setLocked}
               onProtectedSaved={() => void rereadProtection()}
+              {...(fw.canToggle ? { fullWidth: { checked: fw.fullWidth, onToggle: fw.toggle } } : {})}
             />
-          </Stack>
+          </>
+        }
+      />
+      <DocColumn fullWidth={fw.fullWidth}>
+        <DocInset>
           <CoverImage
             pageId={page.id}
             cover={cover}
@@ -144,16 +157,19 @@ export function PageScreen({ view }: { view: PageView }) {
           />
           <Stack spacing={1} sx={{ pt: 2 }}>
             <IconPicker pageId={page.id} icon={icon} canEdit={can.edit} scope={scope} onChange={setIcon} />
-            <PageTitle
-              key={reloadToken}
-              pageId={page.id}
-              value={title}
-              canEdit={can.edit}
-              scope={scope}
-              onChange={setTitle}
-              onEnter={focusEditor}
-              inputRef={titleRef}
-            />
+            {/* M6.1-D19: on documents the big title in the column is the screen's <h1> (the header bar has none) */}
+            <Box component="h1" sx={{ m: 0, font: 'inherit' }}>
+              <PageTitle
+                key={reloadToken}
+                pageId={page.id}
+                value={title}
+                canEdit={can.edit}
+                scope={scope}
+                onChange={setTitle}
+                onEnter={focusEditor}
+                inputRef={titleRef}
+              />
+            </Box>
             {effectiveProtected ? (
               <Box
                 sx={{
@@ -161,7 +177,7 @@ export function PageScreen({ view }: { view: PageView }) {
                   alignItems: 'center',
                   gap: 0.5,
                   color: 'text.secondary',
-                  fontSize: '0.875rem',
+                  fontSize: 'var(--font-md)',
                 }}
               >
                 <span role="img" aria-label={th.pages.protectedIcon} style={{ display: 'inline-flex' }}>
@@ -199,7 +215,7 @@ export function PageScreen({ view }: { view: PageView }) {
               />
             ) : null}
           </Stack>
-        </Box>
+        </DocInset>
         <Box ref={editorBox} sx={{ pt: 2 }}>
           <EditorClient
             pageId={page.id}
@@ -212,6 +228,11 @@ export function PageScreen({ view }: { view: PageView }) {
             uploadLimits={view.uploadLimits}
             reloadToken={reloadToken}
             saveStatusSlot={statusSlot}
+            leaseSlot={leaseSlot}
+            kind="DOC"
+            editorKey={page.id}
+            leaseAcquire="mount"
+            variant="page"
             // only while the chooser is up: the check reads the whole document on every change
             onBlankChange={
               showChooser
@@ -222,7 +243,7 @@ export function PageScreen({ view }: { view: PageView }) {
             }
           />
         </Box>
-      </Box>
-    </Box>
+      </DocColumn>
+    </>
   )
 }

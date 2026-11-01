@@ -16,7 +16,6 @@ export interface InsertTaskRow {
   position: string
   createdBy: string
   statusId: string
-  notes?: string | null
   startDate?: ISODate | null
   dueDate?: ISODate | null
   certaintyOverride?: Certainty | null
@@ -37,7 +36,6 @@ export async function insertTask(tx: DbOrTx, row: InsertTaskRow): Promise<TaskRo
       position: row.position,
       createdBy: row.createdBy,
       statusId: row.statusId,
-      notes: row.notes ?? null,
       startDate: row.startDate ?? null,
       dueDate: row.dueDate ?? null,
       certaintyOverride: row.certaintyOverride ?? null,
@@ -79,7 +77,6 @@ export interface TaskListRow {
   depth: number
   position: string
   name: string
-  notes: string | null
   startDate: ISODate | null
   dueDate: ISODate | null
   certaintyOverride: Certainty | null
@@ -90,6 +87,9 @@ export interface TaskListRow {
   /** BR-86: live edges whose blocker task is live, and those whose blocker is not DONE (X73). */
   blockersOpen: number
   blockersTotal: number
+  /** FR-691 (M6.1-D11): live, non-blank TASK body (text, image or file). Always set by `listColumns`; optional so
+   *  hand-built rows (grid fixtures) may omit it (→ false). */
+  hasBody?: boolean
 }
 
 /** BR-86 (X73): live edges whose blocker task is live / and whose blocker is not DONE — counted in SQL. */
@@ -104,6 +104,13 @@ const blockersOpenSql = sql<number>`(select count(*)::int from task_blockers b
 /** SQL fragments shared with the team-tasks query (S2.16). */
 export const blockerCountSql = { total: blockersTotalSql, open: blockersOpenSql }
 
+/** FR-691 / M6.1-D11: the task has a live TASK body with text, or with an image / file block at any depth (an
+ *  image-only body counts). One probe through pages_task_id_unique per task. Shared by every task list query. */
+export const hasBodySql = sql<boolean>`exists (select 1 from pages hb
+    where hb.task_id = ${tasks.id} and hb.kind = 'TASK' and hb.deleted_at is null
+      and (hb.content_text <> ''
+           or jsonb_path_exists(hb.content, '$.** ? (@.type == "image" || @.type == "file")')))`.mapWith(Boolean)
+
 const listColumns = {
   id: tasks.id,
   projectId: tasks.projectId,
@@ -111,7 +118,6 @@ const listColumns = {
   depth: tasks.depth,
   position: tasks.position,
   name: tasks.name,
-  notes: tasks.notes,
   startDate: tasks.startDate,
   dueDate: tasks.dueDate,
   certaintyOverride: tasks.certaintyOverride,
@@ -121,6 +127,7 @@ const listColumns = {
   completedWeek: tasks.completedWeek,
   blockersOpen: blockersOpenSql,
   blockersTotal: blockersTotalSql,
+  hasBody: hasBodySql,
 }
 
 /** Live tasks of the project with blocker counts, no assignees (M3-D39). Parents before children. */
@@ -310,7 +317,7 @@ export async function namesByIds(tx: DbOrTx, ids: readonly string[]): Promise<Ma
 }
 
 export type TaskFieldPatch = Partial<
-  Pick<TaskRow, 'name' | 'notes' | 'startDate' | 'dueDate' | 'certaintyOverride'>
+  Pick<TaskRow, 'name' | 'startDate' | 'dueDate' | 'certaintyOverride'>
 >
 
 export async function updateFields(tx: DbOrTx, id: string, patch: TaskFieldPatch): Promise<void> {

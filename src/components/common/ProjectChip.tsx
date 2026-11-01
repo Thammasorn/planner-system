@@ -25,7 +25,7 @@ export function ColorSquare({ color, size = 10 }: { color: string | null; size?:
         flex: 'none',
         width: size,
         height: size,
-        borderRadius: '2px',
+        borderRadius: 'var(--radius-sm)',
         bgcolor: color ?? 'transparent',
         border: color ? 'none' : '1px dashed',
         borderColor: 'divider',

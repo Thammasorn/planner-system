@@ -122,8 +122,8 @@ function MenuBody({ statuses, currentId, onPick, onClose }: Omit<StatusMenuProps
               alignItems: 'center',
               gap: 1,
               px: 1,
-              py: 0.75,
-              borderRadius: 1,
+              py: 1,
+              borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
               bgcolor: i === index ? 'action.selected' : 'transparent',
               outline: i === index ? '1px solid' : 'none',
@@ -144,7 +144,7 @@ function MenuBody({ statuses, currentId, onPick, onClose }: Omit<StatusMenuProps
                 {th.tasks.status.categories[s.category]}
               </Typography>
             </Box>
-            {s.id === currentId ? <CheckOutlined aria-hidden="true" sx={{ fontSize: 16 }} /> : null}
+            {s.id === currentId ? <CheckOutlined aria-hidden="true" sx={{ fontSize: 'var(--font-lg)' }} /> : null}
           </Box>
         ))}
       </Box>

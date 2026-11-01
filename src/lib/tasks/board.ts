@@ -94,5 +94,6 @@ export function toCardModel(
     certainty,
     completed: row.completedOn !== null,
     blockers: row.blockers,
+    hasBody: row.hasBody,
   }
 }

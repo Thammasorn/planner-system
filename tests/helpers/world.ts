@@ -3,7 +3,9 @@
 // MEMBER of Q only; A = archived, P's team; Q has no LEAD; C3 archived without projects). Always built.
 // The four role users stay top-level; extra users added by later parts live under `w.users.<name>`.
 import { randomUUID } from 'node:crypto'
+import { eq } from 'drizzle-orm'
 import type { ISODate } from '@/domain/types'
+import { extractContentText } from '@/lib/editor/content-text'
 import type { RemovedMemberSnapshot } from '@/lib/contracts/tasks'
 import type {
   ClientRow,
@@ -14,6 +16,8 @@ import type {
   ProjectRow,
   TimeOffRow,
 } from '@/server/db/schema'
+import { db } from '@/server/db/client'
+import { pages } from '@/server/db/schema'
 import type { AllocRow } from '@/server/repo/allocations'
 import type { TaskRow } from '@/server/repo/tasks'
 import type { AssignmentRow } from '@/server/repo/task-assignments'
@@ -34,6 +38,7 @@ import {
   makeStatus,
   makeStatuses,
   makeTask,
+  makeTaskBody,
   makeTimeOff,
   makeUser,
   type DefaultKey,
@@ -41,14 +46,15 @@ import {
 } from './factories'
 
 /** Pinned part list (X91); each milestone adds the builder for its part(s).
- *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M7 dayAllocations · M8 milestones */
+ *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations · M8 milestones */
 export type WorldPart =
-  'tasks' | 'pages' | 'files' | 'timeOff' | 'allocations' | 'dayAllocations' | 'milestones'
+  'tasks' | 'pages' | 'taskBodies' | 'files' | 'timeOff' | 'allocations' | 'dayAllocations' | 'milestones'
 
 /** Fixed build order of the parts. */
 export const WORLD_PART_ORDER: readonly WorldPart[] = [
   'tasks',
   'pages',
+  'taskBodies', // M6.1: after pages (its TASK pages sit beside the world's DOC pages)
   'files',
   'timeOff',
   'allocations',
@@ -61,6 +67,7 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
 export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>> = {
   files: ['pages'], // M4: every world file sits on a world page
   allocations: ['tasks', 'timeOff'], // M6: plans on the M3 assignments + the M5 coworker (plan/m06 S0.11)
+  taskBodies: ['tasks', 'pages'], // M6.1: bodies of M3 tasks; tree tests compare with the M4 pages
 }
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
@@ -159,6 +166,21 @@ export interface WorldPages {
   deletedPages: { pDeleted: PageRow; aDeleted: PageRow; wikiDeleted: PageRow; pOldDeleted: PageRow }
 }
 
+/** Part 'taskBodies' (M6.1, plan/m06.1 S0.15; implies 'tasks', 'pages'). Distinctive body texts for leak tests.
+ *  Tasks WITHOUT a body used by rows: w.tasks.pChildB, w.tasks.aTask2. */
+export interface WorldTaskBodies {
+  taskBodies: {
+    /** TASK page of pLeaf: 'รายละเอียด P-ลับ11' + an image block of pLeafBodyImage; fullWidth false. */
+    pLeafBody: PageRow
+    /** IMAGE file on pLeafBody (project P). */
+    pLeafBodyImage: FileRow
+    /** TASK page of aTask (archived A): 'รายละเอียด A-ลับ12'. */
+    aTaskBody: PageRow
+    /** TASK page of qTask (Q, outsider's project): 'รายละเอียด Q-ลับ13'. */
+    qTaskBody: PageRow
+  }
+}
+
 /** Part 'files' (M4; implies 'pages'). Bytes exist under UPLOAD_DIR. */
 export interface WorldFiles {
   files: {
@@ -237,7 +259,13 @@ export type WorldBatches = WorldTasks['batches'] & {
 }
 
 export interface World
-  extends Omit<WorldTasks, 'batches'>, WorldPages, WorldFiles, WorldTimeOff, WorldAllocations {
+  extends
+    Omit<WorldTasks, 'batches'>,
+    WorldPages,
+    WorldTaskBodies,
+    WorldFiles,
+    WorldTimeOff,
+    WorldAllocations {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
@@ -520,6 +548,29 @@ async function buildPages(w: World): Promise<void> {
   Object.assign(w.batches, { pDeletedPage, aDeletedPage, wikiDeletedPage, pOldDeletedPage })
 }
 
+/** M6.1 'taskBodies' part (plan/m06.1 S0.15): TASK pages of pLeaf, aTask and qTask (+ an image on pLeaf's). */
+async function buildTaskBodies(w: World): Promise<void> {
+  const { manager } = w
+  const by = { createdBy: manager }
+  const pLeafBody = await makeTaskBody({ task: w.tasks.pLeaf, content: 'รายละเอียด P-ลับ11', ...by })
+  const pLeafBodyImage = await makeFile({ page: pLeafBody, uploadedBy: manager })
+  const content = [
+    { type: 'paragraph', content: 'รายละเอียด P-ลับ11' },
+    { type: 'image', props: { url: `/api/files/${pLeafBodyImage.id}`, name: 'image.png' } },
+  ]
+  const [withImage] = await db
+    .update(pages)
+    .set({ content, contentText: extractContentText(content) })
+    .where(eq(pages.id, pLeafBody.id))
+    .returning()
+  w.taskBodies = {
+    pLeafBody: withImage!,
+    pLeafBodyImage,
+    aTaskBody: await makeTaskBody({ task: w.tasks.aTask, content: 'รายละเอียด A-ลับ12', ...by }),
+    qTaskBody: await makeTaskBody({ task: w.tasks.qTask, content: 'รายละเอียด Q-ลับ13', ...by }),
+  }
+}
+
 /** M4 'files' part (plan/m04 S0.15): bytes on disk under UPLOAD_DIR + files rows. */
 async function buildFiles(w: World): Promise<void> {
   const { manager } = w
@@ -631,6 +682,7 @@ async function buildAllocations(w: World): Promise<void> {
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
   pages: buildPages,
+  taskBodies: buildTaskBodies,
   files: buildFiles,
   timeOff: buildTimeOff,
   allocations: buildAllocations,
@@ -690,6 +742,7 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     blockers: notBuilt('tasks', 'blockers'),
     pages: notBuilt('pages', 'pages'),
     deletedPages: notBuilt('pages', 'deletedPages'),
+    taskBodies: notBuilt('taskBodies', 'taskBodies'),
     files: notBuilt('files', 'files'),
     leaveTypes: notBuilt('timeOff', 'leaveTypes'),
     timeOff: notBuilt('timeOff', 'timeOff'),

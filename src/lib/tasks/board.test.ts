@@ -10,7 +10,7 @@ const task = (id: string, parentId: string | null, position: string, x: Partial<
   depth: 0,
   position,
   name: id,
-  notes: null,
+  hasBody: false,
   startDate: null,
   dueDate: null,
   certaintyOverride: null,
@@ -157,8 +157,13 @@ describe('FR-661 toCardModel', () => {
       certainty: 'TENTATIVE',
       completed: true,
       blockers: { open: 1, total: 2 },
+      hasBody: false,
     }
     expect(card).toEqual(expected)
+  })
+
+  it('FR-691 (M6.1): hasBody is carried to the card (📄)', () => {
+    expect(toCardModel({ ...leaf, hasBody: true }, statuses, 'CONFIRMED').hasBody).toBe(true)
   })
 
   it('M3-D42 (M3-only): the result has exactly the TaskCard keys', () => {
@@ -169,6 +174,7 @@ describe('FR-661 toCardModel', () => {
         'certainty',
         'completed',
         'dueDate',
+        'hasBody',
         'id',
         'name',
         'parentPath',

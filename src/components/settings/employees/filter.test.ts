@@ -24,7 +24,13 @@ function row(p: Partial<EmployeeRow> & Pick<EmployeeRow, 'id' | 'name'>): Employ
 }
 
 const rows: EmployeeRow[] = [
-  row({ id: 'm', name: 'Demo Manager', nickname: 'Manager', positionId: POS_PM, positionName: 'Project Manager' }),
+  row({
+    id: 'm',
+    name: 'Demo Manager',
+    nickname: 'Manager',
+    positionId: POS_PM,
+    positionName: 'Project Manager',
+  }),
   row({ id: 'p', name: 'Peter S.', nickname: 'Peter', positionId: POS_DES, positionName: 'Designer' }),
   row({ id: 'c', name: 'Cindy C.', nickname: 'Cindy', active: false, deactivatedOn: '2026-09-30' }),
   row({ id: 'n', name: 'นิ่ม ใจดี', nickname: null }),

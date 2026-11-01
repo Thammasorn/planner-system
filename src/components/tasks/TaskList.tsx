@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react'
+import { useRouter } from 'next/navigation'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -22,6 +23,10 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { ProjectTasksResponse } from '@/lib/contracts/tasks'
+import { HOTKEYS, matchesHotkey } from '@/lib/keys'
+import { rememberScroll } from '@/lib/nav/scroll-memory'
+import { taskPageHref } from '@/lib/nav/task-href'
+import { useScrollRestore } from '@/lib/nav/useScrollRestore'
 import { taskPreference } from '@/lib/schemas/preferences'
 import { taskCertainty } from '@/lib/tasks/certainty'
 import { groupTasks, type TaskGroup } from '@/lib/tasks/group'
@@ -34,7 +39,7 @@ import { BulkBar } from './BulkBar'
 import { QuickAdd } from './QuickAdd'
 import { StatusChip } from './status/StatusChip'
 import { StatusMenu } from './status/StatusMenu'
-import { openTaskPanel } from './task-param'
+import { openTaskPanel, useTaskParam } from './task-param'
 import { TaskRow, type TaskRowActions } from './TaskRow'
 import styles from './TaskRow.module.css'
 import { errorMessage, resolveId, useTaskMutations } from './useTaskMutations'
@@ -87,6 +92,8 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
   const sort = taskPreference(prefs, 'tasks.sort')
   const showCompleted = taskPreference(prefs, 'tasks.showCompleted')
   const m = useTaskMutations(projectId)
+  const router = useRouter()
+  useScrollRestore(true) // FR-686: back from /t lands where ↗ / Shift+Space left the list
   const people = usePeopleOptions()
   const peopleById = useMemo(
     () => new Map<string, PersonOption>((people.data ?? []).map((p) => [p.id, p])),
@@ -107,6 +114,17 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
   const pendingFocus = useRef<string | null>(null)
   const [focusQuickTick, setFocusQuickTick] = useState(0)
   const lastCreated = useRef<string | null>(null)
+  // Opening the panel narrows the list, rows above re-wrap and the clicked row can slide out of view: keep the panel's
+  // row visible (after the layout; `nearest` is a no-op when it is already on screen, e.g. after the scroll restore).
+  const panelTaskId = useTaskParam()
+  useEffect(() => {
+    if (panelTaskId === null) return
+    const raf = window.requestAnimationFrame(() => {
+      const el = listRef.current?.querySelector<HTMLElement>(`[data-task-id="${CSS.escape(panelTaskId)}"]`)
+      el?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [panelTaskId])
 
   const allRows = useMemo(() => buildTaskRows(data.tasks), [data.tasks])
   const byId = useMemo(() => new Map(allRows.map((r) => [r.id, r])), [allRows])
@@ -223,7 +241,12 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
       else if (e.shiftKey && anchorId !== null) {
         setSelection(rangeSelect(orderIds, anchorId, id))
         return
-      } else setSelection(new Set([id]))
+      } else if (e.shiftKey) setSelection(new Set([id]))
+      else {
+        // M6.1-D17 (FR-685): a plain row click selects the row and opens the panel; modifiers only select (FR-614)
+        setSelection(new Set([id]))
+        openTaskPanel(id)
+      }
       setAnchorId(id)
     },
     toggleExpand: (id) => setCollapsed((c) => toggleSelect(c, id)),
@@ -231,6 +254,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
     rename: (id, name) => m.updateAsync(id, { name }),
     openStatus: (anchor, id) => setStatusMenu({ anchor, ids: targetIds(id) }),
     openPanel: (id) => openTaskPanel(id),
+    openPage: (id) => openPage(id),
     unassign: (assignmentId, label) => m.unassign([assignmentId], label),
     addSubtask: (row) => {
       setCollapsed((c) => {
@@ -253,6 +277,12 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
     },
   }
 
+  /** FR-685/686: Shift+Space and the row menu leave for /t/<id>; the list remembers where it was. */
+  const openPage = (id: string) => {
+    rememberScroll()
+    router.push(taskPageHref(id))
+  }
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
     if (target.getAttribute('role') !== 'row') return
@@ -268,6 +298,11 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
       if (e.shiftKey) setSelection(rangeSelect(orderIds, anchorId ?? id, next.row.id))
       else if (anchorId === null) setAnchorId(id)
       focusRow(next.key)
+    }
+    if (matchesHotkey(e, HOTKEYS.openPage)) {
+      e.preventDefault()
+      openPage(id)
+      return
     }
     if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
       e.preventDefault()

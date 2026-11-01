@@ -28,6 +28,9 @@ export interface IconPickerProps {
   onChange: (icon: string | null) => void
 }
 
+/** The page icon is drawn larger than the 32 px title (AFFiNE-like), derived from the scale. */
+const PAGE_ICON_SIZE = 'calc(var(--font-3xl) * 1.25)'
+
 /** Curated emoji grid (FR-504, X63 — no emoji-mart); readers see the icon only. */
 export function IconPicker({ pageId, icon, canEdit, scope, onChange }: IconPickerProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -40,7 +43,7 @@ export function IconPicker({ pageId, icon, canEdit, scope, onChange }: IconPicke
 
   if (!canEdit) {
     return (
-      <Box component="span" aria-hidden="true" sx={{ fontSize: 40, lineHeight: 1 }}>
+      <Box component="span" aria-hidden="true" sx={{ fontSize: PAGE_ICON_SIZE, lineHeight: 1 }}>
         {shown}
       </Box>
     )
@@ -67,7 +70,13 @@ export function IconPicker({ pageId, icon, canEdit, scope, onChange }: IconPicke
         aria-label={th.pages.icon.button}
         aria-haspopup="dialog"
         onClick={(e) => setAnchor(e.currentTarget)}
-        sx={{ fontSize: 40, lineHeight: 1, width: 64, height: 64, borderRadius: 2 }}
+        sx={{
+          fontSize: PAGE_ICON_SIZE,
+          lineHeight: 1,
+          width: 64,
+          height: 64,
+          borderRadius: 'var(--radius-lg)',
+        }}
       >
         <span aria-hidden="true">{shown}</span>
       </IconButton>
@@ -80,7 +89,7 @@ export function IconPicker({ pageId, icon, canEdit, scope, onChange }: IconPicke
           paper: {
             role: 'dialog',
             'aria-labelledby': titleId,
-            sx: { p: 1.5, maxWidth: 'calc(100vw - 32px)' },
+            sx: { p: 1.5, maxWidth: 'calc(100vw - 2 * var(--space-4))' },
           },
         }}
       >
@@ -102,7 +111,7 @@ export function IconPicker({ pageId, icon, canEdit, scope, onChange }: IconPicke
               aria-label={e}
               aria-pressed={e === icon}
               onClick={() => void pick(e)}
-              sx={{ fontSize: 22, width: 36, height: 36, borderRadius: 1 }}
+              sx={{ fontSize: 'var(--font-2xl)', width: 36, height: 36, borderRadius: 'var(--radius-md)' }}
             >
               <span aria-hidden="true">{e}</span>
             </IconButton>

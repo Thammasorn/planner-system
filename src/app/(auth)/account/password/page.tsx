@@ -25,7 +25,7 @@ export default async function AccountPasswordPage(props: PageProps<'/account/pas
   if (!user) redirect('/login')
   return (
     <Stack spacing={3}>
-      <Typography variant="h5" component="h1">
+      <Typography variant="h3" component="h1">
         {th.account.title}
       </Typography>
       {user.mustChangePassword ? <Alert severity="warning">{th.account.mustChangeBanner}</Alert> : null}

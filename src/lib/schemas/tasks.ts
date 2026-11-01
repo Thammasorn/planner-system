@@ -34,16 +34,13 @@ export const createTaskSchema = z.object({
   statusId: z.uuid().optional(),
 })
 
-/** undefined = unchanged, null = clear. At least one field. */
+/**
+ * undefined = unchanged, null = clear. At least one field. M6.1-D12: no `notes` (FR-692) — an unknown key is stripped,
+ * so a notes-only patch fails the "at least one field" refine (400).
+ */
 export const taskPatchSchema = z
   .object({
     name: zTaskName.optional(),
-    notes: z
-      .string()
-      .max(10_000)
-      .transform((s) => (s.trim() === '' ? null : s))
-      .nullable()
-      .optional(),
     startDate: z.iso.date().nullable().optional(),
     dueDate: z.iso.date().nullable().optional(),
     certaintyOverride: zCertainty.nullable().optional(),

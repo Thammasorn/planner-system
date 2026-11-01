@@ -74,7 +74,7 @@ export function AssigneeAddButton({
         {...(tabIndex !== undefined ? { tabIndex } : {})}
         onClick={(e) => setAnchor(e.currentTarget)}
         aria-haspopup="dialog"
-        sx={{ minWidth: 0, px: 0.75, py: 0, height: 24, flex: 'none' }}
+        sx={{ minWidth: 0, px: 1, py: 0, height: 24, flex: 'none', color: 'var(--text-secondary)' }}
       >
         {th.tasks.panel.addAssignee}
       </Button>

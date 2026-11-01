@@ -10,7 +10,6 @@ import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
@@ -30,11 +29,14 @@ import { compareThai } from '@/lib/collate'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { TaskCard as TaskCardDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
 import { formatThaiDate } from '@/lib/format'
+import { projectTasksHref } from '@/lib/nav/task-href'
+import { useScrollRestore } from '@/lib/nav/useScrollRestore'
 import { qk } from '@/lib/query-keys'
 import { taskPreference } from '@/lib/schemas/preferences'
 import { buildCategoryColumns, resolveCategoryDrop } from '@/lib/tasks/board'
 import { personOf } from '../AssigneeChips'
 import { BlockerBadge } from '../blockers/BlockerBadge'
+import { HasBodyMark, OpenAsPageLink } from '../OpenAsPage'
 import { TaskBoard } from '../board/TaskBoard'
 import { TaskCard } from '../board/TaskCard'
 import { StatusChip } from '../status/StatusChip'
@@ -47,7 +49,7 @@ import { useSetTaskStatus } from './useSetTaskStatus'
 const CATEGORIES: readonly TaskStatusCategory[] = ['TODO', 'IN_PROGRESS', 'WAITING', 'DONE']
 type ProjectRef = TeamTasksResponse['projects'][number]
 
-const taskHref = (c: TaskCardDTO) => `/projects/${c.projectId}/tasks?task=${c.id}`
+const taskHref = (c: TaskCardDTO) => projectTasksHref(c.projectId, c.id)
 
 /**
  * งานของทีม `/tasks` (FR-665/666, X75, M3-D33/D41): tasks of every project the viewer can see; filters person /
@@ -70,6 +72,7 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   })
+  useScrollRestore(q.data !== undefined) // FR-686: back from /t lands where ↗ left the list
   // projects seen so far, so the project filter keeps its options while narrowed (state adjusted during render)
   const [seen, setSeen] = useState<ReadonlyMap<string, ProjectRef>>(new Map())
   const pages = useMemo(() => q.data?.pages ?? [], [q.data])
@@ -290,29 +293,46 @@ function TeamList({
   return (
     <Box sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
       {groups.map(([projectId, list]) => (
-        <Paper
+        <Box
           key={projectId}
-          variant="outlined"
           component="section"
           aria-label={projectOf(projectId).name}
           data-team-project={projectId}
-          sx={{ p: { xs: 1, sm: 2 } }}
         >
           <Typography
-            variant="subtitle1"
             component="h2"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              mb: 1,
+              fontSize: 'var(--font-md)',
+              fontWeight: 'var(--weight-bold)',
+            }}
           >
             <ColorSquare color={projectOf(projectId).color || null} />
             {projectOf(projectId).name}
           </Typography>
-          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+          <Box
+            component="ul"
+            sx={{ listStyle: 'none', m: 0, p: 0, borderTop: '1px solid var(--border-subtle)' }}
+          >
             {list.map((c) => (
               <Box
                 component="li"
                 key={c.id}
                 data-task-id={c.id}
-                sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.5, minWidth: 0 }}
+                data-open-host=""
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 1,
+                  py: 0.5,
+                  px: 0.5,
+                  minWidth: 0,
+                  borderBottom: '1px solid var(--border-subtle)',
+                  '&:hover': { bgcolor: 'var(--hover-bg)' },
+                }}
               >
                 <Checkbox
                   size="small"
@@ -335,17 +355,24 @@ function TeamList({
                   }}
                 >
                   <Box
-                    component={Link}
-                    href={taskHref(c)}
-                    sx={{
-                      color: 'text.primary',
-                      flex: '1 1 220px',
-                      minWidth: 0,
-                      overflowWrap: 'anywhere',
-                      textDecoration: c.completed ? 'line-through' : 'none',
-                    }}
+                    component="span"
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: '1 1 220px', minWidth: 0 }}
                   >
-                    {c.name}
+                    <Box
+                      component={Link}
+                      href={taskHref(c)}
+                      sx={{
+                        color: 'text.primary',
+                        fontSize: 'var(--font-md)',
+                        minWidth: 0,
+                        overflowWrap: 'anywhere',
+                        textDecoration: c.completed ? 'line-through' : 'none',
+                      }}
+                    >
+                      {c.name}
+                    </Box>
+                    {c.hasBody ? <HasBodyMark /> : null}
+                    <OpenAsPageLink taskId={c.id} />
                   </Box>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, minWidth: 0 }}>
                     <StatusChip
@@ -370,7 +397,7 @@ function TeamList({
               </Box>
             ))}
           </Box>
-        </Paper>
+        </Box>
       ))}
       <StatusMenu
         statuses={menu ? (statusesByProject[menu.card.projectId] ?? []) : []}

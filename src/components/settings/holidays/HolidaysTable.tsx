@@ -13,7 +13,6 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -222,7 +221,7 @@ export function HolidaysTable({ rows, initialYear }: { rows: HolidayDTO[]; initi
   return (
     <Stack spacing={2}>
       <Stack direction="row" spacing={2} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <Typography variant="h6" component="h2">
+        <Typography variant="h4" component="h2">
           {th.holidays.title}
         </Typography>
         <TextField
@@ -246,7 +245,7 @@ export function HolidaysTable({ rows, initialYear }: { rows: HolidayDTO[]; initi
       {shown.length === 0 ? (
         <EmptyState title={th.holidays.empty} />
       ) : (
-        <Paper variant="outlined">
+        <Box data-light-form="" sx={{ borderBlock: '1px solid var(--border-subtle)' }}>
           <Table size="small" aria-label={th.holidays.title}>
             <TableHead>
               <TableRow>
@@ -327,7 +326,7 @@ export function HolidaysTable({ rows, initialYear }: { rows: HolidayDTO[]; initi
               )}
             </TableBody>
           </Table>
-        </Paper>
+        </Box>
       )}
 
       <Stack

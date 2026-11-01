@@ -589,7 +589,11 @@ test.describe('E6 ⟲ (AC-505, FR-540, FR-541, FR-542) one editor at a time: ban
     await ivyScreen.goto(charterId)
     const ivy = ivyScreen.editor
     await ivy.waitReady()
-    await expect(ivy.leaseBanner()).toContainText(th.editor.lease.heldBy('Cindy'))
+    // M6.1-D26: on a document the "held by" state is the compact badge in the header bar (no inline banner)
+    await expect(ivyCtx.page.getByTestId('page-header').getByTestId('lease-badge')).toContainText(
+      th.editor.lease.badge('Cindy'),
+    )
+    await expect(ivy.leaseBanner()).toHaveCount(0)
     await ivy.expectReadOnly()
     const versionBefore = (await apiPage(ivyCtx.page, charterId)).page.version
     const textBefore = await ivy.content().innerText()

@@ -2,6 +2,8 @@
 // M4-D21/D22/D23/D31). Services never read the clock (X56); 30-day windows use the DB now().
 // Order keys are generated here between real neighbours under pg_advisory_xact_lock(hashtext('pages:' …)).
 // Audit (M4-D38): createPage never audits (its action does, X96); move/duplicate/delete/restore write their own row.
+// M6.1 (FR-682, M6.1-D4): every path here is document-only — requireDocPage (a TASK page → 404) and kind = 'DOC'
+// scopes / subtrees / batches in repo/pages.ts.
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { th } from '@/i18n/th'
@@ -74,7 +76,7 @@ export async function listTree(tx: DbOrTx, user: SessionUser, q: TreeQuery): Pro
   let parentProtected = false
   let parentDepth = -1
   if (parentId !== null) {
-    const parent = await authz.requirePage(tx, user, parentId, 'view')
+    const parent = await authz.requireDocPage(tx, user, parentId, 'view') // a TASK page → 404 (FR-682)
     // A parent from another space/project is treated as unknown here (never confirms it exists).
     if (parent.page.space !== q.space || parent.page.projectId !== projectId) throw new NotFoundError()
     parentProtected = parent.effectiveProtected
@@ -157,7 +159,7 @@ export async function movePage(
   user: SessionUser,
   input: MovePageInput,
 ): Promise<{ page: PageRow; fromParentId: string | null }> {
-  const a = await authz.requirePage(tx, user, input.pageId, 'edit')
+  const a = await authz.requireDocPage(tx, user, input.pageId, 'edit')
   const page = a.page
   await authz.requireSubtreeUnprotected(tx, user, page.id)
   let parentDepth = -1
@@ -205,7 +207,7 @@ export async function duplicatePage(
   user: SessionUser,
   pageId: string,
 ): Promise<{ root: PageRow; count: number }> {
-  const a = await authz.requirePage(tx, user, pageId, 'view')
+  const a = await authz.requireDocPage(tx, user, pageId, 'view')
   const source = a.page
   const scope: Scope = { space: source.space, projectId: source.projectId, parentId: source.parentId }
   await authz.requirePageCreate(tx, user, scope)
@@ -230,6 +232,7 @@ export async function duplicatePage(
       title: isRoot ? th.pages.copyTitle(r.title) : r.title,
       icon: r.icon,
       coverFileId: r.coverFileId,
+      fullWidth: r.fullWidth, // FR-1602: the copy keeps the shared width
       content,
       contentText: extractContentText(content),
       isCharter: false,
@@ -258,7 +261,7 @@ export async function softDeleteSubtree(
   user: SessionUser,
   pageId: string,
 ): Promise<{ batch: string; root: PageRow; ids: string[] }> {
-  const a = await authz.requirePage(tx, user, pageId, 'edit')
+  const a = await authz.requireDocPage(tx, user, pageId, 'edit')
   if (a.page.isCharter) throw new ForbiddenError(th.pages.errors.charterNotDeletable) // managers too (M4-D6)
   await authz.requireSubtreeUnprotected(tx, user, pageId)
   const batch = randomUUID()

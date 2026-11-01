@@ -6,7 +6,6 @@ import IconButton from '@mui/material/IconButton'
 import ListItemText from '@mui/material/ListItemText'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -23,13 +22,20 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { UserName } from '@/components/common/UserName'
+import { HeaderActions } from '@/components/layout/HeaderActions'
 import { useUndo } from '@/components/undo/useUndo'
 import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
 import type { EmployeeRow, PositionRow } from '@/lib/contracts/users'
 import { deactivateEmployee, reactivateEmployee } from '@/server/actions/employees'
 import { EmployeeFormDialog } from './EmployeeFormDialog'
-import { DEFAULT_FILTER, filterEmployees, sortEmployees, type EmployeeFilter, type StatusFilter } from './filter'
+import {
+  DEFAULT_FILTER,
+  filterEmployees,
+  sortEmployees,
+  type EmployeeFilter,
+  type StatusFilter,
+} from './filter'
 import { ResetPasswordDialog } from './ResetPasswordDialog'
 import { scheduleSummary } from './ScheduleEditor'
 
@@ -74,7 +80,9 @@ export function EmployeesTable({
         toast.error(r.message) // LAST_MANAGER, SELF_DEACTIVATE, …
         return
       }
-      const message = active ? th.employees.reactivated(row.displayName) : th.employees.deactivated(row.displayName)
+      const message = active
+        ? th.employees.reactivated(row.displayName)
+        : th.employees.deactivated(row.displayName)
       undo.push(
         {
           label: message,
@@ -165,22 +173,20 @@ export function EmployeesTable({
           <option value="active">{th.employees.status.active}</option>
           <option value="deactivated">{th.employees.status.deactivated}</option>
         </TextField>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => openForm(null)}
-          sx={{ flex: 'none' }}
-        >
+      </Stack>
+      {/* the screen's one primary action lives in the header bar (FR-1604, M6.1-D23) */}
+      <HeaderActions>
+        <Button variant="contained" startIcon={<Add />} onClick={() => openForm(null)}>
           {th.employees.add}
         </Button>
-      </Stack>
+      </HeaderActions>
 
       {rows.length === 0 ? (
         <EmptyState title={th.employees.empty} />
       ) : visible.length === 0 ? (
         <EmptyState title={th.employees.noMatch} />
       ) : (
-        <TableContainer component={Paper} variant="outlined">
+        <TableContainer>
           <Table size="small" aria-label={th.employees.title}>
             <TableHead>
               <TableRow>
@@ -204,7 +210,12 @@ export function EmployeesTable({
                         <UserName user={row} />
                         {isMe ? <Chip size="small" variant="outlined" label={th.employees.you} /> : null}
                         {row.mustChangePassword ? (
-                          <Chip size="small" variant="outlined" color="warning" label={th.employees.mustChangeBadge} />
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            color="warning"
+                            label={th.employees.mustChangeBadge}
+                          />
                         ) : null}
                       </Stack>
                     </TableCell>
@@ -222,7 +233,12 @@ export function EmployeesTable({
                           label={th.employees.status.active}
                         />
                       ) : (
-                        <Chip size="small" variant="outlined" icon={<Block />} label={th.employees.status.deactivated} />
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          icon={<Block />}
+                          label={th.employees.status.deactivated}
+                        />
                       )}
                     </TableCell>
                     <TableCell align="right">

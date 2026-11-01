@@ -1,0 +1,26 @@
+/* src/components/layout/DocColumn.module.css — FR-1602 / M6.1-D20 reading column. */
+
+.column {
+  /* The editor's inline gutter (BlockNote keeps its side menu in it) — also the inset of DocInset. */
+  --page-gutter: var(--space-12);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: var(--doc-column);
+  margin-inline: auto;
+  padding-bottom: var(--space-12);
+}
+
+.column[data-full-width='true'] {
+  max-width: none;
+}
+
+.inset {
+  padding-inline: var(--page-gutter);
+}
+
+@media (max-width: 599.95px) {
+  .column {
+    --page-gutter: var(--space-2);
+  }
+}

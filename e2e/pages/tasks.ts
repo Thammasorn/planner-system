@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test'
 import { th } from '../../src/i18n/th'
 import { waitForServerAction } from '../fixtures'
 import { ShellPage } from './shell'
+import { TaskProps } from './task-page'
 import { SidebarPage } from './sidebar'
 import { escapeRegExp, exactName } from './text'
 import { toastWith } from './toast'
@@ -178,9 +179,44 @@ export class TaskListPage {
     await this.page.keyboard.press(key)
     await answered
   }
-  /** Click (optionally Shift / Cmd-Ctrl) on the row's name: selection, never rename, for an unselected row. */
+  /**
+   * Click (optionally Shift / Cmd-Ctrl) on the row's name: selection, never rename, for an unselected row. Since M6.1
+   * (M6.1-D17, FR-685) a plain click also opens the panel; Cmd/Ctrl/Shift+click only selects (FR-614).
+   */
   async select(name: string, modifiers: Modifier[] = []): Promise<void> {
     await this.nameButton(name).click({ modifiers })
+  }
+  /** M6.1 (FR-685): a plain click on an unselected row → select it + open its panel; waits for the panel. */
+  async clickRow(name: string): Promise<void> {
+    await this.nameButton(name).click()
+    await expect(this.panelTitle(name)).toBeVisible()
+  }
+
+  // ── ↗ เปิดเป็นหน้า + 📄 (M6.1: FR-685, FR-691) ───────────────────────────────────────────────────────────────
+  /** The row's ↗ — a real `<a href="/t/<id>">` (opacity 0 until hover/focus; always on touch). */
+  openAsPageLink(name: string): Locator {
+    return this.row(name).getByRole('link', { name: th.tasks.openAsPage, exact: true })
+  }
+  /** Clicks ↗ and waits for `/t/<id>` (client navigation; the list remembers its scroll). */
+  async openAsPage(name: string): Promise<void> {
+    await this.row(name).hover()
+    await this.openAsPageLink(name).click()
+    await this.page.waitForURL(/\/t\/[0-9a-f-]{36}$/)
+  }
+  /** 📄 beside the name: `role="img"` named th.tasks.hasBody (text, not colour only). */
+  hasBodyMarker(name: string): Locator {
+    return this.row(name).getByRole('img', { name: th.tasks.hasBody, exact: true })
+  }
+  cardOpenAsPageLink(name: string): Locator {
+    return this.card(name).getByRole('link', { name: th.tasks.openAsPage, exact: true })
+  }
+  cardHasBodyMarker(name: string): Locator {
+    return this.card(name).getByRole('img', { name: th.tasks.hasBody, exact: true })
+  }
+  /** Row ⋯ (th.tasks.rowMenu.label) → `item`. */
+  async rowMenu(name: string, item: string): Promise<void> {
+    await this.row(name).getByRole('button', { name: th.tasks.rowMenu.label, exact: true }).click()
+    await this.page.getByRole('menu').getByRole('menuitem', { name: item, exact: true }).click()
   }
 
   // ── quick add (FR-602) ────────────────────────────────────────────────────────────────────────────────────
@@ -326,9 +362,28 @@ export class TaskListPage {
   panelTitle(name: string): Locator {
     return this.panel().getByRole('heading', { name, exact: true })
   }
+  /**
+   * Opens the panel through the row ⋯ "เปิดรายละเอียด" (stable: no selection side effect, works on a selected row too).
+   * M6.1 replaced the row's "เปิดรายละเอียด" icon with the ↗ page link (M6.1-D17).
+   */
   async openPanel(name: string): Promise<void> {
-    await this.row(name).getByRole('button', { name: th.tasks.openPanel, exact: true }).click()
+    await this.rowMenu(name, th.tasks.rowMenu.open)
     await expect(this.panelTitle(name)).toBeVisible()
+  }
+  /** The shared property rows inside the panel (M6.1-D16). */
+  panelProps(): TaskProps {
+    return new TaskProps(this.page, this.panel())
+  }
+  /** The compact body (FR-684): region th.taskPage.bodyLabel inside the panel. */
+  panelBody(): Locator {
+    return this.panel().getByRole('region', { name: th.taskPage.bodyLabel, exact: true })
+  }
+  /**
+   * The panel header's "เปิดเป็นหน้า" link (FR-684) — the first link of that name (the subtask rows' ↗ below carry the
+   * same name).
+   */
+  panelOpenAsPage(): Locator {
+    return this.panel().getByRole('link', { name: th.tasks.openAsPage, exact: true }).first()
   }
   /** Panel "+ เพิ่มงานย่อย": types one subtask + Enter (closes the field with Esc afterwards). */
   async addSubtaskInPanel(name: string): Promise<void> {
@@ -340,9 +395,6 @@ export class TaskListPage {
     await expect(this.row(name)).toBeVisible()
     await this.settledId(name)
     await this.page.keyboard.press('Escape')
-  }
-  certaintyButton(c: 'inherit' | 'confirmed' | 'tentative'): Locator {
-    return this.panel().getByRole('button', { name: th.tasks.certainty[c], exact: true })
   }
   /** Due date in the panel (MUI X accessible field: sections DD / MM / BBBB). Month, year, then day, so the date is
    *  only valid — and saved — once, when the last section is complete. */

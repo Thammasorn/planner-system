@@ -1,9 +1,9 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import type { ProjectHeader, ProjectOverview as Overview } from '@/lib/contracts/projects'
 import { renderWithProviders } from '../../../tests/helpers/render'
-import { ProjectHeaderBar } from './ProjectHeaderBar'
+import { ProjectArchivedBanner, ProjectHeaderBar } from './ProjectHeaderBar'
 import { ProjectOverview } from './ProjectOverview'
 
 vi.mock('@/server/actions/projects', () => ({
@@ -112,12 +112,28 @@ describe('ProjectOverview', () => {
   })
 })
 
-describe('ProjectHeaderBar', () => {
-  it('shows the read-only banner and archived chip for archived projects (text, not colour only)', () => {
+describe('ProjectHeaderBar (M6.1: the screen header bar)', () => {
+  it('is the 48 px header bar: โปรเจค › name (the one <h1>), actions on the right', () => {
+    renderWithProviders(<ProjectHeaderBar header={header({})} />)
+    const bar = screen.getByTestId('page-header')
+    expect(screen.getByTestId('project-header')).toContainElement(bar)
+    const nav = within(bar).getByRole('navigation', { name: th.layout.breadcrumb })
+    expect(within(nav).getByRole('link', { name: th.nav.projects })).toHaveAttribute('href', '/projects')
+    expect(within(bar).getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(within(bar).getByRole('heading', { level: 1 })).toHaveTextContent('POS Upgrade')
+    expect(
+      within(screen.getByTestId('page-header-actions')).getByRole('link', { name: 'Coral' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the read-only banner (under the tabs) and archived chip for archived projects (text, not colour only)', () => {
     renderWithProviders(
-      <ProjectHeaderBar
-        header={header({ archived: true, can: { manage: false, unarchive: true, delete: true } })}
-      />,
+      <>
+        <ProjectHeaderBar
+          header={header({ archived: true, can: { manage: false, unarchive: true, delete: true } })}
+        />
+        <ProjectArchivedBanner archived />
+      </>,
     )
     expect(screen.getByText(th.projects.archivedBanner)).toBeInTheDocument()
     expect(screen.getByText(th.projects.archivedChip)).toBeInTheDocument()

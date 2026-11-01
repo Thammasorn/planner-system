@@ -6,8 +6,12 @@ import {
   invalidateLoad,
   invalidateProjects,
   invalidateStatuses,
+  invalidateTaskBody,
   invalidateTasks,
+  invalidateTaskViews,
+  patchTaskHasBody,
 } from './invalidate'
+import type { ProjectTasksResponse, TaskDTO } from './contracts/tasks'
 import { type GridChunk, qk } from './query-keys'
 import { teamTasksQuerySchema } from './schemas/tasks'
 
@@ -139,5 +143,71 @@ describe('grid keys (M6, X18, X82)', () => {
       true,
     )
     expect(invalidated(qc, qk.projectTasks('p'))).toBe(false)
+  })
+})
+
+describe('task bodies (M6.1 S0.8)', () => {
+  const task = (id: string, hasBody: boolean): TaskDTO => ({
+    id,
+    projectId: 'p1',
+    parentId: null,
+    depth: 0,
+    position: 'a0',
+    name: id,
+    startDate: null,
+    dueDate: null,
+    certaintyOverride: null,
+    completedOn: null,
+    assignees: [],
+    statusId: 's',
+    blockers: { open: 0, total: 0 },
+    hasBody,
+  })
+  const list = (): ProjectTasksResponse => ({
+    project: { id: 'p1', name: 'P', certainty: 'CONFIRMED', archived: false },
+    viewer: { role: 'MEMBER', canEdit: true, canManage: false },
+    members: [],
+    tasks: [task('a', false), task('b', true)],
+    statuses: [],
+    blockerEdges: [],
+  })
+
+  it('qk.taskBody is ["tasks", "body", id] and task writes do not invalidate it', async () => {
+    expect(qk.taskBody('t1')).toEqual(['tasks', 'body', 't1'])
+    const qc = seeded()
+    qc.setQueryData(qk.taskBody('t1'), 1)
+    await invalidateTasks(qc, 'p1')
+    expect(invalidated(qc, qk.taskBody('t1'))).toBe(false)
+    await invalidateTaskBody(qc, 't1')
+    expect(invalidated(qc, qk.taskBody('t1'))).toBe(true)
+  })
+
+  it('patchTaskHasBody patches one task; unchanged / missing → same reference; no cache → nothing created', () => {
+    const qc = new QueryClient()
+    patchTaskHasBody(qc, 'p1', 'a', true)
+    expect(qc.getQueryData(qk.projectTasks('p1'))).toBeUndefined()
+    qc.setQueryData(qk.projectTasks('p1'), list())
+    const before = qc.getQueryData<ProjectTasksResponse>(qk.projectTasks('p1'))!
+    patchTaskHasBody(qc, 'p1', 'b', true)
+    patchTaskHasBody(qc, 'p1', 'zz', true)
+    expect(qc.getQueryData(qk.projectTasks('p1'))).toBe(before)
+    patchTaskHasBody(qc, 'p1', 'a', true)
+    const after = qc.getQueryData<ProjectTasksResponse>(qk.projectTasks('p1'))!
+    expect(after.tasks.map((t) => [t.id, t.hasBody])).toEqual([
+      ['a', true],
+      ['b', true],
+    ])
+    expect(after.tasks[1]).toBe(before.tasks[1])
+  })
+
+  it('invalidateTaskViews invalidates the project list, /my and every /tasks page only', async () => {
+    const qc = seeded()
+    await invalidateTaskViews(qc, 'p1')
+    expect(invalidated(qc, qk.projectTasks('p1'))).toBe(true)
+    expect(invalidated(qc, qk.myTasks())).toBe(true)
+    expect(invalidated(qc, qk.teamTasks(TEAM_FILTER))).toBe(true)
+    expect(invalidated(qc, qk.projectTasks('p2'))).toBe(false)
+    expect(invalidated(qc, qk.sidebar())).toBe(false)
+    expect(invalidated(qc, ['grid', 'project', 'x', {}])).toBe(false)
   })
 })

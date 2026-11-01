@@ -1,6 +1,7 @@
 'use client'
 // src/components/grid/GridToolbar.tsx — `[สัปดาห์] ◀ [วันนี้] ▶ ภาระ: [ทั้งหมด▾] หน่วย: [วัน▾]` (SPEC §8.3, FR-801/802/804/809,
 // M6-D12/D21). The toolbar is one set of MUI controls (not per cell). M7 adds the วัน zoom option.
+// M6.1 (S5.2, §8.12): light toggles from grid.module.css (token scale, --radius-md); it sits right under the header bar.
 import Button from '@mui/material/Button'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
@@ -33,16 +34,23 @@ export interface GridToolbarProps {
 export function GridToolbar(p: GridToolbarProps) {
   return (
     <div role="toolbar" aria-label={th.grid.toolbar.label} className={styles.toolbar}>
-      <ToggleButton value="WEEK" selected size="small" aria-label={th.grid.toolbar.zoomWeek} disableRipple>
+      <ToggleButton
+        value="WEEK"
+        selected
+        size="small"
+        aria-label={th.grid.toolbar.zoomWeek}
+        disableRipple
+        className={styles.toolbarToggle}
+      >
         {th.grid.toolbar.zoomWeek}
       </ToggleButton>
-      <IconButton size="small" aria-label={th.grid.toolbar.prev} onClick={p.onPrev}>
+      <IconButton size="small" aria-label={th.grid.toolbar.prev} onClick={p.onPrev} className={styles.toolbarIcon}>
         <ChevronLeft fontSize="small" />
       </IconButton>
-      <Button size="small" variant="outlined" onClick={p.onToday}>
+      <Button size="small" variant="outlined" onClick={p.onToday} className={styles.toolbarToggle}>
         {th.grid.toolbar.today}
       </Button>
-      <IconButton size="small" aria-label={th.grid.toolbar.next} onClick={p.onNext}>
+      <IconButton size="small" aria-label={th.grid.toolbar.next} onClick={p.onNext} className={styles.toolbarIcon}>
         <ChevronRight fontSize="small" />
       </IconButton>
       <TextField
@@ -74,6 +82,7 @@ export function GridToolbar(p: GridToolbarProps) {
         ))}
       </TextField>
       <FormControlLabel
+        className={styles.toolbarSwitch}
         control={
           <Switch
             size="small"

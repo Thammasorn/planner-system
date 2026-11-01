@@ -135,7 +135,11 @@ export function pgErrorInfo(e: unknown): { code?: string; constraint?: string } 
  * 23503 on a task/status composite FK → NOT_FOUND (the referenced row is in another project or gone — BR-83, D12).
  * M6 (M6-D5, G23): 23P01 on allocations_one_resolution_per_week → INTERNAL (every plan writer locks first, so it
  * must never fire), checked before the generic OVERLAP.
+ * M6.1 (S1.13): 23514 on the TASK-page shape checks → INTERNAL (task bodies are only built by ensureTaskBody and the
+ * data migration, and the page APIs refuse TASK pages first — so it must never fire).
  */
+const INTERNAL_CHECKS: ReadonlySet<string> = new Set(['pages_kind_task', 'pages_kind_shape', 'pages_task_space'])
+
 const NOT_FOUND_FKS: ReadonlySet<string> = new Set([
   'tasks_status_fk',
   'task_blockers_task_fk',
@@ -158,6 +162,7 @@ export function mapDbError(e: unknown): AppError | null {
       if (constraint === 'allocations_one_resolution_per_week') return new AppError('INTERNAL')
       return new ConflictError('OVERLAP')
     case '23514':
+      if (constraint !== undefined && INTERNAL_CHECKS.has(constraint)) return new AppError('INTERNAL')
       return new ValidationError({})
     case 'P0001':
       return new AppError('INTERNAL')

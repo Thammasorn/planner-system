@@ -22,7 +22,13 @@ import { PasswordReveal } from './PasswordReveal'
  * The new password is shown once with a copy button, like after create. A fresh form per opening. Esc, the
  * backdrop and "ยกเลิก" are ignored while the reset is in flight, so the one-time password step cannot be lost.
  */
-export function ResetPasswordDialog({ employee, onClose }: { employee: EmployeeRow | null; onClose: () => void }) {
+export function ResetPasswordDialog({
+  employee,
+  onClose,
+}: {
+  employee: EmployeeRow | null
+  onClose: () => void
+}) {
   const titleId = useId()
   const open = employee !== null
   const [prevOpen, setPrevOpen] = useState(open)
@@ -36,9 +42,21 @@ export function ResetPasswordDialog({ employee, onClose }: { employee: EmployeeR
   if (employee && employee !== shown) setShown(employee)
   const [busy, setBusy] = useState(false)
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby={titleId}>
+    <Dialog
+      open={open}
+      onClose={busy ? undefined : onClose}
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby={titleId}
+    >
       {shown ? (
-        <ResetForm key={session} employee={shown} titleId={titleId} onClose={onClose} onBusyChange={setBusy} />
+        <ResetForm
+          key={session}
+          employee={shown}
+          titleId={titleId}
+          onClose={onClose}
+          onBusyChange={setBusy}
+        />
       ) : null}
     </Dialog>
   )
@@ -101,7 +119,12 @@ function ResetForm({
     )
   }
   return (
-    <Box component="form" noValidate onSubmit={onSubmit} sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <Box
+      component="form"
+      noValidate
+      onSubmit={onSubmit}
+      sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
+    >
       {title}
       <DialogContent>
         <Stack spacing={2}>
@@ -109,7 +132,12 @@ function ResetForm({
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             {th.employees.resetHint}
           </Typography>
-          <PasswordField label={th.account.newPassword} value={password} onChange={setPassword} errors={errors} />
+          <PasswordField
+            label={th.account.newPassword}
+            value={password}
+            onChange={setPassword}
+            errors={errors}
+          />
         </Stack>
       </DialogContent>
       <DialogActions>

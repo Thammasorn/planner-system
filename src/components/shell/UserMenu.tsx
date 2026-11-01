@@ -104,7 +104,7 @@ export function UserMenu({ collapsed }: { collapsed: boolean }) {
           </MenuItem>
         ) : null}
         <Divider />
-        <ListSubheader disableSticky sx={{ lineHeight: '32px' }}>
+        <ListSubheader disableSticky sx={{ lineHeight: 'var(--leading-ui)', py: 1, fontSize: 'var(--font-xs)' }}>
           {th.prefs.theme}
         </ListSubheader>
         {THEMES.map((t) => {

@@ -39,6 +39,46 @@ const hits: SearchResponse = {
       matchedIn: 'content',
     },
   ],
+  tasks: [],
+}
+
+const TA = '00000000-0000-4000-8000-000000000051'
+const TB = '00000000-0000-4000-8000-000000000052'
+const P = '00000000-0000-4000-8000-000000000061'
+const status = {
+  id: '00000000-0000-4000-8000-000000000071',
+  name: 'กำลังทำ',
+  color: '#2F5597',
+  category: 'IN_PROGRESS',
+} as const
+const taskHits: SearchResponse = {
+  pages: hits.pages,
+  tasks: [
+    {
+      kind: 'task',
+      id: TA,
+      name: 'ย้ายข้อมูลลูกค้าเก่า',
+      projectId: P,
+      projectName: 'CRM Migration',
+      projectArchived: false,
+      status,
+      completed: false,
+      href: `/t/${TA}`,
+      matchedIn: 'name',
+    },
+    {
+      kind: 'task',
+      id: TB,
+      name: 'ตรวจรายชื่อ',
+      projectId: P,
+      projectName: 'Store เก่า',
+      projectArchived: true,
+      status: { ...status, category: 'DONE', name: 'เสร็จ' },
+      completed: true,
+      href: `/t/${TB}`,
+      matchedIn: 'content',
+    },
+  ],
 }
 
 beforeAll(installCmdkShims)
@@ -102,8 +142,29 @@ describe('CommandPalette (FR-1102, X08, X49)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  it('FR-690 (M6.1-D14): the งาน group comes before หน้าเอกสาร; chips say content / done / archived; Enter opens /t', async () => {
+    api.getJson.mockResolvedValue(taskHits)
+    const user = userEvent.setup()
+    renderPalette()
+    openWithKeys()
+    await user.type(await within(await screen.findByRole('dialog')).findByRole('combobox'), 'ลูกค้า')
+    const tasks = await within(dialog()).findByRole('group', { name: th.palette.groups.tasks })
+    const groups = within(dialog()).getAllByRole('group')
+    expect(groups.indexOf(tasks)).toBeLessThan(
+      groups.indexOf(within(dialog()).getByRole('group', { name: th.palette.groups.pages })),
+    )
+    const [first, second] = within(tasks).getAllByRole('option')
+    expect(first).toHaveAccessibleName(/ย้ายข้อมูลลูกค้าเก่า/)
+    expect(first).toHaveAccessibleName(/CRM Migration/)
+    expect(within(first!).queryByText(th.palette.matchedInContent)).toBeNull()
+    for (const chip of [th.palette.matchedInContent, th.palette.taskDone, th.palette.archived])
+      expect(within(second!).getByText(chip)).toBeInTheDocument()
+    await user.keyboard('{Enter}') // the first option (a task) is selected
+    expect(nav.push).toHaveBeenCalledWith(`/t/${TA}`)
+  })
+
   it('no hits → the empty text', async () => {
-    api.getJson.mockResolvedValue({ pages: [] } satisfies SearchResponse)
+    api.getJson.mockResolvedValue({ pages: [], tasks: [] } satisfies SearchResponse)
     const user = userEvent.setup()
     renderPalette()
     openWithKeys()

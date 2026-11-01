@@ -6,7 +6,7 @@
   justify-content: center;
   flex: none;
   line-height: 1;
-  font-size: 12px;
+  font-size: var(--font-xs);
 }
 
 .leave {
@@ -26,13 +26,13 @@
 .tentative {
   composes: glyph;
   color: var(--tentative-fg);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 .dayDetail {
   composes: glyph;
   color: var(--faded-fg);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 .noCapacity {

@@ -24,8 +24,9 @@ export class ShellPage {
   expandButton(): Locator {
     return this.page.getByRole('button', { name: th.nav.expandSidebar, exact: true })
   }
+  /** ☰ — since M6.1 it lives in the screen's header bar (below 900 px), not in a separate mobile bar (M6.1-D19). */
   menuButton(): Locator {
-    return this.page.getByRole('button', { name: th.nav.openMenu, exact: true })
+    return this.page.getByTestId('page-header').getByRole('button', { name: th.layout.openMenu, exact: true })
   }
   skipLink(): Locator {
     return this.page.getByRole('link', { name: th.nav.skipToContent, exact: true })

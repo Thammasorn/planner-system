@@ -72,7 +72,7 @@ const COLUMNS: readonly Column[] = [
     id: 'certainty',
     label: th.projects.columns.certainty,
     render: (p) => (
-      <Box component="span" sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'center' }}>
+      <Box component="span" sx={{ display: 'inline-flex', gap: 1, alignItems: 'center' }}>
         <CertaintyBadge certainty={p.certainty} />
         <span>{th.projects.certainty[p.certainty]}</span>
       </Box>

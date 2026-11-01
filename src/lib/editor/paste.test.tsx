@@ -1,6 +1,7 @@
 // S2.2 — paste routing (FR-524/525, AC-502/503, PLAN §3.11 six routes) + HTML helpers (jsdom, `ui` project).
+import { BlockNoteEditor } from '@blocknote/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppEditor } from '@/components/editor/schema'
+import { type AppEditor, schema } from '@/components/editor/schema'
 import { th } from '@/i18n/th'
 import { DEFAULT_UPLOAD_LIMITS } from '@/lib/files/upload-rules'
 import { externalImagesToLinks, htmlHasText, makePasteHandler } from './paste'
@@ -102,6 +103,42 @@ describe('makePasteHandler', () => {
   it('no clipboard data → default', () => {
     run({ clipboardData: null } as unknown as ClipboardEvent)
     expect(defaultPasteHandler).toHaveBeenCalledWith()
+  })
+})
+
+describe('makePasteHandler › TASK body (FR-680, M6.1-D9): subpage → mention', () => {
+  const PAGE = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+  function realEditor(): AppEditor {
+    const e = BlockNoteEditor.create({ schema, initialContent: [{ type: 'paragraph', content: 'ก่อน' }] })
+    e.setTextCursorPosition(e.document[0]!, 'end')
+    return e
+  }
+  /** Stands in for BlockNote's internal paste of a copied sub-page card (blocknote/html → default handler). */
+  const pastesCard = (e: AppEditor) =>
+    vi.fn(() => {
+      e.insertBlocks([{ type: 'subpage', props: { pageId: PAGE } }], e.document[0]!, 'after')
+      return true
+    })
+  const internalCopy = clip({
+    'blocknote/html': '<div data-content-type="subpage"></div>',
+    'text/html': '<div/>',
+  })
+
+  it('a pasted sub-page card becomes a paragraph with a page mention', () => {
+    const e = realEditor()
+    const handler = makePasteHandler({ notify: vi.fn(), limits: DEFAULT_UPLOAD_LIMITS, kind: 'TASK' })
+    expect(handler({ event: internalCopy, editor: e, defaultPasteHandler: pastesCard(e) })).toBe(true)
+    expect(e.document.some((b) => b.type === 'subpage')).toBe(false)
+    const para = e.document[1]!
+    expect(para.type).toBe('paragraph')
+    expect(para.content).toEqual([{ type: 'mention', props: { kind: 'page', id: PAGE } }])
+  })
+
+  it('DOC pages keep the card (M4 behaviour)', () => {
+    const e = realEditor()
+    const handler = makePasteHandler({ notify: vi.fn(), limits: DEFAULT_UPLOAD_LIMITS })
+    handler({ event: internalCopy, editor: e, defaultPasteHandler: pastesCard(e) })
+    expect(e.document.some((b) => b.type === 'subpage')).toBe(true)
   })
 })
 

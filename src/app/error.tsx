@@ -18,8 +18,8 @@ export default function ErrorPage({
   }, [error])
 
   return (
-    <Box component="section" sx={{ py: 8, px: 2, maxWidth: 560, mx: 'auto', textAlign: 'center' }}>
-      <Typography variant="h5" component="h1" gutterBottom>
+    <Box component="section" sx={{ py: 6, px: 2, maxWidth: 560, mx: 'auto', textAlign: 'center' }}>
+      <Typography variant="h2" component="h1" gutterBottom>
         {th.errors.errorPage.title}
       </Typography>
       <Typography sx={{ color: 'text.secondary', mb: 3 }}>{th.errors.errorPage.body}</Typography>

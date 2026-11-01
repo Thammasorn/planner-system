@@ -223,7 +223,6 @@ export function useTaskMutations(projectId: string): TaskMutations {
           depth: (parent ? parent.depth + 1 : 0) as TaskDepth,
           position: provisionalKey(d.tasks, v.parentId, v.afterId),
           name: v.name,
-          notes: null,
           startDate: null,
           dueDate: null,
           certaintyOverride: null,
@@ -231,6 +230,7 @@ export function useTaskMutations(projectId: string): TaskMutations {
           assignees: [],
           statusId: status.id,
           blockers: { open: 0, total: 0 },
+          hasBody: false, // quick add never creates a body (FR-681, AC-627)
         }
         return { ...d, tasks: patchCreate(d.tasks, row) }
       },
@@ -287,8 +287,6 @@ export function useTaskMutations(projectId: string): TaskMutations {
       optimistic: (d, v) => {
         const p: Partial<TaskDTO> = {}
         if (v.patch.name !== undefined) p.name = v.patch.name.trim()
-        if (v.patch.notes !== undefined)
-          p.notes = v.patch.notes === null || v.patch.notes.trim() === '' ? null : v.patch.notes
         if (v.patch.startDate !== undefined) p.startDate = v.patch.startDate
         if (v.patch.dueDate !== undefined) p.dueDate = v.patch.dueDate
         if (v.patch.certaintyOverride !== undefined) p.certaintyOverride = v.patch.certaintyOverride

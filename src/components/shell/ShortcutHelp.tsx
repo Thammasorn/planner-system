@@ -71,7 +71,7 @@ export function ShortcutHelpDialog({ open, onClose }: { open: boolean; onClose: 
                       <Box
                         key={ci}
                         component="span"
-                        sx={{ display: 'inline-flex', gap: 0.25, alignItems: 'center' }}
+                        sx={{ display: 'inline-flex', gap: 0.5, alignItems: 'center' }}
                       >
                         {ci > 0 ? <span aria-hidden="true">/</span> : null}
                         {combo.map((k, ki) => (
@@ -80,13 +80,13 @@ export function ShortcutHelpDialog({ open, onClose }: { open: boolean; onClose: 
                             <Box
                               component="kbd"
                               sx={{
-                                px: 0.75,
-                                py: 0.125,
+                                px: 0.5,
+                                py: 0,
                                 border: 1,
                                 borderColor: 'divider',
-                                borderRadius: 0.5,
+                                borderRadius: 'var(--radius-sm)',
                                 fontFamily: 'inherit',
-                                fontSize: '0.8125rem',
+                                fontSize: 'var(--font-sm)',
                                 bgcolor: 'action.hover',
                               }}
                             >

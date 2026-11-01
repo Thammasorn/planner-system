@@ -95,7 +95,7 @@ export function AssigneeChips({
                   onUnassign(a.assignmentId, label)
                 }}
               >
-                <CloseOutlined sx={{ fontSize: 14 }} />
+                <CloseOutlined sx={{ fontSize: 'var(--font-md)' }} />
               </button>
             ) : null}
           </span>

@@ -1,21 +1,21 @@
 import type { Metadata } from 'next'
-import Stack from '@mui/material/Stack'
-import Typography from '@mui/material/Typography'
+import Box from '@mui/material/Box'
+import { PageHeaderBar } from '@/components/layout/PageHeaderBar'
 import { MyTasks } from '@/components/tasks/MyTasks'
 import { th } from '@/i18n/th'
 import { requirePageUser } from '@/server/session'
 
 export const metadata: Metadata = { title: th.my.title }
 
-/** งานของฉัน basic (FR-1009, X22): data from GET /api/tasks/my (the caller's own rows only). */
+/** งานของฉัน basic (FR-1009, X22): data from GET /api/tasks/my (the caller's own rows only). Header bar per FR-1603. */
 export default async function MyTasksPage() {
   await requirePageUser()
   return (
-    <Stack spacing={2} sx={{ minWidth: 0 }}>
-      <Typography variant="h4" component="h1">
-        {th.my.title}
-      </Typography>
-      <MyTasks />
-    </Stack>
+    <>
+      <PageHeaderBar crumbs={[{ label: th.my.title, asHeading: true }]} />
+      <Box sx={{ minWidth: 0 }}>
+        <MyTasks />
+      </Box>
+    </>
   )
 }

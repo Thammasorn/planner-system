@@ -34,22 +34,22 @@ export function BlockerBadge({
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 0.25,
-        px: 0.75,
+        gap: 0.5,
+        px: 1,
         height: 22,
-        borderRadius: 11,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid',
-        borderColor: waiting ? 'error.main' : 'divider',
+        borderColor: waiting ? 'error.main' : 'var(--border-subtle)',
         color: 'text.primary',
-        fontSize: '0.75rem',
+        fontSize: 'var(--font-xs)',
         whiteSpace: 'nowrap',
         flex: 'none',
       }}
     >
       {waiting ? (
-        <BlockOutlined aria-hidden="true" sx={{ fontSize: 14, color: 'error.main' }} />
+        <BlockOutlined aria-hidden="true" sx={{ fontSize: 'var(--font-md)', color: 'error.main' }} />
       ) : (
-        <CheckOutlined aria-hidden="true" sx={{ fontSize: 14, color: 'success.main' }} />
+        <CheckOutlined aria-hidden="true" sx={{ fontSize: 'var(--font-md)', color: 'success.main' }} />
       )}
       <span>{text}</span>
     </Box>
