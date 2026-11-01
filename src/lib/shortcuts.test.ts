@@ -39,6 +39,9 @@ describe('grid scope (M6, X07)', () => {
       'grid.clear',
       'grid.selectRow',
       'grid.newTask',
+      'grid.expandWeek',
+      'grid.collapseWeek',
+      'grid.cellMenu',
     ])
     expect(grid.find((s) => s.id === 'grid.full')?.combos).toEqual([['F']])
     expect(grid.find((s) => s.id === 'grid.shift')?.combos).toEqual([
@@ -46,6 +49,29 @@ describe('grid scope (M6, X07)', () => {
       ['Mod', 'ArrowRight'],
     ])
     expect(SHORTCUT_SCOPE_LABELS.grid).toBe(th.shortcuts.scopes.grid)
+  })
+})
+
+describe('grid day entries (M7, KEY-07, X07)', () => {
+  it('Cmd+↓ expands, Cmd+↑ collapses the view, Shift+F10 opens the cell menu', () => {
+    const by = (id: string) => SHORTCUTS.find((s) => s.id === id)
+    expect(by('grid.expandWeek')).toMatchObject({
+      scope: 'grid',
+      combos: [['Mod', 'ArrowDown']],
+      label: th.shortcuts.items.gridExpandWeek,
+    })
+    expect(by('grid.collapseWeek')).toMatchObject({
+      scope: 'grid',
+      combos: [['Mod', 'ArrowUp']],
+      label: th.shortcuts.items.gridCollapseWeek,
+    })
+    expect(by('grid.cellMenu')).toMatchObject({
+      scope: 'grid',
+      combos: [['Shift', 'F10']],
+      label: th.shortcuts.items.gridCellMenu,
+    })
+    for (const id of ['grid.expandWeek', 'grid.collapseWeek', 'grid.cellMenu'])
+      expect(by(id)?.label).not.toBe('')
   })
 })
 

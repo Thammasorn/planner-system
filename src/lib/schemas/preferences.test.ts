@@ -20,7 +20,7 @@ describe('preferences (X05, M1-D17)', () => {
       theme: 'dark',
       'sidebar.collapsed': true,
     })
-    expect(preferenceInput.safeParse({ key: 'grid.zoom', value: 'WEEK' }).success).toBe(false) // M7 key
+    expect(preferenceInput.safeParse({ key: 'grid.nope', value: 'WEEK' }).success).toBe(false) // undefined key
     expect(preferenceInput.safeParse({ key: 'theme', value: 'neon' }).success).toBe(false)
     expect(preferenceInput.safeParse({ key: 'sidebar.collapsed', value: true }).success).toBe(true)
   })
@@ -90,9 +90,25 @@ describe('grid preferences (M6-D21)', () => {
     expect(prefs['grid.unit']).toBeUndefined()
     expect(gridPreference(prefs, 'grid.unit')).toBe('DAYS')
     expect(gridPreference(prefs, 'load.view')).toBe('ALL')
-    expect(GRID_PREFERENCE_DEFAULTS).toEqual({ 'grid.unit': 'DAYS', 'load.view': 'ALL' })
+    expect(GRID_PREFERENCE_DEFAULTS).toEqual({ 'grid.unit': 'DAYS', 'load.view': 'ALL', 'grid.zoom': 'WEEK' })
     const stored = preferencesSchema.parse({ 'grid.unit': 'FRACTION', 'load.view': 'COMMITTED' })
     expect(gridPreference(stored, 'grid.unit')).toBe('FRACTION')
     expect(gridPreference(stored, 'load.view')).toBe('COMMITTED')
+  })
+})
+
+describe('grid.zoom preference (M7, FR-802, X59)', () => {
+  it('WEEK | DAY parse; MONTH fails', () => {
+    expect(preferenceInput.safeParse({ key: 'grid.zoom', value: 'DAY' }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'grid.zoom', value: 'WEEK' }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'grid.zoom', value: 'MONTH' }).success).toBe(false)
+  })
+
+  it('stored DAY is kept; MONTH / absent read as WEEK', () => {
+    expect(gridPreference(preferencesSchema.parse({ 'grid.zoom': 'DAY' }), 'grid.zoom')).toBe('DAY')
+    const bad = preferencesSchema.parse({ 'grid.zoom': 'MONTH' })
+    expect(bad['grid.zoom']).toBeUndefined()
+    expect(gridPreference(bad, 'grid.zoom')).toBe('WEEK')
+    expect(gridPreference(preferencesSchema.parse({}), 'grid.zoom')).toBe('WEEK')
   })
 })

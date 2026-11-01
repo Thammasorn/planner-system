@@ -195,7 +195,7 @@ describe('saveAllocations — world', () => {
     expect(audits.map((a) => a.projectId).sort()).toEqual([w.P.id, w.Q.id].sort())
   })
 
-  it('X27 / M6-D34: WEEK ≠ Σ on a DAY week → VALIDATION DAY_WEEK (also with SCALE); COLLAPSE converts; null clears', async () => {
+  it('X27 / M6-D34 → M7 BR-24: WEEK ≠ Σ on a DAY week → NEEDS_CHOICE; SCALE scales; COLLAPSE converts; null clears', async () => {
     const w = await createWorld({ with: ['allocations'] })
     asUser(w.member)
     const id = w.assignments.pChildAMember.id
@@ -204,21 +204,18 @@ describe('saveAllocations — world', () => {
       { granularity: 'DAY', periodStart: '2026-10-13', cd: 50 },
     ]
     const before = await auditCount()
-    for (const choice of [undefined, 'SCALE'] as const) {
-      const r = await saveAllocations({
-        items: [week(id, '2026-10-12', 150)],
-        ...(choice ? { onDayWeekConflict: choice } : {}),
-        clientOpId: 'dw',
-      })
-      expect(r).toMatchObject({
-        ok: false,
-        code: 'VALIDATION',
-        message: th.grid.errors.dayWeek,
-        issues: [{ taskAssignmentId: id, period: '2026-10-12', reason: 'DAY_WEEK' }],
-      })
-      expect(await allocationRows(id, '2026-10-12')).toEqual(dayRows)
-      expect(await assignmentVersion(id)).toBe(1)
-    }
+    // was the M6-only VALIDATION reason (M6-D34): now NEEDS_CHOICE (M7-D3), nothing written
+    const r = await saveAllocations({ items: [week(id, '2026-10-12', 150)], clientOpId: 'dw' })
+    expect(r).toMatchObject({
+      ok: false,
+      code: 'NEEDS_CHOICE',
+      message: th.errors.NEEDS_CHOICE,
+      week: '2026-10-12',
+      weeks: ['2026-10-12'],
+      pairs: [{ taskAssignmentId: id, week: '2026-10-12' }],
+    })
+    expect(await allocationRows(id, '2026-10-12')).toEqual(dayRows)
+    expect(await assignmentVersion(id)).toBe(1)
     expect(await auditCount()).toBe(before)
     // Σ (100) without a choice → no-op
     const same = ok(await saveAllocations({ items: [week(id, '2026-10-12', 100)], clientOpId: 'sum' }))
@@ -242,18 +239,33 @@ describe('saveAllocations — world', () => {
       }),
     )
     expect(await allocationRows(id, '2026-10-12')).toEqual(dayRows)
-    // COLLAPSE with a different value → WEEK 150; null clears
-    ok(await saveAllocations({ items: [week(id, '2026-10-12', 150, 3)], onDayWeekConflict: 'COLLAPSE', clientOpId: 'col' }))
-    expect(await allocationRows(id, '2026-10-12')).toEqual([{ granularity: 'WEEK', periodStart: '2026-10-12', cd: 150 }])
-    ok(await saveAllocations({ items: [week(id, '2026-10-12', null, 4)], clientOpId: 'clr' }))
+    // was VALIDATION with SCALE (M6): now BR-24 SCALE → DAY 75 / 75
+    const scaled = ok(
+      await saveAllocations({ items: [week(id, '2026-10-12', 150, 3)], onDayWeekConflict: 'SCALE', clientOpId: 'scale' }),
+    )
+    expect(scaled.results[0]!.version).toBe(4)
+    expect(await allocationRows(id, '2026-10-12')).toEqual([
+      { granularity: 'DAY', periodStart: '2026-10-12', cd: 75 },
+      { granularity: 'DAY', periodStart: '2026-10-13', cd: 75 },
+    ])
+    // COLLAPSE with a different value → WEEK 200; null clears
+    ok(await saveAllocations({ items: [week(id, '2026-10-12', 200, 4)], onDayWeekConflict: 'COLLAPSE', clientOpId: 'col' }))
+    expect(await allocationRows(id, '2026-10-12')).toEqual([{ granularity: 'WEEK', periodStart: '2026-10-12', cd: 200 }])
+    ok(await saveAllocations({ items: [week(id, '2026-10-12', null, 5)], clientOpId: 'clr' }))
     expect(await allocationRows(id, '2026-10-12')).toEqual([])
-    // partial DAY edit on a WEEK week → DAY_WEEK as well
+    // was refused in M6 (M6-D34): a partial DAY edit on a WEEK week now splits it (BR-22; 11-20 is the world holiday → cap 0)
     await makeAllocation({ assignment: { id }, period: '2026-11-16', cd: 250 })
-    const partial = await saveAllocations({
-      items: [{ taskAssignmentId: id, baseVersion: 5, changes: [{ granularity: 'DAY', period: '2026-11-18', cd: 100 }] }],
-      clientOpId: 'partial',
+    const partial = ok(
+      await saveAllocations({
+        items: [{ taskAssignmentId: id, baseVersion: 6, changes: [{ granularity: 'DAY', period: '2026-11-18', cd: 100 }] }],
+        clientOpId: 'partial',
+      }),
+    )
+    expect(partial.results[0]!.weeks['2026-11-16']).toEqual({
+      cd: 288,
+      resolution: 'DAY',
+      days: { '2026-11-16': 63, '2026-11-17': 63, '2026-11-18': 100, '2026-11-19': 62 },
     })
-    expect(partial).toMatchObject({ ok: false, code: 'VALIDATION', issues: [{ period: '2026-11-16', reason: 'DAY_WEEK' }] })
   })
 
   it('DAY weeks: null DAY week accepts day edits; mixed WEEK + DAY in one week → VALIDATION MIXED_WEEK_AND_DAY', async () => {

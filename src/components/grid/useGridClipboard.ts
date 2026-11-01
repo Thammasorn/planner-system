@@ -6,6 +6,7 @@ import { useCallback, type ClipboardEvent, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { th } from '@/i18n/th'
 import { copyText } from '@/lib/copy-text'
+import { clipTargets, sameKindRun } from '@/lib/grid/kinds'
 import { planPaste } from '@/lib/grid/paste'
 import { cellsOf, rectSize } from '@/lib/grid/selection'
 import { copyValues, parseTsv, serializeTsv } from '@/lib/grid/tsv'
@@ -40,7 +41,15 @@ export function useGridClipboard(acc: RefObject<GridAccess | null>) {
       e.preventDefault()
       const block = parseTsv(text)
       if (block.length === 0) return
-      const r = planPaste(block, { row: rect.r0, col: rect.c0 }, rectSize(rect), a.target, a.unit)
+      // M7-D12: paste only into the anchor column's kind (stop before the first other-kind column)
+      const size = rectSize(rect)
+      const width = Math.max(0, ...block.map((x) => x.length))
+      const tiled = size.cols % width === 0 && size.rows % block.length === 0 && (size.cols > width || size.rows > block.length)
+      const run = a.cols
+        ? sameKindRun(a.cols, rect.c0, rect.c0 + (tiled ? size.cols : width) - 1)
+        : { from: rect.c0, to: Number.MAX_SAFE_INTEGER, clipped: false }
+      const r = planPaste(block, { row: rect.r0, col: rect.c0 }, size, clipTargets(a.target, run), a.unit)
+      if (run.clipped) toast(th.grid.day.mixedKinds)
       if (r.writes.length > 0) {
         void a.gesture(th.grid.undo.paste, r.writes)
         toast(th.grid.toast.pasted(r.pasted))

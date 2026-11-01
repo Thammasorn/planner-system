@@ -40,7 +40,7 @@ import {
   type TimeOffRow,
 } from '@/server/db/schema'
 import * as services from '@/server/services'
-import { applyFixture, GOLDEN_PATH, seedGolden } from '../../scripts/lib/fixtures'
+import { addDayExample, applyFixture, DAY_EXAMPLE, GOLDEN_PATH, seedGolden } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
 import { allocationRows, makeBlocker, makePage, type TestUser } from '../helpers/factories'
 import { outcomeOf } from '../helpers/outcome'
@@ -1162,5 +1162,89 @@ describe('masking — task bodies (M6.1, plan/m06.1 S6.3; FR-682, FR-687, FR-690
     expect(byId.get(w.tasks.pLeaf.id)?.hasBody).toBe(true)
     expect(byId.get(w.tasks.pChildB.id)?.hasBody).toBe(false)
     assertNoLeak(mine, qBodies(w))
+  })
+})
+
+describe('masking — grid day (M7, plan/m07 S4.2; §3.3, X29, X30)', () => {
+  const W7 = ['dayAllocations'] as const
+  const DAY_WARNS = ['NON_WORKING', 'TIME_OFF']
+
+  it('member + expand + includeOthers=1: coworker’s Q day load is a number on D:2026-11-10 — nothing of Q', async () => {
+    const w = await createWorld({ with: W7 })
+    const coworker = w.users.coworker!
+    const body = await gridOk(w.member, w.P.id, 'from=2026-11-02&to=2026-11-16&expand=2026-11-09&includeOthers=1')
+    // qDay: DAY 2026-11-10 = 75 on qTaskCoworker (Q); P's own plans are excluded (X29)
+    expect(personOf(body, coworker.id).otherProjects?.['D:2026-11-10']?.total).toBe(75)
+    for (const p of Object.values(body.people))
+      for (const [key, v] of Object.entries(p.otherProjects ?? {})) {
+        expect(Object.keys(v ?? {}).sort(), key).toEqual(['committed', 'total'])
+        expect(typeof v?.total, key).toBe('number')
+        expect(typeof v?.committed, key).toBe('number')
+      }
+    assertContains(body, [w.P.name])
+    assertNoLeak(body, [
+      w.Q.name,
+      w.tasks.qTask.name,
+      w.Q.id,
+      w.tasks.qTask.id,
+      w.assignments.qTaskCoworker.id,
+      w.assignments.qTaskOutsider.id,
+    ])
+  })
+
+  it('lead + zoom=day: the member’s leave is only "ลา"; day-cell warn holds codes only (no type, note or id)', async () => {
+    const w = await createWorld({ with: W7 })
+    const body = await gridOk(w.lead, w.P.id, 'from=2026-11-02&to=2026-11-09&zoom=day')
+    expect(body.window.zoom).toBe('day')
+    expect(personOf(body, w.member.id).timeOff).toStrictEqual([
+      { start: '2026-11-02', end: '2026-11-02', half: null, label: th.masking.leave },
+    ])
+    for (const p of Object.values(body.people))
+      for (const e of p.timeOff) expect(Object.keys(e).sort()).toEqual(TIME_OFF_KEYS)
+    for (const r of body.rows) {
+      if (r.kind !== 'assignee') continue
+      for (const [key, c] of Object.entries(r.cells))
+        if (key.startsWith('D:') && c?.warn) for (const code of c.warn) expect(DAY_WARNS, key).toContain(code)
+    }
+    assertNoLeak(body, ['อบรม-โลก', 'โน้ตของ member', w.timeOff.member.id, w.leaveTypes.training.id])
+  })
+
+  it('outsider: the day-zoomed grid of P is a 404 with nothing of P', async () => {
+    const w = await createWorld({ with: W7 })
+    for (const qs of [
+      'from=2026-11-02&to=2026-11-09&zoom=day',
+      'from=2026-11-02&to=2026-11-16&expand=2026-11-09&includeOthers=1',
+    ]) {
+      const { status, body } = await gridAs(w.outsider, w.P.id, qs)
+      expect(status, qs).toBe(404)
+      assertNoLeak(body, [w.P.name, w.tasks.pLeaf.name, w.tasks.pCoworker.name, w.P.id])
+    }
+  })
+
+  it('golden + addDayExample: Ivy (not in Mobile) gets 404 without "Kickoff workshop"; Jack sees others’ day load as numbers only', async () => {
+    await seedGolden(db)
+    await addDayExample(db)
+    const mobileId = await goldenProjectId('Mobile App Revamp')
+    const ivy = await gridAs(await goldenUser('Ivy'), mobileId, 'from=2026-08-31&to=2026-10-26&zoom=day')
+    expect(ivy.status).toBe(404)
+    assertNoLeak(ivy.body, [DAY_EXAMPLE.task, 'Mobile App Revamp', mobileId, ...goldenTaskNames(['Mobile App Revamp'])])
+
+    const body = await gridOk(
+      await goldenUser('Jack'),
+      mobileId,
+      'from=2026-08-31&to=2026-10-26&includeOthers=1&expand=2026-09-07',
+    )
+    assertContains(body, [DAY_EXAMPLE.task])
+    const mint = await goldenUser('Mint')
+    const others = personOf(body, mint.id).otherProjects ?? {}
+    for (const [key, v] of Object.entries(others)) {
+      if (!key.startsWith('D:')) continue
+      expect(Object.keys(v ?? {}).sort(), key).toEqual(['committed', 'total'])
+      expect(Number.isInteger(v?.total) && Number.isInteger(v?.committed), key).toBe(true)
+    }
+    // Jack is not in POS / DW / CRM: none of their names, ids or task names (Mint's POS assignment rides as numbers)
+    const hidden: string[] = [...goldenTaskNames(['POS Upgrade', 'Data Warehouse', 'CRM Migration'])]
+    for (const n of ['POS Upgrade', 'Data Warehouse', 'CRM Migration'] as const) hidden.push(n, await goldenProjectId(n))
+    assertNoLeak(body, hidden)
   })
 })

@@ -98,7 +98,8 @@ describe('authz matrix', () => {
     const m6 = rows.filter((r) => /^(GR|AL|PR)-/.test(r.id))
     for (const perm of ['PERM-06', 'PERM-12'])
       expect(m6.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M6 row`).toBe(true)
-    for (const r of m6) expect(r.with ?? [], `${r.id} needs the allocations world`).toContain('allocations')
+    // implied parts count (M7 GR-D-*/AL-D-* rows run on 'dayAllocations', which implies 'allocations')
+    for (const r of m6) expect([...expandParts(r.with ?? [])], `${r.id} needs the allocations world`).toContain('allocations')
     // X44: every allowed single-item plan write audits one `allocation` row of P
     for (const r of m6.filter((x) => x.mutates)) expect(r.audit, r.id).toMatchObject({ entity: 'allocation' })
     expect(new Set(m6.map((r) => r.action))).toEqual(
@@ -137,6 +138,26 @@ describe('authz matrix', () => {
       expect(['404', '400'], `${r.id} W`).toContain(r.expect.W)
   })
 
+  it('M7 meta (plan/m07 §7.2): every GR-D-*, AL-D-* row exists, cites PERM-06/PERM-12, runs on the dayAllocations world; AL-DAYWEEK is 409', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...['ZOOM', 'EXPAND', 'ARCH', 'BADQ', 'MISSING'].map((k) => `GR-D-${k}`),
+      ...['SPLIT', 'SET', 'NEEDS', 'SCALE', 'COLLAPSE', 'CLEAR', 'MIXED', 'MAX', 'HIDDEN', 'ARCH', 'ARCH-COLLAPSE'].map(
+        (k) => `AL-D-${k}`,
+      ),
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M7 rows').toEqual([])
+    const m7 = rows.filter((r) => /^(GR|AL)-D-/.test(r.id))
+    for (const perm of ['PERM-06', 'PERM-12'])
+      expect(m7.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M7 row`).toBe(true)
+    for (const r of m7) expect(r.with ?? [], `${r.id} needs the dayAllocations world`).toContain('dayAllocations')
+    for (const r of m7.filter((x) => x.mutates)) expect(r.audit, r.id).toMatchObject({ entity: 'allocation' })
+    // no new action in M7 (M7-D2): only the grid route and saveAllocations
+    expect(new Set(m7.map((r) => r.action))).toEqual(new Set(['GET /api/grid/project/[projectId]', 'saveAllocations']))
+    // X27 flip (S4.5): the M6 row keeps its id and now expects NEEDS_CHOICE
+    expect(rows.find((r) => r.id === 'AL-DAYWEEK')?.expect).toEqual({ M: '409', L: '409', Me: '409', W: '404' })
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })
@@ -148,14 +169,24 @@ describe('authz matrix', () => {
       expect(outcome).toBe(row.expect[role])
       if (row.mutates && outcome === 'allow' && row.audit !== false) {
         const added = await auditRowsAfter(before)
-        expect(added).toHaveLength(1)
         const audit = row.audit!
-        const p = audit.projectId
-        expect(added[0]).toMatchObject({
-          entity: audit.entity,
-          actorId: actor.id,
-          ...(p === 'any' ? {} : { projectId: p ? p(w, ctx) : null }),
-        })
+        const n = audit.count ?? 1
+        expect(added).toHaveLength(n)
+        if (n === 1) {
+          const p = audit.projectId
+          expect(added[0]).toMatchObject({
+            entity: audit.entity,
+            actorId: actor.id,
+            ...(p === 'any' ? {} : { projectId: p ? p(w, ctx) : null }),
+          })
+        } else {
+          // X44: one row per changed assignment of the batch (M7 AL-D-HIDDEN)
+          for (const a of added) expect(a).toMatchObject({ entity: audit.entity, actorId: actor.id })
+          if (audit.projectIds)
+            expect(added.map((a) => a.projectId ?? '').sort()).toEqual(
+              audit.projectIds(w, ctx).map((x) => x ?? '').sort(),
+            )
+        }
       }
       // X44 exceptions (leases, preferences): an allowed `audit: false` mutation must not write any audit row —
       // e.g. a lease heartbeat that audited every 30 s would fail here.

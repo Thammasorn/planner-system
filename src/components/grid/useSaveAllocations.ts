@@ -1,12 +1,15 @@
 'use client'
-// src/components/grid/useSaveAllocations.ts — grid saves (SPEC §7.4, PLAN §3.10, X65, M6-D3/D13/D14; based on
-// plan/research/snippets/r4/client/components/grid/useSaveAllocations.ts).
-// - enqueue applies the writes to every cached chunk at once (< 50 ms), coalesces them and (re)starts a 400 ms debounce;
-//   `immediate` (undo / redo) flushes first and sends its own batch with onDayWeekConflict 'COLLAPSE'.
+// src/components/grid/useSaveAllocations.ts — grid saves (SPEC §7.4, PLAN §3.10, X65, M6-D3/D13/D14, M7-D4/D6/D26;
+// based on plan/research/snippets/r4/client/components/grid/useSaveAllocations.ts).
+// - enqueue applies the writes to every cached chunk at once (< 50 ms, the domain's planWeek incl. BR-22/23/24),
+//   coalesces them and (re)starts a 400 ms debounce; `immediate` (undo / redo) flushes first and sends its own batch.
+// - A batch carries one onDayWeekConflict ('SCALE' | 'COLLAPSE' | none): the queue flushes before it takes writes with
+//   another choice, and before a change of the other granularity for a week it already holds (M7-D6).
 // - One scoped mutation queue per context; baseVersion is read from the version registry at send time.
 // - Success: versions remembered, server weeks patched into every chunk (no refetch), warnings toasted, other views
 //   invalidated (invalidateAfterGridSave). Failure: rollback when alone (else resync), retry toast; VERSION_CONFLICT:
-//   server state + conflict epoch bump + toast; DAY_WEEK validation: those weeks revert + toast.
+//   server state + conflict epoch bump + toast; NEEDS_CHOICE (stale cache): the BR-24 dialog (onNeedsChoice) decides
+//   and the batch is re-sent; VALIDATION with issues: those weeks revert + toast, the rest is re-sent.
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -16,11 +19,14 @@ import { th } from '@/i18n/th'
 import { ActionFailure, unwrap } from '@/lib/action-result'
 import type {
   GridResponse,
+  NeedsChoicePayload,
+  OnDayWeekConflict,
   SaveAllocationsInput,
   SaveAllocationsItem,
   SaveAllocationsOk,
   SaveItemResult,
   SaveValidationIssue,
+  SaveWarningCode,
 } from '@/lib/contracts/grid'
 import {
   applyConflicts,
@@ -45,20 +51,29 @@ interface Batch {
   writes: CellWrite[]
   /** first-seen snapshot per (assignment, week) — the rollback target */
   before: Map<string, WeekSnapshot>
-  onDayWeekConflict?: 'COLLAPSE'
+  onDayWeekConflict?: OnDayWeekConflict
   sent?: SaveAllocationsItem[]
   resolve: (v: SaveAllocationsOk | null) => void
   promise: Promise<SaveAllocationsOk | null>
 }
 
+export interface EnqueueOptions {
+  onDayWeekConflict?: OnDayWeekConflict
+  immediate?: boolean
+}
+
 export interface SaveApi {
-  enqueue(
-    writes: readonly CellWrite[],
-    o?: { onDayWeekConflict?: 'COLLAPSE'; immediate?: boolean },
-  ): Promise<SaveAllocationsOk | null>
+  enqueue(writes: readonly CellWrite[], o?: EnqueueOptions): Promise<SaveAllocationsOk | null>
   flush(): Promise<void>
   retry(): void
   state: SaveState
+}
+
+export interface SaveOptions {
+  /** VERSION_CONFLICT hit these assignments (M7-D26: an open BR-24 dialog drops their pairs). */
+  onConflict?: (ids: string[]) => void
+  /** NEEDS_CHOICE (server fallback, M7-D4): the BR-24 choice for these pairs, or null (Cancel). */
+  onNeedsChoice?: (payload: NeedsChoicePayload, writes: readonly CellWrite[]) => Promise<OnDayWeekConflict | null>
 }
 
 let opSeq = 0
@@ -71,7 +86,7 @@ const snapKey = (taId: string, week: ISODate) => `${taId}|${week}`
 function newBatch(
   writes: CellWrite[],
   before: Map<string, WeekSnapshot>,
-  onDayWeekConflict?: 'COLLAPSE',
+  onDayWeekConflict?: OnDayWeekConflict,
 ): Batch {
   let resolve!: (v: SaveAllocationsOk | null) => void
   const promise = new Promise<SaveAllocationsOk | null>((r) => (resolve = r))
@@ -89,7 +104,41 @@ function startsWith(key: readonly unknown[], prefix: readonly unknown[]): boolea
   return prefix.every((p, i) => key[i] === p)
 }
 
-export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[]) => void } = {}): SaveApi {
+/** M7-D6: does `writes` touch a week the batch already holds with the other granularity? */
+function mixesGranularity(batch: readonly CellWrite[], writes: readonly CellWrite[]): boolean {
+  const held = new Map<string, CellWrite['granularity']>()
+  for (const w of batch) held.set(snapKey(w.taskAssignmentId, weekOf(w)), w.granularity)
+  return writes.some((w) => {
+    const g = held.get(snapKey(w.taskAssignmentId, weekOf(w)))
+    return g !== undefined && g !== w.granularity
+  })
+}
+
+const WARNING_TEXT: Readonly<Record<Exclude<SaveWarningCode, 'SPILLED_OVER_DAY_LIMIT'>, string>> = {
+  WORK_ON_NON_WORKING_DAY: th.grid.warn.nonWorkingDay,
+  WEEK_NO_CAPACITY: th.grid.warn.weekNoCapacity,
+  ALLOCATED_ON_TIME_OFF: th.grid.toast.warning.ALLOCATED_ON_TIME_OFF,
+}
+
+/** Save warnings → toasts: SPILLED_OVER_DAY_LIMIT its own (M7-D8); the rest one deduplicated toast. */
+export function toastWarnings(codes: Iterable<SaveWarningCode>): void {
+  const set = new Set(codes)
+  if (set.delete('SPILLED_OVER_DAY_LIMIT')) toast.warning(th.grid.day.splitClampedToast)
+  const texts = [...new Set([...set].map((c) => WARNING_TEXT[c as keyof typeof WARNING_TEXT]))]
+  if (texts.length > 0) toast.warning(texts.join(' · '))
+}
+
+function validationText(issues: readonly SaveValidationIssue[], fallback: string): string {
+  const reasons = new Set(issues.map((i) => i.reason))
+  if (reasons.has('UNREPRESENTABLE')) return th.grid.day.unrepresentable
+  if (reasons.has('MIXED_WEEK_AND_DAY')) return th.grid.errors.mixedWeekAndDay
+  if (reasons.has('MAX')) return issues.some((i) => i.reason === 'MAX' && weekStart(i.period) !== i.period)
+    ? th.grid.errors.maxDay
+    : th.grid.toast.maxWeek
+  return fallback
+}
+
+export function useSaveAllocations(ctx: GridCtx, o: SaveOptions = {}): SaveApi {
   const qc = useQueryClient()
   const prefix = useMemo(() => qk.gridAll(ctx), [ctx])
   const mutationKey = useMemo(() => ['saveAllocations', ctx.id], [ctx.id])
@@ -97,9 +146,9 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const outstanding = useRef(new Map<number, Batch>())
   const failed = useRef<Batch | null>(null)
-  const onConflict = useRef(o.onConflict)
+  const opts = useRef(o)
   useEffect(() => {
-    onConflict.current = o.onConflict
+    opts.current = o
   })
   const [state, setState] = useState<SaveState>('idle')
 
@@ -121,11 +170,11 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
   )
 
   const applyOptimistic = useCallback(
-    (writes: readonly CellWrite[]) => {
+    (writes: readonly CellWrite[], choice?: OnDayWeekConflict) => {
       if (writes.length === 0) return
-      const deltas = rowTotalDeltas(chunks(), writes)
+      const deltas = rowTotalDeltas(chunks(), writes, choice)
       qc.setQueriesData<GridResponse>({ queryKey: prefix }, (old) =>
-        old ? applyWritesOptimistically(old, writes, deltas) : old,
+        old ? applyWritesOptimistically(old, writes, deltas, choice) : old,
       )
     },
     [qc, prefix, chunks],
@@ -144,22 +193,29 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
     [chunks],
   )
 
-  /** Writes that the server has not confirmed yet (sent or pending), in send order. */
-  const unconfirmed = useCallback((after?: number): CellWrite[] => {
-    const out: CellWrite[] = []
-    for (const b of [...outstanding.current.values()].sort((a, b2) => a.id - b2.id)) {
-      if (after === undefined || b.id > after) out.push(...b.writes)
-    }
-    if (pending.current) out.push(...pending.current.writes)
+  /** Batches the server has not confirmed yet (sent or pending), in send order. */
+  const unconfirmed = useCallback((after?: number): Batch[] => {
+    const out = [...outstanding.current.values()]
+      .sort((a, b2) => a.id - b2.id)
+      .filter((b) => after === undefined || b.id > after)
+    if (pending.current) out.push(pending.current)
     return out
   }, [])
 
-  const rollback = useCallback(
-    (snaps: Iterable<WeekSnapshot>) => {
-      applyOptimistic([...snaps].flatMap(snapshotWrites))
-      applyOptimistic(unconfirmed()) // keep later edits on top
+  const reapply = useCallback(
+    (after?: number) => {
+      for (const b of unconfirmed(after)) applyOptimistic(b.writes, b.onDayWeekConflict)
     },
     [applyOptimistic, unconfirmed],
+  )
+
+  const rollback = useCallback(
+    (snaps: Iterable<WeekSnapshot>) => {
+      // complete snapshots replay exactly with COLLAPSE (never a BR-24 choice, §7.5)
+      applyOptimistic([...snaps].flatMap(snapshotWrites), 'COLLAPSE')
+      reapply() // keep later edits on top
+    },
+    [applyOptimistic, reapply],
   )
 
   // a refetch that lands while edits are unconfirmed must not wipe them: re-apply them on fresh data
@@ -169,14 +225,21 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
         if (ev.type !== 'updated' || ev.action.type !== 'success' || ev.action.manual) return
         const key = ev.query.queryKey as readonly unknown[]
         if (!startsWith(key, prefix)) return
-        const writes = unconfirmed()
-        if (writes.length === 0) return
-        qc.setQueryData<GridResponse>(key, (old) => (old ? applyWritesOptimistically(old, writes) : old))
+        const batches = unconfirmed()
+        if (batches.length === 0) return
+        qc.setQueryData<GridResponse>(key, (old) =>
+          old
+            ? batches.reduce((r, b) => applyWritesOptimistically(r, b.writes, undefined, b.onDayWeekConflict), old)
+            : old,
+        )
       }),
     [qc, prefix, unconfirmed],
   )
 
-  const requeue = useRef<(writes: CellWrite[], before: Map<string, WeekSnapshot>) => void>(() => {})
+  const requeue = useRef<(writes: CellWrite[], before: Map<string, WeekSnapshot>, choice?: OnDayWeekConflict) => void>(
+    () => {},
+  )
+  const resend = useRef<(b: Batch) => void>(() => {})
 
   const mutation = useMutation<SaveAllocationsOk, Error, Batch>({
     mutationKey,
@@ -197,15 +260,16 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
       qc.setQueriesData<GridResponse>({ queryKey: prefix }, (old) =>
         old ? applyServerResults(old, ok) : old,
       )
-      applyOptimistic(unconfirmed(b.id))
-      const codes = new Set(ok.warnings.map((w) => w.code))
-      for (const code of codes) toast.warning(th.grid.toast.warning[code])
+      reapply(b.id)
+      toastWarnings(ok.warnings.map((w) => w.code))
       invalidateAfterGridSave(qc, ctx)
       b.resolve(ok)
       sync()
     },
     onError: (err, b) => {
       outstanding.current.delete(b.id)
+      // NEEDS_CHOICE is M7's code (S0.4); compared as a string until the ErrorCode union lists it
+      const code: string = err instanceof ActionFailure ? err.code : ''
       if (err instanceof ActionFailure && err.code === 'VERSION_CONFLICT') {
         const current = (Array.isArray(err.extra.current) ? err.extra.current : []) as SaveItemResult[]
         const sentVersion = new Map((b.sent ?? []).map((i) => [i.taskAssignmentId, i.baseVersion]))
@@ -221,24 +285,38 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
         )
         void qc.invalidateQueries({ queryKey: prefix })
         const rest = b.writes.filter((w) => !ids.has(w.taskAssignmentId))
-        if (rest.length > 0) requeue.current(rest, b.before)
+        if (rest.length > 0) requeue.current(rest, b.before, b.onDayWeekConflict)
         toast.warning(th.grid.toast.conflict)
-        onConflict.current?.([...ids])
+        opts.current.onConflict?.([...ids])
+      } else if (err instanceof ActionFailure && code === 'NEEDS_CHOICE') {
+        const payload = err.extra as unknown as NeedsChoicePayload
+        const pairs = Array.isArray(payload.pairs) ? payload.pairs : []
+        const ask = opts.current.onNeedsChoice
+        const decide = ask
+          ? ask({ week: payload.week, weeks: Array.isArray(payload.weeks) ? payload.weeks : [], pairs }, b.writes)
+          : Promise.resolve(null)
+        void decide.then((choice) => {
+          if (choice) {
+            resend.current(newBatch(b.writes, b.before, choice))
+            return
+          }
+          const bad = new Set(pairs.map((p) => snapKey(p.taskAssignmentId, p.week)))
+          rollback([...b.before].filter(([k]) => bad.has(k)).map(([, s]) => s))
+          const rest = b.writes.filter((w) => !bad.has(snapKey(w.taskAssignmentId, weekOf(w))))
+          if (rest.length > 0) resend.current(newBatch(rest, b.before, b.onDayWeekConflict))
+        })
       } else if (
         err instanceof ActionFailure &&
         err.code === 'VALIDATION' &&
         Array.isArray(err.extra.issues) &&
-        (err.extra.issues as SaveValidationIssue[]).some((i) => i.reason === 'DAY_WEEK')
+        err.extra.issues.length > 0
       ) {
-        const bad = new Set(
-          (err.extra.issues as SaveValidationIssue[])
-            .filter((i) => i.reason === 'DAY_WEEK')
-            .map((i) => snapKey(i.taskAssignmentId, weekStart(i.period))),
-        )
+        const issues = err.extra.issues as SaveValidationIssue[]
+        const bad = new Set(issues.map((i) => snapKey(i.taskAssignmentId, weekStart(i.period))))
         rollback([...b.before].filter(([k]) => bad.has(k)).map(([, s]) => s))
         const rest = b.writes.filter((w) => !bad.has(snapKey(w.taskAssignmentId, weekOf(w))))
-        if (rest.length > 0) requeue.current(rest, b.before)
-        toast(th.grid.toast.dayWeekReadOnly)
+        if (rest.length > 0) requeue.current(rest, b.before, b.onDayWeekConflict)
+        toast.error(validationText(issues, err.message))
       } else {
         // isMutating still counts the failing mutation inside onError (r4 §6)
         if (qc.isMutating({ mutationKey }) <= 1) rollback(b.before.values())
@@ -270,6 +348,12 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
     },
     [mutateAsync, sync],
   )
+  useEffect(() => {
+    resend.current = (b) => {
+      applyOptimistic(b.writes, b.onDayWeekConflict)
+      void send(b)
+    }
+  }, [applyOptimistic, send])
 
   const flushPending = useCallback(() => {
     if (timer.current !== null) {
@@ -294,8 +378,11 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
   }, [flushPending])
 
   const addPending = useCallback(
-    (writes: readonly CellWrite[], before?: Map<string, WeekSnapshot>) => {
-      const b = pending.current ?? (pending.current = newBatch([], new Map()))
+    (writes: readonly CellWrite[], before?: Map<string, WeekSnapshot>, choice?: OnDayWeekConflict) => {
+      const cur = pending.current
+      // M7-D4 / M7-D6: never merge different choices or both granularities of one week into one batch
+      if (cur && (cur.onDayWeekConflict !== choice || mixesGranularity(cur.writes, writes))) flushPending()
+      const b = pending.current ?? (pending.current = newBatch([], new Map(), choice))
       if (before) for (const [k, s] of before) if (!b.before.has(k)) b.before.set(k, s)
       captureBefore(writes, b.before)
       pending.current = { ...b, writes: coalesce(b.writes, writes) }
@@ -303,25 +390,25 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
       sync()
       return b.promise
     },
-    [captureBefore, schedule, sync],
+    [captureBefore, flushPending, schedule, sync],
   )
 
   useEffect(() => {
-    requeue.current = (writes, before) => void addPending(writes, before)
+    requeue.current = (writes, before, choice) => void addPending(writes, before, choice)
   }, [addPending])
 
   const enqueue = useCallback<SaveApi['enqueue']>(
-    (writes, opts) => {
+    (writes, eo) => {
       if (writes.length === 0) return Promise.resolve(null)
-      if (opts?.immediate) {
+      if (eo?.immediate) {
         flushPending()
         const before = new Map<string, WeekSnapshot>()
         captureBefore(writes, before)
-        applyOptimistic(writes)
-        return send(newBatch([...writes], before, opts.onDayWeekConflict))
+        applyOptimistic(writes, eo.onDayWeekConflict)
+        return send(newBatch([...writes], before, eo.onDayWeekConflict))
       }
-      const p = addPending(writes)
-      applyOptimistic(writes)
+      const p = addPending(writes, undefined, eo?.onDayWeekConflict)
+      applyOptimistic(writes, eo?.onDayWeekConflict)
       return p
     },
     [addPending, applyOptimistic, captureBefore, flushPending, send],
@@ -331,7 +418,7 @@ export function useSaveAllocations(ctx: GridCtx, o: { onConflict?: (ids: string[
     const b = failed.current
     if (!b) return
     failed.current = null
-    applyOptimistic(b.writes)
+    applyOptimistic(b.writes, b.onDayWeekConflict)
     void send(newBatch(b.writes, b.before, b.onDayWeekConflict))
   }, [applyOptimistic, send])
   const retryRef = useRef(retry)

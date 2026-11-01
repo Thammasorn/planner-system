@@ -20,6 +20,7 @@ export type ErrorCode =
   | 'INVALID_PASSWORD'
   | 'TOO_LARGE'
   | 'UNSUPPORTED_TYPE'
+  | 'NEEDS_CHOICE'
   | 'INTERNAL'
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -40,6 +41,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   INVALID_PASSWORD: 400,
   TOO_LARGE: 413,
   UNSUPPORTED_TYPE: 415,
+  NEEDS_CHOICE: 409,
   INTERNAL: 500,
 }
 

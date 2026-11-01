@@ -76,12 +76,12 @@ beforeEach(() => {
 })
 
 describe('GridCell (FR-804/807/808, BR-20a)', () => {
-  it('a DAY week shows its total with ⋯ and the hidden text', async () => {
+  it('a DAY week shows its total with ⋯ and the hidden text; editable since M7 (X27)', async () => {
     render()
     const cell = await screen.findByTestId('cell-a:a-ivy-W:2026-09-28')
     expect(cell).toHaveTextContent('1.0')
     expect(cell).toHaveAttribute('data-resolution', 'DAY')
-    expect(cell).toHaveAttribute('aria-readonly', 'true')
+    expect(cell).not.toHaveAttribute('aria-readonly')
     expect(cell.querySelector('[data-glyph="dayDetail"]')).toHaveTextContent('⋯')
     expect(within(cell).getByText(th.grid.glyph.dayDetail)).toBeInTheDocument()
   })

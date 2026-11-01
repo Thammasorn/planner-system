@@ -146,8 +146,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     label: th.calendar.shortcuts.open,
   },
   { id: 'calendar.clear', scope: 'calendar', combos: [['Esc']], label: th.calendar.shortcuts.clear },
-  // M6 planning grid (§4.8, §8.6, X07, X49 — matched on e.code by useGridKeyboard). M7 appends grid.expandWeek,
-  // grid.collapseWeek, grid.cellMenu.
+  // M6 planning grid (§4.8, §8.6, X07, X49 — matched on e.code by useGridKeyboard); M7 appends the day entries.
   { id: 'grid.edit', scope: 'grid', combos: [['Enter'], ['Tab']], label: th.shortcuts.items.gridEdit },
   { id: 'grid.cancel', scope: 'grid', combos: [['Esc']], label: th.shortcuts.items.gridCancel },
   {
@@ -178,4 +177,8 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   // Shift+Space selects the focused row — the keyboard path to deleting a task row (M6-D19)
   { id: 'grid.selectRow', scope: 'grid', combos: [['Shift', 'Space']], label: th.shortcuts.items.gridSelectRow },
   { id: 'grid.newTask', scope: 'grid', combos: [['N']], label: th.shortcuts.items.gridNewTask },
+  // M7 day resolution (FR-803, M7-D11, M7-D23; X49 — e.code ArrowDown/ArrowUp with metaKey || ctrlKey)
+  { id: 'grid.expandWeek', scope: 'grid', combos: [['Mod', 'ArrowDown']], label: th.shortcuts.items.gridExpandWeek },
+  { id: 'grid.collapseWeek', scope: 'grid', combos: [['Mod', 'ArrowUp']], label: th.shortcuts.items.gridCollapseWeek },
+  { id: 'grid.cellMenu', scope: 'grid', combos: [['Shift', 'F10']], label: th.shortcuts.items.gridCellMenu },
 ]

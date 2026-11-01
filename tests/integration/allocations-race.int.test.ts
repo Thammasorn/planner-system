@@ -279,3 +279,169 @@ describe('allocations — races and locks (BR-20b)', () => {
     }
   })
 })
+
+// ── M7 day paths (plan/m07 S4.4; BR-20b, BR-22, BR-23/24, r2 T9/T9-fix, X65, M7-D22) ───────────────────────────────
+// World 'dayAllocations': pWeek = 2026-11-02 WEEK 250 and pDay = 2026-11-09 DAY {11-09: 100, 11-10: 100, 11-11: 50} on
+// pLeafLead (version 1). Every M7 writer locks the assignment first, then DELETE-before-INSERT per week in one tx.
+
+type Change = SaveAllocationsInput['items'][number]['changes'][number]
+
+const itemsInput = (
+  items: readonly { id: string; version: number; changes: Change[] }[],
+  clientOpId: string,
+  onDayWeekConflict?: 'SCALE' | 'COLLAPSE',
+): SaveAllocationsInput => ({
+  items: items.map((i) => ({ taskAssignmentId: i.id, baseVersion: i.version, changes: i.changes })),
+  clientOpId,
+  ...(onDayWeekConflict ? { onDayWeekConflict } : {}),
+})
+
+/** §6.3 / BR-20b on the M7 weeks: no (assignment, week) holds both granularities. */
+async function expectOneGranularityPerWeek(): Promise<void> {
+  const mixed = await raw`
+    select task_assignment_id, week_start from allocations
+    where week_start >= '2026-11-02' and week_start < '2026-11-16'
+    group by 1, 2 having count(distinct granularity) > 1`
+  expect(mixed, 'weeks with WEEK and DAY rows').toHaveLength(0)
+}
+
+/** Runs `a` and holds its transaction open after save() returns; starts `b` only once A holds its lock, waits until
+ *  B is observed blocked on a lock, then lets A commit. Returns both settled results. */
+async function holdThenRace<T>(
+  a: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+  b: () => Promise<T>,
+): Promise<[Settled<T>, Settled<T>]> {
+  const aSaved = deferred()
+  const aCommit = deferred()
+  const txA = settle(
+    db.transaction(async (tx) => {
+      const r = await a(tx)
+      aSaved.resolve()
+      await aCommit.promise
+      return r
+    }),
+  )
+  let txB: Promise<Settled<T>>
+  try {
+    const first = await Promise.race([aSaved.promise.then(() => null), txA])
+    if (first && !first.ok) throw first.error
+    txB = settle(b())
+    await lockWaiters(1, txB)
+  } finally {
+    aCommit.resolve()
+  }
+  return [await txA, await txB]
+}
+
+async function dayWorld(): Promise<{ w: World; manager: SessionUser; lead: SessionUser }> {
+  const w = await createWorld({ with: ['dayAllocations'] })
+  return { w, manager: toSessionUser(w.manager), lead: toSessionUser(w.lead) }
+}
+
+describe('allocations — races and locks, M7 day paths (BR-20b, BR-22/23/24)', () => {
+  it('BR-22 vs BR-22: B (same base) waits on A’s lock, then VERSION_CONFLICT; week 11-02 is DAY only', async () => {
+    const { w, lead } = await dayWorld()
+    const id = w.assignments.pLeafLead.id
+    const input = (op: string) =>
+      itemsInput([{ id, version: 1, changes: [{ granularity: 'DAY', period: '2026-11-04', cd: 100 }] }], op)
+    const [a, b] = await holdThenRace(
+      (tx) => services.allocations.save(tx, lead, input('m7-split-a'), TODAY),
+      () => saveTx(lead, input('m7-split-b')),
+    )
+    expect(a.ok, a.ok ? '' : String(a.error)).toBe(true)
+    expect(b.ok, 'B must fail').toBe(false)
+    const current = conflictCurrent(!b.ok ? b.error : null)
+    expect(current).toMatchObject([
+      { taskAssignmentId: id, version: 2, weeks: { '2026-11-02': { cd: 300, resolution: 'DAY' } } },
+    ])
+    const rows = await allocationRows(id, '2026-11-02')
+    expect(rows.map((r) => r.granularity)).toEqual(['DAY', 'DAY', 'DAY', 'DAY', 'DAY'])
+    expect(rows.reduce((s, r) => s + r.cd, 0)).toBe(300)
+    expect(await assignmentVersion(id)).toBe(2)
+    await expectOneGranularityPerWeek()
+  })
+
+  it('WEEK (COLLAPSE) vs DAY: B (same base) gets VERSION_CONFLICT; week 11-09 holds exactly one WEEK row', async () => {
+    const { w, lead } = await dayWorld()
+    const id = w.assignments.pLeafLead.id
+    const [a, b] = await holdThenRace(
+      (tx) =>
+        services.allocations.save(
+          tx,
+          lead,
+          itemsInput(
+            [{ id, version: 1, changes: [{ granularity: 'WEEK', period: '2026-11-09', cd: 300 }] }],
+            'm7-collapse-a',
+            'COLLAPSE',
+          ),
+          TODAY,
+        ),
+      () =>
+        saveTx(
+          lead,
+          itemsInput([{ id, version: 1, changes: [{ granularity: 'DAY', period: '2026-11-12', cd: 50 }] }], 'm7-day-b'),
+        ),
+    )
+    expect(a.ok, a.ok ? '' : String(a.error)).toBe(true)
+    expect(b.ok, 'B must fail').toBe(false)
+    conflictCurrent(!b.ok ? b.error : null)
+    expect(await allocationRows(id, '2026-11-09')).toEqual([
+      { granularity: 'WEEK', periodStart: '2026-11-09', cd: 300 },
+    ])
+    await expectOneGranularityPerWeek()
+  })
+
+  it('lock order: day batches [pLeafLead, pCoworker] and [pCoworker, pLeafLead] together → never 40P01; one wins, one VERSION_CONFLICT', async () => {
+    const { w, manager } = await dayWorld()
+    const a = w.assignments.pLeafLead.id
+    const b = w.assignments.pCoworker.id
+    for (let round = 0; round < 5; round++) {
+      const va = await assignmentVersion(a)
+      const vb = await assignmentVersion(b)
+      const x = itemsInput(
+        [
+          { id: a, version: va, changes: [{ granularity: 'DAY', period: '2026-11-03', cd: 25 + round * 5 }] },
+          { id: b, version: vb, changes: [{ granularity: 'DAY', period: '2026-11-10', cd: 50 + round * 5 }] },
+        ],
+        `m7-x-${round}`,
+      )
+      const y = itemsInput(
+        [
+          { id: b, version: vb, changes: [{ granularity: 'DAY', period: '2026-11-11', cd: 30 + round * 5 }] },
+          { id: a, version: va, changes: [{ granularity: 'DAY', period: '2026-11-04', cd: 60 + round * 5 }] },
+        ],
+        `m7-y-${round}`,
+      )
+      const results = await Promise.all([settle(saveTx(manager, x)), settle(saveTx(manager, y))])
+      for (const r of results) {
+        if (r.ok) continue
+        expect(pgCode(r.error), 'no deadlock').not.toBe('40P01')
+        conflictCurrent(r.error)
+      }
+      expect(results.filter((r) => r.ok), `round ${round}: exactly one batch wins`).toHaveLength(1)
+      expect(await assignmentVersion(a)).toBe(va + 1)
+      expect(await assignmentVersion(b)).toBe(vb + 1)
+      await expectOneGranularityPerWeek()
+    }
+  })
+
+  it('backstop: raw INSERT DAY before DELETE WEEK in the pWeek week → P0001 WEEK_DAY_CONFLICT; the WEEK row survives', async () => {
+    const { w } = await dayWorld()
+    const id = w.assignments.pLeafLead.id
+    const wrongOrder = await settle(
+      raw.begin(async (tx) => {
+        await tx`insert into allocations (task_assignment_id, granularity, period_start, week_start, person_days)
+                 values (${id}, 'DAY', '2026-11-04', '2026-11-02', 1.00)`
+        await tx`delete from allocations where task_assignment_id = ${id} and week_start = '2026-11-02' and granularity = 'WEEK'`
+      }),
+    )
+    expect(wrongOrder.ok).toBe(false)
+    const error = !wrongOrder.ok ? wrongOrder.error : null
+    expect(pgCode(error)).toBe('P0001')
+    expect(String((error as Error).message)).toMatch(/^WEEK_DAY_CONFLICT/)
+    expect(await allocationRows(id, '2026-11-02')).toEqual([
+      { granularity: 'WEEK', periodStart: '2026-11-02', cd: 250 },
+    ])
+    await expectOneGranularityPerWeek()
+  })
+})

@@ -15,6 +15,8 @@ export const TASK_VIEWS = ['LIST', 'BOARD'] as const
 /** M6 grid / load keys (plan/m06 S0.5, M6-D21, X59). `load.view` is reused by M9's workload. */
 export const GRID_UNITS = ['DAYS', 'FRACTION'] as const
 export const LOAD_VIEWS = ['ALL', 'COMMITTED', 'AT_RISK'] as const
+/** M7 grid zoom (FR-802, X59: first consumer). The URL uses lowercase `week` | `day` (M7-D17). */
+export const GRID_ZOOMS = ['WEEK', 'DAY'] as const
 
 export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('theme'), value: z.enum(THEMES) }),
@@ -31,6 +33,8 @@ export const preferenceInput = z.discriminatedUnion('key', [
   // M6
   z.object({ key: z.literal('grid.unit'), value: z.enum(GRID_UNITS) }),
   z.object({ key: z.literal('load.view'), value: z.enum(LOAD_VIEWS) }),
+  // M7
+  z.object({ key: z.literal('grid.zoom'), value: z.enum(GRID_ZOOMS) }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -53,6 +57,8 @@ export const preferencesSchema = z.object({
   // DEFAULT_PREFERENCES stay valid unchanged. Read with gridPreference(prefs, key).
   'grid.unit': z.enum(GRID_UNITS).optional().catch(undefined),
   'load.view': z.enum(LOAD_VIEWS).optional().catch(undefined),
+  // M7 key: optional like the M6 keys; read with gridPreference(prefs, 'grid.zoom').
+  'grid.zoom': z.enum(GRID_ZOOMS).optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 
@@ -83,14 +89,15 @@ export function taskPreference<K extends TaskPreferenceKey>(
   return (prefs[key] ?? TASK_PREFERENCE_DEFAULTS[key]) as NonNullable<Preferences[K]>
 }
 
-/** Defaults of the optional M6 keys (M6-D21: days, all load). */
+/** Defaults of the optional grid keys (M6-D21: days, all load; M7: week zoom). */
 export const GRID_PREFERENCE_DEFAULTS = {
   'grid.unit': 'DAYS',
   'load.view': 'ALL',
+  'grid.zoom': 'WEEK',
 } as const satisfies { [K in GridPreferenceKey]-?: NonNullable<Preferences[K]> }
-export type GridPreferenceKey = 'grid.unit' | 'load.view'
+export type GridPreferenceKey = 'grid.unit' | 'load.view' | 'grid.zoom'
 
-/** The stored value of an M6 key, or its default. */
+/** The stored value of a grid key (M6/M7), or its default. */
 export function gridPreference<K extends GridPreferenceKey>(
   prefs: Preferences,
   key: K,

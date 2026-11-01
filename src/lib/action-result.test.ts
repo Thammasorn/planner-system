@@ -24,12 +24,12 @@ describe('unwrap / ActionFailure.extra (X86, M6-D25)', () => {
       code: 'VALIDATION',
       message: 'm',
       fieldErrors: { items: ['bad'] },
-      issues: [{ period: '2026-10-12', reason: 'DAY_WEEK' }],
+      issues: [{ period: '2026-10-12', reason: 'UNREPRESENTABLE' }],
     }
     const err = await unwrap(Promise.resolve(fail)).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ActionFailure)
     expect((err as ActionFailure).fieldErrors).toEqual({ items: ['bad'] })
-    expect((err as ActionFailure).extra).toEqual({ issues: [{ period: '2026-10-12', reason: 'DAY_WEEK' }] })
+    expect((err as ActionFailure).extra).toEqual({ issues: [{ period: '2026-10-12', reason: 'UNREPRESENTABLE' }] })
   })
 
   it('an ok result is returned unchanged', () => {

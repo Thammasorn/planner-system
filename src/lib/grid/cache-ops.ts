@@ -1,25 +1,29 @@
 // src/lib/grid/cache-ops.ts — pure patches of cached grid chunks (SPEC §7.4, PLAN §3.10, X65). Applied to every
 // chunk through setQueriesData(qk.gridAll(ctx)). A chunk only takes cells of its own periods; row fields that are
 // chunk-independent (version, rowTotal) are patched in every chunk so the merged model stays consistent.
-import { addLoad, splitLoad, ZERO_LOAD } from '@/domain/certainty'
-import { countsTowardLoad } from '@/domain/completed'
-import { weekStart } from '@/domain/dates'
+import { planWeek, weekPlanTotal, type DayCtx, type WeekChange, type WeekPlan } from '@/domain/allocation'
+import { addLoad, ZERO_LOAD } from '@/domain/certainty'
+import { diffDays, weekStart } from '@/domain/dates'
 import type { Cd, ISODate, LoadPair, PeriodKey } from '@/domain/types'
 import type {
   AssigneeCell,
   GridAssigneeRow,
   GridResponse,
-  GridRow,
   GridTaskRow,
+  OnDayWeekConflict,
   SaveAllocationsOk,
   SaveItemResult,
   WeekState,
 } from '@/lib/contracts/grid'
+import { dayCtxFor, weekPlanFromCell, weekPlanFromState, wKey } from './day'
+import { patchWeekCells } from './day-overlay'
 import type { CellWrite } from './queue'
+import { counted, recomputeTotals } from './totals'
 
 const weekOfWrite = (w: CellWrite): ISODate => (w.granularity === 'WEEK' ? w.period : weekStart(w.period))
 
-/** The cell after applying the writes of one (assignment, week), in order. undefined = empty. */
+/** The cell after applying the writes of one (assignment, week), in order, without day context (M6 snapshot replay;
+ *  the grid overlay uses nextPlan). undefined = empty. */
 export function nextCell(
   cell: AssigneeCell | undefined,
   writes: readonly CellWrite[],
@@ -46,6 +50,39 @@ export function cellFromState(s: WeekState): AssigneeCell | undefined {
   return { cd: s.cd, resolution: 'DAY', derived: false, days: { ...s.days } }
 }
 
+/**
+ * M7: the plan of one (assignment, week) after the writes, through the domain's planWeek with the same DayCtx the
+ * server builds (M7-D19): BR-22 on day writes to a WEEK week, BR-24 with `choice`, BR-23 with 'COLLAPSE'. Writes are
+ * applied in runs of one granularity (queued gestures may mix them, M7-D6); a run the domain refuses (needsChoice /
+ * invalid) leaves the plan unchanged — the BR-24 dialog or the server's validation decides it.
+ */
+export function nextPlan(
+  current: WeekPlan,
+  week: ISODate,
+  writes: readonly CellWrite[],
+  ctx: DayCtx,
+  choice?: OnDayWeekConflict,
+): WeekPlan {
+  let cur = current
+  let i = 0
+  while (i < writes.length) {
+    const g = writes[i]!.granularity
+    const run: WeekChange[] = []
+    while (i < writes.length && writes[i]!.granularity === g) {
+      const w = writes[i]!
+      run.push(
+        w.granularity === 'WEEK'
+          ? { granularity: 'WEEK', cd: w.cd }
+          : { granularity: 'DAY', dayIndex: diffDays(week, w.period), cd: w.cd },
+      )
+      i++
+    }
+    const r = planWeek(cur, run, ctx, choice)
+    if (r.kind === 'ok') cur = r.next
+  }
+  return cur
+}
+
 function groupWrites(writes: readonly CellWrite[]): Map<string, Map<ISODate, CellWrite[]>> {
   const out = new Map<string, Map<ISODate, CellWrite[]>>()
   for (const w of writes) {
@@ -59,75 +96,8 @@ function groupWrites(writes: readonly CellWrite[]): Map<string, Map<ISODate, Cel
   return out
 }
 
-function counted(cd: Cd, week: ISODate, task: GridTaskRow | undefined): LoadPair {
-  if (!task || cd === 0 || !countsTowardLoad(week, task.completedWeek)) return ZERO_LOAD
-  return splitLoad(cd, task.certainty)
-}
-
 function minus(a: LoadPair, b: LoadPair): LoadPair {
   return { total: a.total - b.total, committed: a.committed - b.committed }
-}
-
-/** Recomputes `totals[key]` of the given tasks and all their ancestors from the assignee cells of `rows`. */
-function recomputeTotals(rows: GridRow[], taskIds: ReadonlySet<string>, keys: ReadonlySet<PeriodKey>): void {
-  if (taskIds.size === 0 || keys.size === 0) return
-  const idx = new Map<string, number>()
-  rows.forEach((r, i) => {
-    if (r.kind === 'task') idx.set(r.id, i)
-  })
-  const affected = new Set<string>()
-  for (const id of taskIds) {
-    let cur: string | null = id
-    while (cur !== null && !affected.has(cur)) {
-      affected.add(cur)
-      const i = idx.get(cur)
-      cur = i === undefined ? null : (rows[i] as GridTaskRow).parentId
-    }
-  }
-  const sums = new Map<string, Partial<Record<PeriodKey, LoadPair>>>()
-  const taskOf = new Map<string, GridTaskRow>()
-  for (const r of rows) if (r.kind === 'task') taskOf.set(r.id, r)
-  for (const r of rows) {
-    if (r.kind !== 'assignee' || !affected.has(r.taskId)) continue
-    const task = taskOf.get(r.taskId)
-    if (!task || task.hasChildren) continue
-    const rec = sums.get(task.id) ?? {}
-    for (const key of keys) {
-      const c = r.cells[key]
-      if (!c) continue
-      rec[key] = addLoad(rec[key] ?? ZERO_LOAD, counted(c.cd, key.slice(2), task))
-    }
-    sums.set(task.id, rec)
-  }
-  const childIdx = new Map<string, number[]>()
-  rows.forEach((r, i) => {
-    if (r.kind !== 'task' || r.parentId === null) return
-    const list = childIdx.get(r.parentId)
-    if (list) list.push(i)
-    else childIdx.set(r.parentId, [i])
-  })
-  // depth-first order reversed: children are final before their parent sums them
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const r = rows[i]!
-    if (r.kind !== 'task' || !affected.has(r.id)) continue
-    const rec: Partial<Record<PeriodKey, LoadPair>> = {}
-    if (r.hasChildren) {
-      for (const ci of childIdx.get(r.id) ?? []) {
-        const child = rows[ci] as GridTaskRow
-        for (const key of keys) {
-          const v = child.totals[key]
-          if (v) rec[key] = addLoad(rec[key] ?? ZERO_LOAD, v)
-        }
-      }
-    } else Object.assign(rec, sums.get(r.id))
-    const totals = { ...r.totals }
-    for (const key of keys) {
-      const v = rec[key]
-      if (v && (v.total !== 0 || v.committed !== 0)) totals[key] = v
-      else delete totals[key]
-    }
-    rows[i] = { ...r, totals }
-  }
 }
 
 /**
@@ -137,6 +107,7 @@ function recomputeTotals(rows: GridRow[], taskIds: ReadonlySet<string>, keys: Re
 export function rowTotalDeltas(
   chunks: readonly (GridResponse | undefined)[],
   writes: readonly CellWrite[],
+  choice?: OnDayWeekConflict,
 ): Map<string, LoadPair> {
   const out = new Map<string, LoadPair>()
   const grouped = groupWrites(writes)
@@ -151,8 +122,8 @@ export function rowTotalDeltas(
       if (!row) continue
       const task = chunk.rows.find((r): r is GridTaskRow => r.kind === 'task' && r.id === row.taskId)
       const before = row.cells[key]
-      const after = nextCell(before, ws)
-      const d = minus(counted(after?.cd ?? 0, week, task), counted(before?.cd ?? 0, week, task))
+      const after = nextPlan(weekPlanFromCell(before, week), week, ws, dayCtxFor(chunk.people[row.userId], week), choice)
+      const d = minus(counted(weekPlanTotal(after), week, task), counted(before?.cd ?? 0, week, task))
       out.set(taId, addLoad(out.get(taId) ?? ZERO_LOAD, d))
     }
   }
@@ -160,22 +131,22 @@ export function rowTotalDeltas(
 }
 
 /**
- * Optimistic overlay (< 50 ms): WEEK writes set { cd, WEEK } (null/0 removes the cell); DAY writes set days of a
- * DAY week. Only cells of this chunk's periods change; task totals of touched tasks are recomputed. `deltas` (from
- * rowTotalDeltas over all chunks) moves rowTotal in every chunk; without it the delta is derived from this chunk.
+ * Optimistic overlay (< 50 ms): per touched (assignment, week) the next plan (nextPlan: WEEK / DAY / BR-22 / BR-23 /
+ * BR-24 with `choice`) patches the W: cell and, for weeks this chunk shows expanded, the D: cells. Task totals of
+ * touched tasks are recomputed. `deltas` (from rowTotalDeltas over all chunks) moves rowTotal in every chunk; without
+ * it the delta is derived from this chunk.
  */
 export function applyWritesOptimistically(
   resp: GridResponse,
   writes: readonly CellWrite[],
   deltas?: ReadonlyMap<string, LoadPair>,
+  choice?: OnDayWeekConflict,
 ): GridResponse {
   if (writes.length === 0) return resp
   const periods = new Set(resp.periods.map((p) => p.key))
   const grouped = groupWrites(writes)
-  const ownDeltas = deltas ?? rowTotalDeltas([resp], writes)
+  const ownDeltas = deltas ?? rowTotalDeltas([resp], writes, choice)
   const rows = [...resp.rows]
-  const taskOf = new Map<string, GridTaskRow>()
-  for (const r of rows) if (r.kind === 'task') taskOf.set(r.id, r)
   const touchedTasks = new Set<string>()
   const touchedKeys = new Set<PeriodKey>()
   let changed = false
@@ -185,14 +156,13 @@ export function applyWritesOptimistically(
     const delta = ownDeltas.get(r.taskAssignmentId)
     if (!byWeek && !delta) return
     let cells = r.cells
+    const person = resp.people[r.userId]
     for (const [week, ws] of byWeek ?? []) {
-      const key: PeriodKey = `W:${week}`
+      const key = wKey(week)
       if (!periods.has(key)) continue
       if (cells === r.cells) cells = { ...r.cells }
-      const next = nextCell(cells[key], ws)
-      if (next) cells[key] = next
-      else delete cells[key]
-      touchedKeys.add(key)
+      const next = nextPlan(weekPlanFromCell(cells[key], week), week, ws, dayCtxFor(person, week), choice)
+      for (const k of patchWeekCells(cells, resp, person, week, next)) touchedKeys.add(k)
       touchedTasks.add(r.taskId)
     }
     const rowTotal = delta ? addLoad(r.rowTotal, delta) : r.rowTotal
@@ -221,13 +191,10 @@ export function applyServerResults(resp: GridResponse, ok: SaveAllocationsOk): G
     const res = byId.get(r.taskAssignmentId)
     if (!res) return
     const cells = { ...r.cells }
+    const person = resp.people[r.userId]
     for (const [week, state] of Object.entries(res.weeks)) {
-      const key: PeriodKey = `W:${week}`
-      if (!periods.has(key)) continue
-      const c = cellFromState(state)
-      if (c) cells[key] = c
-      else delete cells[key]
-      touchedKeys.add(key)
+      if (!periods.has(wKey(week))) continue
+      for (const k of patchWeekCells(cells, resp, person, week, weekPlanFromState(state, week))) touchedKeys.add(k)
       touchedTasks.add(r.taskId)
     }
     rows[i] = { ...r, cells, version: res.version, rowTotal: res.rowTotal }

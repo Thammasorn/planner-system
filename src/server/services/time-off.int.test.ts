@@ -5,9 +5,14 @@ import { and, count, eq, sql } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import { formatLeaveRange } from '@/lib/format'
+import { saveAllocations } from '@/server/actions/allocations'
 import { createTimeOff, deleteTimeOff, restoreTimeOff, updateTimeOff } from '@/server/actions/time-off'
+import { seedGolden } from '../../../scripts/lib/fixtures'
+import { goldenUser } from '../../../tests/authz/_support/golden'
 import { asUser } from '../../../tests/helpers/as-user'
 import {
+  allocationRows,
+  makeDayAllocations,
   makeHoliday,
   makeLeaveType,
   makeTimeOff,
@@ -16,7 +21,7 @@ import {
 } from '../../../tests/helpers/factories'
 import { createWorld } from '../../../tests/helpers/world'
 import { db } from '../db/client'
-import { auditLog, leaveTypes, timeOff } from '../db/schema'
+import { allocations, auditLog, leaveTypes, taskAssignments, tasks, timeOff } from '../db/schema'
 import * as repo from '../repo'
 import { loadCapacity } from './capacity'
 import { ensureDefaultLeaveTypes } from './leave-types'
@@ -403,6 +408,36 @@ describe('BR-42 (M5 part): leave writes never edit plans', () => {
     ok(await restoreTimeOff({ batch }))
     expect(await counts()).toEqual(before)
     expect(await planChecksum()).toEqual(plansBefore)
+  })
+})
+
+describe('BR-42 (M7 part, M7-D15): leave added after DAY rows', () => {
+  it('DAY rows are unchanged by a later leave; a later save in that week returns ALLOCATED_ON_TIME_OFF', async () => {
+    await seedGolden(db)
+    const ivy = await goldenUser('Ivy')
+    const [a] = await db
+      .select({ id: taskAssignments.id })
+      .from(taskAssignments)
+      .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+      .where(eq(tasks.name, 'ตั้งค่า automation'))
+    const id = a!.id
+    await db.delete(allocations).where(and(eq(allocations.taskAssignmentId, id), eq(allocations.weekStart, '2026-10-12')))
+    await makeDayAllocations({ assignment: { id }, days: { '2026-10-12': 100, '2026-10-13': 100 } })
+    const before = await allocationRows(id, '2026-10-12')
+    const [vacation] = await db.select({ id: leaveTypes.id }).from(leaveTypes).where(eq(leaveTypes.name, 'ลาพักร้อน'))
+    asUser(ivy)
+    ok(await createTimeOff({ leaveTypeId: vacation!.id, startDate: '2026-10-13', endDate: '2026-10-13' }))
+    expect(await allocationRows(id, '2026-10-12')).toEqual(before)
+    const r = ok(
+      await saveAllocations({
+        items: [{ taskAssignmentId: id, baseVersion: 1, changes: [{ granularity: 'DAY', period: '2026-10-14', cd: 50 }] }],
+        clientOpId: 'br42-day',
+      }),
+    )
+    expect(r.warnings).toEqual([
+      { code: 'WORK_ON_NON_WORKING_DAY', taskAssignmentId: id, week: '2026-10-12', date: '2026-10-13' },
+      { code: 'ALLOCATED_ON_TIME_OFF', taskAssignmentId: id, week: '2026-10-12', date: '2026-10-13' },
+    ])
   })
 })
 

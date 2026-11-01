@@ -2,16 +2,18 @@
 // Not imported by app code.
 import { splitLoad, addLoad, ZERO_LOAD } from '@/domain/certainty'
 import { countsTowardLoad } from '@/domain/completed'
-import { addWeeks, compareISO } from '@/domain/dates'
+import { addWeeks, compareISO, daysOfWeek, isoWeekday } from '@/domain/dates'
 import type { Certainty, ISODate, LoadPair, PeriodKey } from '@/domain/types'
 import type {
   AssigneeCell,
   GridAssigneeRow,
+  GridPeriod,
   GridPerson,
   GridResponse,
   GridRow,
   GridTaskRow,
 } from '@/lib/contracts/grid'
+import { dayCellsFromPlan, dayCtxFor, weekPlanFromCell } from './day'
 
 export interface FxAssignee {
   taId: string
@@ -40,7 +42,9 @@ export interface FxPerson {
   capacity?: Record<ISODate, number>
   defaultCapacity?: number
   timeOff?: GridPerson['timeOff']
-  otherProjects?: Record<ISODate, LoadPair>
+  otherProjects?: Record<ISODate, LoadPair | undefined>
+  /** M7: day capacity by date for D: keys (default Mon–Fri 100, weekend 0) */
+  dayCaps?: Record<ISODate, number>
 }
 
 function cellOf(v: number | { days: Record<ISODate, number> }): AssigneeCell {
@@ -63,6 +67,8 @@ export function gridResponse(o: {
   tasks: FxTask[]
   people: Record<string, FxPerson>
   holidays?: { date: ISODate; name: string }[]
+  /** M7: expanded weeks (D: periods + D: cells + the รวม W: period with expanded: true) */
+  expand?: ISODate[]
 }): GridResponse {
   const weeks = o.weeks ?? 8
   const to = addWeeks(o.from, weeks)
@@ -74,6 +80,48 @@ export function gridResponse(o: {
       ? o.tasks.filter((t) => t.parentId === id).flatMap((c) => leavesOf(c.id))
       : [byId.get(id)!]
   const certaintyOf = (t: FxTask): Certainty => t.certainty ?? 'CONFIRMED'
+
+  const expanded = new Set(o.expand ?? [])
+  const dayResolutionWeeksOf = (userId: string) =>
+    new Set(
+      o.tasks.flatMap((t) =>
+        t.assignees
+          .filter((a) => a.userId === userId)
+          .flatMap((a) => Object.entries(a.cells).filter(([, v]) => typeof v !== 'number').map(([w]) => w)),
+      ),
+    )
+  const people: Record<string, GridPerson> = {}
+  for (const [id, p] of Object.entries(o.people)) {
+    const capacity: Partial<Record<PeriodKey, number>> = {}
+    const standard: Partial<Record<PeriodKey, number>> = {}
+    for (const w of periodWeeks) {
+      capacity[`W:${w}`] = p.capacity?.[w] ?? p.defaultCapacity ?? 500
+      standard[`W:${w}`] = 500
+      if (!expanded.has(w) && !dayResolutionWeeksOf(id).has(w)) continue
+      for (const d of daysOfWeek(w)) {
+        const weekday = isoWeekday(d) <= 5
+        const cap = p.dayCaps?.[d] ?? (weekday ? 100 : 0)
+        if (cap > 0) capacity[`D:${d}`] = cap
+        if (weekday) standard[`D:${d}`] = 100
+      }
+    }
+    const person: GridPerson = {
+      name: p.name,
+      active: p.active ?? true,
+      deactivatedOn: p.deactivatedOn ?? null,
+      capacity,
+      standard,
+      timeOff: p.timeOff ?? [],
+    }
+    if (o.includeOthers) {
+      const other: Partial<Record<PeriodKey, LoadPair>> = {}
+      for (const [w, v] of Object.entries(p.otherProjects ?? {}))
+        if (v && inRange(w, o.from, to)) other[`W:${w}`] = v
+      person.otherProjects = other
+    }
+    people[id] = person
+  }
+
 
   const rows: GridRow[] = []
   for (const t of o.tasks) {
@@ -114,6 +162,8 @@ export function gridResponse(o: {
         if (countsTowardLoad(w, t.completedWeek ?? null))
           rowTotal = addLoad(rowTotal, splitLoad(c.cd, certaintyOf(t)))
         if (inRange(w, o.from, to)) cells[`W:${w}`] = c
+        if (expanded.has(w))
+          Object.assign(cells, dayCellsFromPlan(weekPlanFromCell(c, w), dayCtxFor(people[a.userId], w)))
       }
       const row: GridAssigneeRow = {
         kind: 'assignee',
@@ -129,31 +179,6 @@ export function gridResponse(o: {
     }
   }
 
-  const people: Record<string, GridPerson> = {}
-  for (const [id, p] of Object.entries(o.people)) {
-    const capacity: Partial<Record<PeriodKey, number>> = {}
-    const standard: Partial<Record<PeriodKey, number>> = {}
-    for (const w of periodWeeks) {
-      capacity[`W:${w}`] = p.capacity?.[w] ?? p.defaultCapacity ?? 500
-      standard[`W:${w}`] = 500
-    }
-    const person: GridPerson = {
-      name: p.name,
-      active: p.active ?? true,
-      deactivatedOn: p.deactivatedOn ?? null,
-      capacity,
-      standard,
-      timeOff: p.timeOff ?? [],
-    }
-    if (o.includeOthers) {
-      const other: Partial<Record<PeriodKey, LoadPair>> = {}
-      for (const [w, v] of Object.entries(p.otherProjects ?? {}))
-        if (inRange(w, o.from, to)) other[`W:${w}`] = v
-      person.otherProjects = other
-    }
-    people[id] = person
-  }
-
   return {
     context: {
       kind: 'project',
@@ -162,14 +187,25 @@ export function gridResponse(o: {
       archived: o.archived ?? false,
       canEdit: o.canEdit ?? !(o.archived ?? false),
     },
-    window: { from: o.from, to, expand: [], zoom: 'week', includeOthers: o.includeOthers ?? false },
+    window: { from: o.from, to, expand: o.expand ?? [], zoom: 'week', includeOthers: o.includeOthers ?? false },
     today: '2026-09-30',
-    periods: periodWeeks.map((w) => ({
-      key: `W:${w}` as const,
-      kind: 'WEEK' as const,
-      weekStart: w,
-      date: w,
-    })),
+    periods: periodWeeks.flatMap((w): GridPeriod[] => {
+      const week = { key: `W:${w}` as const, kind: 'WEEK' as const, weekStart: w, date: w }
+      if (!expanded.has(w)) return [week]
+      const dayRow = new Set(
+        o.tasks.flatMap((t) =>
+          t.assignees.flatMap((a) => {
+            const v = a.cells[w]
+            return v !== undefined && typeof v !== 'number' ? Object.keys(v.days) : []
+          }),
+        ),
+      )
+      const dates = daysOfWeek(w).filter((d) => isoWeekday(d) <= 5 || dayRow.has(d))
+      return [
+        ...dates.map((d) => ({ key: `D:${d}` as const, kind: 'DAY' as const, weekStart: w, date: d })),
+        { ...week, expanded: true as const },
+      ]
+    }),
     rows,
     milestones: [],
     people,

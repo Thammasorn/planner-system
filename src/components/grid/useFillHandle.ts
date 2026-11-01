@@ -4,8 +4,10 @@
 // cells dragged across along one axis (planFill: copy, never increment; read-only targets skipped; one undo entry).
 // Pointer only — the keyboard alternative of the fill handle is range + type.
 import { useCallback, useRef, type PointerEvent, type RefObject } from 'react'
+import { toast } from 'sonner'
 import { th } from '@/i18n/th'
 import { planFill } from '@/lib/grid/fill'
+import { clipTargets, fillRun } from '@/lib/grid/kinds'
 import { fillTargetRect, type CellPos, type Rect } from '@/lib/grid/selection'
 import type { GridAccess, GridEditing } from './useGridEditing'
 import { selectionRect } from './useGridEditing'
@@ -89,7 +91,13 @@ export function useFillHandle(acc: RefObject<GridAccess | null>, editing: GridEd
       const target = a.store.get().fill
       a.store.set({ fill: null })
       if (!target) return
-      const res = planFill(d.source, target, a.target)
+      // M7-D12: fill only into columns of the source's kind
+      const run = a.cols ? fillRun(a.cols, d.source, target) : { from: target.c0, to: target.c1, clipped: false }
+      if (run.clipped) toast(th.grid.day.mixedKinds)
+      const clipped = clipTargets(a.target, run)
+      const src = d.source
+      // the source columns stay readable (planFill copies from them); only targets are clipped
+      const res = planFill(src, target, (r, c) => (c >= src.c0 && c <= src.c1 ? a.target(r, c) : clipped(r, c)))
       if (res.writes.length > 0) void a.gesture(th.grid.undo.fill, res.writes)
       const r0 = Math.min(d.source.r0, target.r0)
       const c0 = Math.min(d.source.c0, target.c0)

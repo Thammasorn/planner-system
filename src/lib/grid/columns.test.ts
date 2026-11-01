@@ -8,6 +8,7 @@ import {
   NAME_MIN_W,
   NAME_W,
   nameColumnWidth,
+  stickyTotalWidth,
   timelineStart,
   timelineWeeks,
   TOTAL_W,
@@ -80,8 +81,46 @@ describe('columns (FR-801, M6-D15, M6-D35)', () => {
     // 2029-09-17 is in chunk 38 (304 weeks in), 2029-09-24 starts chunk 39 (the last); chunk 40 is past the end
     expect(last).toEqual(['2029-06-04', '2029-07-30', '2029-09-24'])
   })
+})
 
-  it('throws for expanded weeks until M7', () => {
-    expect(() => buildColumns(timelineWeeks(today), new Set(['2026-09-28']), new Map())).toThrow(RangeError)
+describe('stickyTotalWidth (SPEC §8.12 / D19: รวม abuts the last whole column, no clipped sliver)', () => {
+  it('is TOTAL_W before the grid is measured', () => {
+    expect(stickyTotalWidth(cols, 0, 0, NAME_W)).toBe(TOTAL_W)
+  })
+  it('absorbs the leftover at 1920 px (week zoom, scroll aligned to a column)', () => {
+    const vw = 1620 // ≈ the plan grid at 1920 × 1080 after the sidebar
+    const whole = Math.floor((vw - NAME_W - TOTAL_W) / WEEK_W) // 20
+    const w = stickyTotalWidth(cols, 10 * WEEK_W, vw, NAME_W)
+    expect(w).toBe(vw - NAME_W - whole * WEEK_W) // 1620 − 260 − 1280 = 80
+    expect(NAME_W + whole * WEEK_W + w).toBe(vw) // name + whole weeks + รวม fill the container exactly
+  })
+  it('equals TOTAL_W when the columns fit exactly', () => {
+    expect(stickyTotalWidth(cols, 0, NAME_W + 10 * WEEK_W + TOTAL_W, NAME_W)).toBe(TOTAL_W)
+  })
+  it('covers a partly scrolled column at the right edge (wheel scroll, any offset)', () => {
+    const vw = 1000
+    for (const sl of [0, 7, 31.5, 63, 640, 1001]) {
+      const w = stickyTotalWidth(cols, sl, vw, NAME_W)
+      expect(w).toBeGreaterThanOrEqual(TOTAL_W)
+      // the column under the left edge of รวม ends at or before it, i.e. no visible sliver of a later column
+      const totalLeft = sl + vw - NAME_W - w // in column-offset space
+      const under = cols.find((c) => c.offset < totalLeft && c.offset + c.width >= totalLeft + 1) // sub-pixel overlap ok
+      expect(under).toBeUndefined()
+      expect(w).toBeLessThan(TOTAL_W + WEEK_W + 1)
+    }
+  })
+  it('works with mixed day / week-total widths (day zoom at 1280)', () => {
+    const weeks = timelineWeeks(today)
+    const dcols = buildColumns(weeks, new Set(weeks.slice(150, 160)), new Map())
+    const start = dcols.findIndex((c) => c.role === 'day')
+    const sl = dcols[start]!.offset
+    const vw = 980
+    const w = stickyTotalWidth(dcols, sl, vw, NAME_W)
+    const totalLeft = sl + vw - NAME_W - w
+    expect(dcols.some((c) => c.offset + c.width === totalLeft)).toBe(true) // abuts a column boundary
+    expect(w).toBeGreaterThanOrEqual(TOTAL_W)
+  })
+  it('falls back to TOTAL_W when no whole column fits beside the name column', () => {
+    expect(stickyTotalWidth(cols, 0, NAME_W + TOTAL_W + 10, NAME_W)).toBe(TOTAL_W)
   })
 })

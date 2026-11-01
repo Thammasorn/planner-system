@@ -8,7 +8,8 @@ import { formatCd } from '@/domain/units'
 import type { LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import { footerValue, type FooterCell as FooterCellData } from '@/lib/grid/aggregate'
-import { FOOTER_ROWS, NAME_COL_W, ROW_H, TOTAL_W, type GridColumn } from '@/lib/grid/columns'
+import type { FooterDayCell } from '@/lib/grid/day-footer'
+import { FOOTER_ROWS, NAME_COL_W, ROW_H, TOTAL_COL_W, type GridColumn } from '@/lib/grid/columns'
 import { FooterCell } from './FooterCell'
 import styles from './grid.module.css'
 
@@ -23,6 +24,8 @@ export interface FooterProps {
   view: LoadView
   includeOthers: boolean
   onIncludeOthers: (on: boolean) => void
+  /** M7 (S3.10): day-level tone / glyph of the ภาระรวม row per D: key */
+  dayCells?: ReadonlyMap<string, FooterDayCell>
 }
 
 const days1 = (cd: number) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
@@ -82,6 +85,8 @@ export function Footer(p: FooterProps) {
             const col = p.cols[v.index]
             if (!col) return null
             const cell = p.cells[col.key]
+            const day = row.kind === 'load' && col.kind === 'D' ? p.dayCells?.get(col.key) : undefined
+            const text = cell ? row.text(cell) : ''
             return (
               <FooterCell
                 key={v.key}
@@ -90,7 +95,20 @@ export function Footer(p: FooterProps) {
                 colIndex={v.index}
                 left={v.start}
                 width={v.size}
-                text={cell ? row.text(cell) : ''}
+                text={text}
+                {...(day
+                  ? {
+                      tone: day.tone,
+                      palette: day.palette,
+                      glyph: day.glyph,
+                      glyphLabel: th.overload.dayStatus(
+                        th.overload.level[day.glyph],
+                        days1(day.load) || '0',
+                        days1(day.capCd) || '0',
+                      ),
+                      tip: day.overPeople.length > 0,
+                    }
+                  : {})}
               />
             )
           })}
@@ -98,7 +116,7 @@ export function Footer(p: FooterProps) {
             role="gridcell"
             aria-colindex={p.cols.length + 2}
             className={styles.footerTotal}
-            style={{ width: TOTAL_W, height: ROW_H }}
+            style={{ width: TOTAL_COL_W, height: ROW_H }}
           />
         </div>
       ))}

@@ -9,6 +9,20 @@ import { th } from '@/i18n/th'
 import { formatLeaveRange } from '@/lib/format'
 import type { GridModel } from './merge'
 import type { ViewRow } from './rows'
+import { weekOfPeriodKey } from './totals'
+
+const dayKeySets = new WeakMap<GridModel['periods'], Set<PeriodKey>>()
+/** Whether the model holds the D: period (its day capacity is known, M7-D19). */
+function hasPeriod(m: Pick<GridModel, 'periods'>, key: PeriodKey): boolean {
+  let set = dayKeySets.get(m.periods)
+  if (!set) dayKeySets.set(m.periods, (set = new Set(m.periods.map((p) => p.key))))
+  return set.has(key)
+}
+
+/** Leave entries of a person that cover the date. */
+export function leaveOnDate(timeOff: readonly GridTimeOff[], date: ISODate): GridTimeOff[] {
+  return timeOff.filter((t) => compareISO(t.start, date) <= 0 && compareISO(t.end, date) >= 0)
+}
 
 /** Leave entries of a person that overlap the week [ws, ws + 6]. */
 export function leaveInWeek(timeOff: readonly GridTimeOff[], week: ISODate): GridTimeOff[] {
@@ -33,12 +47,22 @@ export interface CellMarks {
   tentative: boolean
 }
 
+/** M7: on a D: key `leave` = leave covers that date and `noCapacity` = the loaded day has capacity 0. */
 export function cellMarks(m: GridModel, row: ViewRow, key: PeriodKey): CellMarks {
-  const week = key.slice(2)
+  const week = weekOfPeriodKey(key)
   const tentative = row.task.certainty === 'TENTATIVE'
   const notCounted = row.task.completedWeek !== null && !countsTowardLoad(week, row.task.completedWeek)
   if (row.kind === 'task') return { leave: false, noCapacity: false, notCounted, tentative }
   const person = m.people[row.assignee.userId]
+  if (key.startsWith('D:')) {
+    const date = key.slice(2)
+    return {
+      leave: person ? leaveOnDate(person.timeOff, date).length > 0 : false,
+      noCapacity: hasPeriod(m, key) && (person?.capacity[key] ?? 0) === 0,
+      notCounted,
+      tentative,
+    }
+  }
   const loaded = m.loadedWeeks.has(week)
   return {
     leave: person ? leaveInWeek(person.timeOff, week).length > 0 : false,
@@ -67,6 +91,7 @@ export function tooltipFor(
   m: GridModel,
   o: { unit: CellUnit; totalCd?: Cd },
 ): string[] {
+  if (key.startsWith('D:')) return dayTooltipFor(row, key, m, o)
   const week = key.slice(2)
   const lines: string[] = []
   const marks = cellMarks(m, row, key)
@@ -105,4 +130,42 @@ export function tooltipFor(
 export function headerTooltipFor(m: Pick<GridModel, 'holidays'>, week: ISODate): string | null {
   const names = holidaysInWeek(m, week)
   return names.length > 0 ? th.grid.header.holiday(names.join(', ')) : null
+}
+
+/** Tooltip lines of a day cell (M7 S3.4/S3.10): derived (with the week total) or stored value in 2 decimals, warnings,
+ *  BR-50 notes, leave / holiday of that date, no capacity. */
+function dayTooltipFor(row: ViewRow, key: PeriodKey, m: GridModel, o: { unit: CellUnit; totalCd?: Cd }): string[] {
+  const date = key.slice(2)
+  const week = weekOfPeriodKey(key)
+  const lines: string[] = []
+  const marks = cellMarks(m, row, key)
+  const completedHere = row.task.completedWeek !== null && row.task.completedWeek === week
+  if (row.kind === 'task') {
+    const cd = o.totalCd ?? 0
+    if (cd > 0) lines.push(th.grid.cell.exact(days2(cd)))
+  } else {
+    const cell = m.cells.get(row.key)?.get(key)
+    if (cell && cell.cd > 0) {
+      if (cell.derived) {
+        const weekCd = m.cells.get(row.key)?.get(`W:${week}`)?.cd ?? 0
+        lines.push(th.grid.day.derivedTooltip(days2(cell.cd), days2(weekCd)))
+      } else lines.push(th.grid.day.dayTooltip(days2(cell.cd)))
+      if (cell.warn?.includes('NON_WORKING')) lines.push(th.grid.warn.nonWorkingDay)
+      if (cell.warn?.includes('TIME_OFF')) lines.push(th.grid.warn.allocatedOnTimeOff(days2(cell.cd)))
+    }
+    for (const t of leaveOnDate(m.people[row.assignee.userId]?.timeOff ?? [], date))
+      lines.push(th.grid.cell.leave(t.label, formatLeaveRange(t.start, t.end, t.half)))
+  }
+  if (marks.notCounted) lines.push(th.grid.cell.notCounted)
+  else if (completedHere) lines.push(th.grid.day.completedWeekCounts)
+  const h = m.holidays.get(date)
+  if (h !== undefined) lines.push(th.grid.cell.holiday(h))
+  if (marks.noCapacity) lines.push(th.grid.day.noCapacityDay)
+  return lines
+}
+
+/** Header tooltip of a day column: "วันหยุด: …" on a holiday, else null. */
+export function dayHeaderTooltipFor(m: Pick<GridModel, 'holidays'>, date: ISODate): string | null {
+  const name = m.holidays.get(date)
+  return name !== undefined ? th.grid.header.holiday(name) : null
 }

@@ -16,6 +16,7 @@ import {
   type ClipboardEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   type ReactNode,
   type Ref,
@@ -28,6 +29,7 @@ import {
   NAME_W,
   nameColumnWidth,
   ROW_H,
+  stickyTotalWidth,
   TOTAL_W,
   WEEK_W,
   type GridColumn,
@@ -64,6 +66,8 @@ export interface VirtualGridProps {
   onCopy?: (e: ClipboardEvent<HTMLDivElement>) => void
   onPaste?: (e: ClipboardEvent<HTMLDivElement>) => void
   onBlur?: (e: FocusEvent<HTMLDivElement>) => void
+  /** M7: right click → the cell menu */
+  onContextMenu?: (e: ReactMouseEvent<HTMLDivElement>) => void
   /** store changes that can move the roving cell (re-checks the root's tab stop, see below) */
   subscribeTabStop?: (fn: () => void) => () => void
   /** Tab reached the root because the roving cell is not rendered: bring it into view and focus it */
@@ -80,10 +84,15 @@ export function VirtualGrid(p: VirtualGridProps) {
   // The frozen name column shrinks with the grid (phones / narrow tablets) so week columns stay visible (SPEC §7).
   // Its width reaches the sticky cells through --grid-name-w; the virtualizer needs the number.
   const [nameW, setNameW] = useState(NAME_W)
+  // the scroller's clientWidth (0 = not measured): the sticky "รวม" column absorbs the leftover (stickyTotalWidth)
+  const [viewW, setViewW] = useState(0)
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const measure = () => setNameW(nameColumnWidth(el.clientWidth))
+    const measure = () => {
+      setNameW(nameColumnWidth(el.clientWidth))
+      setViewW(el.clientWidth)
+    }
     measure()
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(measure)
@@ -126,8 +135,17 @@ export function VirtualGrid(p: VirtualGridProps) {
       if (c >= 0 && c < cols.length) colV.scrollToIndex(c, { align: 'auto' })
     },
     firstVisibleColumn: () => {
+      // columns have different widths since M7 (day 44 / รวม 52): the first one not scrolled past the name column
       const left = scrollRef.current?.scrollLeft ?? 0
-      return Math.round(left / WEEK_W)
+      let lo = 0
+      let hi = cols.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        const c = cols[mid]!
+        if (c.offset + c.width / 2 <= left) lo = mid + 1
+        else hi = mid
+      }
+      return lo
     },
     fittingColumns: () => {
       const w = scrollRef.current?.clientWidth ?? 0
@@ -185,6 +203,8 @@ export function VirtualGrid(p: VirtualGridProps) {
   )
 
   const totalW = colV.getTotalSize()
+  // SPEC §8.12 / D19: no clipped sliver of a column beside "รวม" — it widens to abut the last whole column
+  const totalColW = stickyTotalWidth(cols, colV.scrollOffset ?? 0, viewW, nameW)
   const totalH = rowV.getTotalSize()
 
   return (
@@ -199,7 +219,7 @@ export function VirtualGrid(p: VirtualGridProps) {
       // initial value only: syncTabStop owns it afterwards (React never rewrites an unchanged prop)
       tabIndex={-1}
       className={styles.scroller}
-      style={{ '--grid-name-w': `${nameW}px` } as CSSProperties}
+      style={{ '--grid-name-w': `${nameW}px`, '--grid-total-w': `${totalColW}px` } as CSSProperties}
       data-compact={nameW < NAME_COMPACT_W ? 'true' : undefined}
       onKeyDown={p.onKeyDown}
       onFocus={onFocus}
@@ -213,6 +233,7 @@ export function VirtualGrid(p: VirtualGridProps) {
       onCopy={p.onCopy}
       onPaste={p.onPaste}
       onBlur={p.onBlur}
+      onContextMenu={p.onContextMenu}
     >
       <div
         className={styles.sized}

@@ -29,9 +29,15 @@ describe('planShift (§4.8 Cmd+←/→)', () => {
     const g = fakeGrid([{ id: 'cindy', values: [300, 500] }])
     expect(planShift({ r0: 0, c0: 0, r1: 0, c1: 1 }, -1, g.at)).toEqual({ blocked: true })
   })
-  it('a DAY week in the destination → blocked', () => {
-    const g = fakeGrid([{ id: 'cindy', values: [300, 0, 200], editability: ['ok', 'ok', 'dayWeek'] }])
-    expect(planShift({ r0: 0, c0: 0, r1: 0, c1: 1 }, 1, g.at)).toEqual({ blocked: true })
+  it('M7 (X27): a DAY week in the destination is overwritten (its WEEK write goes through BR-24)', () => {
+    const g = fakeGrid([{ id: 'cindy', values: [300, 0, 200], day: [false, false, true] }])
+    const r = planShift({ r0: 0, c0: 0, r1: 0, c1: 1 }, 1, g.at)
+    if ('blocked' in r) throw new Error('blocked')
+    expect(r.writes.map((w) => [w.period, w.cd])).toEqual([
+      ['2026-11-09', null],
+      ['2026-11-16', 300],
+      ['2026-11-23', null],
+    ])
   })
   it('a read-only row in the rect → blocked', () => {
     const g = fakeGrid([

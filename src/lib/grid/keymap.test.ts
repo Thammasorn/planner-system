@@ -30,9 +30,6 @@ describe('gridKeyAction (§4.8, X49, M6-D27/D32)', () => {
     expect(gridKeyAction(k('ArrowLeft', { ctrlKey: true }), 'nav', nav)).toEqual({ kind: 'shift', dir: -1 })
     expect(gridKeyAction(k('ArrowRight', { ctrlKey: true }), 'nav', nav)).toEqual({ kind: 'shift', dir: 1 })
   })
-  it('Mod+↑/↓ are left for M7', () => {
-    expect(gridKeyAction(k('ArrowDown', { metaKey: true }), 'nav', nav)).toBeNull()
-  })
   it('arrows move; Shift extends', () => {
     expect(gridKeyAction(k('ArrowDown'), 'nav', nav)).toEqual({ kind: 'move', dr: 1, dc: 0, extend: false })
     expect(gridKeyAction(k('ArrowDown', { shiftKey: true }), 'nav', nav)).toEqual({
@@ -85,6 +82,28 @@ describe('gridKeyAction (§4.8, X49, M6-D27/D32)', () => {
   })
   it('Shift+Space selects the row (keyboard path to deleteRow)', () => {
     expect(gridKeyAction(k('Space', { shiftKey: true }), 'nav', nav)).toEqual({ kind: 'selectRow' })
+  })
+})
+
+describe('M7 keys (KEY-07, M7-D11, X49)', () => {
+  it('Mod+ArrowDown → expandWeek (Cmd, Ctrl, Thai layout)', () => {
+    expect(gridKeyAction(k('ArrowDown', { metaKey: true }), 'nav', nav)).toEqual({ kind: 'expandWeek' })
+    expect(gridKeyAction(k('ArrowDown', { ctrlKey: true }), 'nav', nav)).toEqual({ kind: 'expandWeek' })
+    expect(gridKeyAction(k('ArrowDown', { key: 'ArrowDown', metaKey: true }), 'nav', nav)).toEqual({ kind: 'expandWeek' })
+  })
+  it('Mod+ArrowUp → collapseWeek', () => {
+    expect(gridKeyAction(k('ArrowUp', { ctrlKey: true }), 'nav', nav)).toEqual({ kind: 'collapseWeek' })
+  })
+  it('Shift+F10 and the ContextMenu key → cellMenu', () => {
+    expect(gridKeyAction(k('F10', { shiftKey: true }), 'nav', nav)).toEqual({ kind: 'cellMenu' })
+    expect(gridKeyAction(k('ContextMenu'), 'nav', nav)).toEqual({ kind: 'cellMenu' })
+    expect(gridKeyAction(k('F10'), 'nav', nav)).toBeNull()
+  })
+  it('a plain ArrowDown still moves', () => {
+    expect(gridKeyAction(k('ArrowDown'), 'nav', nav)).toEqual({ kind: 'move', dr: 1, dc: 0, extend: false })
+  })
+  it('in edit mode Mod+ArrowDown stays with the editor', () => {
+    expect(gridKeyAction(k('ArrowDown', { metaKey: true }), 'edit', nav)).toBeNull()
   })
 })
 

@@ -1,11 +1,14 @@
 // src/lib/grid/shift.ts — Cmd+←/→ moves the selected values one column (SPEC §4.8, X65). Pure.
 import type { CellWrite } from './queue'
 import type { TargetCell } from './apply'
+import { MAX_DAY_CD, writeFor } from './day-input'
 import type { Rect } from './selection'
 
 /**
  * Values move one column, the vacated edge column is cleared, the destination column is overwritten and the selection
- * moves. Any read-only or DAY-week cell in the source rect or the destination column, or the timeline edge → blocked.
+ * moves. Any read-only cell in the source rect or the destination column, or the timeline edge → blocked. M7: the
+ * column-kind rule (kinds.ts#canShift) is checked by the caller first; DAY weeks are written (X27); day values over
+ * 1 day (derived) are capped at 1 (BR-26).
  */
 export function planShift(
   rect: Rect,
@@ -35,14 +38,9 @@ export function planShift(
       return fromCol >= rect.c0 && fromCol <= rect.c1 ? (values[from] ?? 0) : 0
     })
     line.forEach((t, i) => {
-      const v = next[i]!
+      const v = t.granularity === 'DAY' ? Math.min(next[i]!, MAX_DAY_CD) : next[i]!
       if (v === values[i]) return
-      writes.push({
-        taskAssignmentId: t.taskAssignmentId!,
-        granularity: 'WEEK',
-        period: t.week,
-        cd: v === 0 ? null : v,
-      })
+      writes.push(writeFor(t, v === 0 ? null : v))
     })
   }
   return { writes, newRect: { r0: rect.r0, r1: rect.r1, c0: rect.c0 + dir, c1: rect.c1 + dir } }

@@ -1,5 +1,5 @@
 // src/lib/schemas/allocations.ts — plan writes (SPEC §7.4 saveAllocations, FR-612 planAssignmentRange; X65, BR-26,
-// M6-D3/D6). Bounds are per cell (BR-26: WEEK ≤ 700, DAY ≤ 100 cd); business rules (DAY_WEEK, UNREPRESENTABLE, MAX
+// M6-D3/D6). Bounds are per cell (BR-26: WEEK ≤ 700, DAY ≤ 100 cd); business rules (UNREPRESENTABLE, MAX
 // against the current plan) are the service's. Refinements skip values that already failed their own parse.
 import { compareISO, diffDays, isISODate, isoWeekday } from '@/domain/dates'
 import { th } from '@/i18n/th'

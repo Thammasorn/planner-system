@@ -40,8 +40,17 @@ describe('planPaste (AC-803, M6-D28)', () => {
     )
     expect(r.pasted).toBe(6)
   })
-  it('skips (and counts) a DAY-week target, never shifting', () => {
-    const g = fakeGrid([{ id: 'cindy', values: [0, 200, 0], editability: ['ok', 'dayWeek', 'ok'] }])
+  it('M7 (X27): a DAY-week target is written (BR-24 flow); a read-only target is skipped, never shifting', () => {
+    const g = fakeGrid([{ id: 'cindy', values: [0, 200, 0], day: [false, true, false] }])
+    const all = planPaste([['1', '2', '3']], { row: 0, col: 0 }, { rows: 1, cols: 1 }, g.at, 'DAYS')
+    expect(all.writes.map((w) => [w.period, w.cd])).toEqual([
+      ['2026-11-09', 100],
+      ['2026-11-16', 200],
+      ['2026-11-23', 300],
+    ])
+  })
+  it('skips (and counts) a read-only target, never shifting', () => {
+    const g = fakeGrid([{ id: 'cindy', values: [0, 200, 0], editability: ['ok', 'noEdit', 'ok'] }])
     const r = planPaste([['1', '2', '3']], { row: 0, col: 0 }, { rows: 1, cols: 1 }, g.at, 'DAYS')
     expect(r.writes.map((w) => [w.period, w.cd])).toEqual([
       ['2026-11-09', 100],

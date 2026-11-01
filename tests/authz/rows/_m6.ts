@@ -17,7 +17,7 @@ import { pinToday } from './_m5'
 export const PROJ = { M: 'allow', L: 'allow', Me: 'allow', W: '404' } as const satisfies Record<Role, Outcome>
 /** X42: every plan write on archived A is 403 for everyone who can see it. */
 export const ARCH_WRITE = { M: '403', L: '403', Me: '403', W: '404' } as const satisfies Record<Role, Outcome>
-/** A visible row whose input the service rejects (DAY_WEEK, UNREPRESENTABLE): 400 for the team, 404 for W. */
+/** A visible row whose input the service rejects (UNREPRESENTABLE, MAX): 400 for the team, 404 for W. */
 export const PROJ_400 = { M: '400', L: '400', Me: '400', W: '404' } as const satisfies Record<Role, Outcome>
 /** A stale baseVersion on a visible assignment: 409 for the team, 404 for W (authz precedes the version check). */
 export const PROJ_409 = { M: '409', L: '409', Me: '409', W: '404' } as const satisfies Record<Role, Outcome>

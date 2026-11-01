@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from '@/lib/z'
 import { th } from '@/i18n/th'
+import { ERROR_STATUS } from '@/lib/action-result'
 import {
   AppError,
   ConflictError,
   ForbiddenError,
   mapDbError,
   MustChangePasswordError,
+  NeedsChoiceError,
   notImplemented,
   NotFoundError,
   pgErrorInfo,
@@ -93,13 +95,13 @@ describe('mapDbError / pgErrorInfo', () => {
   })
 
   it('M6: ValidationError carries an extra payload (issues) next to fieldErrors', () => {
-    const e = new ValidationError({}, 'x', { issues: [{ reason: 'DAY_WEEK' }] })
+    const e = new ValidationError({}, 'x', { issues: [{ reason: 'MAX' }] })
     expect(toActionError(e)).toEqual({
       ok: false,
       code: 'VALIDATION',
       message: 'x',
       fieldErrors: {},
-      issues: [{ reason: 'DAY_WEEK' }],
+      issues: [{ reason: 'MAX' }],
     })
   })
 
@@ -114,6 +116,21 @@ describe('mapDbError / pgErrorInfo', () => {
 })
 
 describe('toActionError', () => {
+  it('NEEDS_CHOICE (BR-24, M7-D3): 409 with { week, weeks, pairs } spread into the result', () => {
+    const p = { taskAssignmentId: 'a1', week: '2026-09-21' }
+    expect(ERROR_STATUS.NEEDS_CHOICE).toBe(409)
+    const e = new NeedsChoiceError({ week: '2026-09-21', weeks: ['2026-09-21', '2026-09-28'], pairs: [p] })
+    expect(e.status).toBe(409)
+    expect(toActionError(e)).toEqual({
+      ok: false,
+      code: 'NEEDS_CHOICE',
+      message: th.errors.NEEDS_CHOICE,
+      week: '2026-09-21',
+      weeks: ['2026-09-21', '2026-09-28'],
+      pairs: [p],
+    })
+  })
+
   it("T-ERR-03 toActionError(new Error('secret-param')) → INTERNAL and the log never sees the message", () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(toActionError(new Error('secret-param'))).toEqual({

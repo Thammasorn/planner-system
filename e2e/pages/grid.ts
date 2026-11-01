@@ -2,7 +2,8 @@ import { expect, type Locator, type Page } from '@playwright/test'
 import type { ISODate, LoadView, PeriodKey } from '../../src/domain/types'
 import { diffDays } from '../../src/domain/dates'
 import { th } from '../../src/i18n/th'
-import { timelineStart, WEEK_W } from '../../src/lib/grid/columns'
+import { formatWeekHeader } from '../../src/lib/format'
+import { DAY_W, timelineStart, WEEK_TOTAL_W, WEEK_W } from '../../src/lib/grid/columns'
 import { E2E } from '../env'
 import { ShellPage } from './shell'
 import { SidebarPage } from './sidebar'
@@ -147,11 +148,31 @@ export class GridPage {
 
   /** Scrolls the grid horizontally so `week` is the 3rd visible column (the column virtualiser renders it). */
   async scrollToWeek(week: ISODate): Promise<void> {
+    const header = this.columnHeader(week)
     const index = diffDays(timelineStart(E2E_TODAY), week) / 7
-    await this.root().evaluate((el, left) => {
-      el.scrollLeft = left
-    }, Math.max(0, (index - 2) * WEEK_W))
-    await expect(this.columnHeader(week)).toBeAttached()
+    // M7: in day zoom every week is Mon–Fri day columns + its narrow รวม column (weekend columns and inline expanded
+    // weeks make the estimate approximate; the loop below corrects it from the rendered week headers).
+    const dayZoom = (await this.zoomButton('day').getAttribute('aria-pressed')) === 'true'
+    const perWeek = dayZoom ? 5 * DAY_W + WEEK_TOTAL_W : WEEK_W
+    const setLeft = (left: number) =>
+      this.root().evaluate((el, l) => {
+        el.scrollLeft = l
+      }, Math.max(0, left))
+    await setLeft((index - 2) * perWeek)
+    for (let i = 0; i < 20 && (await header.count()) === 0; i++) {
+      const keys = (
+        await this.root()
+          .locator('[role="columnheader"][data-col-key^="W:"]')
+          .evaluateAll((els) => els.map((e) => e.getAttribute('data-col-key')!.slice(2)))
+      ).sort()
+      const first = keys[0]
+      const last = keys.at(-1)
+      const left = await this.root().evaluate((el) => el.scrollLeft)
+      if (!first || !last) await setLeft(left + (week < E2E_TODAY ? -perWeek : perWeek))
+      else if (week < first) await setLeft(left - (diffDays(week, first) / 7 + 2) * perWeek)
+      else if (week > last) await setLeft(left + (diffDays(last, week) / 7 + 1) * perWeek)
+    }
+    await expect(header).toBeAttached()
   }
 
   /** The cell, scrolled into the virtual window (horizontally) and into view (vertically). */
@@ -221,6 +242,89 @@ export class GridPage {
   }
   showCompletedSwitch(): Locator {
     return this.toolbar().getByRole('switch', { name: th.grid.toolbar.showCompleted })
+  }
+
+  // ── M7 day resolution (plan/m07 S5.1) ─────────────────────────────────────────────────────────────────────
+  // DOM contract (S3): zoom = MUI ToggleButtonGroup (role=group named th.grid.toolbar.zoom, buttons with aria-pressed);
+  // a collapsed week header holds a button named th.grid.day.expandWeek(<d/m>) (aria-expanded=false); an expanded
+  // week's first day header holds the collapse-view button th.grid.day.collapseWeekView(<d/m>) (aria-expanded=true,
+  // text formatThaiDate(week, 'medium')); day cells `cell-<rowKey>-D:<date>`, the narrow รวม column keeps the week's
+  // `cell-<rowKey>-W:<Monday>` id; derived values carry data-derived="true"; a BR-24 pending cell
+  // data-pending-choice="true"; glyphs `[data-glyph=over|risk|warn|dayDetail]`; footer day tones `data-tone`.
+  /** The `[สัปดาห์ | วัน]` toggle group. */
+  zoomGroup(): Locator {
+    return this.toolbar().getByRole('group', { name: th.grid.toolbar.zoom })
+  }
+  zoomButton(level: 'week' | 'day'): Locator {
+    return this.zoomGroup().getByRole('button', {
+      name: level === 'week' ? th.grid.toolbar.zoomWeek : th.grid.toolbar.zoomDay,
+      exact: true,
+    })
+  }
+  zoomDay(): Locator {
+    return this.zoomButton('day')
+  }
+  /** Clicks the zoom button and waits until it is pressed and the grid is idle again. */
+  async zoom(level: 'week' | 'day'): Promise<void> {
+    await this.zoomButton(level).click()
+    await expect(this.zoomButton(level)).toHaveAttribute('aria-pressed', 'true')
+    // the day layout is rendered before callers scroll by column widths
+    if (level === 'day') await expect(this.root().locator('[role="columnheader"][data-col-key^="D:"]').first()).toBeAttached()
+    await this.waitSaved()
+  }
+  /** The expand toggle of a collapsed week header (plain click expands, view only). */
+  weekHeader(week: ISODate): Locator {
+    return this.root().getByRole('button', { name: th.grid.day.expandWeek(formatWeekHeader(week)), exact: true })
+  }
+  /** The collapse-view toggle on the first day header of an expanded week. */
+  dayGroupHeader(week: ISODate): Locator {
+    return this.root().getByRole('button', {
+      name: th.grid.day.collapseWeekView(formatWeekHeader(week)),
+      exact: true,
+    })
+  }
+  /** The column header of one day (expanded week / day zoom). */
+  dayHeader(date: ISODate): Locator {
+    return this.root().locator(`[role="columnheader"][data-col-key="D:${date}"]`)
+  }
+  /** Expands `week` by a plain header click and waits for its day columns. */
+  async expandWeek(week: ISODate): Promise<void> {
+    if ((await this.columnHeader(week).count()) === 0) await this.scrollToWeek(week)
+    await this.weekHeader(week).click()
+    await expect(this.dayGroupHeader(week)).toHaveAttribute('aria-expanded', 'true')
+    await expect(this.dayHeader(week)).toBeAttached()
+  }
+  dayCell(rowKey: string, date: ISODate): Locator {
+    return this.page.getByTestId(`cell-${rowKey}-D:${date}`)
+  }
+  /** The day cell, attached and scrolled into view (the dates the specs use lie inside the first viewport). */
+  async revealDay(rowKey: string, date: ISODate): Promise<Locator> {
+    const cell = this.dayCell(rowKey, date)
+    await expect(cell).toBeAttached()
+    await cell.scrollIntoViewIfNeeded()
+    return cell
+  }
+  /** "↕ รวมเป็นรายสัปดาห์" inside the รวม cell of an expanded DAY week (shown on hover / focus). */
+  collapseButton(rowKey: string, week: ISODate): Locator {
+    return this.cell(rowKey, week).getByRole('button', { name: th.grid.day.collapseToWeek, exact: true })
+  }
+  /** The cell menu (right click / Shift+F10). */
+  cellMenu(): Locator {
+    return this.page.getByRole('menu', { name: th.grid.day.cellMenu })
+  }
+  /** The BR-24 choice dialog (found by its SCALE option text — its title depends on the number of weeks). */
+  br24(): { root: Locator; scale(): Promise<void>; collapse(): Promise<void>; cancel(): Promise<void> } {
+    const root = this.page.getByRole('dialog').filter({ hasText: th.grid.br24.scale })
+    const choose = async (name: string, exact: boolean) => {
+      await root.getByRole('button', { name, exact }).click()
+      await expect(root).toHaveCount(0)
+    }
+    return {
+      root,
+      scale: () => choose(th.grid.br24.scale, false),
+      collapse: () => choose(th.grid.br24.collapse, false),
+      cancel: () => choose(th.grid.br24.cancel, true),
+    }
   }
 
   // ── save state ────────────────────────────────────────────────────────────────────────────────────────────

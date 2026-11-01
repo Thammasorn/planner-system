@@ -27,6 +27,7 @@ import { pdfBytes } from './files'
 import {
   makeAllocation,
   makeAssignment,
+  makeDayAllocations,
   makeBlocker,
   makeClient,
   makeFile,
@@ -68,6 +69,7 @@ export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>
   files: ['pages'], // M4: every world file sits on a world page
   allocations: ['tasks', 'timeOff'], // M6: plans on the M3 assignments + the M5 coworker (plan/m06 S0.11)
   taskBodies: ['tasks', 'pages'], // M6.1: bodies of M3 tasks; tree tests compare with the M4 pages
+  dayAllocations: ['allocations'], // M7: day plans on M6's assignments (plan/m07 S0.9, G17 — no new users/tasks)
 }
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
@@ -244,6 +246,21 @@ export interface WorldAllocations {
   }
 }
 
+/** Part 'dayAllocations' (M7, plan/m07 S0.9). Weeks (Mondays) of the rows it adds on M6's assignments; plain inserts,
+ *  every assignment version stays 1. */
+export interface WorldDayAllocations {
+  dayWeeks: {
+    /** WEEK 250 on `assignments.pLeafLead` (P). */
+    pWeek: ISODate
+    /** DAY { 11-09: 100, 11-10: 100, 11-11: 50 } on `assignments.pLeafLead`. */
+    pDay: ISODate
+    /** DAY { 11-09: 50 } on `assignments.aTaskMember` (archived A). */
+    aDay: ISODate
+    /** DAY { 11-10: 75 } on `assignments.qTaskCoworker` (Q) — feeds P's `otherProjects['D:2026-11-10']` of coworker. */
+    qDay: ISODate
+  }
+}
+
 /** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
 export type WorldBatches = WorldTasks['batches'] & {
   /** P root 'ลบแล้ว P', deleted 1 day ago. */
@@ -265,7 +282,8 @@ export interface World
     WorldTaskBodies,
     WorldFiles,
     WorldTimeOff,
-    WorldAllocations {
+    WorldAllocations,
+    WorldDayAllocations {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
@@ -678,6 +696,25 @@ async function buildAllocations(w: World): Promise<void> {
   Object.assign(w.assignments, { pDoneMember, pCoworker, qTaskCoworker })
 }
 
+/** M7 'dayAllocations' part (plan/m07 S0.9): rows on M6's assignments only (WorldDayAllocations). */
+async function buildDayAllocations(w: World): Promise<void> {
+  const a = w.assignments
+  const dayWeeks: World['dayWeeks'] = {
+    pWeek: '2026-11-02',
+    pDay: '2026-11-09',
+    aDay: '2026-11-09',
+    qDay: '2026-11-09',
+  }
+  await makeAllocation({ assignment: a.pLeafLead, period: dayWeeks.pWeek, cd: 250 })
+  await makeDayAllocations({
+    assignment: a.pLeafLead,
+    days: { '2026-11-09': 100, '2026-11-10': 100, '2026-11-11': 50 },
+  })
+  await makeDayAllocations({ assignment: a.aTaskMember, days: { '2026-11-09': 50 } })
+  await makeDayAllocations({ assignment: a.qTaskCoworker, days: { '2026-11-10': 75 } })
+  w.dayWeeks = dayWeeks
+}
+
 /** Builders by part; each milestone adds its own. */
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
@@ -686,6 +723,7 @@ const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   files: buildFiles,
   timeOff: buildTimeOff,
   allocations: buildAllocations,
+  dayAllocations: buildDayAllocations,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -748,6 +786,7 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     timeOff: notBuilt('timeOff', 'timeOff'),
     holidays: notBuilt('timeOff', 'holidays'),
     allocations: notBuilt('allocations', 'allocations'),
+    dayWeeks: notBuilt('dayAllocations', 'dayWeeks'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w

@@ -3,21 +3,25 @@
 // (requireProject 'view', archived allowed — X42); `today` is a parameter (X45). The DTO is assembled by the pure
 // `assembleGrid` (unit-tested): masking of leave labels happens here (§3.3, canSeeLeaveDetails); `otherProjects` carries
 // numbers only (X29). Loads stay integer cd; every allocations query is week-bounded (repo/allocations.ts).
+import type { WeekPlan } from '@/domain/allocation'
 import { resolveCertainty, splitLoad, addLoad, type CertaintyNode } from '@/domain/certainty'
 import { countsTowardLoad } from '@/domain/completed'
-import { addDays, weekRange } from '@/domain/dates'
-import type { Cd, Certainty, ISODate, LoadPair, PeriodKey } from '@/domain/types'
+import { addDays, isoWeekday, weekRange, weekStart } from '@/domain/dates'
+import type { Cd, Certainty, ISODate, LoadPair, PeriodKey, Weekday } from '@/domain/types'
 import { displayName } from '@/lib/display-name'
 import type { UserCapacity } from '@/lib/contracts/capacity'
 import type {
   AssigneeCell,
+  DayLoadRow,
   GridAssigneeRow,
+  GridPeriod,
   GridPerson,
   GridResponse,
   GridRow,
   GridTaskRow,
   GridTimeOff,
 } from '@/lib/contracts/grid'
+import { dayCellsFromPlan, dayCtxFor, dKey, spreadDayLoads, visibleDayDates, weekCellFromPlan, wKey } from '@/lib/grid/day'
 import * as authz from '../authz'
 import type { DbOrTx } from '../db/types'
 import { NotFoundError } from '../errors'
@@ -27,11 +31,12 @@ import type { TaskListRow } from '../repo/tasks'
 import type { CalendarTimeOffRow } from '../repo/time-off'
 import type { SessionUser } from '../session'
 import * as capacity from './capacity'
+import { dayKeysFor } from './day-context'
 import * as holidaysSvc from './holidays'
 import { maskTimeOff } from './masking'
 import { timelineBound } from './timeline'
 
-/** M6: expand [] and zoom 'week' (M7 fills them). */
+/** M7 (M7-D10/D17): `expand` = Mondays shown as days; `zoom: 'day'` expands every week (and ignores `expand`). */
 export interface ChunkParams {
   from: ISODate
   to: ISODate
@@ -41,6 +46,31 @@ export interface ChunkParams {
 }
 
 const wk = (w: ISODate): PeriodKey => `W:${w}`
+
+/** FR-802/803: the weeks of the chunk that are shown as days (zoom=day → all of them). */
+export function expandedWeeks(p: Pick<ChunkParams, 'expand' | 'zoom'>, weeks: readonly ISODate[]): Set<ISODate> {
+  if (p.zoom === 'day') return new Set(weeks)
+  const inChunk = new Set(weeks)
+  return new Set(p.expand.filter((w) => inChunk.has(w)))
+}
+
+/** M7-D10: collapsed week → its W: period; expanded week → its visible D: periods, then W: `expanded: true` ("รวม"). */
+export function buildPeriods(
+  weeks: readonly ISODate[],
+  expanded: ReadonlySet<ISODate>,
+  vis: { scheduledWeekdays: ReadonlySet<Weekday>; dayRowDates: ReadonlySet<ISODate> },
+): GridPeriod[] {
+  const out: GridPeriod[] = []
+  for (const w of weeks) {
+    if (!expanded.has(w)) {
+      out.push({ key: wKey(w), kind: 'WEEK', weekStart: w, date: w })
+      continue
+    }
+    for (const d of visibleDayDates(w, vis)) out.push({ key: dKey(d), kind: 'DAY', weekStart: w, date: d })
+    out.push({ key: wKey(w), kind: 'WEEK', weekStart: w, date: w, expanded: true })
+  }
+  return out
+}
 
 function unique<T>(xs: readonly T[]): T[] {
   return [...new Set(xs)]
@@ -80,6 +110,12 @@ export async function buildChunk(
   const others = p.includeOthers
     ? await repo.allocations.loadByUserWeek(tx, { userIds, range, excludeProjectId: ctx.id })
     : null
+  // X29 (M7-D27): other projects' loads of the grid people in expanded weeks, spread to days in assembleGrid
+  const expanded = [...expandedWeeks(p, weekRange(p.from, p.to))]
+  const othersDay =
+    p.includeOthers && expanded.length > 0
+      ? await repo.allocations.dayLoadsForProjects(tx, { userIds, weeks: expanded, excludeProjectId: ctx.id })
+      : null
   return assembleGrid({
     project: { id: project.id, name: project.name, certainty: project.certainty, archived: access.archived },
     tasks,
@@ -96,6 +132,7 @@ export async function buildChunk(
     leave,
     holidays,
     others,
+    othersDay,
     p,
     today,
     viewer: user,
@@ -119,6 +156,8 @@ export interface AssembleInput {
   holidays: readonly { date: ISODate; name: string }[]
   /** includeOthers: per user and week, the counted load of their other live, non-archived projects (X29). */
   others: ReadonlyMap<string, Record<ISODate, LoadPair>> | null
+  /** M7 includeOthers: repo.allocations.dayLoadsForProjects rows of the expanded weeks (X29, M7-D27); numbers only. */
+  othersDay?: readonly DayLoadRow[] | null
   p: ChunkParams
   today: ISODate
   viewer: Pick<SessionUser, 'id' | 'role'>
@@ -178,7 +217,7 @@ export function aggregateTaskTotals(nodes: readonly TotalsNode[]): Map<string, P
     for (const cells of n.cells) {
       for (const [key, cell] of Object.entries(cells) as [PeriodKey, AssigneeCell | undefined][]) {
         if (!cell || cell.cd === 0) continue
-        if (!countsTowardLoad(key.slice(2), n.completedWeek)) continue
+        if (!countsTowardLoad(weekStart(key.slice(2)), n.completedWeek)) continue // BR-50 per week (M7-D14)
         addInto(t, key, splitLoad(cell.cd, n.certainty))
       }
     }
@@ -192,10 +231,20 @@ export function aggregateTaskTotals(nodes: readonly TotalsNode[]): Map<string, P
   return out
 }
 
+/** Weekdays (6/7 matter) on which some footer person is scheduled — from M5's per-day standard (schedule only). */
+function scheduledWeekdays(i: Pick<AssembleInput, 'capacity' | 'people'>): Set<Weekday> {
+  const out = new Set<Weekday>()
+  for (const u of i.people) {
+    for (const [d, c] of Object.entries(i.capacity.get(u.id)?.days ?? {})) if (c.standardCd > 0) out.add(isoWeekday(d))
+  }
+  return out
+}
+
 export function assembleGrid(i: AssembleInput): GridResponse {
   const { p } = i
   const canEdit = !i.project.archived // M, L, Me all edit (PERM-12); archived → read-only (X42)
   const weeks = weekRange(p.from, p.to)
+  const expanded = expandedWeeks(p, weeks)
 
   // task tree (depth-first by position COLLATE "C", then id)
   const live = new Map(i.tasks.map((t) => [t.id, t]))
@@ -229,7 +278,86 @@ export function assembleGrid(i: AssembleInput): GridResponse {
     list.push(a)
     assignmentsByTask.set(a.taskId, list)
   }
-  const cellsOf = new Map(i.assignments.map((a) => [a.id, assigneeCells(rowsByAssignment.get(a.id) ?? [])]))
+  // plans per assignment; weeks with DAY plans per user (M7-D19)
+  const plansOf = new Map(
+    i.assignments.map((a) => [
+      a.id,
+      repo.allocations.plansFromRows(rowsByAssignment.get(a.id) ?? []).get(a.id) ?? new Map<ISODate, WeekPlan>(),
+    ]),
+  )
+  const dayWeeksOf = new Map<string, Set<ISODate>>()
+  for (const a of i.assignments) {
+    for (const [w, plan] of plansOf.get(a.id)!) {
+      if (plan.resolution !== 'DAY') continue
+      const set = dayWeeksOf.get(a.userId) ?? new Set<ISODate>()
+      set.add(w)
+      dayWeeksOf.set(a.userId, set)
+    }
+  }
+
+  // people (FR-806/807, §3.3): every assignee user
+  const leaveBy = new Map<string, GridTimeOff[]>()
+  for (const row of i.leave) {
+    const m = maskTimeOff(row, authz.canSeeLeaveDetails(i.viewer, row.userId))
+    const entry: GridTimeOff = {
+      start: m.startDate,
+      end: m.endDate,
+      half: m.half,
+      label: m.kind === 'full' ? m.leaveTypeName : m.label,
+    }
+    const list = leaveBy.get(row.userId) ?? []
+    list.push(entry)
+    leaveBy.set(row.userId, list)
+  }
+  const people: Record<string, GridPerson> = {}
+  for (const u of i.people) {
+    const cap = i.capacity.get(u.id)
+    const capacityCd: Partial<Record<PeriodKey, Cd>> = {}
+    const standardCd: Partial<Record<PeriodKey, Cd>> = {}
+    for (const w of weeks) {
+      capacityCd[wk(w)] = cap?.weeks[w]?.capacityCd ?? 0
+      standardCd[wk(w)] = cap?.weeks[w]?.standardCd ?? 0
+    }
+    // M7-D19: D: keys for every day of expanded weeks and of weeks where this person has a DAY cell (zeros omitted)
+    const dk = dayKeysFor(cap?.days, new Set([...expanded, ...(dayWeeksOf.get(u.id) ?? [])]))
+    Object.assign(capacityCd, dk.capacity)
+    Object.assign(standardCd, dk.standard)
+    const person: GridPerson = {
+      name: u.name,
+      active: u.active,
+      deactivatedOn: u.deactivatedOn,
+      capacity: capacityCd,
+      standard: standardCd,
+      timeOff: leaveBy.get(u.id) ?? [],
+    }
+    if (i.others) {
+      const other: Partial<Record<PeriodKey, LoadPair>> = {}
+      for (const [w, v] of Object.entries(i.others.get(u.id) ?? {})) other[wk(w)] = { total: v.total, committed: v.committed }
+      person.otherProjects = other
+    }
+    people[u.id] = person
+  }
+  // X29 day keys (M7-D27): WEEK rows spread separately for committed and tentative parts; no ids or names
+  if (i.others && i.othersDay) {
+    const spread = spreadDayLoads(i.othersDay, (userId, w) => dayCtxFor(people[userId], w))
+    for (const [userId, loads] of spread) {
+      const person = people[userId]
+      if (person?.otherProjects) Object.assign(person.otherProjects, loads)
+    }
+  }
+
+  // assignee cells: W: per week (BR-20/20a, BR-21a fallback flag) + D: per expanded week (BR-20 derived / BR-20a stored)
+  const cellsOf = new Map<string, Partial<Record<PeriodKey, AssigneeCell>>>()
+  for (const a of i.assignments) {
+    const cells: Partial<Record<PeriodKey, AssigneeCell>> = {}
+    const cap = i.capacity.get(a.userId)
+    for (const [w, plan] of plansOf.get(a.id)!) {
+      const cell = weekCellFromPlan(plan, w, cap?.weeks[w]?.capacityCd ?? 0, cap?.weeks[w]?.standardCd ?? 0)
+      if (cell) cells[wk(w)] = cell
+      if (expanded.has(w)) Object.assign(cells, dayCellsFromPlan(plan, dayCtxFor(people[a.userId], w)))
+    }
+    cellsOf.set(a.id, cells)
+  }
 
   const totals = aggregateTaskTotals(
     i.tasks
@@ -285,50 +413,16 @@ export function assembleGrid(i: AssembleInput): GridResponse {
   }
   for (const root of kids.get(null) ?? []) emit(root)
 
-  // people (FR-806/807, §3.3): every assignee user
-  const leaveBy = new Map<string, GridTimeOff[]>()
-  for (const row of i.leave) {
-    const m = maskTimeOff(row, authz.canSeeLeaveDetails(i.viewer, row.userId))
-    const entry: GridTimeOff = {
-      start: m.startDate,
-      end: m.endDate,
-      half: m.half,
-      label: m.kind === 'full' ? m.leaveTypeName : m.label,
-    }
-    const list = leaveBy.get(row.userId) ?? []
-    list.push(entry)
-    leaveBy.set(row.userId, list)
-  }
-  const people: Record<string, GridPerson> = {}
-  for (const u of i.people) {
-    const cap = i.capacity.get(u.id)
-    const capacityCd: Partial<Record<PeriodKey, Cd>> = {}
-    const standardCd: Partial<Record<PeriodKey, Cd>> = {}
-    for (const w of weeks) {
-      capacityCd[wk(w)] = cap?.weeks[w]?.capacityCd ?? 0
-      standardCd[wk(w)] = cap?.weeks[w]?.standardCd ?? 0
-    }
-    const person: GridPerson = {
-      name: u.name,
-      active: u.active,
-      deactivatedOn: u.deactivatedOn,
-      capacity: capacityCd,
-      standard: standardCd,
-      timeOff: leaveBy.get(u.id) ?? [],
-    }
-    if (i.others) {
-      const other: Partial<Record<PeriodKey, LoadPair>> = {}
-      for (const [w, v] of Object.entries(i.others.get(u.id) ?? {})) other[wk(w)] = { total: v.total, committed: v.committed }
-      person.otherProjects = other
-    }
-    people[u.id] = person
-  }
+  // M7-D10: Sat/Sun columns when a grid person is scheduled that weekday or a DAY row of this project exists that date
+  const dayRowDates = new Set(
+    i.rows.filter((r) => r.granularity === 'DAY' && expanded.has(r.weekStart)).map((r) => r.periodStart),
+  )
 
   return {
     context: { kind: 'project', id: i.project.id, name: i.project.name, archived: i.project.archived, canEdit },
-    window: { from: p.from, to: p.to, expand: [], zoom: 'week', includeOthers: p.includeOthers },
+    window: { from: p.from, to: p.to, expand: [...p.expand], zoom: p.zoom, includeOthers: p.includeOthers },
     today: i.today,
-    periods: weeks.map((w) => ({ key: wk(w), kind: 'WEEK', weekStart: w, date: w })),
+    periods: buildPeriods(weeks, expanded, { scheduledWeekdays: scheduledWeekdays(i), dayRowDates }),
     rows: out,
     milestones: [], // X28 (M8)
     people,

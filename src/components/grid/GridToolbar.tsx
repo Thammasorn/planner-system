@@ -1,6 +1,6 @@
 'use client'
 // src/components/grid/GridToolbar.tsx — `[สัปดาห์] ◀ [วันนี้] ▶ ภาระ: [ทั้งหมด▾] หน่วย: [วัน▾]` (SPEC §8.3, FR-801/802/804/809,
-// M6-D12/D21). The toolbar is one set of MUI controls (not per cell). M7 adds the วัน zoom option.
+// M6-D12/D21). The toolbar is one set of MUI controls (not per cell). M7: `[สัปดาห์ | วัน]` is ZoomToggle (FR-802).
 // M6.1 (S5.2, §8.12): light toggles from grid.module.css (token scale, --radius-md); it sits right under the header bar.
 import Button from '@mui/material/Button'
 import FormControlLabel from '@mui/material/FormControlLabel'
@@ -8,14 +8,15 @@ import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
-import ToggleButton from '@mui/material/ToggleButton'
 import ChevronLeft from '@mui/icons-material/ChevronLeft'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import EventBusyOutlined from '@mui/icons-material/EventBusyOutlined'
 import type { CellUnit, LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { GridZoom } from '@/lib/contracts/grid'
 import { GRID_UNITS, LOAD_VIEWS } from '@/lib/schemas/preferences'
 import type { SaveState } from './useSaveAllocations'
+import { ZoomToggle } from './ZoomToggle'
 import styles from './grid.module.css'
 
 export interface GridToolbarProps {
@@ -29,21 +30,15 @@ export interface GridToolbarProps {
   onView: (v: LoadView) => void
   onUnit: (u: CellUnit) => void
   onShowCompleted: (on: boolean) => void
+  /** M7 (FR-802) */
+  zoom?: GridZoom
+  onZoom?: (z: GridZoom) => void
 }
 
 export function GridToolbar(p: GridToolbarProps) {
   return (
     <div role="toolbar" aria-label={th.grid.toolbar.label} className={styles.toolbar}>
-      <ToggleButton
-        value="WEEK"
-        selected
-        size="small"
-        aria-label={th.grid.toolbar.zoomWeek}
-        disableRipple
-        className={styles.toolbarToggle}
-      >
-        {th.grid.toolbar.zoomWeek}
-      </ToggleButton>
+      <ZoomToggle zoom={p.zoom ?? 'WEEK'} onChange={p.onZoom ?? (() => {})} />
       <IconButton size="small" aria-label={th.grid.toolbar.prev} onClick={p.onPrev} className={styles.toolbarIcon}>
         <ChevronLeft fontSize="small" />
       </IconButton>

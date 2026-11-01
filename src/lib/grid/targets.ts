@@ -11,7 +11,8 @@ export function cellAt(m: GridModel, row: ViewRow, col: GridColumn): AssigneeCel
   return row.kind === 'task' ? undefined : m.cells.get(row.key)?.get(col.key)
 }
 
-/** The week capacity of the row's person (0 when unknown or a task row). */
+/** The capacity of the row's person for the column's period — W: week capacity, D: that day's (0 when unknown or a
+ *  task row; a missing D: key means 0, M7-D19). */
 export function capacityAt(m: GridModel, row: ViewRow, key: PeriodKey): number {
   return row.kind === 'task' ? 0 : (m.people[row.assignee.userId]?.capacity[key] ?? 0)
 }
@@ -33,6 +34,7 @@ export function targetFor(
     editability: cellEditability(row, own, m),
     capCd: capacityAt(m, row, col.key),
     ...(cell ? { cell } : {}),
+    ...(col.kind === 'D' ? { granularity: 'DAY' as const, date: col.date } : {}),
   }
 }
 

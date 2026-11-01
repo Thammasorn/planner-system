@@ -248,13 +248,13 @@ describe('useSaveAllocations (§7.4, S3.6)', () => {
     expect(await screen.findByText(th.grid.toast.conflict)).toBeInTheDocument()
   })
 
-  it('DAY_WEEK validation reverts those weeks only', async () => {
+  it('VALIDATION issues (UNREPRESENTABLE) revert those weeks only and re-send the rest (M7)', async () => {
     m.saveAllocations
       .mockResolvedValueOnce({
         ok: false,
         code: 'VALIDATION',
-        message: th.grid.errors.dayWeek,
-        issues: [{ taskAssignmentId: 'a-cindy-pos', period: '2026-09-07', reason: 'DAY_WEEK' }],
+        message: th.grid.errors.invalidBatch,
+        issues: [{ taskAssignmentId: 'a-cindy-pos', period: '2026-09-07', reason: 'UNREPRESENTABLE' }],
       })
       .mockImplementation((input: SaveAllocationsInput) => Promise.resolve(okFor(input)))
     const { hook, cell } = setup()
@@ -264,12 +264,90 @@ describe('useSaveAllocations (§7.4, S3.6)', () => {
     })
     expect(cell('2026-09-07')?.cd).toBe(500)
     expect(cell('2026-09-14')?.cd).toBe(100)
-    expect(await screen.findByText(th.grid.toast.dayWeekReadOnly)).toBeInTheDocument()
+    expect(await screen.findByText(th.grid.day.unrepresentable)).toBeInTheDocument()
     await act(async () => {
       await hook.result.current.flush()
     })
     const resent = m.saveAllocations.mock.calls[1]![0] as SaveAllocationsInput
     expect(resent.items[0]!.changes).toEqual([{ granularity: 'WEEK', period: '2026-09-14', cd: 100 }])
+  })
+
+  it('a batch never mixes onDayWeekConflict values: the queue flushes first (M7-D4)', async () => {
+    m.saveAllocations.mockImplementation((input: SaveAllocationsInput) => Promise.resolve(okFor(input)))
+    const { hook } = setup()
+    act(() => {
+      void hook.result.current.enqueue([w('2026-10-05', 300)])
+      void hook.result.current.enqueue([w('2026-10-12', 200)], { onDayWeekConflict: 'SCALE' })
+    })
+    await act(async () => {
+      await hook.result.current.flush()
+    })
+    const calls = m.saveAllocations.mock.calls.map((c) => c[0] as SaveAllocationsInput)
+    expect(calls).toHaveLength(2)
+    expect(calls[0]!.onDayWeekConflict).toBeUndefined()
+    expect(calls[1]!.onDayWeekConflict).toBe('SCALE')
+  })
+
+  it('a day change for a week with a queued WEEK change flushes first (M7-D6)', async () => {
+    m.saveAllocations.mockImplementation((input: SaveAllocationsInput) => Promise.resolve(okFor(input)))
+    const { hook } = setup()
+    act(() => {
+      void hook.result.current.enqueue([w('2026-10-05', 300)])
+      void hook.result.current.enqueue([
+        { taskAssignmentId: 'a-cindy-pos', granularity: 'DAY', period: '2026-10-07', cd: 100 },
+      ])
+    })
+    await act(async () => {
+      await hook.result.current.flush()
+    })
+    expect(m.saveAllocations).toHaveBeenCalledTimes(2)
+  })
+
+  it('NEEDS_CHOICE (stale cache) asks onNeedsChoice and re-sends the batch with the choice', async () => {
+    m.saveAllocations
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 'NEEDS_CHOICE',
+        message: 'x',
+        week: '2026-09-07',
+        weeks: ['2026-09-07'],
+        pairs: [{ taskAssignmentId: 'a-cindy-pos', week: '2026-09-07' }],
+      })
+      .mockImplementation((input: SaveAllocationsInput) => Promise.resolve(okFor(input)))
+    const qc = newQueryClient()
+    const [a, b] = posChunks()
+    qc.setQueryData(qk.gridChunk(ctx, { from: '2026-08-31', expand: [], zoom: 'WEEK', includeOthers: false }), a)
+    qc.setQueryData(qk.gridChunk(ctx, { from: '2026-10-26', expand: [], zoom: 'WEEK', includeOthers: false }), b)
+    const onNeedsChoice = vi.fn(() => Promise.resolve('COLLAPSE' as const))
+    const wrapper = ({ children }: { children: ReactNode }) => <Providers qc={qc}>{children}</Providers>
+    const hook = renderHook(() => useSaveAllocations(ctx, { onNeedsChoice }), { wrapper })
+    act(() => void hook.result.current.enqueue([w('2026-09-07', 100)]))
+    await act(async () => {
+      await hook.result.current.flush()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await hook.result.current.flush()
+    })
+    expect(onNeedsChoice).toHaveBeenCalledTimes(1)
+    const resent = m.saveAllocations.mock.calls[1]![0] as SaveAllocationsInput
+    expect(resent.onDayWeekConflict).toBe('COLLAPSE')
+    expect(resent.items[0]!.changes).toEqual([{ granularity: 'WEEK', period: '2026-09-07', cd: 100 }])
+  })
+
+  it('SPILLED_OVER_DAY_LIMIT toasts the split-clamped text (M7-D8)', async () => {
+    m.saveAllocations.mockImplementation((input: SaveAllocationsInput) =>
+      Promise.resolve({
+        ...okFor(input),
+        warnings: [{ code: 'SPILLED_OVER_DAY_LIMIT', taskAssignmentId: 'a-cindy-pos', week: '2026-10-05' }],
+      }),
+    )
+    const { hook } = setup()
+    act(() => void hook.result.current.enqueue([w('2026-10-05', 300)]))
+    await act(async () => {
+      await hook.result.current.flush()
+    })
+    expect(await screen.findByText(th.grid.day.splitClampedToast)).toBeInTheDocument()
   })
 
   it('ActionFailure is what unwrap throws (sanity)', () => {

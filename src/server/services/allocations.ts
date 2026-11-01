@@ -3,19 +3,20 @@
 // (`ORDER BY ta.id FOR UPDATE OF ta`), authorize per project, check versions, DELETE before INSERT per week, bump
 // versions and write one audit row per changed assignment — all in the caller's transaction. `today` is a required
 // parameter (X90); these never import clock.ts and never call refresh(). Names marked ★ are reused by M7.
+// M7 (S2.4–S2.7): the full per-(item, week) table of planWeek (BR-22 split, BR-23/BR-24 COLLAPSE, BR-24 SCALE with
+// clamp-and-spill M7-D7), NEEDS_CHOICE for the whole batch (M7-D3), DayCtx from services/day-context.ts (M7-D25) and
+// conversions in the audit `after` (FR-1201).
 import {
   planRange as domainPlanRange,
   planWeek,
   weekPlanTotal,
-  type DayCtx,
   type DayWarning,
   type WeekChange,
   type WeekPlan,
 } from '@/domain/allocation'
-import { dayCapacityCd, standardDayCd } from '@/domain/capacity'
 import { splitLoad } from '@/domain/certainty'
 import { futureLoad, releasedLoad } from '@/domain/completed'
-import { addDays, addWeeks, compareISO, daysOfWeek, isoWeekday, weekRange, weekStart } from '@/domain/dates'
+import { addDays, addWeeks, isoWeekday, weekRange, weekStart } from '@/domain/dates'
 import type { Cd, Certainty, ISODate, LoadPair } from '@/domain/types'
 import { formatCd } from '@/domain/units'
 import { th } from '@/i18n/th'
@@ -32,16 +33,17 @@ import type {
   SaveValidationIssue,
   SaveWarning,
   SaveWarningCode,
+  NeedsChoicePayload,
   WeekState,
 } from '@/lib/contracts/grid'
 import type { ReleasedLoad } from '@/lib/contracts/tasks'
 import * as audit from '../audit'
 import * as authz from '../authz'
 import type { DbOrTx, Tx } from '../db/types'
-import { ConflictError, NotFoundError, ValidationError } from '../errors'
+import { ConflictError, NeedsChoiceError, NotFoundError, ValidationError } from '../errors'
 import * as repo from '../repo'
 import type { SessionUser } from '../session'
-import { loadCapacityInputs } from './capacity'
+import { loadDayCtx } from './day-context'
 import { timelineBound, TIMELINE_WEEKS_AHEAD } from './timeline'
 
 /** Audit entity of every plan write (M6-D29, X93). */
@@ -195,43 +197,6 @@ export async function assertVersions(
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Week context (S2.6; M7 replaces it with services/day-context.ts#loadDayCtx, M7-D25)
-// ---------------------------------------------------------------------------------------------------------------
-
-/** DayCtx per (user, week) from M5's capacity inputs: dayCaps (BR-10…13), schedule (BR-21a), leave flags. */
-export async function loadWeekCtx(
-  tx: DbOrTx,
-  userIds: readonly string[],
-  weeks: readonly ISODate[],
-): Promise<Map<string, Map<ISODate, DayCtx>>> {
-  const out = new Map<string, Map<ISODate, DayCtx>>()
-  const sorted = [...new Set(weeks)].sort()
-  if (sorted.length === 0 || userIds.length === 0) return out
-  const inputs = await loadCapacityInputs(tx, userIds, {
-    from: sorted[0]!,
-    to: addDays(sorted[sorted.length - 1]!, 7),
-  })
-  for (const userId of new Set(userIds)) {
-    const u = inputs.users.get(userId)
-    const spans = u?.timeOff ?? []
-    const byWeek = new Map<ISODate, DayCtx>()
-    for (const week of sorted) {
-      const days = daysOfWeek(week)
-      byWeek.set(week, {
-        week,
-        dayCaps: days.map((d) =>
-          u ? dayCapacityCd(u.schedule, inputs.holidays, spans, d, u.deactivatedOn) : 0,
-        ),
-        schedule: days.map((d) => (u ? standardDayCd(u.schedule, d) : 0)),
-        timeOff: days.map((d) => spans.some((s) => compareISO(s.startDate, d) <= 0 && compareISO(d, s.endDate) <= 0)),
-      })
-    }
-    out.set(userId, byWeek)
-  }
-  return out
-}
-
-// ---------------------------------------------------------------------------------------------------------------
 // save — saveAllocations (X65, M6-D3/D4/D29/D34)
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -271,15 +236,42 @@ const SAVE_WARNING_CODES: ReadonlySet<string> = new Set<SaveWarningCode>([
   'WORK_ON_NON_WORKING_DAY',
   'WEEK_NO_CAPACITY',
   'SPILLED_OVER_DAY_LIMIT',
+  'ALLOCATED_ON_TIME_OFF',
 ])
 
+/** S2.7: DayWarning → SaveWarning { code, taskAssignmentId, week, date? }; WEEK_NO_CAPACITY / SPILLED_OVER_DAY_LIMIT
+ *  carry no date (one per (item, week)); identical entries are deduplicated. The client renders the text (th.grid.*). */
 function toSaveWarnings(taskAssignmentId: string, week: ISODate, ws: readonly DayWarning[]): SaveWarning[] {
+  const seen = new Set<string>()
   return ws.flatMap((w) => {
     if (!SAVE_WARNING_CODES.has(w.code)) return []
-    const out: SaveWarning = { code: w.code as SaveWarningCode, taskAssignmentId, week }
-    if (w.dayIndex !== undefined) out.date = addDays(week, w.dayIndex)
+    const out: SaveWarning = { code: w.code, taskAssignmentId, week }
+    if (w.dayIndex !== undefined && w.code !== 'WEEK_NO_CAPACITY' && w.code !== 'SPILLED_OVER_DAY_LIMIT')
+      out.date = addDays(week, w.dayIndex)
+    const key = `${out.code}|${out.date ?? ''}`
+    if (seen.has(key)) return []
+    seen.add(key)
     return [out]
   })
+}
+
+/** S2.6 (FR-1201): how one changed week moved — SPLIT = BR-22, COLLAPSE = BR-23 / BR-24 COLLAPSE, SCALE = BR-24. */
+export interface AllocationConversion {
+  week: ISODate
+  from: 'WEEK' | 'DAY' | null
+  to: 'WEEK' | 'DAY' | null
+  via: 'SET' | 'SPLIT' | 'SCALE' | 'COLLAPSE'
+}
+
+function conversionOf(p: Planned): AllocationConversion | null {
+  const from = p.before.resolution
+  const to = p.next.resolution
+  const weekChange = p.changes.some((c) => c.granularity === 'WEEK')
+  let via: AllocationConversion['via'] = 'SET'
+  if (from === 'WEEK' && to === 'DAY') via = 'SPLIT'
+  else if (from === 'DAY' && to === 'WEEK') via = 'COLLAPSE'
+  else if (from === 'DAY' && to === 'DAY' && weekChange) via = 'SCALE'
+  return from !== to || via !== 'SET' ? { week: p.week, from, to, via } : null
 }
 
 /** Display names of users and task names for audit summaries. */
@@ -311,9 +303,10 @@ export async function save(
   const pairs = groupByWeek(input.items)
   const weeks = [...new Set(pairs.map((p) => p.week))].sort()
   const current = repo.allocations.plansFromRows(await repo.allocations.listForWeeks(tx, locked.ids, weeks))
-  const ctx = await loadWeekCtx(tx, locked.userIds, weeks)
+  const ctx = await loadDayCtx(tx, locked.userIds, weeks) // M7-D25: the grid's DayCtx (C18)
 
   const issues: SaveValidationIssue[] = []
+  const choice: NeedsChoicePayload['pairs'] = []
   const planned: Planned[] = []
   for (const p of pairs) {
     const before = current.get(p.assignmentId)?.get(p.week) ?? NULL_PLAN
@@ -323,14 +316,17 @@ export async function save(
       const period = r.dayIndex === undefined ? p.week : addDays(p.week, r.dayIndex)
       issues.push({ taskAssignmentId: p.assignmentId, period, reason: r.reason })
     } else if (r.kind === 'needsChoice') {
-      issues.push({ taskAssignmentId: p.assignmentId, period: p.week, reason: 'DAY_WEEK' }) // M6 only (M6-D34)
+      choice.push({ taskAssignmentId: p.assignmentId, week: p.week }) // BR-24 (M7-D3)
     } else {
       planned.push({ ...p, before, next: r.next, changed: r.changed, warnings: r.warnings })
     }
   }
-  if (issues.length > 0) {
-    const dayWeek = issues.some((i) => i.reason === 'DAY_WEEK')
-    throw new ValidationError({}, dayWeek ? th.grid.errors.dayWeek : th.grid.errors.invalidBatch, { issues })
+  // Precedence VERSION_CONFLICT (above) → VALIDATION → NEEDS_CHOICE; both throw before any write (nothing written,
+  // no version bump, no audit row — the transaction rolls back).
+  if (issues.length > 0) throw new ValidationError({}, th.grid.errors.invalidBatch, { issues })
+  if (choice.length > 0) {
+    const ws = [...new Set(choice.map((c) => c.week))].sort()
+    throw new NeedsChoiceError({ week: ws[0]!, weeks: ws, pairs: choice })
   }
 
   for (const p of planned) {
@@ -354,6 +350,7 @@ export async function save(
         before: { weeks: Object.fromEntries(mine.map((p) => [p.week, toWeekState(p.week, p.before)])) },
         after: {
           weeks: Object.fromEntries(mine.map((p) => [p.week, toWeekState(p.week, p.next)])),
+          conversions: mine.flatMap((p) => conversionOf(p) ?? []),
           clientOpId: input.clientOpId,
         },
       })
@@ -398,7 +395,7 @@ export async function planRange(
   }
   const current = repo.allocations.plansFromRows(await repo.allocations.listForWeeks(tx, [id], weeks)).get(id)
   const userId = locked.userOf(id)
-  const ctx = (await loadWeekCtx(tx, [userId], weeks)).get(userId)!
+  const ctx = (await loadDayCtx(tx, [userId], weeks)).get(userId)!
   const r = domainPlanRange(
     input.totalCd,
     input.start,

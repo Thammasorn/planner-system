@@ -97,9 +97,10 @@ test.describe('G1 ⟲ (FR-408, FR-801, FR-802 week, toolbar) tab, timeline and c
     ])
     await grid.openTab(POS)
 
-    // toolbar: [สัปดาห์] pressed, no วัน zoom in M6
+    // toolbar: [สัปดาห์] pressed; M7 (S5.3, FR-802 complete): [วัน] present, not pressed
     await expect(grid.zoomWeek()).toHaveAttribute('aria-pressed', 'true')
-    await expect(grid.toolbar().getByRole('button', { name: th.units.DAYS, exact: true })).toHaveCount(0)
+    await expect(grid.zoomDay()).toBeVisible()
+    await expect(grid.zoomDay()).toHaveAttribute('aria-pressed', 'false')
 
     // first visible week (right after the sticky name column) = today − 4 weeks
     const gridBox = (await grid.root().boundingBox())!
@@ -316,12 +317,16 @@ test.describe('G5 ⟲ (AC-805, §7.5) three edits, three undos, reload', () => {
 })
 
 // ── G6 ───────────────────────────────────────────────────────────────────────────────────────────────────────
-test.describe('G6 ⟲ (X27, BR-20a, §4.8 การลบ) DAY weeks are read-only in M6 · ivy', () => {
+// M7 (S5.3, X27 → BR-24): the M6 "DAY week is read-only" skip is gone — a WEEK value on the DAY week opens the BR-24
+// dialog (Cancel keeps it), Delete clears it without a dialog (M7-D5) and Cmd+Z restores the 7-day snapshot.
+test.describe('G6 ⟲ (X27 → BR-24, BR-20a, §4.8 การลบ) DAY weeks: BR-24 dialog, Delete + undo · ivy', () => {
   test.beforeAll(async () => {
     await resetDb()
   })
 
-  test('FR-612 on 11-11..11-13 makes a DAY week (⋯ + day tooltip); typing and Delete skip it', async ({ page }) => {
+  test('FR-612 on 11-11..11-13 makes a DAY week (⋯ + day tooltip); typing opens BR-24 once, Delete clears it', async ({
+    page,
+  }) => {
     const tasks = await openTasks(page, 'ivy', POS)
     await tasks.openPanel(UAT)
     const dialog = await tasks.planFor('Ivy', UAT)
@@ -332,26 +337,41 @@ test.describe('G6 ⟲ (X27, BR-20a, §4.8 การลบ) DAY weeks are read-on
     const grid = new GridPage(page)
     await grid.openTab(POS)
     const ivy = await grid.rowKeyOf(UAT, 'Ivy')
-    const dayWeek = await grid.reveal(ivy, '2026-11-09')
-    await expect(grid.value(dayWeek)).toHaveText(d1(200))
-    await expect(dayWeek).toHaveAttribute('data-resolution', 'DAY')
-    await expect(dayWeek.locator('[data-glyph="dayDetail"]')).toBeAttached()
-    await hoverTip(page, dayWeek)
+    const dayCell = await grid.reveal(ivy, '2026-11-09')
+    const expectDayWeek = async () => {
+      await expectValue(grid, ivy, '2026-11-09', d1(200))
+      await expect(dayCell).toHaveAttribute('data-resolution', 'DAY')
+      await expect(dayCell.locator('[data-glyph="dayDetail"]')).toBeAttached()
+    }
+    await expectDayWeek()
+    await hoverTip(page, dayCell)
     await expect(grid.tooltip()).toContainText(th.grid.cell.dayTooltip('พ 0.67 · พฤ 0.67 · ศ 0.66'))
 
+    // range typing: 11-02 and 11-16 are written, the DAY week 11-09 asks once (BR-24) → Cancel keeps it
     await grid.select(grid.cell(ivy, '2026-11-02'), grid.cell(ivy, '2026-11-16'))
     await page.keyboard.type('1')
     await grid.press('Enter')
-    await expect(grid.toast(th.grid.toast.dayWeekReadOnly)).toBeVisible()
+    const br24 = grid.br24()
+    await expect(br24.root).toHaveCount(1)
+    await expect(br24.root).toContainText(th.grid.br24.title(1))
+    await expect(br24.root).toContainText(th.grid.br24.change(d1(200), d1(100)))
+    await br24.cancel()
     await grid.waitSaved()
     await expectValue(grid, ivy, '2026-11-02', d1(100))
-    await expectValue(grid, ivy, '2026-11-09', d1(200))
+    await expectDayWeek()
     await expectValue(grid, ivy, '2026-11-16', d1(100))
 
+    // Delete on the DAY week clears it — no dialog (M7-D5); Cmd+Z restores 2.0 + ⋯ (complete 7-day snapshot)
     await grid.cell(ivy, '2026-11-09').click()
     await grid.press('Delete')
-    await expect(grid.toast(th.grid.toast.dayWeekReadOnly)).toBeVisible()
-    await expectValue(grid, ivy, '2026-11-09', d1(200))
+    await grid.waitSaved()
+    await expect(br24.root).toHaveCount(0)
+    await expectValue(grid, ivy, '2026-11-09', '')
+    await grid.press('ControlOrMeta+KeyZ')
+    await grid.waitSaved()
+    await expect(br24.root).toHaveCount(0)
+    await expectDayWeek()
+
     await grid.cell(ivy, '2026-11-16').click()
     await grid.press('Delete')
     await grid.waitSaved()

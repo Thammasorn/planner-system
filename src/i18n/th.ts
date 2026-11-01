@@ -351,6 +351,8 @@ export const th = {
     // M4 upload codes (HTTP 413 / 415).
     TOO_LARGE: 'ไฟล์ใหญ่เกินกำหนด',
     UNSUPPORTED_TYPE: 'ไม่รองรับไฟล์ชนิดนี้',
+    // M7 (BR-24, HTTP 409)
+    NEEDS_CHOICE: 'สัปดาห์นี้มีแผนรายวัน — เลือกวิธีปรับยอดรวม',
   },
   home: {
     title: 'หน้าหลัก',
@@ -982,6 +984,10 @@ export const th = {
       gridClear: 'ล้างค่า',
       gridSelectRow: 'เลือกทั้งแถว (แล้วกด Delete เพื่อลบงาน)',
       gridNewTask: 'เพิ่มงานใหม่ในแผนงาน',
+      // M7
+      gridExpandWeek: 'ขยายสัปดาห์เป็นรายวัน',
+      gridCollapseWeek: 'ยุบสัปดาห์',
+      gridCellMenu: 'เมนูเซลล์ (รวมเป็นรายสัปดาห์)',
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
@@ -1385,6 +1391,7 @@ export const th = {
       label: 'เครื่องมือกริด',
       zoom: 'มุมมอง',
       zoomWeek: 'สัปดาห์',
+      zoomDay: 'วัน',
       today: 'วันนี้',
       prev: 'สัปดาห์ก่อนหน้า',
       next: 'สัปดาห์ถัดไป',
@@ -1455,13 +1462,14 @@ export const th = {
       tentative: 'อาจไม่ทำ',
       dayDetail: 'มีรายละเอียดรายวัน',
       noCapacity: 'ไม่มี capacity',
+      over: 'ล้น',
+      risk: 'เสี่ยงล้น',
     },
     save: { idle: 'บันทึกแล้ว', pending: 'รอบันทึก…', saving: 'กำลังบันทึก…', error: 'บันทึกไม่สำเร็จ' },
     toast: {
       saveFailed: 'บันทึกไม่สำเร็จ · ลองใหม่',
       retry: 'ลองใหม่',
       conflict: 'มีคนแก้แผนนี้พร้อมกัน — โหลดค่าล่าสุดแล้ว',
-      dayWeekReadOnly: 'สัปดาห์นี้มีแผนรายวัน',
       readOnlySkipped: (n: number) => `ข้าม ${n} ช่องที่แก้ไม่ได้`,
       invalidSkipped: (n: number) => `ข้าม ${n} ค่าที่อ่านไม่ได้`,
       invalidValue: 'ค่าไม่ถูกต้อง',
@@ -1477,6 +1485,7 @@ export const th = {
         WORK_ON_NON_WORKING_DAY: 'วางงานในวันที่ไม่ทำงาน',
         WEEK_NO_CAPACITY: 'สัปดาห์นี้ไม่มี capacity',
         SPILLED_OVER_DAY_LIMIT: 'บางวันเกิน 1 วัน — ย้ายส่วนเกินไปวันอื่นแล้ว',
+        ALLOCATED_ON_TIME_OFF: 'มีงานวางไว้ในวันที่ลา',
       },
     },
     undo: {
@@ -1488,6 +1497,52 @@ export const th = {
       capacity: 'ใส่ตาม capacity',
       planRange: 'วางแผนตามช่วง',
     },
+    // M7 day resolution (plan/m07 S0.8). Build-time owner after S0: S3 (grid.toolbar/day/br24/warn/glyph).
+    day: {
+      expandWeek: (label: string) => `ขยายสัปดาห์ ${label} เป็นรายวัน`,
+      collapseWeekView: (label: string) => `ยุบสัปดาห์ ${label}`,
+      totalColumn: 'รวม',
+      totalColumnLabel: (label: string) => `ยอดรวมสัปดาห์ ${label}`,
+      derivedDescription: 'ค่ากระจายจากแผนรายสัปดาห์',
+      derivedTooltip: (value: string, week: string) =>
+        `ค่ากระจายจากแผนรายสัปดาห์ (${week} วัน): ${value} วัน`,
+      dayTooltip: (value: string) => `${value} วัน`,
+      cellLabel: (weekday: string, date: string, value: string) => `${weekday} ${date}: ${value}`,
+      collapseToWeek: '↕ รวมเป็นรายสัปดาห์',
+      collapseToWeekDisabled: 'สัปดาห์นี้เป็นแผนรายสัปดาห์อยู่แล้ว',
+      collapsedToast: 'รวมเป็นรายสัปดาห์แล้ว',
+      collapsedManyToast: (n: number) => `รวมเป็นรายสัปดาห์แล้ว ${n} สัปดาห์`,
+      splitClampedToast: 'แยกเป็นรายวันแล้ว — ปรับค่าที่เกิน 1 วัน/วัน',
+      unrepresentable: 'ใส่ค่านี้ไม่ได้ — ทุกวันในสัปดาห์เต็ม 1 วันแล้ว',
+      mixedKinds: 'วาง/เติม/เลื่อนได้เฉพาะคอลัมน์ชนิดเดียวกัน',
+      shiftWithinWeek: 'เลื่อนค่ารายวันได้ภายในสัปดาห์เดียวกันเท่านั้น',
+      noCapacityDay: 'ไม่มี capacity วันนี้',
+      completedWeekCounts: 'งานเสร็จแล้ว — สัปดาห์ที่ติ๊กเสร็จยังนับภาระครบทั้งสัปดาห์',
+      cellMenu: 'เมนูเซลล์',
+      loading: 'กำลังโหลดรายวัน…',
+      undo: { dayEdit: 'แก้แผนรายวัน', scale: 'ปรับยอดตามสัดส่วนเดิม', collapse: 'รวมเป็นรายสัปดาห์' },
+    },
+    warn: {
+      nonWorkingDay: 'วางงานในวันที่ไม่ทำงาน',
+      weekNoCapacity: 'สัปดาห์นี้ไม่มี capacity — กระจายตามตารางงาน',
+      allocatedOnTimeOff: (days: string) => `มีงาน ${days} วันวางไว้ในวันที่ลา`,
+    },
+    br24: {
+      title: (n: number) => (n === 1 ? 'สัปดาห์นี้มีแผนรายวัน' : `${n} สัปดาห์มีแผนรายวัน`),
+      /** parts e.g. "จ 1.0 · อ 1.0 · พ 0.5" */
+      breakdown: (parts: string) => `แผนเดิม: ${parts}`,
+      change: (from: string, to: string) => `กำลังเปลี่ยนยอดรวมจาก ${from} → ${to} วัน`,
+      pairLine: (person: string, week: string, from: string, to: string) =>
+        `${person} · สัปดาห์ ${week}: ${from} → ${to} วัน`,
+      more: (k: number) => `และอีก ${k} สัปดาห์`,
+      scale: 'ปรับตามสัดส่วนเดิม',
+      scaleHint: 'คงสัดส่วนรายวันเดิม ปัดเศษให้ยอดรวมตรง',
+      scalePreview: (parts: string) => `ผลลัพธ์: ${parts}`,
+      collapse: 'เปลี่ยนเป็นรายสัปดาห์',
+      collapseHint: 'ทิ้งรายละเอียดรายวัน',
+      collapsePreview: (total: string) => `ผลลัพธ์: ${total} วันทั้งสัปดาห์`,
+      cancel: 'ยกเลิก',
+    },
     empty: 'ยังไม่มีงาน — พิมพ์ชื่องานในแถว "+ เพิ่มงาน…" ด้านล่าง',
     /** read-only / archived grid: no quick-add row to point at */
     emptyReadOnly: 'ยังไม่มีงานในแผนนี้',
@@ -1498,9 +1553,18 @@ export const th = {
       weekNotMonday: 'สัปดาห์ต้องเริ่มวันจันทร์',
       badRange: 'ช่วงวันที่ไม่ถูกต้อง',
       maxDay: 'ไม่เกิน 1 วันต่อวัน',
-      dayWeek: 'สัปดาห์นี้มีแผนรายวัน — แก้ได้เมื่อมีมุมมองรายวัน',
       invalidBatch: 'มีค่าที่บันทึกไม่ได้',
+      // M7
+      expandOutOfRange: 'สัปดาห์ที่ขยายอยู่นอกช่วง',
+      mixedWeekAndDay: 'แก้ยอดสัปดาห์และรายวันของสัปดาห์เดียวกันพร้อมกันไม่ได้',
     },
+  },
+  // M7 BR-40 / BR-45 day-level status (X06; M9 extends). Build-time owner after S0: S3.
+  overload: {
+    level: { OK: 'ปกติ', RISK: 'เสี่ยงล้น', OVER: 'ล้น' },
+    glyph: { RISK: '⚠', OVER: '🔴' },
+    dayStatus: (level: string, load: string, cap: string) => `${level}: ภาระ ${load} / capacity ${cap} วัน`,
+    peopleOver: (names: string) => `คนที่ล้น: ${names}`,
   },
   plan: {
     button: 'วางแผน',

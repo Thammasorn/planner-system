@@ -7,10 +7,10 @@
 import { randomUUID } from 'node:crypto'
 import { expect } from 'vitest'
 import type { ISODate } from '@/domain/types'
-import { th } from '@/i18n/th'
 import type { ActionResult } from '@/lib/action-result'
 import type { GridResponse, PlanAssignmentRangeOk } from '@/lib/contracts/grid'
 import { allocationRows, assignmentVersion } from '../../helpers/factories'
+import { outcomeOf } from '../../helpers/outcome'
 import { defineRow, type AuthzRow } from '../types'
 import {
   ALLOC,
@@ -208,18 +208,23 @@ export const rows: AuthzRow[] = [
   }),
   defineRow({
     id: 'AL-DAYWEEK',
-    spec: 'PERM-12 + X27 / M6-D34 — WEEK change on a DAY week without a choice → 400 DAY_WEEK, nothing written',
+    // M6 asserted 400 (day week read-only) here (M6-D34); M7 replaces that branch with BR-24's NEEDS_CHOICE (plan/m07 S4.5).
+    spec: 'PERM-12 + X27 / M6-D34 → BR-24 NEEDS_CHOICE (M7-D3) — WEEK change on a DAY week without a choice, nothing written',
     action: 'saveAllocations',
     mutates: false,
     with: ALLOC,
-    expect: PROJ_400,
+    expect: PROJ_409,
     setup: (w) => snapshot(w.assignments.pChildAMember.id, '2026-10-12'),
     run: async (w, before) => {
       const id = w.assignments.pChildAMember.id
       const r = await save({ items: [weekItem(id, '2026-10-12', 150)], clientOpId: 'op-al-dayweek' })
-      if (!r.ok && r.code === 'VALIDATION') {
-        expect(r.message).toBe(th.grid.errors.dayWeek)
-        expect(r.issues).toEqual([{ taskAssignmentId: id, period: '2026-10-12', reason: 'DAY_WEEK' }])
+      if (!r.ok && outcomeOf(r) === '409') {
+        expect(String(r.code)).toBe('NEEDS_CHOICE')
+        expect({ week: r.week, weeks: r.weeks, pairs: r.pairs }).toEqual({
+          week: '2026-10-12',
+          weeks: ['2026-10-12'],
+          pairs: [{ taskAssignmentId: id, week: '2026-10-12' }],
+        })
       }
       await expectUnchanged(id, '2026-10-12', before)
       return r

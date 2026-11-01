@@ -4,11 +4,11 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { z } from 'zod'
-import { addWeeks } from '@/domain/dates'
+import { addWeeks, weekStart } from '@/domain/dates'
 import { defaultStatus } from '@/domain/status'
-import type { ISODate } from '@/domain/types'
+import type { Cd, ISODate } from '@/domain/types'
 import { cdToNumeric } from '@/domain/units'
 import { th } from '@/i18n/th'
 import {
@@ -378,6 +378,118 @@ export async function addSyntheticGridProject(
   for (let i = 0; i < rows.length; i += INSERT_CHUNK)
     await db.insert(allocations).values(rows.slice(i, i + INSERT_CHUNK))
   return { projectId }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M7 — SPEC Appendix A.2 day example (PLAN §3.13, X11, M7-D16; plan/m07 S0.7)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** SPEC Appendix A.2 "Task หลายคน + รายวัน". Not in golden-fixtures.json, hence constants (M7-D16 — the only
+ *  re-typed seed data). */
+export const DAY_EXAMPLE = {
+  project: 'Mobile App Revamp',
+  task: 'Kickoff workshop',
+  assignees: ['Jack', 'Mint'] as const,
+  day: '2026-09-07' as ISODate,
+  cd: 50 as Cd,
+} as const
+
+type DayExampleAssignee = (typeof DAY_EXAMPLE.assignees)[number]
+
+/**
+ * Requires seedGolden(db) at the M6 level. Idempotent (no-op when the live task exists → returns its ids). Plain
+ * Drizzle / repo inserts inside the caller's transaction: the depth-0 task after Mobile's last live root task (no
+ * override, Mobile's default status per BR-81/X70, created_by = the golden manager), one assignment per A.2 assignee
+ * (version 1) and one DAY row of 0.50 on 2026-09-07 each (the assignments are new rows of this transaction, so they
+ * are already locked). Audit actor = null (X59): M3's task-create row + one allocation row per assignment (M6-D23).
+ * Fixed A.2 dates: it takes no `today` (X90 covers services; M12 composes it as-is in seed:demo).
+ */
+export async function addDayExample(
+  db: DbOrTx,
+): Promise<{ taskId: string; assignmentIds: Record<DayExampleAssignee, string> }> {
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.name, DAY_EXAMPLE.project))
+  if (!project) throw new Error(`golden project ${DAY_EXAMPLE.project} not found (seedGolden first)`)
+  const people = await db
+    .select({ id: user.id, nickname: user.nickname })
+    .from(user)
+    .where(inArray(user.nickname, [...DAY_EXAMPLE.assignees]))
+  const userIdOf = (nickname: DayExampleAssignee): string => {
+    const hit = people.find((p) => p.nickname === nickname)
+    if (!hit) throw new Error(`golden user ${nickname} not found (seedGolden first)`)
+    return hit.id
+  }
+
+  const [existing] = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.projectId, project.id), eq(tasks.name, DAY_EXAMPLE.task), isNull(tasks.deletedAt)))
+  if (existing) {
+    const rows = await db
+      .select({ id: taskAssignments.id, userId: taskAssignments.userId })
+      .from(taskAssignments)
+      .where(and(eq(taskAssignments.taskId, existing.id), isNull(taskAssignments.deletedAt)))
+    const idFor = (nickname: DayExampleAssignee): string => {
+      const hit = rows.find((r) => r.userId === userIdOf(nickname))
+      if (!hit) throw new Error(`${DAY_EXAMPLE.task}: assignment of ${nickname} not found`)
+      return hit.id
+    }
+    return { taskId: existing.id, assignmentIds: { Jack: idFor('Jack'), Mint: idFor('Mint') } }
+  }
+
+  const [manager] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'manager')).limit(1)
+  if (!manager) throw new Error('no manager (seedGolden first)')
+  const status = defaultStatus(await repo.statuses.listLiveStatuses(db, project.id))
+  const position = repo.order.keyAfter(await repo.tasks.lastChildPosition(db, project.id, null))
+  const task = await repo.tasks.insertTask(db, {
+    projectId: project.id,
+    name: DAY_EXAMPLE.task,
+    depth: 0,
+    position,
+    createdBy: manager.id,
+    statusId: status.id,
+  })
+  await db.insert(auditLog).values({
+    actorId: null,
+    entity: 'task',
+    entityId: task.id,
+    action: 'create',
+    projectId: project.id,
+    summary: th.audit.taskCreated(task.name),
+    before: null,
+    after: { parentId: null, statusId: status.id },
+  })
+
+  const week = weekStart(DAY_EXAMPLE.day)
+  const assignmentIds = {} as Record<DayExampleAssignee, string>
+  for (const nickname of DAY_EXAMPLE.assignees) {
+    const a = await repo.assignments.insertAssignment(db, { taskId: task.id, userId: userIdOf(nickname) })
+    assignmentIds[nickname] = a.id
+    await db.insert(allocations).values({
+      taskAssignmentId: a.id,
+      granularity: 'DAY',
+      periodStart: DAY_EXAMPLE.day,
+      weekStart: week,
+      personDays: cdToNumeric(DAY_EXAMPLE.cd),
+    })
+    await db.insert(auditLog).values({
+      actorId: null,
+      entity: ALLOCATION_AUDIT_ENTITY,
+      entityId: a.id,
+      action: 'create',
+      projectId: project.id,
+      summary: th.audit.allocationsSeeded(1),
+      before: null,
+      after: {
+        weeks: {
+          [week]: { cd: DAY_EXAMPLE.cd, resolution: 'DAY', days: { [DAY_EXAMPLE.day]: DAY_EXAMPLE.cd } },
+        },
+      },
+    })
+  }
+  return { taskId: task.id, assignmentIds }
 }
 
 // ---------------------------------------------------------------------------------------------------------------

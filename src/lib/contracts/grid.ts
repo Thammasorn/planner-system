@@ -13,16 +13,26 @@ export interface GridPeriod {
   kind: 'WEEK' | 'DAY'
   weekStart: ISODate
   date: ISODate
+  /** M7 (M7-D10): an expanded week contributes its D: periods followed by its W: period with `expanded: true`
+   *  (the narrow "รวม" column). Absent on collapsed weeks. */
+  expanded?: true
 }
+
+/** Day-cell warnings (M7-D9 cap-0 day, M7-D15 time-off date); only on D: cells with cd > 0. */
+export type DayWarn = 'NON_WORKING' | 'TIME_OFF'
 
 export interface AssigneeCell {
   /** W: the week total (Σ days for DAY weeks). */
   cd: Cd
   resolution: 'WEEK' | 'DAY'
-  /** Always false in M6 (M7: derived day values). */
+  /** M7: true on D: cells of WEEK weeks (BR-20, display-only BR-21 spread; such cd may exceed 100). */
   derived: boolean
   /** W: cells of DAY weeks only (tooltip, 2 decimals). */
   days?: Record<ISODate, Cd>
+  /** M7 (BR-21a, M7-D9): W: cells of WEEK weeks whose week capacity is 0 — how the derived days were spread. */
+  fallback?: 'SCHEDULE' | 'WEEKDAYS'
+  /** M7 (M7-D9, M7-D15): D: cells with cd > 0 on a cap-0 day / a time-off date. */
+  warn?: DayWarn[]
 }
 
 /** Authoritative state of one (assignment, week) — save results, undo snapshots, FR-612 preview. */
@@ -46,7 +56,8 @@ export interface GridPerson {
   /** false = deactivated ("ปิดใช้งาน", AC-203). */
   active: boolean
   deactivatedOn: ISODate | null
-  /** W: keys in M6 (M7 adds D: keys); missing = 0. */
+  /** W: keys in M6. M7 (M7-D19) adds D: keys for every day of expanded weeks and of weeks where this person
+   *  has a DAY-resolution cell; zeros omitted; missing = 0. */
   capacity: Partial<Record<PeriodKey, Cd>>
   standard: Partial<Record<PeriodKey, Cd>>
   timeOff: GridTimeOff[]
@@ -143,8 +154,9 @@ export interface SaveItemResult {
   weeks: Record<ISODate, WeekState>
   rowTotal: LoadPair
 }
-/** M7 adds ALLOCATED_ON_TIME_OFF. */
-export type SaveWarningCode = 'WORK_ON_NON_WORKING_DAY' | 'WEEK_NO_CAPACITY' | 'SPILLED_OVER_DAY_LIMIT'
+/** ALLOCATED_ON_TIME_OFF: M7 (M7-D15). */
+export type SaveWarningCode =
+  'WORK_ON_NON_WORKING_DAY' | 'WEEK_NO_CAPACITY' | 'SPILLED_OVER_DAY_LIMIT' | 'ALLOCATED_ON_TIME_OFF'
 export interface SaveWarning {
   code: SaveWarningCode
   taskAssignmentId: string
@@ -160,8 +172,15 @@ export interface SaveAllocationsOk {
 export interface VersionConflictPayload {
   current: SaveItemResult[]
 }
-/** DAY_WEEK = M6 only (M6-D34); M7 removes it from this union instead of redeclaring it (G25). */
-export type SaveValidationReason = 'MAX' | 'NEGATIVE' | 'MIXED_WEEK_AND_DAY' | 'UNREPRESENTABLE' | 'DAY_WEEK'
+/** ActionError extra on NEEDS_CHOICE (M7-D3, BR-24): every (assignment, week) whose DAY plan needs a SCALE/COLLAPSE
+ *  choice; `week` = `weeks[0]` (SPEC §7.4-compatible). Nothing was written. */
+export interface NeedsChoicePayload {
+  week: ISODate
+  weeks: ISODate[]
+  pairs: { taskAssignmentId: string; week: ISODate }[]
+}
+/** M7 removed M6's read-only day-week reason (M6-D34): BR-22/BR-24 make every DAY week editable (G25). */
+export type SaveValidationReason = 'MAX' | 'NEGATIVE' | 'MIXED_WEEK_AND_DAY' | 'UNREPRESENTABLE'
 export interface SaveValidationIssue {
   taskAssignmentId: string
   period: ISODate
@@ -199,4 +218,17 @@ export interface PlanRangePreview {
 export interface PlanAssignmentRangeOk {
   preview: PlanRangePreview
   applied: SaveItemResult | null
+}
+
+// ── M7 day loads (M7-D27) ──
+
+/** Server-internal row of repo.allocations.dayLoadsForProjects, consumed by src/lib/grid/day.ts#spreadDayLoads (M7, M9).
+ *  Grouped by user / week / granularity / period; WEEK rows have `periodStart = weekStart`. */
+export interface DayLoadRow {
+  userId: string
+  weekStart: ISODate
+  granularity: 'WEEK' | 'DAY'
+  periodStart: ISODate
+  totalCd: Cd
+  committedCd: Cd
 }

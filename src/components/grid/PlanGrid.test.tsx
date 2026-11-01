@@ -151,19 +151,22 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(screen.getByTestId('cell-a:a-ivy-uat-total')).toHaveTextContent('8.8')
   })
 
-  it('a plain header click changes nothing; Shift+click selects the column over editable rows', async () => {
+  it('Shift+click selects the column over editable rows; a plain header click toggles aria-expanded and fires no save (M7)', async () => {
     const user = userEvent.setup()
     renderPos()
     await screen.findByTestId('cell-a:a-cindy-pos-W:2026-09-28')
     const header = document.querySelector<HTMLElement>('[data-col-key="W:2026-09-28"]')!
-    await user.click(header)
-    expect(document.querySelectorAll('[role="gridcell"][aria-selected="true"]')).toHaveLength(0)
     await user.keyboard('{Shift>}')
     await user.click(header)
     await user.keyboard('{/Shift}')
     expect(screen.getByTestId('cell-a:a-cindy-pos-W:2026-09-28')).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('cell-a:a-mix-rollout-W:2026-09-28')).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('cell-a:a-cindy-pos-W:2026-10-05')).toHaveAttribute('aria-selected', 'false')
+    const toggle = screen.getByTestId('expand-week-2026-09-28')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(await screen.findByTestId('collapse-week-2026-09-28')).toHaveAttribute('aria-expanded', 'true')
+    expect(m.saveAllocations).not.toHaveBeenCalled()
   })
 
   it('ARIA sizes come from HEADER_ROWS / FOOTER_ROWS; roving tabindex', async () => {

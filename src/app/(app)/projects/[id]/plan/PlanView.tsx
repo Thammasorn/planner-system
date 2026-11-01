@@ -4,6 +4,7 @@ import Box from '@mui/material/Box'
 import { PlanGrid } from '@/components/grid/PlanGrid'
 import { openTaskPanel } from '@/components/tasks/task-param'
 import { TaskPanel } from '@/components/tasks/TaskPanel'
+import type { GridZoom } from '@/lib/contracts/grid'
 
 /** Space kept under the grid inside the viewport (the shell's bottom padding, --space-8 since M6.1-D20). */
 const BOTTOM_GAP = 32
@@ -19,11 +20,14 @@ export function PlanView({
   projectName,
   archived,
   canEdit,
+  initialZoom,
 }: {
   projectId: string
   projectName: string
   archived: boolean
   canEdit: boolean
+  /** M7: `grid.zoom` preference (S3.11) */
+  initialZoom?: GridZoom
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [top, setTop] = useState(0)
@@ -55,6 +59,7 @@ export function PlanView({
           archived={archived}
           canEdit={canEdit}
           onOpenTask={(taskId) => openTaskPanel(taskId)}
+          {...(initialZoom ? { initialZoom } : {})}
         />
       </Box>
       <TaskPanel projectId={projectId} />

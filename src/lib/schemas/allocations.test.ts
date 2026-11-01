@@ -98,6 +98,23 @@ describe('saveAllocationsSchema (§7.4, X65, BR-26)', () => {
   })
 })
 
+describe('saveAllocationsSchema › M7 (BR-26 DAY part, BR-24 choices)', () => {
+  it('DAY cd 100 ok; DAY cd 125 → maxDay at items.0.changes.0.cd', () => {
+    expect(save([{ granularity: 'DAY', period: '2026-09-30', cd: 100 }]).success).toBe(true)
+    expect(issues(save([{ granularity: 'DAY', period: '2026-09-30', cd: 125 }]))).toEqual([
+      { path: 'items.0.changes.0.cd', message: th.grid.errors.maxDay },
+    ])
+  })
+
+  it("DAY edits with SCALE / COLLAPSE parse; 'EXPAND' / 'REDISTRIBUTE' → error (r5 C11, C34)", () => {
+    const c = [{ granularity: 'DAY', period: '2026-09-30', cd: 100 }]
+    expect(save(c, { onDayWeekConflict: 'SCALE' }).success).toBe(true)
+    expect(save(c, { onDayWeekConflict: 'COLLAPSE' }).success).toBe(true)
+    expect(save(c, { onDayWeekConflict: 'EXPAND' }).success).toBe(false)
+    expect(save(c, { onDayWeekConflict: 'REDISTRIBUTE' }).success).toBe(false)
+  })
+})
+
 describe('planAssignmentRangeSchema (FR-612, BR-25, M6-D6)', () => {
   const base = {
     taskAssignmentId: ta,

@@ -265,7 +265,7 @@ describe('clampAndSpill (X65)', () => {
 // planWeek — M6 subset (M6-D4, M6-D34)
 // ---------------------------------------------------------------------------------------------------------------
 
-describe('planWeek (M6 subset)', () => {
+describe('planWeek (M6 rows, M7 rules)', () => {
   const DAYW = D(50, 50, 100, 50, 50, 0, 0) // Σ 300
 
   it.each<[string, WeekPlan, WeekChange[], 'SCALE' | 'COLLAPSE' | undefined, ReturnType<typeof planWeek>]>([
@@ -275,7 +275,7 @@ describe('planWeek (M6 subset)', () => {
     ['WEEK 250 + WEEK 250', W(250), [wk(250)], undefined, { kind: 'ok', next: W(250), changed: false, warnings: [] }],
     ['WEEK 250 + WEEK 725', W(250), [wk(725)], undefined, { kind: 'invalid', reason: 'MAX' }],
     ['DAY + WEEK 400', DAYW, [wk(400)], undefined, { kind: 'needsChoice' }],
-    ['DAY + WEEK 400 SCALE (M6)', DAYW, [wk(400)], 'SCALE', { kind: 'needsChoice' }],
+    ['DAY + WEEK 400 SCALE (M7 BR-24)', DAYW, [wk(400)], 'SCALE', { kind: 'ok', next: D(100, 67, 100, 67, 66, 0, 0), changed: true, warnings: [spilled] }],
     ['DAY + WEEK 400 COLLAPSE', DAYW, [wk(400)], 'COLLAPSE', { kind: 'ok', next: W(400), changed: true, warnings: [] }],
     ['DAY + WEEK 300 (= Σ)', DAYW, [wk(300)], undefined, { kind: 'ok', next: DAYW, changed: false, warnings: [] }],
     ['DAY + WEEK 300 COLLAPSE (BR-23)', DAYW, [wk(300)], 'COLLAPSE', { kind: 'ok', next: W(300), changed: true, warnings: [] }],
@@ -287,7 +287,7 @@ describe('planWeek (M6 subset)', () => {
       undefined,
       { kind: 'ok', next: D(100, 100, 50, 0, 0, 0, 0), changed: true, warnings: [] },
     ],
-    ['WEEK 250 + DAY Wed 100', W(250), [dy(2, 100)], undefined, { kind: 'invalid', reason: 'DAY_WEEK' }],
+    ['WEEK 250 + DAY Wed 100 (M7 BR-22)', W(250), [dy(2, 100)], undefined, { kind: 'ok', next: D(50, 50, 100, 50, 50, 0, 0), changed: true, warnings: [] }],
     ['null + DAY Mon 50', NULL_PLAN, [dy(0, 50)], undefined, { kind: 'ok', next: D(50, 0, 0, 0, 0, 0, 0), changed: true, warnings: [] }],
     ['DAY [50,0…] + DAY Mon null', D(50, 0, 0, 0, 0, 0, 0), [dy(0, null)], undefined, { kind: 'ok', next: NULL_PLAN, changed: true, warnings: [] }],
     ['DAY + DAY Mon 125', DAYW, [dy(0, 125)], undefined, { kind: 'invalid', reason: 'MAX', dayIndex: 0 }],

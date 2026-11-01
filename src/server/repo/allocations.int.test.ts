@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { effectiveCertainty, splitLoad, type CertaintyNode } from '@/domain/certainty'
 import { countsTowardLoad } from '@/domain/completed'
 import type { ISODate, LoadPair } from '@/domain/types'
+import { addWeeks } from '@/domain/dates'
 import { numericToCd } from '@/domain/units'
 import { seedGolden } from '../../../scripts/lib/fixtures'
 import { makeAllocation, makeAssignment, makeTask } from '../../../tests/helpers/factories'
@@ -173,5 +174,67 @@ describe('repo.allocations — counted sums (BR-50)', () => {
       { weekStart: '2026-09-28', cd: 500, completedWeek: null },
       { weekStart: '2026-10-05', cd: 125, completedWeek: null },
     ])
+  })
+})
+
+describe('repo.allocations — dayLoadsForProjects (M7 S2.1, C39, M7-D27)', () => {
+  const weeksOf = (from: ISODate, n: number): ISODate[] => Array.from({ length: n }, (_, i) => addWeeks(from, i))
+
+  it('excludeProjectId / projectIds narrow it; archived A and weeks outside `weeks` never returned; [] without weeks', async () => {
+    const w = await createWorld({ with: ['dayAllocations'] })
+    const coworker = w.users.coworker!.id
+    const qRow = { userId: coworker, weekStart: '2026-11-09', granularity: 'DAY', periodStart: '2026-11-10', totalCd: 75, committedCd: 75 }
+    expect(
+      await repoAllocations.dayLoadsForProjects(db, { userIds: [coworker], weeks: ['2026-11-09'], excludeProjectId: w.P.id }),
+    ).toEqual([qRow])
+    expect(await repoAllocations.dayLoadsForProjects(db, { userIds: [coworker], weeks: ['2026-11-09'], projectIds: [w.Q.id] })).toEqual([
+      qRow,
+    ])
+    const lead = w.lead.id
+    const pDay = await repoAllocations.dayLoadsForProjects(db, { userIds: [lead], weeks: ['2026-11-09'], projectIds: [w.P.id] })
+    expect(pDay.map((r) => [r.granularity, r.periodStart, r.totalCd])).toEqual([
+      ['DAY', '2026-11-09', 100],
+      ['DAY', '2026-11-10', 100],
+      ['DAY', '2026-11-11', 50],
+    ])
+    for (const r of pDay) expect(r).toMatchObject({ userId: lead, weekStart: '2026-11-09', committedCd: r.totalCd })
+    // archived A (member's DAY 11-09 = 50) is excluded (BR-44)
+    expect(await repoAllocations.dayLoadsForProjects(db, { userIds: [w.member.id], weeks: ['2026-11-09'] })).toEqual([])
+    // a week outside `weeks` is never returned: pWeek (11-02) WEEK 250 only when asked
+    expect(await repoAllocations.dayLoadsForProjects(db, { userIds: [lead], weeks: ['2026-11-16'] })).toEqual([])
+    expect(await repoAllocations.dayLoadsForProjects(db, { userIds: [lead], weeks: ['2026-11-02'] })).toEqual([
+      { userId: lead, weekStart: '2026-11-02', granularity: 'WEEK', periodStart: '2026-11-02', totalCd: 250, committedCd: 250 },
+    ])
+    expect(await repoAllocations.dayLoadsForProjects(db, { userIds: [lead], weeks: [] })).toEqual([])
+    expect(await repoAllocations.dayLoadsForProjects(db, { userIds: [], weeks: ['2026-11-09'] })).toEqual([])
+  })
+
+  it('parity: Σ per (user, week) equals loadByUserWeek for the same filters (incl. BR-50 and certainty)', async () => {
+    const w = await createWorld({ with: ['dayAllocations'] })
+    await db.update(projects).set({ certainty: 'TENTATIVE' }).where(eq(projects.id, w.Q.id))
+    const userIds = [w.manager, w.lead, w.member, w.outsider, w.users.coworker!].map((u) => u.id)
+    const weeks = weeksOf('2026-09-28', 8)
+    const cases: { excludeProjectId?: string; projectId?: string }[] = [{}, { excludeProjectId: w.P.id }, { projectId: w.Q.id }]
+    for (const filter of cases) {
+      const expected = await repoAllocations.loadByUserWeek(db, {
+        userIds,
+        range: { from: weeks[0]!, to: '2026-11-23' },
+        ...filter,
+      })
+      const rows = await repoAllocations.dayLoadsForProjects(db, {
+        userIds,
+        weeks,
+        ...(filter.excludeProjectId ? { excludeProjectId: filter.excludeProjectId } : {}),
+        ...(filter.projectId ? { projectIds: [filter.projectId] } : {}),
+      })
+      const got = new Map<string, Record<ISODate, LoadPair>>()
+      for (const r of rows) {
+        const m = got.get(r.userId) ?? {}
+        const prev = m[r.weekStart] ?? { total: 0, committed: 0 }
+        m[r.weekStart] = { total: prev.total + r.totalCd, committed: prev.committed + r.committedCd }
+        got.set(r.userId, m)
+      }
+      expect(got).toEqual(expected)
+    }
   })
 })

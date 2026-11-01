@@ -17,12 +17,15 @@ export default async function ProjectPlanPage(props: PageProps<'/projects/[id]/p
   const user = await requirePageUser()
   const { id } = await props.params
   const header = await orNotFound(services.projects.getProjectHeader(db, user, id))
+  // M7 (S3.11, FR-802): the zoom preference, read after authz; default 'WEEK'
+  const zoom = (await services.preferences.getPreferences(db, user.id))['grid.zoom'] ?? 'WEEK'
   return (
     <PlanView
       projectId={header.id}
       projectName={header.name}
       archived={header.archived}
       canEdit={!header.archived}
+      initialZoom={zoom}
     />
   )
 }

@@ -5,6 +5,7 @@ import type { Cd, ISODate, LoadPair, LoadView, PeriodKey } from '@/domain/types'
 import type { GridAssigneeRow, GridTaskRow } from '@/lib/contracts/grid'
 import type { GridModel } from './merge'
 import type { ViewRow } from './rows'
+import { weekOfPeriodKey } from './totals'
 
 const collator = new Intl.Collator('th')
 
@@ -23,14 +24,13 @@ function indexTasks(m: GridModel): { tasks: Map<string, GridTaskRow>; assignees:
   return { tasks, assignees }
 }
 
-/** Counted contribution of one assignee row per week (BR-50 + certainty split). */
+/** Counted contribution of one assignee row per period (BR-50 + certainty split; M7: D: cells count by their week). */
 function countedCells(m: GridModel, a: GridAssigneeRow, task: GridTaskRow): [PeriodKey, LoadPair][] {
   const out: [PeriodKey, LoadPair][] = []
   const cells = m.cells.get(`a:${a.taskAssignmentId}`)
   if (!cells) return out
   for (const [key, cell] of cells) {
-    const week = weekOfKey(key)
-    if (week === null || cell.cd === 0 || !countsTowardLoad(week, task.completedWeek)) continue
+    if (cell.cd === 0 || !countsTowardLoad(weekOfPeriodKey(key), task.completedWeek)) continue
     out.push([key, splitLoad(cell.cd, task.certainty)])
   }
   return out

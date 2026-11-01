@@ -1,7 +1,10 @@
 'use client'
-// src/components/grid/FooterCell.tsx — ★ one memoised footer cell (FR-806, M6-D33). M7 adds day cells / tones, M9 week
-// tones (C87) through additive props.
+// src/components/grid/FooterCell.tsx — ★ one memoised footer cell (FR-806, M6-D33). M7 (S3.10, X06/X67, M7-D13): day
+// cells of the ภาระรวม row carry the BR-45 tone (data-tone / data-palette) AND the BR-40 glyph + number — never the
+// colour alone; M9 adds week tones through the same additive props (C87).
 import { memo } from 'react'
+import { StatusGlyph } from '@/components/common/StatusGlyph'
+import type { LoadTone, OverloadLevel } from '@/domain/overload'
 import styles from './grid.module.css'
 
 export interface FooterCellProps {
@@ -13,6 +16,14 @@ export interface FooterCellProps {
   width: number
   text: string
   label?: string
+  /** M7: BR-45 tone of a day load cell */
+  tone?: LoadTone
+  palette?: 'load' | 'tentative'
+  /** M7: the worst person's BR-40 level (OK = no glyph) and its text */
+  glyph?: OverloadLevel
+  glyphLabel?: string
+  /** M7: the shared tooltip lists the people over capacity */
+  tip?: boolean
 }
 
 export const FooterCell = memo(function FooterCell({
@@ -23,6 +34,11 @@ export const FooterCell = memo(function FooterCell({
   width,
   text,
   label,
+  tone,
+  palette,
+  glyph,
+  glyphLabel,
+  tip,
 }: FooterCellProps) {
   return (
     <div
@@ -33,7 +49,14 @@ export const FooterCell = memo(function FooterCell({
       className={styles.footerCell}
       style={{ left, width }}
       data-testid={`cell-footer-${kind}-${periodKey}`}
+      data-tone={tone}
+      data-palette={tone ? palette : undefined}
+      data-tip={tip ? 'footer' : undefined}
+      data-period={periodKey}
     >
+      {glyph && glyph !== 'OK' ? (
+        <StatusGlyph kind={glyph === 'OVER' ? 'over' : 'risk'} label={glyphLabel ?? ''} />
+      ) : null}
       {text}
     </div>
   )

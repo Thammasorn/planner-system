@@ -2,8 +2,13 @@
 // src/components/grid/GridCell.tsx — one memoised body cell (FR-804/807/808, BR-20a, M6-D9/D12/D20, PLAN §3.9).
 // A plain div with one CSS Module class and data-* state; selection/focus flags come from the external grid store, so
 // only cells whose flags change re-render. The inline editor replaces the text while editing.
+// M7 (S3.4/S3.10, §8.9): day cells — derived (dashed underline + faded token + data-derived + aria-description, never
+// opacity), warnings (⚠ cap-0 day, leave glyph on a time-off date), 🔴 / ⚠ day overload of the person; the รวม cell
+// of a DAY week carries the ↕ collapse-to-week button; a BR-24 pending value shows data-pending-choice.
 import { memo, useCallback, useEffect, useRef, type KeyboardEvent } from 'react'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
+import { VisuallyHidden } from '@/components/common/VisuallyHidden'
+import { th } from '@/i18n/th'
 import type { Editability } from '@/lib/grid/rows'
 import { asciiForCode } from '@/lib/grid/keymap'
 import {
@@ -39,6 +44,27 @@ export interface GridCellProps {
   /** the editor's initial value for F2 / '' (exact, current unit) */
   exactValue: string
   onEditorBlur: (value: string) => void
+  // ── M7 (all optional; absent = M6 week cell) ──
+  colKind?: 'W' | 'D'
+  /** D cell of a WEEK week (BR-20 display-only spread) */
+  derived?: boolean
+  /** aria-description (derived values, M7-D20) */
+  description?: string
+  /** ⚠ text: a cap-0 day with work, or a WEEK week without capacity (BR-21a fallback) */
+  warnLabel?: string
+  /** leave glyph text on a time-off date with work (M7-D15) */
+  timeOffLabel?: string
+  /** BR-40 level of the person on this day (≠ OK) and its full status text */
+  dayLevel?: 'OVER' | 'RISK'
+  dayLevelLabel?: string
+  holiday?: boolean
+  /** BR-24 dialog open for this (row, week): the typed value shows as pending */
+  pendingChoice?: boolean
+  /** the expanded week's day data is still loading (placeholder) */
+  busy?: boolean
+  /** the รวม cell of a DAY week on an editable row: ↕ รวมเป็นรายสัปดาห์ */
+  collapsible?: boolean
+  onCollapse?: (rowKey: string, periodKey: string) => void
 }
 
 function CellEditor({
@@ -108,6 +134,7 @@ export const GridCell = memo(function GridCell(p: GridCellProps) {
 
   const draft = editing ? p.store.get().draft : ''
   return (
+    // eslint-disable-next-line jsx-a11y/role-supports-aria-props -- aria-description is a global ARIA 1.3 attribute (M7-D20, derived values)
     <div
       ref={setRef}
       role="gridcell"
@@ -115,6 +142,8 @@ export const GridCell = memo(function GridCell(p: GridCellProps) {
       aria-selected={(flags & CELL_SELECTED) !== 0}
       aria-readonly={p.editability !== 'ok' ? true : undefined}
       aria-label={p.label}
+      aria-description={p.description}
+      aria-busy={p.busy ? true : undefined}
       tabIndex={(flags & CELL_ROVING) !== 0 ? 0 : -1}
       className={styles.cell}
       style={{ left: p.left, width: p.width }}
@@ -131,15 +160,53 @@ export const GridCell = memo(function GridCell(p: GridCellProps) {
       data-today={p.today ? 'true' : undefined}
       data-focused={focused ? 'true' : undefined}
       data-fill={(flags & CELL_FILL) !== 0 ? 'true' : undefined}
+      data-col-kind={p.colKind}
+      data-derived={p.derived ? 'true' : undefined}
+      data-holiday={p.holiday ? 'true' : undefined}
+      data-pending-choice={p.pendingChoice ? 'true' : undefined}
+      data-day-level={p.dayLevel}
     >
       {editing ? (
         <CellEditor initial={draft === '' ? p.exactValue : draft} label={p.label} onBlur={p.onEditorBlur} />
       ) : (
         <>
+          {p.collapsible && p.onCollapse ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              className={styles.collapseButton}
+              aria-label={th.grid.day.collapseToWeek}
+              title={th.grid.day.collapseToWeek}
+              data-collapse-week=""
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => p.onCollapse?.(p.rowKey, p.periodKey)}
+            >
+              <span aria-hidden="true">↕</span>
+            </button>
+          ) : null}
           {p.leave ? <StatusGlyph kind="leave" /> : null}
           {p.noCapacity ? <StatusGlyph kind="noCapacity" /> : null}
-          <span data-cell-value="">{p.text}</span>
-          {p.resolution === 'DAY' ? <StatusGlyph kind="dayDetail" /> : null}
+          {p.timeOffLabel ? <StatusGlyph kind="leave" label={p.timeOffLabel} /> : null}
+          {p.warnLabel ? (
+            <span className={styles.warnGlyph} data-glyph="warn">
+              <span aria-hidden="true">{th.overload.glyph.RISK}</span>
+              <VisuallyHidden>{p.warnLabel}</VisuallyHidden>
+            </span>
+          ) : null}
+          {p.dayLevel ? (
+            <StatusGlyph kind={p.dayLevel === 'OVER' ? 'over' : 'risk'} label={p.dayLevelLabel ?? ''} />
+          ) : null}
+          {p.busy && p.text === '' ? (
+            // the expanded week's day data is still loading: a visible placeholder + its text (never cursor only)
+            <span className={styles.busyPlaceholder} data-busy-placeholder="">
+              <span aria-hidden="true">…</span>
+              <VisuallyHidden>{th.grid.day.loading}</VisuallyHidden>
+            </span>
+          ) : null}
+          <span data-cell-value="" className={p.derived ? styles.derivedValue : undefined}>
+            {p.text}
+          </span>
+          {p.resolution === 'DAY' && p.colKind !== 'D' ? <StatusGlyph kind="dayDetail" /> : null}
         </>
       )}
       {(flags & CELL_HANDLE) !== 0 && p.editability === 'ok' ? (

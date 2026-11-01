@@ -4,6 +4,9 @@
 // gestures (useGridEditing / useGridKeyboard / useGridClipboard / useFillHandle), undo (useGridUndo), rendering
 // (VirtualGrid + GridCell + RowHeader + GridHeader + Footer). Task rows reuse M3's mutations (create, delete, assign,
 // unassign) with their undo entries and toasts (M6-D19).
+// M7 (plan/m07 S3): zoom [สัปดาห์ | วัน] + inline week expansion (view only, useExpansion), day / รวม columns,
+// derived day values, day editing through the same gesture pipeline, the BR-24 dialog (pre-emptive, server fallback),
+// ↕ collapse-to-week (BR-23) in the รวม cell and the cell menu, day-level overload glyphs and footer tones.
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import type { VirtualItem } from '@tanstack/react-virtual'
@@ -16,9 +19,10 @@ import {
   useState,
   type FocusEvent,
   type JSX,
+  type MouseEvent as ReactMouseEvent,
 } from 'react'
 import { viewLoad } from '@/domain/certainty'
-import { addWeeks, weekStart } from '@/domain/dates'
+import { addWeeks, isoWeekday, weekStart } from '@/domain/dates'
 import { formatCd } from '@/domain/units'
 import type { Cd, LoadPair, PeriodKey } from '@/domain/types'
 import { useProjectTasks } from '@/components/tasks/useProjectTasks'
@@ -28,6 +32,7 @@ import { useHotkeys } from '@/hooks/useHotkeys'
 import { usePreferences } from '@/hooks/usePreferences'
 import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
+import type { GridZoom } from '@/lib/contracts/grid'
 import { formatWeekHeader } from '@/lib/format'
 import {
   type BoxScroll,
@@ -36,21 +41,34 @@ import {
   takeBoxScroll,
 } from '@/lib/nav/scroll-memory'
 import { footerTotals, rowTotalView, taskRowTotals, taskTotals } from '@/lib/grid/aggregate'
+import { findDayWeekConflicts, splitByConflicts, type ConflictPair } from '@/lib/grid/br24'
+import { collapseChanges, dayTargetsOf, type CollapseTarget } from '@/lib/grid/collapse'
 import {
   buildColumns,
   chunksForRange,
   columnIndexOfPeriod,
   HEADER_ROWS,
-  initialScrollIndex,
   NAME_COL_W,
   ROW_H,
   timelineWeeks,
-  TOTAL_W,
+  TOTAL_COL_W,
+  type GridColumn,
 } from '@/lib/grid/columns'
+import { dayCtxFor } from '@/lib/grid/day'
+import {
+  footerDayCell,
+  otherDayLoads,
+  personDayLoads,
+  personDayStatus,
+  type DayStatus,
+  type FooterDayCell,
+} from '@/lib/grid/day-footer'
 import type { GridModel } from '@/lib/grid/merge'
-import { buildViewRows, cellEditability, type ViewRow } from '@/lib/grid/rows'
+import type { CellWrite } from '@/lib/grid/queue'
+import { buildViewRows, cellEditability, type RowKey, type ViewRow } from '@/lib/grid/rows'
+import { cellsOf } from '@/lib/grid/selection'
 import { targetGrid } from '@/lib/grid/targets'
-import { cellMarks, headerTooltipFor, tooltipFor } from '@/lib/grid/tooltip'
+import { cellMarks, dayHeaderTooltipFor, headerTooltipFor, tooltipFor } from '@/lib/grid/tooltip'
 import { rememberVersion } from '@/lib/grid/versions'
 import type { GridCtx } from '@/lib/query-keys'
 import { gridPreference, taskPreference } from '@/lib/schemas/preferences'
@@ -60,6 +78,8 @@ import { GridCell } from './GridCell'
 import { GridHeader } from './GridHeader'
 import { GridLegend, GridToolbar } from './GridToolbar'
 import { AddPersonPopover, type PickerContext } from './AddPersonPopover'
+import { Br24Dialog } from './Br24Dialog'
+import { CellMenu } from './CellMenu'
 import { createGridStore } from './gridStore'
 import { RowHeader } from './RowHeader'
 import { useFillHandle } from './useFillHandle'
@@ -67,6 +87,8 @@ import { useGridChunks } from './useGridChunks'
 import { useGridClipboard } from './useGridClipboard'
 import { useGridEditing, type GridAccess } from './useGridEditing'
 import { useGridKeyboard, type GridKeyHandlers } from './useGridKeyboard'
+import { useDayWeekChoice } from './useDayWeekChoice'
+import { useExpansion } from './useExpansion'
 import { useGridUndo } from './useGridUndo'
 import { useSaveAllocations } from './useSaveAllocations'
 import { VirtualGrid, type VirtualGridHandle } from './VirtualGrid'
@@ -81,6 +103,27 @@ export interface PlanGridProps {
   archived: boolean
   canEdit: boolean
   onOpenTask(taskId: string, projectId?: string): void
+  /** M7 (S3.11): the `grid.zoom` preference read by the page on the server; absent → usePreferences */
+  initialZoom?: GridZoom
+}
+
+/** First column of a week (its first day column when expanded); −1 when absent. */
+function firstColOfWeek(cols: readonly GridColumn[], week: string): number {
+  return cols.findIndex((c) => c.weekStart === week)
+}
+
+/** D: keys "D:2026-09-28,D:2026-09-29" → dates per week (stable input of buildColumns). */
+function dayDatesOf(sig: string): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  if (sig === '') return out
+  for (const k of sig.split(',')) {
+    const d = k.slice(2)
+    const w = weekStart(d)
+    const list = out.get(w)
+    if (list) list.push(d)
+    else out.set(w, [d])
+  }
+  return out
 }
 
 const EMPTY_TOTALS = new Map<string, Partial<Record<PeriodKey, LoadPair>>>()
@@ -100,13 +143,32 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const [includeOthers, setIncludeOthers] = useState(false)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
 
-  // ── columns + chunks (FR-801, M6-D15) ──
-  const cols = useMemo(() => buildColumns(timelineWeeks(today), new Set(), new Map()), [today])
-  const initialIdx = useMemo(() => Math.max(0, initialScrollIndex(cols, today)), [cols, today])
-  const todayIdx = useMemo(() => columnIndexOfPeriod(cols, `W:${thisWeek}`), [cols, thisWeek])
+  // ── zoom + expansion (FR-802/803, M7-D10/D11; view only, never data) ──
+  const exp = useExpansion(context, props.initialZoom ?? gridPreference(prefs, 'grid.zoom'))
+  const zoom = exp.state.zoom
+  const weeks = useMemo(() => timelineWeeks(today), [today])
+  const expandedSet = useMemo(
+    () => (zoom === 'DAY' ? new Set(weeks) : exp.state.expanded),
+    [zoom, weeks, exp.state.expanded],
+  )
+
+  // ── chunks + columns (FR-801, M6-D15, M7-D24) ──
   const [chunkStarts, setChunkStarts] = useState(() =>
     chunksForRange(today, addWeeks(thisWeek, -4), addWeeks(thisWeek, 16)),
   )
+  const chunks = useGridChunks(context, chunkStarts, includeOthers, exp.state)
+  const raw = chunks.model
+  const daySig = useMemo(
+    () => (raw ? raw.periods.filter((x) => x.kind === 'DAY').map((x) => x.key).join(',') : ''),
+    [raw],
+  )
+  const dayDates = useMemo(() => dayDatesOf(daySig), [daySig])
+  const cols = useMemo(() => buildColumns(weeks, expandedSet, dayDates), [weeks, expandedSet, dayDates])
+  const initialIdx = useMemo(() => Math.max(0, firstColOfWeek(cols, addWeeks(thisWeek, -4))), [cols, thisWeek])
+  const todayIdx = useMemo(() => {
+    const d = columnIndexOfPeriod(cols, `D:${today}`)
+    return d >= 0 ? d : Math.max(firstColOfWeek(cols, thisWeek), columnIndexOfPeriod(cols, `W:${thisWeek}`))
+  }, [cols, today, thisWeek])
   const onRangeChange = useCallback(
     (first: number, last: number) => {
       const a = cols[first]
@@ -117,8 +179,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     },
     [cols, today],
   )
-  const chunks = useGridChunks(context, chunkStarts, includeOthers)
-  const raw = chunks.model
   const archived = props.archived || (raw?.context.archived ?? false)
   const model = useMemo<GridModel | null>(() => {
     if (!raw) return null
@@ -150,6 +210,25 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     () => new Set([...(model?.holidays.keys() ?? [])].map((d) => weekStart(d))),
     [model],
   )
+  // ── M7 day-level load (BR-40/45, M7-D13): once per data change, never per cell (S3.13) ──
+  const dayLoads = useMemo(
+    () =>
+      model
+        ? personDayLoads(model.rows, model.periods, includeOthers ? { extra: otherDayLoads(model.people) } : {})
+        : new Map<string, Partial<Record<PeriodKey, LoadPair>>>(),
+    [model, includeOthers],
+  )
+  const footerDays = useMemo(() => {
+    const out = new Map<string, FooterDayCell>()
+    if (!model) return out
+    for (const per of model.periods) {
+      if (per.kind !== 'DAY') continue
+      const statuses = new Map<string, DayStatus>()
+      for (const u of footer.people) statuses.set(u, personDayStatus(dayLoads.get(u), model.people[u], per.key))
+      out.set(per.key, footerDayCell(statuses, view, (u) => model.people[u]?.name ?? ''))
+    }
+    return out
+  }, [model, footer.people, dayLoads, view])
 
   // ── M3 task data: blocker names (M6-D31), picker members, task mutations (M6-D19) ──
   const tasksQ = useProjectTasks(context.id)
@@ -190,8 +269,64 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
 
   // ── store, save, undo ──
   const [store] = useState(createGridStore)
-  const save = useSaveAllocations(context)
-  const { gesture, undo, redo } = useGridUndo(context, save)
+  const choice = useDayWeekChoice()
+  const modelRef = useRef<GridModel | null>(model)
+  useLayoutEffect(() => {
+    modelRef.current = model
+  })
+  /** BR-24 pairs of writes against the current cache (server fallback: NEEDS_CHOICE, M7-D4). */
+  const onNeedsChoice = useCallback(
+    (payload: { pairs: { taskAssignmentId: string; week: string }[] }, writes: readonly CellWrite[]) => {
+      const m = modelRef.current
+      const keys = new Set(payload.pairs.map((x) => `${x.taskAssignmentId}|${x.week}`))
+      const pairs = m
+        ? findDayWeekConflicts(
+            writes.filter((w) => w.granularity === 'WEEK' && keys.has(`${w.taskAssignmentId}|${w.period}`)),
+            m,
+          )
+        : []
+      return pairs.length > 0 ? choice.ask(pairs) : Promise.resolve(null)
+    },
+    [choice],
+  )
+  const save = useSaveAllocations(context, { onConflict: choice.dropAssignments, onNeedsChoice })
+  const { gesture, start, undo, redo } = useGridUndo(context, save)
+
+  /**
+   * Every value gesture (type, f/h, Delete, paste, fill, shift) runs here (X65, M7-D4): WEEK writes onto DAY weeks
+   * (≠ Σ days) are held back while the one BR-24 dialog of the gesture is open; the rest is enqueued at once. One undo
+   * entry for the whole gesture. Cancel drops only those pairs.
+   */
+  const runGesture = useCallback(
+    (label: string, writes: readonly CellWrite[]) => {
+      const m = modelRef.current
+      const pairs: ConflictPair[] = m ? findDayWeekConflicts(writes, m) : []
+      if (pairs.length === 0) return gesture(label, writes)
+      const { plain, conflicting } = splitByConflicts(writes, pairs)
+      const g = start(writes)
+      g.send(plain)
+      return choice.ask(pairs).then((c) => {
+        if (c) g.send(conflicting, c)
+        return g.finish(c === 'SCALE' ? th.grid.day.undo.scale : c === 'COLLAPSE' ? th.grid.day.undo.collapse : label)
+      })
+    },
+    [gesture, start, choice],
+  )
+
+  /** BR-23 "↕ รวมเป็นรายสัปดาห์" (M7-D2): WEEK = Σ days with COLLAPSE; undo toast, no confirm (P2). */
+  const collapseToWeek = useCallback(
+    (targets: readonly CollapseTarget[]) => {
+      const m = modelRef.current
+      if (!m) return
+      const writes = collapseChanges(targets, m)
+      if (writes.length === 0) return
+      void gesture(th.grid.day.undo.collapse, writes, {
+        onDayWeekConflict: 'COLLAPSE',
+        toast: writes.length === 1 ? th.grid.day.collapsedToast : th.grid.day.collapsedManyToast(writes.length),
+      })
+    },
+    [gesture],
+  )
   const gridRef = useRef<VirtualGridHandle>(null)
   const quickRef = useRef<HTMLInputElement>(null)
 
@@ -207,8 +342,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       colCount: cols.length,
       target: model ? targetGrid(model, viewRows, cols, totals) : () => null,
       unit,
-      gesture,
+      gesture: runGesture,
       scrollTo: (r, c) => gridRef.current?.scrollToCell(r, c),
+      cols,
     }
   })
 
@@ -271,6 +407,84 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   }, [viewRows.length])
   useHotkeys([{ hotkey: { code: 'KeyN' }, handler: focusQuickAdd }], { enabled: canEdit })
 
+  // ── expansion focus + horizontal position (M7-D11, S3.11) ──
+  const refocus = useRef<{ r: number; week: string; at: 'firstDay' | 'week' } | null>(null)
+  const keepWeek = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const k = keepWeek.current
+    if (k !== null) {
+      keepWeek.current = null
+      const i = firstColOfWeek(cols, k)
+      if (i >= 0) gridRef.current?.scrollToColumn(i)
+    }
+    const f = refocus.current
+    if (!f) return
+    refocus.current = null
+    const c = firstColOfWeek(cols, f.week)
+    if (c < 0) return
+    const p = { r: f.r, c }
+    store.set({ anchor: p, focus: p, hasSelection: true, rowSelection: null, mode: 'nav', active: true })
+    gridRef.current?.scrollToCell(p.r, p.c)
+  }, [cols, store])
+  const onToggleWeek = useCallback((week: string) => exp.toggle(week), [exp])
+  const onZoom = useCallback(
+    (z: GridZoom) => {
+      const first = cols[gridRef.current?.firstVisibleColumn() ?? -1]
+      keepWeek.current = first?.weekStart ?? null
+      exp.setZoom(z)
+      setPreference('grid.zoom', z)
+    },
+    [cols, exp, setPreference],
+  )
+
+  // ── cell menu (Shift+F10 / ContextMenu / right click) + ↕ (M7-D23) ──
+  const [menu, setMenu] = useState<{
+    anchor: { rowKey: RowKey; periodKey: PeriodKey } | { x: number; y: number }
+    targets: CollapseTarget[]
+  } | null>(null)
+  const selectionDayTargets = useCallback((): CollapseTarget[] => {
+    const m = modelRef.current
+    const a = acc.current
+    const s = store.get()
+    const rect = store.rect() ?? (s.focus ? { r0: s.focus.r, c0: s.focus.c, r1: s.focus.r, c1: s.focus.c } : null)
+    if (!m || !a || !rect) return []
+    return dayTargetsOf(
+      cellsOf(rect, a.target)
+        .flat()
+        .map((t) => ({ taskAssignmentId: t.editability === 'ok' ? t.taskAssignmentId : null, week: t.week })),
+      m,
+    )
+  }, [store])
+  const onContextMenu = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
+      if (!el) return
+      e.preventDefault()
+      const p = { r: Number(el.dataset.r), c: Number(el.dataset.c) }
+      const rect = store.rect()
+      const inside = rect && p.r >= rect.r0 && p.r <= rect.r1 && p.c >= rect.c0 && p.c <= rect.c1
+      if (!inside) store.set({ anchor: p, focus: p, hasSelection: true, rowSelection: null, active: true })
+      // a keyboard-initiated contextmenu event (no pointer position) anchors at the cell, like Shift+F10
+      const row = viewRows[p.r]
+      const col = cols[p.c]
+      const keyboard = e.clientX === 0 && e.clientY === 0 && row !== undefined && col !== undefined
+      setMenu({
+        anchor: keyboard ? { rowKey: row.key, periodKey: col.key } : { x: e.clientX, y: e.clientY },
+        targets: selectionDayTargets(),
+      })
+    },
+    [store, selectionDayTargets, viewRows, cols],
+  )
+  const onCollapseCell = useCallback(
+    (rowKey: string, periodKey: string) => {
+      const row = viewRows.find((x) => x.key === rowKey)
+      if (!row || row.kind === 'task') return
+      collapseToWeek([{ taskAssignmentId: row.assignee.taskAssignmentId, week: periodKey.slice(2) }])
+    },
+    [viewRows, collapseToWeek],
+  )
+  const closeMenu = useCallback(() => setMenu(null), [])
+
   const handlers = useRef<GridKeyHandlers | null>(null)
   useLayoutEffect(() => {
     const selectedRow = () => viewRows.find((r) => r.key === store.get().rowSelection)
@@ -304,9 +518,33 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           ?.querySelector<HTMLElement>(`[data-row-header][data-r="${f.r}"]`)
           ?.focus({ preventScroll: true })
       },
+      // M7-D11: Mod+↓ on a week cell expands it; the same index is then its first day column (same row)
+      expandWeek: () => {
+        const f = store.get().focus
+        const col = f ? cols[f.c] : undefined
+        if (!f || !col || zoom === 'DAY' || col.role !== 'week') return
+        refocus.current = { r: f.r, week: col.weekStart, at: 'firstDay' }
+        exp.expand(col.weekStart)
+      },
+      // Mod+↑ on a day / รวม cell collapses the view and focuses the week cell
+      collapseWeek: () => {
+        const f = store.get().focus
+        const col = f ? cols[f.c] : undefined
+        if (!f || !col || zoom === 'DAY' || col.role === 'week') return
+        refocus.current = { r: f.r, week: col.weekStart, at: 'week' }
+        exp.collapse(col.weekStart)
+      },
+      cellMenu: () => {
+        const f = store.get().focus
+        const row = f ? viewRows[f.r] : undefined
+        const col = f ? cols[f.c] : undefined
+        if (!row || !col) return
+        setMenu({ anchor: { rowKey: row.key, periodKey: col.key }, targets: selectionDayTargets() })
+      },
     }
   })
   const onKeyDown = useGridKeyboard(acc, editing, handlers)
+
 
   const onSelectRow = useCallback(
     (r: number) => {
@@ -434,7 +672,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   // ── initial scroll + perf marks (M6-D15, M6-D22); history return → the remembered place (FR-686) ──
   // undefined = not decided yet; null = open at the default week; a value = back from /t via ← / Esc / browser back
   const restore = useRef<BoxScroll | null | undefined>(undefined)
+  // once per `today` (M7: expansions change the column indexes; they keep their own position, S3.11)
+  const scrolledFor = useRef<string | null>(null)
   useLayoutEffect(() => {
+    if (scrolledFor.current === today) return
+    scrolledFor.current = today
     if (restore.current === undefined) {
       const pos = takeBoxScroll(currentScrollKey())
       restore.current = consumePopNavigation() ? pos : null
@@ -448,7 +690,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     const fit = gridRef.current?.fittingColumns() ?? 0
     const start = fit > 0 && todayIdx >= 0 ? Math.max(initialIdx, todayIdx - fit + 1) : initialIdx
     gridRef.current?.scrollToColumn(start)
-  }, [initialIdx, todayIdx])
+  }, [initialIdx, todayIdx, today])
   const hasData = model !== null
   useLayoutEffect(() => {
     const back = restore.current
@@ -469,16 +711,25 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   }, [hasData])
 
   // ── tooltip content ──
-  const tipData = useRef({ model, viewRows, totals, unit, view, cols })
+  const tipData = useRef({ model, viewRows, totals, unit, view, cols, footerDays })
   useLayoutEffect(() => {
-    tipData.current = { model, viewRows, totals, unit, view, cols }
+    tipData.current = { model, viewRows, totals, unit, view, cols, footerDays }
   })
   const contentFor = useCallback((el: HTMLElement): string[] | null => {
     const d = tipData.current
     if (!d.model) return null
     if (el.dataset.tip === 'header') {
-      const t = el.dataset.week ? headerTooltipFor(d.model, el.dataset.week) : null
+      const t = el.dataset.date
+        ? dayHeaderTooltipFor(d.model, el.dataset.date)
+        : el.dataset.week
+          ? headerTooltipFor(d.model, el.dataset.week)
+          : null
       return t ? [t] : null
+    }
+    if (el.dataset.tip === 'footer') {
+      const f = el.dataset.period ? d.footerDays.get(el.dataset.period) : undefined
+      const names = f?.overPeople.map((u) => d.model?.people[u]?.name ?? '') ?? []
+      return names.length > 0 ? [th.overload.peopleOver(names.join(', '))] : null
     }
     const row = d.viewRows[Number(el.dataset.r)]
     const col = d.cols[Number(el.dataset.c)]
@@ -568,11 +819,16 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           const cell = row.kind === 'task' ? undefined : model.cells.get(row.key)?.get(col.key)
           const cap = person?.capacity[col.key] ?? 0
           const marks = cellMarks(model, row, col.key)
+          const isDay = col.kind === 'D'
+          const taId = row.kind === 'task' ? null : row.assignee.taskAssignmentId
+          const pendingCd = taId !== null && !isDay ? choice.pendingKeys.get(`${taId}|${col.weekStart}`) : undefined
           let text = ''
           let exact = ''
           if (row.kind === 'task') {
             const t = totals.get(row.task.id)?.[col.key]
             text = t ? days1(viewLoad(t, view)) : ''
+          } else if (pendingCd !== undefined) {
+            text = days1(pendingCd)
           } else if (cell) {
             const frac = unit === 'FRACTION' && cap > 0
             text = formatCd(cell.cd, { unit, baseCd: cap, decimals: unit === 'FRACTION' ? 2 : 1 })
@@ -580,14 +836,48 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
               ? formatCd(cell.cd, { unit: 'FRACTION', baseCd: cap, decimals: 2 })
               : formatCd(cell.cd, { unit: 'DAYS', decimals: 2 })
           }
+          // M7 day cells (S3.4/S3.10): warnings, leave on that date, the person's day level
+          const busy = isDay && !dayDates.has(col.weekStart)
+          const warnLabel =
+            isDay && cell?.warn?.includes('NON_WORKING')
+              ? th.grid.warn.nonWorkingDay
+              : !isDay && cell?.fallback
+                ? th.grid.warn.weekNoCapacity
+                : undefined
+          const timeOffLabel =
+            isDay && cell?.warn?.includes('TIME_OFF')
+              ? th.grid.warn.allocatedOnTimeOff(formatCd(cell.cd, { unit: 'DAYS', decimals: 1 }))
+              : undefined
+          const status =
+            isDay && row.kind !== 'task' && cell && cell.cd > 0
+              ? personDayStatus(dayLoads.get(row.assignee.userId), person, col.key)
+              : undefined
+          const dayLevel = status && status.level !== 'OK' ? status.level : undefined
+          const dayLevelLabel =
+            status && dayLevel
+              ? th.overload.dayStatus(th.overload.level[dayLevel], days1(status.load.total) || '0', days1(status.capCd) || '0')
+              : undefined
           const parts = [
-            text || th.grid.cell.empty,
-            cell?.resolution === 'DAY' ? th.grid.glyph.dayDetail : null,
+            text || (busy ? th.grid.day.loading : th.grid.cell.empty),
+            !isDay && cell?.resolution === 'DAY' ? th.grid.glyph.dayDetail : null,
             marks.leave ? th.grid.glyph.leave : null,
             marks.noCapacity ? th.grid.glyph.noCapacity : null,
             marks.notCounted ? th.grid.cell.notCounted : null,
             marks.tentative ? th.grid.glyph.tentative : null,
+            warnLabel ?? null,
+            timeOffLabel ?? null,
+            dayLevelLabel ?? null,
           ].filter((x): x is string => x !== null)
+          const label = isDay
+            ? `${rowName} ${th.grid.day.cellLabel(
+                th.calendar.weekdaysLong[isoWeekday(col.date) - 1]!,
+                formatWeekHeader(col.date),
+                parts.join(' · '),
+              )}`
+            : col.role === 'weekTotal'
+              ? th.grid.cell.label(rowName, th.grid.day.totalColumnLabel(formatWeekHeader(col.weekStart)), parts.join(' · '))
+              : th.grid.cell.label(rowName, formatWeekHeader(col.weekStart), parts.join(' · '))
+          const editability = cellEditability(row, cell, model)
           return (
             <GridCell
               key={v.key}
@@ -599,16 +889,29 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
               rowKey={row.key}
               periodKey={col.key}
               text={text}
-              label={th.grid.cell.label(rowName, formatWeekHeader(col.weekStart), parts.join(' · '))}
-              editability={cellEditability(row, cell, model)}
+              label={label}
+              editability={editability}
               resolution={cell?.resolution}
               tentative={marks.tentative}
               leave={marks.leave}
               noCapacity={marks.noCapacity}
               notCounted={marks.notCounted}
-              today={col.weekStart === thisWeek}
+              today={isDay ? col.date === today : col.weekStart === thisWeek}
               exactValue={exact}
               onEditorBlur={onEditorBlur}
+              colKind={col.kind}
+              derived={isDay && cell?.derived === true}
+              {...(isDay && cell?.derived ? { description: th.grid.day.derivedDescription } : {})}
+              {...(warnLabel ? { warnLabel } : {})}
+              {...(timeOffLabel ? { timeOffLabel } : {})}
+              {...(dayLevel ? { dayLevel, dayLevelLabel: dayLevelLabel ?? '' } : {})}
+              holiday={isDay && model.holidays.has(col.date)}
+              pendingChoice={pendingCd !== undefined}
+              busy={busy}
+              collapsible={
+                col.role === 'weekTotal' && cell?.resolution === 'DAY' && editability === 'ok' && row.kind !== 'task'
+              }
+              onCollapse={onCollapseCell}
             />
           )
         })}
@@ -617,7 +920,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           aria-colindex={cols.length + 2}
           aria-readonly="true"
           className={styles.totalCell}
-          style={{ width: TOTAL_W, height: ROW_H }}
+          style={{ width: TOTAL_COL_W, height: ROW_H }}
           data-testid={`cell-${row.key}-total`}
         >
           {total ? days1(rowTotalView(total, view)) : ''}
@@ -648,6 +951,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onPrev={() => scrollToColumn((gridRef.current?.firstVisibleColumn() ?? initialIdx) - 4)}
         onNext={() => scrollToColumn((gridRef.current?.firstVisibleColumn() ?? initialIdx) + 4)}
         onToday={() => scrollToColumn(todayIdx)}
+        zoom={zoom}
+        onZoom={onZoom}
         onView={(v) => setPreference('load.view', v)}
         onUnit={(u) => setPreference('grid.unit', u)}
         onShowCompleted={(on) => setPreference('tasks.showCompleted', on)}
@@ -686,6 +991,10 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             thisWeek={thisWeek}
             holidayWeeks={holidayWeeks}
             onSelectColumn={onSelectColumn}
+            today={today}
+            holidays={model?.holidays ?? EMPTY_HOLIDAYS}
+            toggle={zoom === 'WEEK'}
+            onToggleWeek={onToggleWeek}
           />
         )}
         renderFooter={(vCols, totalWidth, firstRowIndex) => (
@@ -699,6 +1008,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             view={view}
             includeOthers={includeOthers}
             onIncludeOthers={setIncludeOthers}
+            dayCells={footerDays}
           />
         )}
         message={message}
@@ -710,6 +1020,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onCopy={onCopy}
         onPaste={onPaste}
         onBlur={onBlur}
+        onContextMenu={onContextMenu}
         subscribeTabStop={store.subscribe}
         onEnter={enterGrid}
       />
@@ -720,6 +1031,20 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         anchor={addPersonAnchor}
         onClose={closeAddPerson}
       />
+      <Br24Dialog
+        open={choice.isOpen}
+        pairs={choice.pairs}
+        nameOf={(u) => model?.people[u]?.name ?? ''}
+        ctxOf={(pair) => dayCtxFor(model?.people[pair.userId], pair.week)}
+        onChoose={choice.choose}
+        onCancel={choice.cancel}
+      />
+      <CellMenu
+        anchor={menu?.anchor ?? null}
+        targets={menu?.targets ?? EMPTY_TARGETS}
+        onCollapse={() => collapseToWeek(menu?.targets ?? EMPTY_TARGETS)}
+        onClose={closeMenu}
+      />
       <GridLegend />
       <CellTooltip rootRef={rootRef} contentFor={contentFor} />
     </div>
@@ -727,4 +1052,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set()
+const EMPTY_HOLIDAYS: ReadonlyMap<string, string> = new Map()
+const EMPTY_TARGETS: CollapseTarget[] = []
 const EMPTY_NAMES: readonly string[] = []

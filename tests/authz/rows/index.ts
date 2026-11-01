@@ -3,12 +3,14 @@
 import type { AuthzRow } from '../types'
 import { rows as account } from './account'
 import { rows as allocations } from './allocations'
+import { rows as allocationsDay } from './allocations-day'
 import { rows as assignments } from './assignments'
 import { rows as authEndpoints } from './auth-endpoints'
 import { rows as calendar } from './calendar'
 import { rows as clients } from './clients'
 import { rows as employees } from './employees'
 import { rows as files } from './files'
+import { rows as gridDay } from './grid-day'
 import { rows as holidays } from './holidays'
 import { rows as leaveTypes } from './leave-types'
 import { rows as members } from './members'
@@ -54,4 +56,7 @@ export const rows: AuthzRow[] = [
   ...allocations,
   // M6.1
   ...taskPages,
+  // M7
+  ...gridDay,
+  ...allocationsDay,
 ]

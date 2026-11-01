@@ -812,6 +812,28 @@ export async function allocationRows(
   }))
 }
 
+/** M7: DAY rows of one week (all dates in the same Monday-week; week_start = weekStart(date)); zero values skipped.
+ *  Plain Drizzle (X59); the caller makes sure the week has no WEEK row (the M6 trigger rejects mixing). */
+export async function makeDayAllocations(o: {
+  assignment: { id: string }
+  days: Record<ISODate, Cd>
+}): Promise<void> {
+  const entries = Object.entries(o.days).filter(([, cd]) => cd > 0)
+  if (entries.length === 0) return
+  const week = weekStart(entries[0]![0])
+  for (const [date] of entries)
+    if (weekStart(date) !== week) throw new Error(`makeDayAllocations: ${date} is not in the week of ${week}`)
+  await db.insert(allocations).values(
+    entries.map(([date, cd]) => ({
+      taskAssignmentId: o.assignment.id,
+      granularity: 'DAY' as const,
+      periodStart: date,
+      weekStart: week,
+      personDays: cdToNumeric(cd),
+    })),
+  )
+}
+
 /** Current `task_assignments.version` (BR-20b optimistic concurrency). */
 export async function assignmentVersion(assignmentId: string): Promise<number> {
   const [row] = await db

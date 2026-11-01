@@ -9,6 +9,8 @@ export interface FakeRow {
   values: number[]
   editability?: Editability | Editability[]
   capCd?: number | number[]
+  /** M7: DAY-resolution week cells (by column) */
+  day?: boolean[]
 }
 
 export function fakeGrid(rows: FakeRow[], firstWeek = '2026-11-09') {
@@ -27,7 +29,7 @@ export function fakeGrid(rows: FakeRow[], firstWeek = '2026-11-09') {
       capCd: cap,
       ...(cd !== 0
         ? {
-            cell: { cd, resolution: ed === 'dayWeek' ? ('DAY' as const) : ('WEEK' as const), derived: false },
+            cell: { cd, resolution: row.day?.[c] ? ('DAY' as const) : ('WEEK' as const), derived: false },
           }
         : {}),
     }

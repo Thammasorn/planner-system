@@ -8,6 +8,7 @@ import { alias } from 'drizzle-orm/pg-core'
 import type { WeekPlan } from '@/domain/allocation'
 import { addDays, compareISO, daysOfWeek, isoWeekday, maxISO, minISO } from '@/domain/dates'
 import type { Cd, ISODate, LoadPair } from '@/domain/types'
+import type { DayLoadRow } from '@/lib/contracts/grid'
 import { cdToNumeric, numericToCd } from '@/domain/units'
 import { allocations, projects, taskAssignments, tasks } from '../db/schema'
 import type { DbOrTx, Tx } from '../db/types'
@@ -240,6 +241,68 @@ export async function loadByUserWeek(
     weeks[r.weekStart] = { total: r.total, committed: r.committed }
   }
   return out
+}
+
+/**
+ * M7 (S2.1, C39, M7-D27; M9 reuses it): §6.5 filters exactly as loadByUserWeek (live assignment + task, project not
+ * deleted and not archived (BR-44), BR-50 per task, effective certainty coalesce(t, parent, grandparent, project)),
+ * restricted to `week_start = ANY($weeks)` (+ min/max bounds); grouped by (user_id, week_start, granularity,
+ * period_start). excludeProjectId → other projects of the grid people (X29); projectIds → only those projects (M9).
+ * WEEK rows have periodStart = weekStart. `weeks` or `userIds` empty → [] without a query.
+ */
+export async function dayLoadsForProjects(
+  tx: DbOrTx,
+  o: { userIds: readonly string[]; weeks: readonly ISODate[]; excludeProjectId?: string; projectIds?: readonly string[] },
+): Promise<DayLoadRow[]> {
+  if (o.userIds.length === 0 || o.weeks.length === 0) return []
+  if (o.projectIds !== undefined && o.projectIds.length === 0) return []
+  const weeks = [...new Set(o.weeks)]
+  const p1 = alias(tasks, 'p1')
+  const p2 = alias(tasks, 'p2')
+  const effective = sql`coalesce(${tasks.certaintyOverride}, ${p1.certaintyOverride}, ${p2.certaintyOverride}, ${projects.certainty})`
+  const rows = await tx
+    .select({
+      userId: taskAssignments.userId,
+      weekStart: allocations.weekStart,
+      granularity: allocations.granularity,
+      periodStart: allocations.periodStart,
+      totalCd: cdSum,
+      committedCd:
+        sql<number>`(coalesce(sum(${allocations.personDays}) filter (where ${effective} = 'CONFIRMED'), 0) * 100)::int`.mapWith(
+          Number,
+        ),
+    })
+    .from(allocations)
+    .innerJoin(
+      taskAssignments,
+      and(eq(taskAssignments.id, allocations.taskAssignmentId), isNull(taskAssignments.deletedAt)),
+    )
+    .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
+    .leftJoin(p1, eq(p1.id, tasks.parentId))
+    .leftJoin(p2, eq(p2.id, p1.parentId))
+    .innerJoin(
+      projects,
+      and(eq(projects.id, tasks.projectId), isNull(projects.deletedAt), isNull(projects.archivedAt)),
+    )
+    .where(
+      and(
+        inArray(allocations.weekStart, weeks),
+        gte(allocations.weekStart, weeks.reduce(minISO)),
+        lte(allocations.weekStart, weeks.reduce(maxISO)),
+        countedSql,
+        inArray(taskAssignments.userId, [...o.userIds]),
+        o.excludeProjectId === undefined ? undefined : ne(projects.id, o.excludeProjectId),
+        o.projectIds === undefined ? undefined : inArray(projects.id, [...o.projectIds]),
+      ),
+    )
+    .groupBy(taskAssignments.userId, allocations.weekStart, allocations.granularity, allocations.periodStart)
+    .orderBy(
+      asc(taskAssignments.userId),
+      asc(allocations.weekStart),
+      asc(allocations.granularity),
+      asc(allocations.periodStart),
+    )
+  return rows.filter((r) => r.totalCd > 0 || r.committedCd > 0)
 }
 
 /** Rows (weekStart, cd) of the live assignments of `taskIds` in (afterWeek, bound) — BR-52; one row per week. */

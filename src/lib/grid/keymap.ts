@@ -19,6 +19,12 @@ export type GridKeyAction =
   | { kind: 'deleteRow' }
   /** Shift+Space: select the focused row (keyboard path to deleteRow, M6-D19) */
   | { kind: 'selectRow' }
+  /** M7 (KEY-07, M7-D11): Mod+↓ on a week cell expands that week (view only) */
+  | { kind: 'expandWeek' }
+  /** M7: Mod+↑ on a day / รวม cell collapses the view (never data) */
+  | { kind: 'collapseWeek' }
+  /** M7: Shift+F10 / ContextMenu key → the cell menu (↕ รวมเป็นรายสัปดาห์; M8 adds items) */
+  | { kind: 'cellMenu' }
 
 type KeyEv = Pick<
   KeyboardEvent,
@@ -78,8 +84,11 @@ export function gridKeyAction(
     if (e.shiftKey) return null
     if (e.code === 'ArrowLeft') return { kind: 'shift', dir: -1 }
     if (e.code === 'ArrowRight') return { kind: 'shift', dir: 1 }
-    return null // Mod+↑/↓ → M7; Mod+C/V → DOM copy/paste events
+    if (e.code === 'ArrowDown') return { kind: 'expandWeek' }
+    if (e.code === 'ArrowUp') return { kind: 'collapseWeek' }
+    return null // Mod+C/V → DOM copy/paste events
   }
+  if ((e.code === 'F10' && e.shiftKey) || e.code === 'ContextMenu') return { kind: 'cellMenu' }
 
   const arrow = ARROWS[e.code]
   if (arrow) return { kind: 'move', dr: arrow[0], dc: arrow[1], extend: e.shiftKey }

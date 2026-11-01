@@ -19,7 +19,15 @@ import {
   timeOff,
   user,
 } from '@/server/db/schema'
-import { addSyntheticGridProject, applyFixture, loadGolden, parseFixtureArg, seedGolden } from './fixtures'
+import {
+  addDayExample,
+  addSyntheticGridProject,
+  applyFixture,
+  DAY_EXAMPLE,
+  loadGolden,
+  parseFixtureArg,
+  seedGolden,
+} from './fixtures'
 
 async function membership(): Promise<Record<string, Record<string, string>>> {
   const rows = await db
@@ -329,5 +337,110 @@ describe('M6 — seedGolden allocations + addSyntheticGridProject (X11, X92, M6-
     expect(rows.every((r) => r.granularity === 'WEEK' && r.pd === '1.00')).toBe(true)
     expect(new Set(rows.map((r) => r.week)).size).toBe(16)
     expect(await membership()).toMatchObject({ 'Perf grid': { Cindy: 'LEAD', Ivy: 'MEMBER', Mint: 'MEMBER' } })
+  })
+})
+
+describe('M7 — addDayExample (SPEC A.2, M7-D16; plan/m07 S0.7)', () => {
+  /** The golden window [2026-08-31, 2027-01-04) (r8 §6.10), bounded like every allocations query. */
+  const win = and(gte(allocations.weekStart, '2026-08-31'), lt(allocations.weekStart, '2027-01-04'))
+  const cdOf = (pd: string | null | undefined): number => Math.round(Number(pd ?? '0') * 100)
+
+  async function totals(where = win) {
+    const committed = sql<string>`coalesce(sum(${allocations.personDays}) filter (where coalesce(${tasks.certaintyOverride}, ${projects.certainty}) = 'CONFIRMED'), 0)::text`
+    const [r] = await db
+      .select({ total: sql<string>`coalesce(sum(${allocations.personDays}), 0)::text`, committed })
+      .from(allocations)
+      .innerJoin(taskAssignments, eq(taskAssignments.id, allocations.taskAssignmentId))
+      .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(where)
+    return { total: cdOf(r?.total), committed: cdOf(r?.committed) }
+  }
+
+  async function weekOf(nickname: string, week: string): Promise<number> {
+    const [r] = await db
+      .select({ total: sql<string>`coalesce(sum(${allocations.personDays}), 0)::text` })
+      .from(allocations)
+      .innerJoin(taskAssignments, eq(taskAssignments.id, allocations.taskAssignmentId))
+      .innerJoin(user, eq(user.id, taskAssignments.userId))
+      .where(and(eq(user.nickname, nickname), eq(allocations.weekStart, week)))
+    return cdOf(r?.total)
+  }
+
+  it('Mobile gets "Kickoff workshop" last, 2 assignments and exactly 2 DAY rows of 0.50 on 2026-09-07', async () => {
+    await seedGolden(db)
+    const { taskId, assignmentIds } = await addDayExample(db)
+    const [mobile] = await db.select().from(projects).where(eq(projects.name, DAY_EXAMPLE.project))
+    const roots = await db
+      .select({ id: tasks.id, name: tasks.name, depth: tasks.depth, override: tasks.certaintyOverride })
+      .from(tasks)
+      .where(
+        and(eq(tasks.projectId, mobile!.id), sql`${tasks.parentId} is null`, sql`${tasks.deletedAt} is null`),
+      )
+      .orderBy(sql`${tasks.position} collate "C"`, asc(tasks.id))
+    expect(roots).toHaveLength(3)
+    expect(roots.at(-1)).toEqual({ id: taskId, name: 'Kickoff workshop', depth: 0, override: null })
+    const as = await db
+      .select({ id: taskAssignments.id, nickname: user.nickname, version: taskAssignments.version })
+      .from(taskAssignments)
+      .innerJoin(user, eq(user.id, taskAssignments.userId))
+      .where(and(eq(taskAssignments.taskId, taskId), sql`${taskAssignments.deletedAt} is null`))
+    expect(as.map((a) => a.nickname).sort()).toEqual(['Jack', 'Mint'])
+    expect(as.every((a) => a.version === 1)).toBe(true)
+    expect(new Set(as.map((a) => a.id))).toEqual(new Set([assignmentIds.Jack, assignmentIds.Mint]))
+    const rows = await db
+      .select({
+        granularity: allocations.granularity,
+        period: allocations.periodStart,
+        week: allocations.weekStart,
+        pd: allocations.personDays,
+      })
+      .from(allocations)
+      .where(and(inArray(allocations.taskAssignmentId, [assignmentIds.Jack, assignmentIds.Mint]), win))
+    expect(rows).toEqual([
+      { granularity: 'DAY', period: '2026-09-07', week: '2026-09-07', pd: '0.50' },
+      { granularity: 'DAY', period: '2026-09-07', week: '2026-09-07', pd: '0.50' },
+    ])
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(inArray(auditLog.entityId, [taskId, assignmentIds.Jack, assignmentIds.Mint]))
+    expect(audits.map((a) => `${a.entity}:${a.action}`).sort()).toEqual([
+      'allocation:create',
+      'allocation:create',
+      'task:create',
+    ])
+    expect(audits.every((a) => a.actorId === null && a.projectId === mobile!.id)).toBe(true)
+    expect(audits.find((a) => a.entity === 'task')?.summary).toBe(th.audit.taskCreated('Kickoff workshop'))
+    expect(audits.filter((a) => a.entity === 'allocation').map((a) => a.summary)).toEqual([
+      th.audit.allocationsSeeded(1),
+      th.audit.allocationsSeeded(1),
+    ])
+  })
+
+  it('totals over [2026-08-31, 2027-01-04): all 19 600 / 11 725 cd, Mobile 5 975, Jack 09-07 = 300, Mint 09-07 = 50 (r8 §6.10)', async () => {
+    await seedGolden(db)
+    await addDayExample(db)
+    expect(await totals()).toEqual({ total: 19600, committed: 11725 })
+    expect((await totals(and(win, eq(projects.name, DAY_EXAMPLE.project)))).total).toBe(5975)
+    expect(await weekOf('Jack', '2026-09-07')).toBe(300)
+    expect(await weekOf('Mint', '2026-09-07')).toBe(50)
+  })
+
+  it('is idempotent: a second call returns the same ids and leaves 2 DAY rows', async () => {
+    await seedGolden(db)
+    const first = await addDayExample(db)
+    const second = await addDayExample(db)
+    expect(second).toEqual(first)
+    const rows = await db
+      .select({ id: allocations.id })
+      .from(allocations)
+      .where(and(inArray(allocations.taskAssignmentId, Object.values(first.assignmentIds)), win))
+    expect(rows).toHaveLength(2)
+    const [{ n } = { n: 0 }] = await db
+      .select({ n: count() })
+      .from(tasks)
+      .where(eq(tasks.name, DAY_EXAMPLE.task))
+    expect(n).toBe(1)
   })
 })

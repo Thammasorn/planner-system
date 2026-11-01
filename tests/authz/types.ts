@@ -22,7 +22,16 @@ export interface AuthzRow<C = unknown> {
   mutates: boolean
   /** required for mutating rows unless explicitly false (X44 exceptions). projectId: omitted → the audit row's
    *  project_id must be null; a function → must equal its result; 'any' → not checked (rows that create a project). */
-  audit?: { entity: MatrixAuditEntity; projectId?: ((w: World, ctx: C) => string | null) | 'any' } | false
+  audit?:
+    | {
+        entity: MatrixAuditEntity
+        projectId?: ((w: World, ctx: C) => string | null) | 'any'
+        /** M7 (X44, AL-D-HIDDEN): a batch that changes N assignments writes N rows (default 1). With `count > 1`
+         *  every row must match entity + actor, and `projectIds` (when given) is the multiset of their project_id. */
+        count?: number
+        projectIds?: (w: World, ctx: C) => (string | null)[]
+      }
+    | false
   /** action allowed while mustChangePassword */
   allowMustChange?: boolean
   /** world parts the row needs (X91); default [] */

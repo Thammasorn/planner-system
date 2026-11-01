@@ -13,7 +13,13 @@ import path from 'node:path'
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
-import { addSyntheticGridProject, applyFixture, seedGolden, type FixtureId } from '../scripts/lib/fixtures'
+import {
+  addDayExample,
+  addSyntheticGridProject,
+  applyFixture,
+  seedGolden,
+  type FixtureId,
+} from '../scripts/lib/fixtures'
 import { clients, pages, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
@@ -98,6 +104,8 @@ export type ResetDbOptions = {
   extras?: (tx: Tx) => Promise<unknown>
   /** M6-D22 / G15: adds the "Perf grid" project (200 leaf tasks × 16 WEEK rows from 2026-09-28) after the seed. */
   syntheticGrid?: boolean
+  /** M7 (M7-D16): SPEC A.2 "Kickoff workshop" — Jack + Mint 0.5 DAY on 2026-09-07 in Mobile App Revamp. */
+  dayExample?: boolean
 }
 
 /**
@@ -113,6 +121,7 @@ export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): P
       await seedGolden(tx)
       if (fixture !== undefined) await applyFixture(tx, fixture) // M5 (X11): F1 + that fixture's own setup only
       if (opts.syntheticGrid) await addSyntheticGridProject(tx, { tasks: 200, weeks: 16, from: '2026-09-28' }) // M6
+      if (opts.dayExample) await addDayExample(tx) // M7
       await opts.extras?.(tx)
     })
   } finally {

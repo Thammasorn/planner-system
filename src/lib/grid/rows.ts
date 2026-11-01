@@ -98,11 +98,11 @@ export function buildViewRows(
   return out
 }
 
-export type Editability = 'ok' | 'readOnlyRow' | 'unassigned' | 'archived' | 'dayWeek' | 'noEdit'
+export type Editability = 'ok' | 'readOnlyRow' | 'unassigned' | 'archived' | 'noEdit'
 
 /**
  * M6-D11. Order: archived (banner) → noEdit (context.canEdit false or the row is not editable) → readOnlyRow /
- * unassigned → dayWeek → ok. (An archived project always has canEdit false, so `archived` is checked first to give
+ * unassigned → ok. M7 (X27): DAY-resolution weeks are editable (BR-22/24), so `cell` no longer matters. (An archived project always has canEdit false, so `archived` is checked first to give
  * the more specific reason.) Completed tasks and deactivated assignees stay editable.
  */
 export function cellEditability(row: ViewRow, cell: AssigneeCell | undefined, m: GridModel): Editability {
@@ -111,6 +111,6 @@ export function cellEditability(row: ViewRow, cell: AssigneeCell | undefined, m:
   if (row.kind === 'task')
     return row.task.hasChildren || row.task.assigneeCount > 0 ? 'readOnlyRow' : 'unassigned'
   if (!row.assignee.editable) return 'noEdit'
-  if (cell?.resolution === 'DAY') return 'dayWeek'
+  void cell // kept in the signature for later milestones (M9 masked rows)
   return 'ok'
 }

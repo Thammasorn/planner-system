@@ -557,3 +557,217 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/* ── M7 day resolution (plan/m07 S3.3–S3.5, S3.10; §8.4, §8.9) ── */
+
+/* week header toggle: the header's own look, a real button (aria-expanded) for keyboard and AT */
+.headerToggle {
+  border: 0;
+  padding: 0 var(--space-1);
+  margin: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.headerToggle:hover {
+  background: var(--hover-bg);
+}
+
+.headerToggle:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.dayHeader,
+.weekTotalHeader {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  user-select: none;
+}
+
+/* line 1 (week label / collapse button) spans the whole day group from the first day column */
+.dayHeader[data-first-day='true'] {
+  z-index: 1;
+}
+
+.dayHeaderWeek {
+  display: block;
+  min-height: 1lh;
+  white-space: nowrap;
+  text-align: left;
+  /* the label spans the whole week group (width = groupWidth) over the other day headers: let pointer events reach
+     them (holiday tooltip, FR-807) and keep only the toggle button itself interactive */
+  pointer-events: none;
+}
+
+.dayHeaderWeek > * {
+  pointer-events: auto;
+}
+
+.dayHeaderDay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--space-1) / 2);
+}
+
+.dayHeader[data-today='true'] {
+  color: var(--mui-palette-text-primary);
+  font-weight: var(--weight-bold);
+  box-shadow: inset 0 -3px 0 var(--today);
+}
+
+.dayHeader[data-holiday='true'] {
+  background: var(--holiday);
+}
+
+.weekTotalHeader {
+  align-items: center;
+  font-weight: var(--weight-bold);
+  background: var(--surface-muted);
+}
+
+/* day cells: holidays grey for every row; derived values dashed + faded token (never opacity, X51 / M7-D20) */
+.cell[data-col-kind='D'] {
+  justify-content: center;
+}
+
+.cell[data-holiday='true'] {
+  background-color: var(--holiday);
+}
+
+.derivedValue {
+  color: var(--faded-fg);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+
+.cell[data-pending-choice='true'] {
+  font-style: italic;
+  outline: 1px dashed var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.cell[aria-busy='true'] {
+  cursor: progress;
+}
+
+.busyPlaceholder {
+  color: var(--faded-fg);
+  animation: busyPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes busyPulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busyPlaceholder {
+    animation: none;
+  }
+}
+
+.warnGlyph {
+  color: var(--load-light-fg);
+}
+
+/* ↕ รวมเป็นรายสัปดาห์ in the รวม cell of a DAY week: visible on hover and on focus within the row */
+.collapseButton {
+  margin-right: auto;
+  border: 0;
+  padding: 0 calc(var(--space-1) / 2);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+
+.row:hover .collapseButton,
+.row:focus-within .collapseButton {
+  opacity: 1;
+}
+
+.collapseButton:hover {
+  background: var(--hover-bg);
+}
+
+@media (pointer: coarse) {
+  .collapseButton {
+    opacity: 1;
+  }
+}
+
+/* footer day tones (BR-45, X51/X67): always with the glyph and the number */
+.footerCell[data-tone='light'] {
+  background: var(--load-light-bg);
+  color: var(--load-light-fg);
+}
+
+.footerCell[data-tone='full'] {
+  background: var(--load-full-bg);
+  color: var(--load-full-fg);
+}
+
+.footerCell[data-tone='over'] {
+  background: var(--load-over-bg);
+  color: var(--load-over-fg);
+}
+
+.footerCell[data-tone='noCapacity'] {
+  background: var(--nonworking);
+}
+
+.footerCell[data-palette='tentative'][data-tone='light'],
+.footerCell[data-palette='tentative'][data-tone='full'] {
+  background: var(--tentative-bg);
+  color: var(--tentative-fg);
+}
+
+.zoomGroup {
+  gap: var(--space-1);
+}
+
+/* BR-24 dialog */
+.br24Line {
+  margin: 0 0 var(--space-2);
+}
+
+.br24List {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-4);
+}
+
+.br24Choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.br24Choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  text-align: left;
+  text-transform: none;
+}
+
+.br24ChoiceTitle {
+  font-weight: var(--weight-bold);
+  font-size: var(--font-md);
+}

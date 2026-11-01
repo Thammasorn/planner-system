@@ -3,6 +3,7 @@
 import { th } from '@/i18n/th'
 import { z } from '@/lib/z'
 import { ERROR_STATUS, type ActionError, type ErrorCode } from '@/lib/action-result'
+import type { NeedsChoicePayload } from '@/lib/contracts/grid'
 
 export type { ErrorCode } from '@/lib/action-result'
 
@@ -73,6 +74,18 @@ export type ConflictCode =
 export class ConflictError extends AppError {
   constructor(code: ConflictCode, message?: string, extra?: Extra) {
     super(code, message, extra)
+  }
+}
+
+/** BR-24 (M7-D3, X85): a WEEK change on a DAY week needs SCALE or COLLAPSE (409); `{ week, weeks, pairs }` ride along
+ *  on the action result. Thrown before any write, so nothing is written, no version moves and no audit row exists. */
+export class NeedsChoiceError extends AppError {
+  readonly payload: NeedsChoicePayload
+
+  constructor(payload: NeedsChoicePayload) {
+    super('NEEDS_CHOICE', th.errors.NEEDS_CHOICE, { week: payload.week, weeks: payload.weeks, pairs: payload.pairs })
+    this.name = 'NeedsChoiceError'
+    this.payload = payload
   }
 }
 

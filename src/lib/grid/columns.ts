@@ -1,7 +1,7 @@
 // src/lib/grid/columns.ts — the client column model (FR-801, PLAN §3.10, M6-D15, M6-D35). Pure and isomorphic.
 // The GridColumn shape and the buildColumns signature are M7's (plan/m07 S3.1): M6 is the base (week columns only),
-// M7 replaces the RangeError branch with day / "รวม" columns without changing a signature (G26).
-import { addWeeks, diffDays, weekStart } from '@/domain/dates'
+// M7 adds the day / "รวม" columns of expanded weeks without changing a signature (G26).
+import { addWeeks, daysOfWeek, diffDays, weekStart } from '@/domain/dates'
 import type { ISODate, PeriodKey } from '@/domain/types'
 
 export const WEEK_W = 64
@@ -60,31 +60,72 @@ export function timelineWeeks(today: ISODate): ISODate[] {
   return out
 }
 
+export const DAY_W = 44
+export const WEEK_TOTAL_W = 52
+export const WIDTH = { week: WEEK_W, day: DAY_W, weekTotal: WEEK_TOTAL_W } as const
+
 /**
- * M6: one { kind: 'W', role: 'week', key: `W:${w}`, weekStart: w, date: w, width: WEEK_W } per week, offsets
- * cumulative from 0. M6 always passes `new Set()` / `new Map()`; a non-empty `expanded` throws until M7.
+ * Collapsed week → one { kind: 'W', role: 'week', key: `W:${w}`, width: WEEK_W }. M7 (M7-D10): an expanded week → its
+ * day columns (dates from dayDatesByWeek.get(week), i.e. the loaded chunk's D: periods; Mon–Fri placeholders while
+ * absent), each { kind: 'D', role: 'day', key: `D:${d}`, weekStart: week, date: d, width: DAY_W }, then one
+ * { kind: 'W', role: 'weekTotal', key: `W:${week}`, date: week, width: WEEK_TOTAL_W }. Offsets cumulative from 0.
  */
 export function buildColumns(
   weeks: readonly ISODate[],
   expanded: ReadonlySet<ISODate>,
   dayDatesByWeek: ReadonlyMap<ISODate, readonly ISODate[]>,
 ): GridColumn[] {
-  void dayDatesByWeek // M7 reads it for the day columns of expanded weeks
-  if (expanded.size > 0) throw new RangeError('day columns arrive in M7')
   let offset = 0
-  return weeks.map((w) => {
-    const col: GridColumn = {
-      key: `W:${w}`,
-      kind: 'W',
-      role: 'week',
-      weekStart: w,
-      date: w,
-      width: WEEK_W,
-      offset,
+  const out: GridColumn[] = []
+  const push = (c: Omit<GridColumn, 'offset'>) => {
+    out.push({ ...c, offset })
+    offset += c.width
+  }
+  for (const w of weeks) {
+    if (!expanded.has(w)) {
+      push({ key: `W:${w}`, kind: 'W', role: 'week', weekStart: w, date: w, width: WEEK_W })
+      continue
     }
-    offset += WEEK_W
-    return col
-  })
+    const dates = dayDatesByWeek.get(w) ?? daysOfWeek(w).slice(0, 5)
+    for (const d of dates) push({ key: `D:${d}`, kind: 'D', role: 'day', weekStart: w, date: d, width: DAY_W })
+    push({ key: `W:${w}`, kind: 'W', role: 'weekTotal', weekStart: w, date: w, width: WEEK_TOTAL_W })
+  }
+  return out
+}
+
+/** The sticky "รวม" column's width as a CSS length (VirtualGrid sets --grid-total-w, see stickyTotalWidth). */
+export const TOTAL_COL_W = `var(--grid-total-w, ${TOTAL_W}px)`
+
+/**
+ * SPEC §8.12 / D19: the sticky "รวม" column absorbs the space left of it that no whole column fills, so it always abuts
+ * the last fully visible week / day column instead of sitting beside a clipped sliver of the next one, at any container
+ * width and in day zoom (mixed 44 / 52 / 64 px columns). `scrollLeft` / `viewportW` are the scroller's
+ * scrollLeft and clientWidth, `nameW` the frozen name column. Never below TOTAL_W; TOTAL_W until measured.
+ */
+export function stickyTotalWidth(
+  cols: readonly GridColumn[],
+  scrollLeft: number,
+  viewportW: number,
+  nameW: number,
+): number {
+  if (viewportW <= 0 || cols.length === 0) return TOTAL_W
+  // column-offset space: a column is whole when its right edge is at or left of `limit`
+  const limit = scrollLeft + viewportW - nameW - TOTAL_W
+  let lo = 0
+  let hi = cols.length - 1
+  let last = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const c = cols[mid]!
+    if (c.offset + c.width <= limit) {
+      last = mid
+      lo = mid + 1
+    } else hi = mid - 1
+  }
+  if (last < 0) return TOTAL_W
+  const edge = cols[last]!.offset + cols[last]!.width - scrollLeft // right edge, relative to the end of the name column
+  if (edge <= 0) return TOTAL_W // no whole column right of the name column (very narrow grid)
+  return Math.max(TOTAL_W, Math.ceil(viewportW - nameW - edge)) // ceil: overlap a sub-pixel, never a gap
 }
 
 /** ★ M8 places ◆ with it; −1 when absent. */

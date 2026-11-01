@@ -56,8 +56,8 @@ describe('world fixture (X91)', () => {
   })
 
   it('parts without a builder throw; part fields of an unbuilt part throw on access', async () => {
-    await expect(createWorld({ with: ['dayAllocations'] })).rejects.toThrow(
-      'world part dayAllocations has no builder yet',
+    await expect(createWorld({ with: ['milestones'] })).rejects.toThrow(
+      'world part milestones has no builder yet',
     )
     const w = await createWorld()
     expect(() => w.tasks.pLeaf).toThrow("needs createWorld({ with: ['tasks'] })")
@@ -68,6 +68,7 @@ describe('world fixture (X91)', () => {
     expect(() => w.leaveTypes.vacation).toThrow("needs createWorld({ with: ['timeOff'] })")
     expect(() => w.timeOff.coworker).toThrow("needs createWorld({ with: ['timeOff'] })")
     expect(() => w.batches.coworkerDeletedTimeOff).toThrow("needs createWorld({ with: ['timeOff'] })")
+    expect(() => w.dayWeeks.pDay).toThrow("needs createWorld({ with: ['dayAllocations'] })")
     expect(() => w.allocations.pLeafLead).toThrow("needs createWorld({ with: ['allocations'] })")
     expect(() => w.taskBodies.pLeafBody).toThrow("needs createWorld({ with: ['taskBodies'] })")
   })
@@ -394,5 +395,36 @@ describe('world fixture (X91)', () => {
     ])
     for (const id of Object.values(a).map((x) => x.id)) expect(await assignmentVersion(id)).toBe(1)
     await assertCompletionInvariant()
+  })
+
+  it('M7 with dayAllocations: implies allocations; DAY/WEEK rows on M6 assignments; versions stay 1 (plan/m07 S0.9)', async () => {
+    expect([...expandParts(['dayAllocations'])].sort()).toEqual([
+      'allocations',
+      'dayAllocations',
+      'tasks',
+      'timeOff',
+    ])
+    const w = await createWorld({ with: ['dayAllocations'] })
+    const a = w.assignments
+    const W = (cd: number, week: string) => ({ granularity: 'WEEK', periodStart: week, cd })
+    const D = (cd: number, day: string) => ({ granularity: 'DAY', periodStart: day, cd })
+    expect(w.dayWeeks).toEqual({
+      pWeek: '2026-11-02',
+      pDay: '2026-11-09',
+      aDay: '2026-11-09',
+      qDay: '2026-11-09',
+    })
+    expect(await allocationRows(a.pLeafLead.id, '2026-11-02')).toEqual([W(250, '2026-11-02')])
+    expect(await allocationRows(a.pLeafLead.id, '2026-11-09')).toEqual([
+      D(100, '2026-11-09'),
+      D(100, '2026-11-10'),
+      D(50, '2026-11-11'),
+    ])
+    expect(await allocationRows(a.aTaskMember.id, '2026-11-09')).toEqual([D(50, '2026-11-09')])
+    expect(await allocationRows(a.qTaskCoworker.id, '2026-11-09')).toEqual([D(75, '2026-11-10')])
+    // M6's rows are untouched
+    expect(await allocationRows(a.qTaskCoworker.id, '2026-10-05')).toEqual([W(300, '2026-10-05')])
+    expect(await allocationRows(a.pLeafLead.id, '2026-09-28')).toEqual([W(250, '2026-09-28')])
+    for (const id of Object.values(a).map((x) => x.id)) expect(await assignmentVersion(id)).toBe(1)
   })
 })

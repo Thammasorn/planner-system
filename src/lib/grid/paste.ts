@@ -1,13 +1,14 @@
 // src/lib/grid/paste.ts — paste tiling (SPEC §4.8, AC-803, X65, M6-D28). Pure.
-import { parseCellInput } from '@/domain/units'
 import type { CellUnit } from '@/domain/types'
-import { MAX_WEEK_CD, type TargetCell } from './apply'
+import { parseFor, type TargetCell } from './apply'
+import { writeFor } from './day-input'
 import type { CellWrite } from './queue'
 
 /**
  * A selection whose height and width are exact multiples of the block (and larger) is tiled; otherwise the block is
- * pasted once from the top-left. Cells past the grid edge are dropped; read-only and DAY-week targets are skipped
- * (not shifted); empty tokens clear; each token is parsed against its target's own capacity (fraction unit).
+ * pasted once from the top-left. Cells past the grid edge (or the caller's same-kind run, `null` targets) are dropped;
+ * read-only targets are skipped (not shifted); empty tokens clear; each token is parsed against its target's own
+ * capacity (fraction unit; day cells: the day's capacity and ≤ 1 day). M7: DAY weeks are written (X27).
  */
 export function planPaste(
   block: readonly (readonly string[])[],
@@ -35,15 +36,9 @@ export function planPaste(
         skippedReadOnly++
         continue
       }
-      const p = parseCellInput(token, { unit, capCd: t.capCd, maxCd: MAX_WEEK_CD })
-      if (p.kind === 'value' || p.kind === 'clear') {
-        writes.push({
-          taskAssignmentId: t.taskAssignmentId,
-          granularity: 'WEEK',
-          period: t.week,
-          cd: p.kind === 'value' ? p.cd : null,
-        })
-      } else invalid++
+      const p = parseFor(token, t, unit)
+      if (p.kind === 'value' || p.kind === 'clear') writes.push(writeFor(t, p.kind === 'value' ? p.cd : null))
+      else invalid++
     }
   }
   return { writes, pasted: writes.length, skippedReadOnly, invalid }

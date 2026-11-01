@@ -3,14 +3,17 @@ import { th } from '@/i18n/th'
 import styles from './StatusGlyph.module.css'
 import { VisuallyHidden } from './VisuallyHidden'
 
-/** M6 kinds (FR-807/808, BR-20a, §8.9). M7 adds 'over' | 'risk'. */
-export type StatusGlyphKind = 'leave' | 'holiday' | 'tentative' | 'dayDetail' | 'noCapacity'
+/** M6 kinds (FR-807/808, BR-20a, §8.9) + M7 BR-40 day levels 'over' (🔴) | 'risk' (⚠). Callers of over/risk pass
+ *  `label` with the full status text (`th.overload.dayStatus(...)`). */
+export type StatusGlyphKind = 'leave' | 'holiday' | 'tentative' | 'dayDetail' | 'noCapacity' | 'over' | 'risk'
 
 const GLYPHS: Readonly<Record<Exclude<StatusGlyphKind, 'leave'>, string>> = {
   holiday: '🎌',
   tentative: '◐',
   dayDetail: '⋯',
   noCapacity: '▨',
+  over: th.overload.glyph.OVER,
+  risk: th.overload.glyph.RISK,
 }
 
 /**

@@ -36,12 +36,8 @@ export type WeekPlan = { resolution: null } | { resolution: 'WEEK'; weekCd: Cd }
 export type WeekChange = { granularity: 'WEEK'; cd: Cd | null } | { granularity: 'DAY'; dayIndex: number; cd: Cd | null }
 export type PlanWeekResult =
   | { kind: 'ok'; next: WeekPlan; changed: boolean; warnings: DayWarning[] }
-  | { kind: 'needsChoice' } // M6: mapped to VALIDATION DAY_WEEK by the service
-  | {
-      kind: 'invalid'
-      reason: 'MAX' | 'NEGATIVE' | 'MIXED_WEEK_AND_DAY' | 'UNREPRESENTABLE' | 'DAY_WEEK'
-      dayIndex?: number
-    }
+  | { kind: 'needsChoice' } // BR-24: the service answers NEEDS_CHOICE (M7-D3)
+  | { kind: 'invalid'; reason: 'MAX' | 'NEGATIVE' | 'MIXED_WEEK_AND_DAY' | 'UNREPRESENTABLE'; dayIndex?: number }
 
 /** BR-26 maxima. */
 const WEEK_MAX_CD = 700
@@ -191,7 +187,68 @@ export function clampAndSpill(
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// ★ planWeek — the per-(item, week) table, M6 subset (M6-D4, M6-D34)
+// M7 day-level steps (BR-22, BR-23, BR-24 SCALE, M7-D7/D8)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Warnings of a stored DAY week (S1.4): SPILLED_OVER_DAY_LIMIT once when `spilled`, then WORK_ON_NON_WORKING_DAY
+ * for every day with work and dayCaps 0, then ALLOCATED_ON_TIME_OFF for every day with work on leave (M7-D15).
+ */
+export function dayWarnings(days: readonly Cd[], ctx: DayCtx, spilled: boolean): DayWarning[] {
+  assertCtx(ctx)
+  assertDays7(days, 'days')
+  const out: DayWarning[] = spilled ? [{ code: 'SPILLED_OVER_DAY_LIMIT' }] : []
+  days.forEach((v, i) => {
+    if (v > 0 && ctx.dayCaps[i] === 0) out.push({ code: 'WORK_ON_NON_WORKING_DAY', dayIndex: i })
+  })
+  days.forEach((v, i) => {
+    if (v > 0 && ctx.timeOff[i] === true) out.push({ code: 'ALLOCATED_ON_TIME_OFF', dayIndex: i })
+  })
+  return out
+}
+
+function withWarnings(r: StepResult, ctx: DayCtx): StepResult {
+  return r.ok ? { ...r, warnings: dayWarnings(r.days, ctx, r.spilled) } : r
+}
+
+/**
+ * BR-22 (M7-D8): the BR-21 split of `weekCd`, with the edited days fixed to their values (always materialises,
+ * even when a value equals the derived one); the rest is clamped at 100 and spilled in X65 order (M7-D7).
+ */
+export function materializeWithEdits(weekCd: Cd, edits: ReadonlyMap<number, Cd>, ctx: DayCtx): StepResult {
+  const values = spreadWeek(weekCd, ctx).days
+  for (const [i, cd] of edits) {
+    if (!(Number.isSafeInteger(i) && i >= 0 && i < DAYS_PER_WEEK)) throw new RangeError(`dayIndex must be 0..6, got ${i}`)
+    assertNonNegativeInt(cd, 'edit cd')
+    if (cd > DAY_MAX_CD) throw new RangeError(`edit cd must be ≤ ${DAY_MAX_CD}, got ${cd}`)
+    values[i] = cd
+  }
+  return withWarnings(clampAndSpill(values, new Set(edits.keys()), ctx), ctx)
+}
+
+/** BR-24 SCALE: largest remainder of `newTotal` by the current days, then clamp-and-spill (nothing fixed). */
+export function scaleDays(days: readonly Cd[], newTotal: Cd, ctx: DayCtx): StepResult {
+  assertDays7(days, 'days')
+  return withWarnings(clampAndSpill(distribute(newTotal, days), new Set(), ctx), ctx)
+}
+
+/** BR-23: the WEEK total of a DAY week. */
+export function collapseDays(days: readonly Cd[]): Cd {
+  return sum(days)
+}
+
+/** What the grid shows for one week (SPEC §5.3 invariant 3): WEEK → BR-21 split (derived, never clamped). */
+export function displayDays(
+  plan: WeekPlan,
+  ctx: DayCtx,
+): { days: Cd[]; derived: boolean; fallback: null | 'SCHEDULE' | 'WEEKDAYS' } {
+  if (plan.resolution === 'WEEK') return { ...spreadWeek(plan.weekCd, ctx), derived: true }
+  if (plan.resolution === 'DAY') return { days: [...plan.days], derived: false, fallback: null }
+  return { days: zeros(), derived: false, fallback: null }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// ★ planWeek — the per-(item, week) table (M6-D4, M7 S1.8)
 // ---------------------------------------------------------------------------------------------------------------
 
 export function weekPlanTotal(plan: WeekPlan): Cd {
@@ -211,12 +268,12 @@ function ok(current: WeekPlan, next: WeekPlan, warnings: DayWarning[] = []): Pla
 }
 
 /**
- * Applies one item's changes to one week (M6-D4). Rules in order:
+ * Applies one item's changes to one week (M6-D4, completed by M7 S1.8). Rules in order:
  * 1. empty → unchanged; WEEK + DAY → MIXED_WEEK_AND_DAY; cd < 0 → NEGATIVE; WEEK > 700 / DAY > 100 → MAX.
- * 2. WEEK (last wins, null → 0): null/WEEK → WEEK x; DAY → 0 clears, COLLAPSE → WEEK x (before the Σ no-op,
- *    M7-D2), x = Σ days → unchanged, otherwise needsChoice (SCALE included — M7).
- * 3. DAY (per day, last wins, null → 0): null/DAY → set days; WEEK → only a full 7-day snapshot replaces it,
- *    otherwise DAY_WEEK (M7: BR-22).
+ * 2. WEEK (last wins, null → 0): null/WEEK → WEEK x; DAY → 0 clears (M7-D5), COLLAPSE → WEEK x (before the Σ
+ *    no-op: BR-23, M7-D2), x = Σ days → unchanged (M7-D5), SCALE → scaleDays (BR-24), otherwise needsChoice.
+ * 3. DAY (per day, last wins, null → 0): null/DAY → set days (+ dayWarnings); WEEK → materializeWithEdits (BR-22;
+ *    a full 7-day snapshot fixes every day, so it replays exactly). Clamp failure → UNREPRESENTABLE.
  */
 export function planWeek(
   current: WeekPlan,
@@ -248,16 +305,22 @@ export function planWeek(
     if (x === 0) return ok(cur, NULL_PLAN)
     if (choice === 'COLLAPSE') return ok(cur, weekPlan(x), weekNoCapacity(x, ctx))
     if (x === sum(cur.days)) return ok(cur, cur)
+    if (choice === 'SCALE') return fromStep(cur, scaleDays(cur.days, x, ctx))
     return { kind: 'needsChoice' }
   }
 
   const edits = new Map<number, Cd>()
   const dayChanges = changes.filter((c): c is Extract<WeekChange, { granularity: 'DAY' }> => c.granularity === 'DAY')
   for (const c of dayChanges) edits.set(c.dayIndex, c.cd ?? 0)
-  if (cur.resolution === 'WEEK' && edits.size < DAYS_PER_WEEK) return { kind: 'invalid', reason: 'DAY_WEEK' }
+  if (cur.resolution === 'WEEK') return fromStep(cur, materializeWithEdits(cur.weekCd, edits, ctx))
   const days = cur.resolution === 'DAY' ? [...cur.days] : zeros()
   for (const [i, cd] of edits) days[i] = cd
-  return ok(cur, dayPlan(days))
+  return ok(cur, dayPlan(days), dayWarnings(days, ctx, false))
+}
+
+function fromStep(cur: WeekPlan, r: StepResult): PlanWeekResult {
+  if (!r.ok) return { kind: 'invalid', reason: r.reason }
+  return ok(cur, dayPlan(r.days), r.warnings)
 }
 
 // ---------------------------------------------------------------------------------------------------------------

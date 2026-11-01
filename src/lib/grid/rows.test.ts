@@ -109,8 +109,8 @@ describe('cellEditability (M6-D11)', () => {
   it('unassigned leaf → unassigned', () => {
     expect(cellEditability(byKey('t:child-b'), undefined, m)).toBe('unassigned')
   })
-  it('DAY week → dayWeek', () => {
-    expect(cellEditability(byKey('a:a-mix'), cellOf('a:a-mix', 'W:2026-10-12'), m)).toBe('dayWeek')
+  it('DAY week → ok (M7, X27: DAY weeks are editable)', () => {
+    expect(cellEditability(byKey('a:a-mix'), cellOf('a:a-mix', 'W:2026-10-12'), m)).toBe('ok')
   })
   it('archived project → archived; canEdit false → noEdit', () => {
     const am = model({ archived: true })

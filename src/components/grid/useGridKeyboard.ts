@@ -1,7 +1,8 @@
 'use client'
 // src/components/grid/useGridKeyboard.ts — ★ one keydown handler on the grid root (SPEC §4.8, §8.6, X49, M6-D27/D32).
 // e.code first (src/lib/grid/keymap.ts); every handled action calls preventDefault (Cmd+←/→ would go Back, Cmd+S would
-// save the page). Undo / redo go to the shared M1 stack. Mod+↑/↓ stay unmapped for M7.
+// save the page). Undo / redo go to the shared M1 stack. M7: Mod+↓ / Mod+↑ expand / collapse the focused week (view
+// only, no-ops in day zoom — PlanGrid decides), Shift+F10 / ContextMenu open the cell menu.
 import type { KeyboardEvent, RefObject } from 'react'
 import { gridKeyAction } from '@/lib/grid/keymap'
 import { movePos } from '@/lib/grid/selection'
@@ -19,6 +20,11 @@ export interface GridKeyHandlers {
   /** Enter on a selected row header: open the task panel (same as double-click; ↗ is the page link, M6.1-D17) */
   openRow: () => void
   rowDeletable: () => boolean
+  /** M7: Mod+↓ on a week cell; Mod+↑ on a day / รวม cell (view only) */
+  expandWeek: () => void
+  collapseWeek: () => void
+  /** M7: Shift+F10 / ContextMenu key on a cell */
+  cellMenu: () => void
 }
 
 export function useGridKeyboard(
@@ -131,6 +137,15 @@ export function useGridKeyboard(
         break
       case 'selectRow':
         handlers.selectRow()
+        break
+      case 'expandWeek':
+        handlers.expandWeek()
+        break
+      case 'collapseWeek':
+        handlers.collapseWeek()
+        break
+      case 'cellMenu':
+        handlers.cellMenu()
         break
     }
   }

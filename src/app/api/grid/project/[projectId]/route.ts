@@ -1,4 +1,4 @@
-// GET /api/grid/project/[projectId]?from&to&includeOthers — one planning-grid chunk (§3.2 PERM-06, SPEC §7.4, X65).
+// GET /api/grid/project/[projectId]?from&to&includeOthers&expand&zoom — one planning-grid chunk (§3.2 PERM-06, SPEC §7.4, X65).
 // Query parse (400) precedes authz (gridQuerySchema in the wrapper); a malformed id → 404 (X86); default window
 // −4/+12 weeks around serverToday(); one REPEATABLE READ read-only tx; services.grid.buildChunk calls
 // authz.requireProject(…, 'view') first (archived readable, X42).
@@ -29,7 +29,7 @@ export const GET = route<{ projectId: string }, typeof gridQuerySchema>(
           tx,
           user,
           { kind: 'project', id: id.data },
-          { from, to, expand: [], zoom: 'week', includeOthers: query.includeOthers },
+          { from, to, expand: query.expand, zoom: query.zoom, includeOthers: query.includeOthers },
           today,
         ),
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
