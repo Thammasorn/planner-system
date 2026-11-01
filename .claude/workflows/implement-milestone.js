@@ -14,8 +14,8 @@ export const meta = {
 }
 
 // ───────────────────────── parameters ─────────────────────────
-// Milestone order (SPEC §12). M6.1 is a catch-up milestone between M6 and M7 (SPEC v3.2).
-const ORDER = ['0', '1', '2', '3', '4', '5', '6', '6.1', '7', '8', '9', '10', '11', '12']
+// Milestone order (SPEC §12). M6.1 and M7.1 are catch-up milestones (SPEC v3.2, v3.3).
+const ORDER = ['0', '1', '2', '3', '4', '5', '6', '6.1', '7', '7.1', '8', '9', '10', '11', '12']
 const KEY = String(args && args.milestone)
 const IDX = ORDER.indexOf(KEY)
 if (IDX < 0) throw new Error('args.milestone must be one of ' + ORDER.join(', '))
