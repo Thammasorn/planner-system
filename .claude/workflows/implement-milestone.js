@@ -22,7 +22,8 @@ if (IDX < 0) throw new Error('args.milestone must be one of ' + ORDER.join(', ')
 const N = Number(KEY)
 const PREV = IDX > 0 ? ORDER[IDX - 1] : null
 const NEXT = IDX < ORDER.length - 1 ? ORDER[IDX + 1] : null
-const MAX_FIX_ROUNDS = (args && Number(args.maxFixRounds)) || 3
+const MAX_FIX_ROUNDS = (args && Number(args.maxFixRounds)) || 2 // owner 2026-11-01: 2 rounds (time/tokens)
+const REVIEW_MODEL = (args && args.reviewModel) || 'sonnet' // reviewers + skeptics; builders/integrator inherit the session model
 const SKIP_REVIEW = Boolean(args && args.skipReview)
 const NN = KEY.split('.')[0].padStart(2, '0') + (KEY.includes('.') ? '.' + KEY.split('.')[1] : '') // '06.1'
 const MID = 'M' + KEY
@@ -244,8 +245,9 @@ function streamPrompt(s) {
 
 Read, in order:
 1. PLAN.md §2 (operating rules) and the §3/§4 subsections relevant to your role.
-2. ${kickoff.planFile}: read it end-to-end once, then execute section "${s.planSection}" step by step (in order, test-first where it says so).
+2. ${kickoff.planFile}: read ONLY sections 1–4 (goal, read-first, decisions, streams) and your own section "${s.planSection}" — not the other streams' sections — then execute your section step by step (in order, test-first where it says so).
 3. Every SPEC.md section your plan section cites.
+4. SPEC v3.2 (2026-11-01) added M6.1: tasks are documents (pages.kind 'TASK', /t/[taskId], tasks.notes removed), §8.12 token scale with an automated token-scale check, the 48 px PageHeaderBar on every screen, full-width work screens, light forms (SPEC §4.6.4, §4.16, §8.12). Where the plan predates this, SPEC wins: use the layout primitives in src/components/layout/** and tokens, add ↗ /t/ links on task rows, never reference tasks.notes. Also read PROGRESS.md › Known issues "forward notes" for ${MID}.
 ${contracts}
 OWNERSHIP — you may create/modify ONLY: ${s.owns.join(', ')}
 Everything else is read-only for you. Other streams may be running right now in the same working tree. If you need any change outside your ownership (a dependency, schema, an i18n key outside your namespace, another module's API, PROGRESS.md), do NOT make it — put it in "requests". Never run git commands that change state, never install packages, never run repo-wide formatters.
@@ -318,7 +320,13 @@ for (const id of Object.keys(results)) {
 }
 
 // ───────────────────────── Integrate ─────────────────────────
-function gatePrompt(extra) {
+function gatePrompt(extra, targeted) {
+  if (targeted) {
+    return `Targeted re-gate for milestone ${MID} of Team Working OS after review fixes. The repository root is the current working directory. No other agent is editing files now.
+${extra}
+Run: pnpm db:up; pnpm typecheck; pnpm lint; the Vitest files covering the changed files (git diff --name-only HEAD plus untracked: their *.test.ts / *.int.test.ts, and tests/authz when server actions/routes changed) via pnpm exec vitest run <files>; and only the Playwright specs that exercise the changed screens via pnpm exec playwright test <specs>. Fix failures at the root cause (never delete, skip or weaken tests). The full pnpm check + full e2e suite run later at close-out — do NOT run them here.
+Return green=true only if every targeted run passed in your final attempt; list the commands you ran in "check"/"e2e".`
+  }
   return `Integration gate for milestone ${MID} of Team Working OS. The repository root is the current working directory. No other agent is editing files now.
 ${extra}
 Then:
@@ -367,21 +375,23 @@ Lens: ${lens.desc}
 Scope: ${scope}.
 References: ${kickoff.planFile} (sections 1, 3, 5, 7), the SPEC.md sections it cites, CLAUDE.md, PROGRESS.md › Decisions/Deviations (accepted — do not re-litigate).
 Report only findings you can evidence with file:line and a quote, each tied to a rule. Return an empty list if the lens is clean.`,
-          { label: `${MID}:review:${lens.key}:r${round}`, phase: 'Review', agentType: 'spec-reviewer', schema: FINDINGS_SCHEMA },
+          { label: `${MID}:review:${lens.key}:r${round}`, phase: 'Review', agentType: 'spec-reviewer', schema: FINDINGS_SCHEMA, model: REVIEW_MODEL },
         ),
       (res, lens) =>
         parallel(
           ((res && res.findings) || [])
             .filter(f => !refutedKeys[findingKey(f)])
             .map(f => () => {
-              const votes = f.severity === 'minor' ? 1 : 2
+              // owner 2026-11-01: minor findings go straight to the fixers (no skeptic) to save time/tokens
+              if (f.severity === 'minor') return Promise.resolve(Object.assign({}, f, { lens: lens.key, confirmed: true }))
+              const votes = 2
               return parallel(
                 Array.from({ length: votes }, (_, i) => () =>
                   agent(
                     `REFUTE this review finding for milestone ${MID} of Team Working OS (skeptic #${i + 1}, lens ${lens.key}).
 Finding: ${JSON.stringify(f)}
 Open the cited file and the cited rule. Look for evidence that the finding is wrong: the behaviour is handled elsewhere (wrapper, service, middleware), the rule does not apply to this milestone, a recorded Decision/Deviation covers it, or the quote is misread. Return refuted=true only with concrete evidence; if you cannot disprove it, return refuted=false.`,
-                    { label: `${MID}:verify:${lens.key}:${i + 1}`, phase: 'Review', agentType: 'spec-reviewer', schema: VERDICT_SCHEMA },
+                    { label: `${MID}:verify:${lens.key}:${i + 1}`, phase: 'Review', agentType: 'spec-reviewer', schema: VERDICT_SCHEMA, model: REVIEW_MODEL },
                   ),
                 ),
               ).then(vs => {
@@ -442,6 +452,7 @@ For each finding: fix the root cause, add or adjust a test that would have caugh
       gatePrompt(
         (fixRequests.length ? `Apply these requests from the fixers first:\n${fixRequests.map(q => `- ${q.path}: ${q.change}`).join('\n')}\n` : '') +
           `Review-fix round ${round} just changed code; re-establish green.`,
+        true,
       ),
       { label: `${MID}:regate:r${round}`, phase: 'Fix', schema: GATE_SCHEMA },
     )
