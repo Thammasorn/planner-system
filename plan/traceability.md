@@ -1,8 +1,8 @@
 # Traceability — SPEC → milestone → plan step → test
 
-> Appendix of `PLAN.md` (§7). Every requirement id that `SPEC.md` v3.1 defines (FR-, BR-, AC-), every §3.2 permission row (PERM-01…23) and every §9 row (NFR-01…10, r7 numbering) maps to the milestone(s) that deliver it, the plan step(s) that build it and the test(s) that prove it.
+> Appendix of `PLAN.md` (§7). Every requirement id that `SPEC.md` v3.2 defines (FR-, BR-, AC-), every §3.2 permission row (PERM-01…28) and every §9 row (NFR-01…10 r7 numbering + NFR-11…12 appended in v3.2) maps to the milestone(s) that deliver it, the plan step(s) that build it and the test(s) that prove it.
 > **Precedence:** `SPEC.md` > `CLAUDE.md` > `PLAN.md` / `plan/**` (this file included) > `docs/**`. If a row here disagrees with a milestone plan, the milestone plan's §1.1/§7 wins for *how*; SPEC wins for *what*. This file replaces `plan/research/r7-traceability.md` §F–§I (v3.0 baseline) and the interim v3.1-only version of this file.
-> **Generated** 2026-10-30 (HANDOFF T9) from the 12 milestone plans `plan/m00…m11-*.md` (all complete, reviewed, consistency-checked; PLAN §1.4 rulings X01–X96).
+> **Generated** 2026-10-30 (HANDOFF T9) from the 12 milestone plans `plan/m00…m11-*.md` of that day (all complete, reviewed, consistency-checked; PLAN §1.4 rulings X01–X96). **Updated 2026-11-01 (SPEC v3.2, PLAN §1.8):** the hardening plan is now `plan/m12-hardening-deploy.md` (every former "M11"/"m11" here reads M12/m12; r6b gap ids `M11-nn` unchanged); rows for the new M11 (FR-1401…1506, BR-90…98, AC-1401…1504, PERM-24…28, NFR-11…12; plus the M6.1 ids FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, AC-1414) are placeholders marked "plan pending" until `plan/m11-database-views.md` is written; the same holds for the M6.1 rows (FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, PERM-27…28) until `plan/m06.1-task-page-ui.md` is written.
 
 ## 0. How to read and how to regenerate
 
@@ -18,7 +18,7 @@ comm -23 <(grep -oE '^\| \*{0,2}(FR|BR)-[0-9]+[a-z]?|^- \*{0,2}(AC|BR|FR)-[0-9]+
         <(grep -oE '^\| (FR|BR|AC)-[0-9]+[a-z]?' plan/traceability.md | grep -oE '(FR|BR|AC)-[0-9]+[a-z]?' | sort -u)   # must print nothing
 ```
 
-**Row counts:** FR 148 (142 SPEC ids + 6 r7 sub-rows FR-1101a–f) · BR 51 · AC 32 · PERM 23 · NFR 14 · MASK 7 (masking section) · other v3.1 ids 15 (§6).
+**Row counts:** FR 228 (222 SPEC ids + 6 r7 sub-rows FR-1101a–f) · BR 60 · AC 63 · PERM 28 · NFR 16 · MASK 7 (masking section) · other v3.1 ids 15 (§6).
 
 ## 1. Functional requirements (FR)
 
@@ -27,7 +27,7 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | ID | Short description | Milestone | Plan step (mNN §5.Sx.y) | Test file › test name | Notes (X-id) |
 |---|---|---|---|---|---|
 | FR-101 | Login with email + password; no sign-up page; sign-up endpoint disabled | M1 | m01 §5.S0.8, §5.S2.3, §5.S2.6, §5.S3.2 | `tests/integration/auth.int.test.ts` › T-AUTH-01..03, T-AUTH-06 · `e2e/m1-auth.spec.ts` › E2E-01, E2E-02 | §4.1 |
-| FR-102 | First manager is created at first deploy from INITIAL_MANAGER_* env (bootstrap) | M1 · M11 | m01 §5.S2.12<br>m11 §5.S2.3 | M1: `tests/integration/bootstrap.int.test.ts` + `tests/integration/seed-golden.int.test.ts` › T-BOOT-01..06<br>M11: `e2e/m11-deploy.spec.ts` › D1 | §4.1 |
+| FR-102 | First manager is created at first deploy from INITIAL_MANAGER_* env (bootstrap) | M1 · M12 | m01 §5.S2.12<br>m12 §5.S2.3 | M1: `tests/integration/bootstrap.int.test.ts` + `tests/integration/seed-golden.int.test.ts` › T-BOOT-01..06<br>M12: `e2e/m12-deploy.spec.ts` › D1 | §4.1 |
 | FR-103 | Session lives 7 days and renews automatically while used | M1 | m01 §5.S0.8, §5.S2.4 | `tests/integration/proxy.int.test.ts` › T-SESS-04, T-SESS-05, `tests/integration/auth.int.test.ts` › T-AUTH-05 | §4.1 |
 | FR-104 | must_change_password = true → user is forced to the password page before anything else | M1 | m01 §5.S2.4, §5.S0.7, §5.S0.8, §5.S3.3 | `tests/integration/proxy.int.test.ts` › T-SESS-03, `src/server/action.int.test.ts` + `src/server/route.int.test.ts` › T-GATE-02, T-GATE-04, matrix MCP loop · `e2e/m1-auth.spec.ts` › E2E-03 | §4.1 |
 | FR-105 | Change own password: old password required, new ≥ 8 chars and not equal to email | M1 | m01 §5.S0.10, §5.S2.7, §5.S3.3 | `src/lib/schemas/account.test.ts` › U-SCH-01..08 · `tests/integration/account.int.test.ts` › T-ACC-01..05 · `e2e/m1-auth.spec.ts` › E2E-03, E2E-09 | §4.1, X60 |
@@ -119,6 +119,20 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | FR-665 | `/tasks`: visible projects only; columns = categories; filters | M3 | m03 §5.S2.16, §5.S1.4, §5.S3.19 | int `src/server/services/team-tasks.int.test.ts` · `tests/authz/masking.int.test.ts` (m03 §5.S4.3) · `e2e/m3-tasks.spec.ts` › E20 · `src/components/tasks/team/TeamTasks.test.tsx` (v3.1 row) | §4.6.3, X75 |
 | FR-666 | Category drag → first status of that category, or refuse | M3 | m03 §5.S1.4, §5.S3.19 | unit · ui · `e2e/m3-tasks.spec.ts` › E20 | §4.6.3 |
 | FR-667 | Person tab + `/my` reuse the component (`/my` keeps X22 grouping) | M3 · M9 | m03 §5.S3.12<br>m09 §5.S4.8, §5.S4.10 | M3: `e2e/m3-tasks.spec.ts` › E13<br>M9: ui `TeamTasks.fixedUser.test.tsx` · mask (via M3's `/api/tasks`) · `e2e/m9-workload.spec.ts` › W10 · ui `TeamTasks.fixedUser.test.tsx`, `src/components/tasks/MyTasks.test.tsx` · `e2e/m9-workload.spec.ts` › W9, W10 | §4.6.3, X22, X77 |
+| FR-680 | Every task has a document body (M4 editor, all blocks except sub-page) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, D18 |
+| FR-681 | Body = pages row kind TASK 1:1 (task_id unique), created on first edit | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, §6.2 |
+| FR-682 | TASK pages hidden from trees/sidebar/docs tab/recent/@/page search; not movable/duplicable/lockable | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4 |
+| FR-683 | Task page /t/[taskId]: header bar, title, properties (status, dates, certainty, assignees+plan, blockers, subtasks), body | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, §8.12 |
+| FR-684 | Panel keeps quick edits, gains compact body + "เปิดเป็นหน้า" | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, FR-611 |
+| FR-685 | Click = panel; ↗ link = page (Cmd/Ctrl-click new tab); Shift+Space in list | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, FR-614 |
+| FR-686 | Back / Esc returns to previous in-app view (else project tasks tab) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4 |
+| FR-687 | Permissions = task (requirePage TASK → requireTask); W 404; masking unchanged | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, §3.2 PERM-27/28 |
+| FR-688 | Edit lease covers body only; properties stay editable | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, FR-540 |
+| FR-689 | Task delete/restore carries the body (same batch); cascade on project delete | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, FR-609 |
+| FR-690 | Cmd+K task group matches name and body (≥ 3 chars) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, FR-1102 |
+| FR-691 | 📄 marker on tasks with a body | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4 |
+| FR-692 | Migrate tasks.notes into the body, then drop the column | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, §6.2 |
+| FR-693 | Body saves audited like page saves (no content) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, FR-1201 |
 | FR-701 | Milestone: name, date (day), description, done status | M8 | m08 §5.S0.2, §5.S0.4, §5.S2.2 | int `milestones.int.test.ts` › create/update · unit `schemas/milestones.test.ts` · `e2e/m8-milestones.spec.ts` › M4 | §4.7 |
 | FR-702 | LEAD/manager create from the overview tab, the grid milestone row (click a date cell) or Cmd+K | M8 | m08 §5.S4.2, §5.S3.4, §5.S4.10 | `e2e/m8-milestones.spec.ts` › M1, M4, M9 · ui (files per step: `src/components/palette/CommandPalette.test.tsx`) · `e2e/m8-milestones.spec.ts` › M4, M1, **M9** · ui `src/components/palette/CommandPalette.test.tsx` | §4.7 |
 | FR-703 | Link a task to one milestone; show progress 'เสร็จ 4/7 งาน' | M8 | m08 §5.S2.2, §5.S2.7, §5.S4.5, §5.S4.6 | int `milestones.int.test.ts` › progress, `› link` · `e2e/m8-milestones.spec.ts` › M2, M4, M6 · `e2e/m8-milestones.spec.ts` › M4 | §4.7, X66 |
@@ -165,8 +179,8 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | FR-1103 | Palette quick commands: create task, create page, report leave, go to today | M10 | m10 §5.S2.4 | `src/components/palette/commands.test.ts` · `src/components/palette/CommandPalette.test.tsx` · `e2e/m10-home-search.spec.ts` › P4 | §4.11, X68 |
 | FR-1104 | Search results respect §3 — nothing the user may not see | M4 (pages part) · M10 | m04 §5.S1.8<br>m10 §5.S1.8 | M4: `src/server/services/search.int.test.ts` · `tests/authz/masking.int.test.ts` › search · `e2e/m4-pages.spec.ts` › E16<br>M10: rows `tests/authz/rows/search.ts` › SR-* · `tests/authz/masking.int.test.ts` › K1–K3 · `src/server/services/search.int.test.ts` › visibility · `e2e/m10-home-search.spec.ts` › **P1, P2** | §4.11 |
 | FR-1105 | Thai substring search ('ลูกค้า' finds 'ย้ายข้อมูลลูกค้า') via pg_trgm | M4 (pages part) · M10 | m04 §5.S1.8<br>m10 §5.S1.8, §5.S0.3 | M4: `src/server/services/search.int.test.ts` · `tests/authz/masking.int.test.ts` › search · `e2e/m4-pages.spec.ts` › E16<br>M10: `src/server/services/search.int.test.ts` › thai substring · `e2e/m10-home-search.spec.ts` › P1 · rows `tests/authz/rows/search.ts` › SR-* · `tests/authz/masking.int.test.ts` › K1–K3 · `e2e/m10-home-search.spec.ts` › **P1, P2** | §4.11 |
-| FR-1201 | Audit every change of project, member, task, assignment, plan (per batch), milestone, page (per save, no content), leave, employee — **v3.1:** Audit also covers status … | M1 · M2 (part) · M3 · M4 (part) · M5 · M6 · M7 · M8 · M10 · M11 | m01 §5.S0.9<br>m02 §5.S1.4–S1.6<br>m03 §5.S2<br>m04 §5.S1.3–S1.7<br>m05 §5.S2.2–S2.4<br>m06 §5.S2.4, §5.S2.5<br>m07 §5.S2.6<br>m08 §5.S2.3<br>m10 — (no step)<br>m11 §5.S0.4, §5.S1.1 | M1: matrix audit assertion · `src/server/audit.int.test.ts` › T-AUD-01..02<br>M2: matrix audit assertion on every `mutates` allow row · per-service audit asserts<br>M3: authz (audit assertion) + int · `tests/authz/matrix.int.test.ts` (v3.1 row)<br>M4: matrix audit assertion · `src/server/services/pages.int.test.ts`<br>M5: authz audit assertion on every mutating `allow` · int (files per step: `src/server/services/holidays.int.test.ts`, `src/server/services/leave-types.int.test.ts`, `src/server/services/time-off.int.test.ts`) · matrix audit assertions<br>M6: authz audit assertion · int (files per step: `src/server/services/allocations.int.test.ts`, `src/server/services/plan-range.int.test.ts`)<br>M7: authz (audit assertion) · int (files per step: `src/server/services/allocations-day.int.test.ts`) · int `› audit` · authz audit assertions for every allow + mutates row (files per step: `src/server/services/allocations-day.int.test.ts`)<br>M8: authz audit assertion · int<br>M10: matrix: no new `mutates` rows · M3/M4/M5 rows unchanged<br>M11: `tests/authz/audit-coverage.int.test.ts` (AUD-00…AUD-10) + the M1 matrix audit assertion per row · `tests/authz/audit-coverage.int.test.ts` › AUD-00…AUD-08, AUD-10 + every mutating matrix row's audit assertion (M1 harness) + `scripts/lib/demo.int.test.ts` › DM-12 (seed audit trail) | §4.12, X44, M8-D25 |
-| FR-1202 | MVP only records; no audit UI (Phase 2) | M11 | m11 (scope guard (§1.2)) | `tests/authz/audit-coverage.int.test.ts` › AUD-09 (`grep` no `audit_log` read outside `src/server/audit.ts` + tests) | §4.12 |
+| FR-1201 | Audit every change of project, member, task, assignment, plan (per batch), milestone, page (per save, no content), leave, employee — **v3.1:** Audit also covers status … | M1 · M2 (part) · M3 · M4 (part) · M5 · M6 · M7 · M8 · M10 · M12 | m01 §5.S0.9<br>m02 §5.S1.4–S1.6<br>m03 §5.S2<br>m04 §5.S1.3–S1.7<br>m05 §5.S2.2–S2.4<br>m06 §5.S2.4, §5.S2.5<br>m07 §5.S2.6<br>m08 §5.S2.3<br>m10 — (no step)<br>m12 §5.S0.4, §5.S1.1 | M1: matrix audit assertion · `src/server/audit.int.test.ts` › T-AUD-01..02<br>M2: matrix audit assertion on every `mutates` allow row · per-service audit asserts<br>M3: authz (audit assertion) + int · `tests/authz/matrix.int.test.ts` (v3.1 row)<br>M4: matrix audit assertion · `src/server/services/pages.int.test.ts`<br>M5: authz audit assertion on every mutating `allow` · int (files per step: `src/server/services/holidays.int.test.ts`, `src/server/services/leave-types.int.test.ts`, `src/server/services/time-off.int.test.ts`) · matrix audit assertions<br>M6: authz audit assertion · int (files per step: `src/server/services/allocations.int.test.ts`, `src/server/services/plan-range.int.test.ts`)<br>M7: authz (audit assertion) · int (files per step: `src/server/services/allocations-day.int.test.ts`) · int `› audit` · authz audit assertions for every allow + mutates row (files per step: `src/server/services/allocations-day.int.test.ts`)<br>M8: authz audit assertion · int<br>M10: matrix: no new `mutates` rows · M3/M4/M5 rows unchanged<br>M12: `tests/authz/audit-coverage.int.test.ts` (AUD-00…AUD-10) + the M1 matrix audit assertion per row · `tests/authz/audit-coverage.int.test.ts` › AUD-00…AUD-08, AUD-10 + every mutating matrix row's audit assertion (M1 harness) + `scripts/lib/demo.int.test.ts` › DM-12 (seed audit trail) | §4.12, X44, M8-D25 |
+| FR-1202 | MVP only records; no audit UI (Phase 2) | M12 | m12 (scope guard (§1.2)) | `tests/authz/audit-coverage.int.test.ts` › AUD-09 (`grep` no `audit_log` read outside `src/server/audit.ts` + tests) | §4.12 |
 | FR-1301 | `taskView` block (list/board of the page's project), editable in place | M10 | m10 §5.S3.2–S3.4, §5.S1.9 | `TaskViewBlock.test.tsx` · `src/components/tasks/embed/EmbeddedTasks.test.tsx` · `src/server/services/embed.int.test.ts` · `e2e/m10-home-search.spec.ts` › B1 | §4.13 |
 | FR-1302 | Block props = view config only; no task data in `content` | M10 | m10 §5.S0.4, §5.S3.3 | `src/lib/schemas/page-content.test.ts` › live blocks · `src/components/tasks/embed/EmbeddedTasks.test.tsx` › limit · `TaskViewBlock.test.tsx` › no task data in content | §4.13 |
 | FR-1303 | `projectWorkload` block, masking as `/api/workload` | M10 | m10 §5.S1.10, §5.S3.5 | `src/server/services/embed.int.test.ts` › workload · `tests/authz/masking.int.test.ts` › K6–K8 · `ProjectWorkloadBlock.test.tsx` · `e2e/m10-home-search.spec.ts` › B3 | §4.13 |
@@ -174,6 +188,72 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | FR-1305 | Charter template section "งานและภาระของทีม" | M10 | m10 §5.S0.8 | `src/i18n/templates.test.ts` · `src/components/editor/templates.headless.test.ts` · `src/server/services/charters.int.test.ts` (M4, still green) | §4.13, M4-D30 |
 | FR-1306 | Refetch on focus + invalidate after mutation | M10 | m10 §5.S0.5, §5.S3.3 | `src/lib/invalidate.test.ts` · `src/components/tasks/embed/EmbeddedTasks.test.tsx` › refetch · `e2e/m10-home-search.spec.ts` › B4 | §4.13 |
 | FR-1307 | Blocks contribute nothing to `content_text` | M10 | m10 (M4 walker (M4-D30) — test only) | `src/lib/editor/content-text.test.ts` › live blocks · `e2e/m10-home-search.spec.ts` › B5 | §4.13, M4-D30 |
+| FR-1401 | Database = one data source (title, typed columns, rows) with several views | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
+| FR-1402 | Owned by exactly one page; no linked views in MVP | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, D15 |
+| FR-1403 | Slash items table/kanban/calendar view with Thai titles + English aliases | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
+| FR-1404 | Insert creates a ready database (title + สถานะ + วันที่ columns, first view) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, P5 |
+| FR-1405 | Block header: editable title + view tabs (add/switch/rename/duplicate/delete/reorder) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
+| FR-1406 | Views are shared by everyone; read-only viewers cannot change view settings | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
+| FR-1407 | Block is a non-text island; delete/undo of the block via editor; Cmd+Z inside = database undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, §7.5 |
+| FR-1408 | Narrow screens: horizontal scroll inside block, calendar as day list, menu instead of drag | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, §9 |
+| FR-1410 | Column types TITLE, TEXT, NUMBER, SELECT, MULTI_SELECT, DATE, CHECKBOX, PERSON (1–20 active users), URL | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2, BR-90 |
+| FR-1411 | Add column with type and default name | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
+| FR-1412 | Column header menu (rename, type, config, sort, filter, hide, insert, duplicate, delete) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
+| FR-1413 | Column order per database; hidden/width/card props per view | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
+| FR-1414 | Change type converts all rows (BR-93), no dialog, undo restores everything | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2, BR-93 |
+| FR-1415 | Delete column with undo; dependent sort/filter/group suspended | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
+| FR-1416 | Delete select option with undo; values shown empty | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2, BR-95 |
+| FR-1420 | Table view: rows × columns, title pinned, virtualized > 50 rows | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
+| FR-1421 | Inline cell editing per type; type-to-replace | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
+| FR-1422 | Table keyboard navigation | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, §8.6 |
+| FR-1423 | Add row (no required value); inherits "is" filter values | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, P1 |
+| FR-1424 | Select rows, delete with undo toast | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, P2 |
+| FR-1425 | Column width per view (80–600 px) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
+| FR-1426 | Sort up to 3 keys; manual drag order only without sort | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, BR-94 |
+| FR-1427 | Filter up to 10 AND conditions | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, BR-95 |
+| FR-1428 | Hide columns per view | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
+| FR-1429 | Row count footer "N / N จาก M แถว"; no aggregates | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
+| FR-1430 | Kanban group by SELECT / PERSON / CHECKBOX; auto-create สถานะ | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4, BR-96 |
+| FR-1431 | Groups with counts and "ไม่มีค่า"; hide empty groups | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4, BR-96 |
+| FR-1432 | Cards show chosen properties; view filter/sort apply | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4 |
+| FR-1433 | Drag between groups sets value; reorder within group; undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4, BR-96 |
+| FR-1434 | Quick add per group; add group = new option | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4 |
+| FR-1435 | Card click opens row detail | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4 |
+| FR-1440 | Calendar month grid by date column, Monday first, Thai month/พ.ศ., today marker | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5, BR-97 |
+| FR-1441 | Cards per day, "+N เพิ่มเติม" | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5, BR-97 |
+| FR-1442 | Drag card to another day = reschedule with undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5 |
+| FR-1443 | Add row on a day | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5 |
+| FR-1444 | Rows without date listed separately; drag in/out | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5 |
+| FR-1445 | Calendar shows database data only (no leave/holidays/milestones) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5, BR-98 |
+| FR-1450 | Row detail side panel with all properties | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6 |
+| FR-1451 | Prev/next row in panel; Esc closes | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6 |
+| FR-1452 | Row deep link /p/[pageId]?db=&row= | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6 |
+| FR-1453 | Rows open as pages (kind DB_ROW, /r/[rowId]) with a document body, same mechanism as tasks (§4.6.4) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6, §13 |
+| FR-1460 | Permissions = owning page (view/edit/protected/archived); 404 when invisible | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §3.2 PERM-24/25 |
+| FR-1461 | Read-only viewers see data without edit controls | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7 |
+| FR-1462 | Database edits independent of the page edit lease | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, D16 |
+| FR-1463 | Per-row/column/view/database version; conflict toast; refetch on focus | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §7.9 |
+| FR-1464 | Foreign/missing/forbidden databaseId → generic placeholder, 404 without data | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §3.3 |
+| FR-1465 | Undo for everything without confirm dialogs | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §7.5, P2 |
+| FR-1466 | Audit per action, no cell values | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, FR-1201 |
+| FR-1470 | Page duplicate deep-copies databases | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, FR-508 |
+| FR-1471 | Paste/copy block = deep copy (view source + edit target); cut-paste same page keeps id | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, D15, PERM-26 |
+| FR-1472 | Removing the block detaches the database on save; editor undo re-attaches | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8 |
+| FR-1473 | Page delete/restore and project permanent delete | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, FR-509 |
+| FR-1474 | Cmd+K database group: database titles + row titles; cells not indexed | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, FR-1102, §6.4 |
+| FR-1475 | Server-enforced limits (1,000 rows, 30 columns, 10 views, …) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8 |
+| FR-1501 | Block equation via /สมการ (/equation, /math, /latex) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
+| FR-1502 | Inline equation via slash or toolbar button on selection | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
+| FR-1503 | Equation editing popover with live preview | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
+| FR-1504 | Invalid LaTeX error state; source kept | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
+| FR-1505 | KaTeX bundled locally, safe options, MathML output | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15, NFR-09 |
+| FR-1506 | Stored in pages.content; LaTeX source in content_text | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15, §6.4 |
+| FR-1601 | Work screens use full width after the sidebar (1920/2560), no max-width | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
+| FR-1602 | Documents (/p, /t, /r bodies) in a centred 760 px reading column by default + per-page "เต็มความกว้าง" toggle (pages.full_width, shared, undo, audit) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
+| FR-1603 | 48 px page header bar: breadcrumb left, page actions right | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
+| FR-1604 | Light forms: borderless label·value rows, inline editing, few dialogs | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
+| FR-1605 | All screens use the §8.12 typography/spacing/radius/colour scale | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
+| FR-1606 | Phone (< 600 px) and tablet layouts per §9 Browser row | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
 
 ## 2. Business rules (BR)
 
@@ -203,7 +283,7 @@ SPEC §5 (incl. BR-20a, BR-20b, BR-21a). Every §5 rule is a pure function in `s
 | BR-26 | Cell limits: WEEK 0 < v ≤ 700 cd, DAY 0 < v ≤ 100 cd; value 0 deletes the row | M6 · M7 (DAY part) | m06 §5.S0.5, §5.S1.1, §5.S1.4<br>m07 §5.S0.3, §5.S1.8, §5.S3.6 | M6: unit · int (files per step: `src/lib/schemas/allocations.test.ts`, `src/lib/schemas/grid.test.ts`, `src/domain/units.test.ts`, `src/domain/allocation.test.ts`)<br>M7: unit `src/lib/schemas/allocations.test.ts` · int · ui · unit `src/lib/schemas/allocations.test.ts` › M7 · unit `src/lib/grid/day-input.test.ts` · authz `tests/authz/rows/allocations-day.ts` › AL-D-MAX · `e2e/m7-daily.spec.ts` › D6 (1.5 rejected) | §5.3 |
 | BR-27 | Typed values round to the nearest 0.25 person-day (25 cd) | M6 | m06 §5.S1.1 | unit (vectors + property) (files per step: `src/domain/units.test.ts`) | §5.3 |
 | BR-30 | Tasks nest at most 3 levels (depth 0, 1, 2) | M3 | m03 §5.S0.2, §5.S2.2 | int · unit (files per step: `src/server/services/task-tree.int.test.ts`) | §5.4 |
-| BR-31 | Assignees and plans live on leaf tasks only; parents show the sum; adding a child to an assigned task moves assignees + plans to it | M3 · M6 (plans clause) · M11 (seed) | m03 §5.S2.2, §5.S2.7<br>m06 §5.S2.9<br>m11 §5.S1.3 | M3: int `› BR-31` (files per step: `src/server/services/task-tree.int.test.ts`, `src/server/services/assignments.int.test.ts`)<br>M6: int `src/server/services/tasks.int.test.ts` › FR-610 plans<br>M11: `scripts/lib/demo.int.test.ts` › DM-04 | §5.4, X69 |
+| BR-31 | Assignees and plans live on leaf tasks only; parents show the sum; adding a child to an assigned task moves assignees + plans to it | M3 · M6 (plans clause) · M12 (seed) | m03 §5.S2.2, §5.S2.7<br>m06 §5.S2.9<br>m12 §5.S1.3 | M3: int `› BR-31` (files per step: `src/server/services/task-tree.int.test.ts`, `src/server/services/assignments.int.test.ts`)<br>M6: int `src/server/services/tasks.int.test.ts` › FR-610 plans<br>M12: `scripts/lib/demo.int.test.ts` › DM-04 | §5.4, X69 |
 | BR-32 | Deleting a task soft-deletes it and all descendants with one deleted_batch; undo restores that batch only | M3 | m03 §5.S2.8 | int `› BR-32` (files per step: `src/server/services/tasks.int.test.ts`) | §5.4 |
 | BR-33 | Moving tasks across projects is not allowed in MVP | M3 | m03 §5.S2.2 | int + authz row `tests/authz/rows/tasks.ts` › T-MOVE-X (files per step: `src/server/services/task-tree.int.test.ts`) | §5.4 |
 | BR-35 | effectiveCertainty = task.override ?? parent.override ?? grandparent.override ?? project.certainty | M3 · M6 (grid) | m03 §5.S1.1<br>m06 §5.S2.2 | M3: unit `src/domain/certainty.test.ts` (table + property)<br>M6: int (files per step: `src/server/services/grid.int.test.ts`) | §5.5, X03 |
@@ -224,18 +304,27 @@ SPEC §5 (incl. BR-20a, BR-20b, BR-21a). Every §5 rule is a pure function in `s
 | BR-70 | Status: completed_on → DONE; date < today → OVERDUE; date − today ≤ 7 → DUE_SOON; else UPCOMING | M8 | m08 §5.S1.2, §5.S2.2 | unit `src/domain/milestone.test.ts` · golden (r8 §4.9 table) | §5.9 |
 | BR-71 | 'เลย milestone' if a linked open task has a WEEK plan with week_start > date, a DAY plan with period_start > date, or due_date > date | M8 | m08 §5.S1.3, §5.S2.1, §5.S2.5–S2.8, §5.S3.7, §5.S4.4–S4.7 | unit · int `repo/milestones.int.test.ts` › lateFacts, `milestones.int.test.ts` › AC-702 · golden · `e2e/m8-milestones.spec.ts` › M2 (files per step: `src/server/repo/milestone-join-guard.test.ts`) | §5.9 |
 | BR-72 | Milestones carry no load and never affect capacity/overload | M8 · M9 | m08 §5.S2.5<br>m09 §5.S2.1 | M8: golden `BR-72` · int `src/server/services/grid.int.test.ts` › BR-72 · golden `milestones.int.test.ts` › BR-72<br>M9: int `› WAITING`, `› milestones no load`, `› BR-50` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`) · int `repo/allocations › loadByUserProjectWeek`, `workload › WAITING / milestones no load` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`) | §5.9 |
-| BR-80 | `DONE` ⇔ completed; set/clear/keep `completed_on` | M3 · M11 (§7.1 tests) | m03 §5.S1.5, §5.S2.6, §5.S2.14 | M3: unit `src/domain/status.test.ts` · int (+ invariant query, R22)<br>M11: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10, M3-D43 |
+| BR-80 | `DONE` ⇔ completed; set/clear/keep `completed_on` | M3 · M12 (§7.1 tests) | m03 §5.S1.5, §5.S2.6, §5.S2.14 | M3: unit `src/domain/status.test.ts` · int (+ invariant query, R22)<br>M12: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10, M3-D43 |
 | BR-81 | Default status = lowest-position `TODO` | M3 | m03 §5.S1.5 | unit (files per step: `src/domain/status.test.ts`) | §5.10 |
 | BR-82 | Checkbox → lowest-position `DONE`; uncheck → BR-81 | M3 | m03 §5.S1.5 | unit (files per step: `src/domain/status.test.ts`) | §5.10 |
 | BR-83 | Status belongs to the task's project (composite FK) | M3 | m03 §5.S0.2 | int `src/server/db/schema.int.test.ts` (23503) | §5.10 |
 | BR-84 | Set invariant `TODO` ≥ 1, `DONE` ≥ 1 | M3 | m03 §5.S1.5, §5.S2.14 | unit · int (files per step: `src/domain/status.test.ts`, `src/server/services/task-statuses.int.test.ts`) | §5.10 |
 | BR-85 | Blocker validity + `wouldCreateCycle` with path | M3 | m03 §5.S1.6, §5.S2.15 | unit + property · int (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/task-blockers.int.test.ts`) | §5.10 |
-| BR-86 | Badge states open/done/none | M3 · M11 (§7.1 tests) | m03 §5.S1.6, §5.S2.10, §5.S2.16 | M3: unit · int (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/my-tasks.int.test.ts` …)<br>M11: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10, X73 |
-| BR-87 | Status/blockers never change plan, capacity, overload | M3 · M6 (load part) · M9 · M11 (§7.1 tests) | m03 §5.S2.6, §5.S2.15<br>m06 §5.S2.2<br>m09 §5.S2.1 | M3: int (files per step: `src/server/services/task-status.int.test.ts`, `src/server/services/task-statuses.int.test.ts`, `src/server/services/tasks.int.test.ts`, `src/server/services/task-blockers.int.test.ts`)<br>M6: int `src/server/services/grid.int.test.ts` › WAITING counts<br>M9: int `› WAITING`, `› milestones no load`, `› BR-50` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`) · int `repo/allocations › loadByUserProjectWeek`, `workload › WAITING / milestones no load` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`)<br>M11: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10 |
+| BR-86 | Badge states open/done/none | M3 · M12 (§7.1 tests) | m03 §5.S1.6, §5.S2.10, §5.S2.16 | M3: unit · int (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/my-tasks.int.test.ts` …)<br>M12: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10, X73 |
+| BR-87 | Status/blockers never change plan, capacity, overload | M3 · M6 (load part) · M9 · M12 (§7.1 tests) | m03 §5.S2.6, §5.S2.15<br>m06 §5.S2.2<br>m09 §5.S2.1 | M3: int (files per step: `src/server/services/task-status.int.test.ts`, `src/server/services/task-statuses.int.test.ts`, `src/server/services/tasks.int.test.ts`, `src/server/services/task-blockers.int.test.ts`)<br>M6: int `src/server/services/grid.int.test.ts` › WAITING counts<br>M9: int `› WAITING`, `› milestones no load`, `› BR-50` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`) · int `repo/allocations › loadByUserProjectWeek`, `workload › WAITING / milestones no load` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`)<br>M12: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10 |
+| BR-90 | Cell value shapes per column type; validated against current type | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-91 | Numbers as canonical decimal strings, no float | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-92 | Cell dates are ISODate; input formats incl. พ.ศ. | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-93 | Column type conversion rules | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-94 | Sort: empties last, collator, stable by position/id | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-95 | Filters: AND, per-type operators, empty semantics | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-96 | Kanban grouping order and drop effect (multi-person: card in every person group; A→B replaces A) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-97 | Calendar month range and placement | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-98 | Databases never touch planning, membership or automation | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
 
 ## 3. Acceptance criteria (AC)
 
-SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets are labelled AC-M5-a…d inside `plan/m05-calendar-capacity.md` §7.1 (not SPEC ids). M11 owns no AC (its acceptance is §12 "Done when", FR-1201/1202 and the NFR rows).
+SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets are labelled AC-M5-a…d inside `plan/m05-calendar-capacity.md` §7.1 (not SPEC ids). M12 owns no AC (its acceptance is §12 "Done when", FR-1201/1202 and the NFR rows).
 
 | ID | Short description | Milestone | Plan step (mNN §5.Sx.y) | Test file › test name | Notes (X-id) |
 |---|---|---|---|---|---|
@@ -261,6 +350,14 @@ SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets
 | AC-614 | Delete used status with move; undo restores | M3 | m03 §5.S2.14, §5.S3.18 | `e2e/m3-tasks.spec.ts` › E18 · int `› delete/restore` · int `src/server/services/task-statuses.int.test.ts` › AC-614 | §4.6.3 |
 | AC-615 | Blocker badge, cycle refused, ✓ after done, status unchanged | M3 | m03 §5.S1.6, §5.S2.15, §5.S3.17 | `e2e/m3-tasks.spec.ts` › E19 · int · unit (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/task-blockers.int.test.ts`) · int `src/server/services/task-blockers.int.test.ts` › AC-615 · unit `src/domain/blockers.test.ts` | §4.6.3 |
 | AC-616 | Non-member of POS (Peter) sees no POS data in `/tasks` | M3 | m03 §5.S2.16, §5.S3.19 | `e2e/m3-tasks.spec.ts` › E20 (Peter, M3-D34) · `tests/authz/masking.int.test.ts` (m03 §5.S4.3) (world `outsider`) · int `src/server/services/team-tasks.int.test.ts` | §4.6.3, M3-D34 |
+| AC-621 | Write rich body in panel, open as page, same content after reload | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-622 | Edit all properties on the task page; list/board/grid agree | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-623 | Open semantics: click/↗/Cmd-click/Shift+Space/Esc/Back | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-624 | Non-member 404 on page, body, lease, files; body search scoped | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-625 | Lease on body only; properties editable by others | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-626 | Delete parent with bodies + undo restores all | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-627 | notes migrated to paragraphs; column dropped; quick add creates no page | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
+| AC-628 | TASK pages hidden from trees/search; no /หน้า; 📄 marker | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
 | AC-701 | Milestone on 23 Oct → ◆ in the week-of-19-Oct column → in day zoom ◆ sits on Friday 23 | M8 | m08 §5.S3.3, §5.S3.4 | `e2e/m8-milestones.spec.ts` › M1 · unit `lib/grid/milestones.test.ts` › milestoneColumnKey · ui `src/components/grid/MilestoneRow.test.tsx` | §4.7 |
 | AC-702 | Linking a task planned in the week of 26 Oct → 'เลย milestone' on the task and on ◆ | M8 | m08 §5.S2.1, §5.S3.7, §5.S4.4, §5.S4.5 | `e2e/m8-milestones.spec.ts` › M2 · int `› AC-702` · int `milestones.int.test.ts` › AC-702 · unit `src/domain/milestone.test.ts` › BR-71 · golden bindings | §4.7 |
 | AC-801 | Select Cindy's 6 week cells → type 3 → Enter → all six = 3.0 days | M6 · M7 (§7.1 tests) | m06 §5.S3.10 | M6: `e2e/m6-grid.spec.ts` › G2 · unit `apply.test.ts` › range fill · int `allocations.int.test.ts` › AC-801 batch<br>M7: unit `src/lib/grid/kinds.test.ts`, `src/lib/grid/day-input.test.ts` · e2e m6-grid unchanged (S5.3) · `e2e/m7-daily.spec.ts` › D6 (paste on day cells) | §4.8 |
@@ -271,10 +368,33 @@ SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets
 | AC-1301 | `/มุมมองงาน` in POS charter; drag updates the tasks tab | M10 | m10 §5.S3.4, §5.S3.6 | `e2e/m10-home-search.spec.ts` › B1 · `src/components/editor/slash-menu.test.ts` › มุมมองงาน · `src/components/tasks/embed/EmbeddedTasks.test.tsx` › onMove | §4.13 |
 | AC-1302 | Copied block follows the destination page's project; wiki placeholder | M10 | m10 §5.S3.4, §5.S1.9 | `e2e/m10-home-search.spec.ts` › B2 · `src/server/services/embed.int.test.ts` › binding · `src/server/services/embed.int.test.ts` › tasks binding · rows `tests/authz/rows/pages.ts` › EMB-T-WIKI | §4.13 |
 | AC-1303 | Worker sees "งานในโปรเจคอื่น" with no other project name | M10 | m10 §5.S1.10 | `tests/authz/masking.int.test.ts` › K6–K8 · `e2e/m10-home-search.spec.ts` › B3 · `tests/authz/masking.int.test.ts` › **K6/K8** + golden Ivy variant · `src/server/services/embed.int.test.ts` › workload | §4.13 |
+| AC-1401 | Insert table view, add rows by keyboard, page JSON holds only databaseId | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1402 | Every column type round-trips (exact number, ISO date, active people, URL guard) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1403 | Sort + AND filters + hidden column + width persist and are shared | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1404 | Kanban drag between groups, undo, regroup by person (multi-person rows in each group, A→B replace) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1405 | Calendar Monday-first พ.ศ., drag reschedule, add on day, no-date list | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1406 | Type change text→number→undo restores; text→select | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1407 | Delete rows/column/view with undo; last view protected | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1408 | Non-member 404 + no leak; search scoped; locked wiki; archived project | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, §3.3 |
+| AC-1409 | Edits while another user holds the lease; version conflict | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, D16 |
+| AC-1410 | Duplicate page / copy block = independent copy; forged id = placeholder | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, D15 |
+| AC-1411 | Block delete + undo; detached not searchable; page delete + undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
+| AC-1412 | 1,000-row limit; perf budget | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, §9 |
+| AC-1413 | Cell values do not change planning (golden F1 unchanged) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, BR-98 |
+| AC-1414 | Row opens as page /r/[rowId] with body; no sub-page/database blocks; 404 for non-members; duplicate/delete carry the body | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, FR-1453 |
+| AC-1501 | Block equation renders, persists, no external requests | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
+| AC-1502 | Inline equation from selection / slash | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
+| AC-1503 | Invalid LaTeX error state survives reload | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
+| AC-1504 | Equation source searchable; read-only view | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
+| AC-1601 | Full-width work screens at 1920 and 2560 px | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
+| AC-1602 | Reading column ≤ 760 px; wide tables scroll inside the block; full-width toggle persists for all viewers, Cmd+Z reverts, audited | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
+| AC-1603 | 48 px header bar with correct breadcrumb on main screens | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
+| AC-1604 | Phone 390×844 and tablet 768×1024 usable, no horizontal page scroll | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
+| AC-1605 | Contrast ≥ 4.5:1 with new tokens; no off-scale px in components | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
 
-## 4. Permissions (PERM-01…23 = SPEC §3.2 rows in table order)
+## 4. Permissions (PERM-01…28 = SPEC §3.2 rows in table order)
 
-Outcomes: `M` manager · `L` LEAD of that project · `Me` MEMBER of that project · `W` worker who is not a member. Invisible → **404**, visible but not allowed → **403** (X41); every write on an archived project → M/L/Me 403, W 404 (X42). Every row also runs as nobody (401) and as a must-change-password user (403) via the M1 loops; every mutating `allow` row asserts exactly one `audit_log` row (X44). M11 adds no rows; its audit sweep `tests/authz/audit-coverage.int.test.ts` (AUD-00…AUD-10, m11 §5.S0.4) re-reads every rows file. PERM-23 was appended at the end of §3.2 so PERM-01…22 keep their numbers (X79); PERM-11 was widened in v3.1.
+Outcomes: `M` manager · `L` LEAD of that project · `Me` MEMBER of that project · `W` worker who is not a member. Invisible → **404**, visible but not allowed → **403** (X41); every write on an archived project → M/L/Me 403, W 404 (X42). Every row also runs as nobody (401) and as a must-change-password user (403) via the M1 loops; every mutating `allow` row asserts exactly one `audit_log` row (X44). M12 adds no rows; its audit sweep `tests/authz/audit-coverage.int.test.ts` (AUD-00…AUD-10, m12 §5.S0.4) re-reads every rows file. PERM-23 was appended at the end of §3.2 so PERM-01…22 keep their numbers (X79); PERM-11 was widened in v3.1.
 
 | ID | Short description | Milestone | Plan step (mNN §5.Sx.y) | Test file › test name | Notes (X-id) |
 |---|---|---|---|---|---|
@@ -301,29 +421,36 @@ Outcomes: `M` manager · `L` LEAD of that project · `Me` MEMBER of that project
 | PERM-21 | "บันทึก/แก้/ลบวันลาของคนอื่น" — M allow · workers 403 (404 when the person is outside their visibility) | M5 · M9 | m05 §5.S4.2 | M5: `tests/authz/rows/time-off.ts` › PERM-21a, PERM-21b, PERM-21c, PERM-21d, PERM-21e, PERM-21f, PERM-21g | §3.2, M5-D3 |
 | PERM-22 | "ดู workload" — per §3.3 (MASK-1…7, §7 below) | M5 (calendar part) · M9 · M10 (home, search, embed part) | m05 §5.S4.3<br>m09 §5.S5.1<br>m10 §5.S1.2, §5.S1.6, §5.S1.8, §5.S1.10, §5.S4.1 | M5: `tests/authz/rows/calendar.ts` › PERM-22a, CAL-400<br>M9: `tests/authz/rows/workload.ts` › WL-TABLE, WL-DEFAULT, WL-CELL-ME, WL-CELL-W, WL-BADGE · `tests/authz/rows/people.ts` › PEOPLE, PG-ME, PG-W, PG-CO, PH-ME, PH-W, PT-ME, PT-W<br>M10: `tests/authz/rows/home.ts` › HM-HOME · `tests/authz/rows/search.ts` › SR-ALL, SR-INDEX · `tests/authz/rows/pages.ts` › EMB-W-P, EMB-W-Q, EMB-W-A<br>masking: `tests/authz/masking.int.test.ts` (M2, M5, M6–M10 blocks — §7) | §3.2 |
 | PERM-23 | "จัดการชุดสถานะงานของโปรเจค (เพิ่ม/แก้/เรียง/ลบ)" — M/L allow · Me 403 · W 404 · archived 403 | M3 | m03 §5.S4.2 | M3: `tests/authz/rows/task-statuses.ts` › S-CREATE, S-CREATE-ARCH, S-UPDATE, S-REORDER, S-DELETE, S-RESTORE, S-RESTORE-ARCH | §3.2, X79, v3.1 new (X79) |
+| PERM-24 | "ดูฐานข้อมูลในหน้าเอกสาร" — = view of the owning page (project page: M/L/Me allow · W 404; wiki: all allow) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2) |
+| PERM-25 | "แก้ฐานข้อมูลในหน้า" — = edit of the owning page, lease not required (locked wiki: workers 403; archived: 403) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2), D16 |
+| PERM-26 | "คัดลอกฐานข้อมูลไปหน้าอื่น" — view source (else 404) + edit target (invisible 404, protected/archived 403) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2), D15 |
+| PERM-27 | "เปิด task เป็นหน้า / ดูเนื้อหางาน" — = view of the task (M/L/Me allow, archived allowed · W 404) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §3.2 (v3.2) |
+| PERM-28 | "แก้เนื้อหางาน" (save, lease, upload) — = edit of the task (M/L/Me allow · archived 403 · W 404) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §3.2 (v3.2) |
 
 Rows not tied to one PERM line: M1 `ACC-01/02` (own password, sign-out everywhere), `PREF-01/02`, `BA-01…08` (Better Auth endpoints → 404) in `tests/authz/rows/{account,preferences,auth-endpoints}.ts`; M3 `T-TEAM`, `T-MY`, `T-SIDEBAR` (own data / visibility filter X75); M5 `LT-READ` (M5-D15); M8 `MS-Q`, `MS-MISSING`, `MS-BAD` (X41/X42); M10 `HM-HOME` extra assertion `manager` card only for M.
 
 ## 5. Non-functional requirements (NFR, SPEC §9; r7 numbering)
 
-`NFR-02a/b` = grid response/render, `NFR-07a/b` = browsers/viewports, `NFR-08a/b/c` = hashing/cookies/headers. m00 calls the NFR-07b part "NFR-07 (part)". Budgets are measured in M11 on `seed:perf` data (`scripts/perf-check.ts` P1–P8, `e2e/perf/m11-perf.spec.ts` PF1–PF6; gates per M11-D12).
+`NFR-02a/b` = grid response/render, `NFR-07a/b` = browsers/viewports, `NFR-08a/b/c` = hashing/cookies/headers. m00 calls the NFR-07b part "NFR-07 (part)". Budgets are measured in M12 on `seed:perf` data (`scripts/perf-check.ts` P1–P8, `e2e/perf/m12-perf.spec.ts` PF1–PF6; gates per M12-D12).
 
 | ID | Short description | Milestone | Plan step (mNN §5.Sx.y) | Test file › test name | Notes (X-id) |
 |---|---|---|---|---|---|
-| NFR-01 | Target size: ≤ 100 employees · 300 projects · 20 000 tasks · 5 000 pages · 3 years of data | M11 | m11 §5.S1.6–S1.8 | `scripts/lib/perf-data.int.test.ts` (scaled) · m11 §7.4 P0 data-volume counts on `planner_perf` | §9 (r7 numbering) |
-| NFR-02a | Project grid 16 weeks × 200 rows: response < 500 ms p95 | M11 | m11 §5.S3.2 | `scripts/perf-check.ts` › P1, P1b, P1c (gates, m11 §7.4) | §9 (r7 numbering) |
-| NFR-02b | Project grid 16 weeks × 200 rows: render < 300 ms | M11 | m11 §5.S3.4 | `e2e/perf/m11-perf.spec.ts` › PF1 (gate, m11 §7.4; m11 §1.1 calls it "P5") | §9 (r7 numbering) |
-| NFR-03 | Team workload 100 people × 12 weeks < 800 ms p95 | M9 (smoke) · M11 | m09 §5.S2.12<br>m11 §5.S3.2 | M9: int `src/server/services/workload.perf.int.test.ts`<br>M11: `scripts/perf-check.ts` › P2, P2b (gates, m11 §7.4) · `e2e/perf/m11-perf.spec.ts` › PF6 (client, logged) | §9 (r7 numbering) |
-| NFR-04 | Cell edit → visible result < 50 ms (optimistic) | M11 | m11 §5.S3.4 | `e2e/perf/m11-perf.spec.ts` › PF2 (gate, m11 §7.4; m11 §1.1 calls it "P6") | §9 (r7 numbering) |
-| NFR-05 | Open a 300-block page < 1 s | M4 (smoke) · M11 | m04 §5.S2.4<br>m11 §5.S1.8, §5.S3.4 | M4: m04 §7.4 P-1<br>M11: `e2e/perf/m11-perf.spec.ts` › PF3 (gate, m11 §7.4; m11 §1.1 calls it "P7") | §9 (r7 numbering) |
-| NFR-06 | Command palette: first result < 200 ms | M10 · M11 | m10 §5.S2.3, §5.S1.8<br>m11 §5.S3.4, §5.S3.2 | M10: `e2e/m10-home-search.spec.ts` › P3 (timing) · m10 §7.4 perf note · `src/server/services/search.int.test.ts` › timing<br>M11: `e2e/perf/m11-perf.spec.ts` › PF4 (gate) · `scripts/perf-check.ts` › P3b (server search p95, gate), P3c (logged) — m11 §7.4; m11 §1.1 calls them "P8" + "P3" | §9 (r7 numbering) |
-| NFR-07a | Browsers: Chrome, Edge, Safari — 2 latest versions | M11 | m11 (Chromium automated; manual Safari/Edge pass (M11-D25)) | m11 §7.4 M3 manual | §9 (r7 numbering), M11-D25 |
-| NFR-07b | ≥ 1280 px full UI; tablet usable; mobile = home, my tasks, report leave, read documents | M0 (part) · M3 · M4 (part) · M5 · M10 (home part) · M11 | m00 §5.S2.10<br>m03 §5.S3.12<br>m04 §5.S3.1<br>m05 §5.S3.3, §5.S3.4<br>m10 §5.S2.2<br>m11 §5.S4.2 | M0: `src/components/shell/AppShell.test.tsx` · `e2e/m0-smoke.spec.ts` › "narrow screens use a drawer" · `e2e/m0-smoke.spec.ts` › "narrow screens use a temporary drawer"<br>M3: `e2e/m3-tasks.spec.ts` › E13 (390 px viewport)<br>M4: m04 §7.4 M-4<br>M5: `e2e/m5-calendar.spec.ts` › E7 (390 × 844)<br>M10: `e2e/m10-home-search.spec.ts` › H4 (390 × 844)<br>M11: `e2e/m11-hardening.spec.ts` V1–V4 · `e2e/m11-hardening.spec.ts` › H6 (desktop tour) · V1–V3 | §9 (r7 numbering) |
-| NFR-08a | Password hashing = Better Auth default | M1 · M11 | m01 §5.S0.8, §5.S2.3<br>m11 (M1) | M1: `tests/integration/auth.int.test.ts` › T-AUTH-04, T-AUTH-04b<br>M11: unchanged — M1 `auth.int.test.ts` · `tests/authz/audit-coverage.int.test.ts` › AUD-08 no hash in audit rows | §9 (r7 numbering) |
-| NFR-08b | Cookies httpOnly + sameSite=lax; secure when served over HTTPS (SECURE_COOKIES) | M1 · M11 | m01 §5.S0.8, §5.S2.3<br>m11 (M1) + prod check | M1: `tests/integration/auth.int.test.ts` › T-AUTH-04, T-AUTH-04b<br>M11: `e2e/m11-hardening.spec.ts` H3 · `e2e/m11-deploy.spec.ts` D1 | §9 (r7 numbering) |
-| NFR-08c | Security headers: CSP, frame-ancestors 'none' (+ nosniff) | M0 · M4 (editor part) · M11 | m00 §5.S1.4, §5.S1.5<br>m04 §5.S2.4<br>m11 (M0) + verification | M0: `src/lib/csp.test.ts`, `src/proxy.test.ts` · `e2e/m0-smoke.spec.ts` › "security headers and CSP nonce" + CSP guard on every test · CSP guard on every e2e test<br>M4: e2e CSP + external-request guards (M0 fixtures) on every M4 test<br>M11: `e2e/m11-hardening.spec.ts` H1–H2, H4 · `e2e/m11-deploy.spec.ts` › D1 · H6 | §9 (r7 numbering) |
-| NFR-09 | No CDN or external service at runtime (server may be offline) | M0 · M4 (editor part) · M11 | m00 §5.S2.1, §5.S3.4<br>m04 §5.S2.4<br>m11 §5.S3.5, §5.S2.9 | M0: e2e/fixtures.ts external-request guard on every test · m00 §5.S2.13 grep · m00 §6 I9 grep<br>M4: e2e CSP + external-request guards (M0 fixtures) on every M4 test<br>M11: `tests/hardening/no-external-urls.test.ts` · `scripts/offline-check.sh` · every e2e (external-request guard) · external-request guard in every e2e · `offline:check` · `e2e/m11-deploy.spec.ts` › D6 | §9 (r7 numbering) |
-| NFR-10 | Backup: daily pg_dump kept 14 days + UPLOAD_DIR backup | M11 | m11 §5.S2.4 | `tests/deploy/files.test.ts` · `e2e/m11-deploy.spec.ts` › D3–D4 · m11 §7.4 M1 restore drill · `tests/deploy/backup.int.test.ts` | §9 (r7 numbering) |
+| NFR-01 | Target size: ≤ 100 employees · 300 projects · 20 000 tasks · 5 000 pages · 3 years of data | M12 | m12 §5.S1.6–S1.8 | `scripts/lib/perf-data.int.test.ts` (scaled) · m12 §7.4 P0 data-volume counts on `planner_perf` | §9 (r7 numbering) |
+| NFR-02a | Project grid 16 weeks × 200 rows: response < 500 ms p95 | M12 | m12 §5.S3.2 | `scripts/perf-check.ts` › P1, P1b, P1c (gates, m12 §7.4) | §9 (r7 numbering) |
+| NFR-02b | Project grid 16 weeks × 200 rows: render < 300 ms | M12 | m12 §5.S3.4 | `e2e/perf/m12-perf.spec.ts` › PF1 (gate, m12 §7.4; m12 §1.1 calls it "P5") | §9 (r7 numbering) |
+| NFR-03 | Team workload 100 people × 12 weeks < 800 ms p95 | M9 (smoke) · M12 | m09 §5.S2.12<br>m12 §5.S3.2 | M9: int `src/server/services/workload.perf.int.test.ts`<br>M12: `scripts/perf-check.ts` › P2, P2b (gates, m12 §7.4) · `e2e/perf/m12-perf.spec.ts` › PF6 (client, logged) | §9 (r7 numbering) |
+| NFR-04 | Cell edit → visible result < 50 ms (optimistic) | M12 | m12 §5.S3.4 | `e2e/perf/m12-perf.spec.ts` › PF2 (gate, m12 §7.4; m12 §1.1 calls it "P6") | §9 (r7 numbering) |
+| NFR-05 | Open a 300-block page < 1 s | M4 (smoke) · M12 | m04 §5.S2.4<br>m12 §5.S1.8, §5.S3.4 | M4: m04 §7.4 P-1<br>M12: `e2e/perf/m12-perf.spec.ts` › PF3 (gate, m12 §7.4; m12 §1.1 calls it "P7") | §9 (r7 numbering) |
+| NFR-06 | Command palette: first result < 200 ms | M10 · M12 | m10 §5.S2.3, §5.S1.8<br>m12 §5.S3.4, §5.S3.2 | M10: `e2e/m10-home-search.spec.ts` › P3 (timing) · m10 §7.4 perf note · `src/server/services/search.int.test.ts` › timing<br>M12: `e2e/perf/m12-perf.spec.ts` › PF4 (gate) · `scripts/perf-check.ts` › P3b (server search p95, gate), P3c (logged) — m12 §7.4; m12 §1.1 calls them "P8" + "P3" | §9 (r7 numbering) |
+| NFR-07a | Browsers: Chrome, Edge, Safari — 2 latest versions | M12 | m12 (Chromium automated; manual Safari/Edge pass (M12-D25)) | m12 §7.4 M3 manual | §9 (r7 numbering), M12-D25 |
+| NFR-07b | ≥ 1280 px full UI; tablet usable; mobile = home, my tasks, report leave, read documents | M0 (part) · M3 · M4 (part) · M5 · M10 (home part) · M12 | m00 §5.S2.10<br>m03 §5.S3.12<br>m04 §5.S3.1<br>m05 §5.S3.3, §5.S3.4<br>m10 §5.S2.2<br>m12 §5.S4.2 | M0: `src/components/shell/AppShell.test.tsx` · `e2e/m0-smoke.spec.ts` › "narrow screens use a drawer" · `e2e/m0-smoke.spec.ts` › "narrow screens use a temporary drawer"<br>M3: `e2e/m3-tasks.spec.ts` › E13 (390 px viewport)<br>M4: m04 §7.4 M-4<br>M5: `e2e/m5-calendar.spec.ts` › E7 (390 × 844)<br>M10: `e2e/m10-home-search.spec.ts` › H4 (390 × 844)<br>M12: `e2e/m12-hardening.spec.ts` V1–V4 · `e2e/m12-hardening.spec.ts` › H6 (desktop tour) · V1–V3 | §9 (r7 numbering) |
+| NFR-08a | Password hashing = Better Auth default | M1 · M12 | m01 §5.S0.8, §5.S2.3<br>m12 (M1) | M1: `tests/integration/auth.int.test.ts` › T-AUTH-04, T-AUTH-04b<br>M12: unchanged — M1 `auth.int.test.ts` · `tests/authz/audit-coverage.int.test.ts` › AUD-08 no hash in audit rows | §9 (r7 numbering) |
+| NFR-08b | Cookies httpOnly + sameSite=lax; secure when served over HTTPS (SECURE_COOKIES) | M1 · M12 | m01 §5.S0.8, §5.S2.3<br>m12 (M1) + prod check | M1: `tests/integration/auth.int.test.ts` › T-AUTH-04, T-AUTH-04b<br>M12: `e2e/m12-hardening.spec.ts` H3 · `e2e/m12-deploy.spec.ts` D1 | §9 (r7 numbering) |
+| NFR-08c | Security headers: CSP, frame-ancestors 'none' (+ nosniff) | M0 · M4 (editor part) · M12 | m00 §5.S1.4, §5.S1.5<br>m04 §5.S2.4<br>m12 (M0) + verification | M0: `src/lib/csp.test.ts`, `src/proxy.test.ts` · `e2e/m0-smoke.spec.ts` › "security headers and CSP nonce" + CSP guard on every test · CSP guard on every e2e test<br>M4: e2e CSP + external-request guards (M0 fixtures) on every M4 test<br>M12: `e2e/m12-hardening.spec.ts` H1–H2, H4 · `e2e/m12-deploy.spec.ts` › D1 · H6 | §9 (r7 numbering) |
+| NFR-09 | No CDN or external service at runtime (server may be offline) | M0 · M4 (editor part) · M12 | m00 §5.S2.1, §5.S3.4<br>m04 §5.S2.4<br>m12 §5.S3.5, §5.S2.9 | M0: e2e/fixtures.ts external-request guard on every test · m00 §5.S2.13 grep · m00 §6 I9 grep<br>M4: e2e CSP + external-request guards (M0 fixtures) on every M4 test<br>M12: `tests/hardening/no-external-urls.test.ts` · `scripts/offline-check.sh` · every e2e (external-request guard) · external-request guard in every e2e · `offline:check` · `e2e/m12-deploy.spec.ts` › D6 | §9 (r7 numbering) |
+| NFR-10 | Backup: daily pg_dump kept 14 days + UPLOAD_DIR backup | M12 | m12 §5.S2.4 | `tests/deploy/files.test.ts` · `e2e/m12-deploy.spec.ts` › D3–D4 · m12 §7.4 M1 restore drill · `tests/deploy/backup.int.test.ts` | §9 (r7 numbering) |
+| NFR-11 | Page database 1,000 rows × 20 columns: GET < 500 ms p95, table render < 300 ms, view switch < 100 ms, cell edit < 50 ms | M11 (smoke) · M12 | m11 (plan pending — PLAN §1.8)<br>m12 (to be added, PLAN §1.8) | TBD | §9 (v3.2, appended) |
+| NFR-12 | Page with 3 database blocks (1,000 rows) + 50 equations opens < 1.5 s; KaTeX lazy | M11 (smoke) · M12 | m11 (plan pending — PLAN §1.8)<br>m12 (to be added, PLAN §1.8) | TBD | §9 (v3.2, appended) |
 
 ## 6. Other v3.1 ids (kept from the interim v3.1 table; r7 families)
 
@@ -387,7 +514,7 @@ Server-side masking helpers have their own unit/integration tests: `src/server/s
 
 ## 8. E2E spec index (spec file → scenario ids → ACs)
 
-Scenario ids are those of each plan's §7.3 (m11: §5.S3.4/§5.S4.2/§5.S4.3). "Other ids" = FR/BR/PERM/NFR/MASK ids named in the scenario label or pointing at it from a §1.1/§7.1 row. `⟲` in the plan = scenario starts from `resetDb()`.
+Scenario ids are those of each plan's §7.3 (m12: §5.S3.4/§5.S4.2/§5.S4.3). "Other ids" = FR/BR/PERM/NFR/MASK ids named in the scenario label or pointing at it from a §1.1/§7.1 row. `⟲` in the plan = scenario starts from `resetDb()`.
 
 ### `e2e/m0-smoke.spec.ts`
 
@@ -536,6 +663,10 @@ ACs covered: AC-203, AC-603, AC-604, AC-801, AC-802, AC-803, AC-805
 | G14 | G14 ⟲ — VERSION_CONFLICT · cindy + ivy (two contexts) | — | — |
 | G15 | G15 ⟲ `syntheticGrid` — §9 smoke (M6-D22) · cindy | — | — |
 
+### `e2e/m6.1-task-page.spec.ts`
+
+Plan pending (`plan/m06.1-task-page-ui.md`, PLAN §1.8). Must cover AC-621…628 and AC-1601…1605 (viewports 1920, 2560, 768×1024, 390×844) — SPEC §12 M6.1.
+
 ### `e2e/m7-daily.spec.ts`
 
 ACs covered: AC-801, AC-802, AC-803, AC-804, AC-805
@@ -609,7 +740,11 @@ ACs covered: AC-1301, AC-1302, AC-1303
 | B5 | B5 — FR-1307 (cindy) | — | FR-1307 |
 | B6 | B6 — M10-D5 (cindy) | — | — |
 
-### `e2e/perf/m11-perf.spec.ts`
+### `e2e/m11-database.spec.ts`
+
+Plan pending (`plan/m11-database-views.md`, PLAN §1.8). Must cover AC-1401…1413 and AC-1501…1504 (SPEC §12 M11).
+
+### `e2e/perf/m12-perf.spec.ts`
 
 ACs covered: — (no SPEC AC id)
 
@@ -622,7 +757,7 @@ ACs covered: — (no SPEC AC id)
 | PF5 | PF5 — — (X75) | — | — |
 | PF6 | PF6 — — (NFR-03 client) | — | NFR-03 |
 
-### `e2e/m11-hardening.spec.ts`
+### `e2e/m12-hardening.spec.ts`
 
 ACs covered: — (no SPEC AC id)
 
@@ -632,14 +767,14 @@ ACs covered: — (no SPEC AC id)
 | H2 | H2 — NFR-08c | — | NFR-08c |
 | H3 | H3 — NFR-08b | — | NFR-08b |
 | H4 | H4 — NFR-08c, FILE-7 | — | NFR-08c |
-| H5 | H5 — M11-D32, §7.6 | — | — |
+| H5 | H5 — M12-D32, §7.6 | — | — |
 | H6 | H6 — NFR-09, NFR-08c | — | NFR-09, NFR-08c, NFR-07b |
 | V1 | V1 — NFR-07b mobile | — | NFR-07b |
 | V2 | V2 — NFR-07b tablet | — | NFR-07b |
 | V3 | V3 — NFR-07b desktop | — | NFR-07b |
 | V4 | V4 — §8.9 | — | — |
 
-### `e2e/m11-deploy.spec.ts`
+### `e2e/m12-deploy.spec.ts`
 
 ACs covered: — (no SPEC AC id)
 
@@ -648,21 +783,21 @@ ACs covered: — (no SPEC AC id)
 | D1 | D1 — FR-102, FR-104, DEP-15, NFR-08b/c | — | FR-102, FR-104, NFR-08b, NFR-08c |
 | D2 | D2 — DEP-03, FR-201, FR-401 | — | FR-201, FR-401 |
 | D3 | D3 — DEP-04, DEP-12, NFR-10 | — | NFR-10 |
-| D4 | D4 — DEP-12, DEP-13, M11-D26 | — | NFR-10 |
+| D4 | D4 — DEP-12, DEP-13, M12-D26 | — | NFR-10 |
 | D5 | D5 — DEP-01, X52 | — | — |
 | D6 | D6 — NFR-09 | — | NFR-09 |
 
-Every spec also runs the M0 auto-fixture guards (`e2e/fixtures.ts`: no external request — NFR-09; no CSP console error — NFR-08c) and the M1 `loginAs`/`resetDb` helpers (X91). `e2e/perf/**` and `e2e/m11-deploy.spec.ts` are excluded from the default run (`testIgnore`, m11 §5.S0.3).
+Every spec also runs the M0 auto-fixture guards (`e2e/fixtures.ts`: no external request — NFR-09; no CSP console error — NFR-08c) and the M1 `loginAs`/`resetDb` helpers (X91). `e2e/perf/**` and `e2e/m12-deploy.spec.ts` are excluded from the default run (`testIgnore`, m12 §5.S0.3).
 
 ## 9. Gaps
 
 ### 9.1 Ids with no milestone or no test
 
-- **No milestone:** none — every SPEC FR/BR/AC id, every §3.2 row (PERM-01…23) and every §9 row (NFR-01…10) has at least one in-scope row in a milestone plan.
+- **No milestone:** none — every SPEC FR/BR/AC id, every §3.2 row (PERM-01…23) and every §9 row (NFR-01…10) has at least one in-scope row in a milestone plan — **except the v3.2 ids** (FR-1401…1506, BR-90…98, AC-1401…1504, PERM-24…28, NFR-11…12; plus the M6.1 ids FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, AC-1414): milestone M11 or M6.1 is assigned but `plan/m11-database-views.md` / `plan/m06.1-task-page-ui.md` is not written yet (owner review of SPEC v3.2 first, PLAN §1.8).
 - **No test:** none.
-- **Manual check only (allowed; named explicitly):** NFR-07a → m11 §7.4 M3 (Safari + Edge manual pass; Chromium runs every automated test, M11-D25).
+- **Manual check only (allowed; named explicitly):** NFR-07a → m12 §7.4 M3 (Safari + Edge manual pass; Chromium runs every automated test, M12-D25).
 - **Test named but file not named in the plan:** FR-210 (`U-UN-01..03` in m01 §5.S3.5 — component test for `UserName`/`UserAvatar`; expected `src/components/common/UserName.test.tsx`). The unit half (`src/lib/display-name.test.ts` › U-NAME-01..04) is named.
-- **Automated test plus a manual check** (the manual part is in that plan's §7.4): FR-526, FR-530 (m04 §7.4 M-3), FR-627 (m03 §7.4 "Manual v3.1"), NFR-01…06 (m11 §7.4 P0 counts and the P1–P3e / PF1–PF4 gates), NFR-07b (m04 §7.4 M-4), NFR-10 (m11 §7.4 M1 restore drill).
+- **Automated test plus a manual check** (the manual part is in that plan's §7.4): FR-526, FR-530 (m04 §7.4 M-3), FR-627 (m03 §7.4 "Manual v3.1"), NFR-01…06 (m12 §7.4 P0 counts and the P1–P3e / PF1–PF4 gates), NFR-07b (m04 §7.4 M-4), NFR-10 (m12 §7.4 M1 restore drill).
 
 ### 9.2 Ids cited by plan files that SPEC does not define
 
@@ -670,23 +805,23 @@ Every spec also runs the M0 auto-fixture guards (`e2e/fixtures.ts`: no external 
 |---|---|---|
 | FR-1101a … FR-1101f | m10 §1.1, §7.1, §7.3; r7 | r7 sub-rows of SPEC FR-1101 (one per home card); kept as sub-rows in §1. |
 | AC-M5-a … AC-M5-d | m05 §1.1, §7.1, §7.3 | m05's own labels for the SPEC §12 M5 e2e bullets (SPEC §4.9 has no AC ids); documented in m05 line 14. Not SPEC ids. |
-| PERM-01…23, NFR-01…10 (a/b/c), MASK-1…7 | all plans | r7 numbering of un-numbered SPEC rows (§3.2, §9, §3.3) — by design (r7 §A, X79). |
+| PERM-01…28, NFR-01…12 (a/b/c), MASK-1…7 | all plans | r7 numbering of un-numbered SPEC rows (§3.2, §9, §3.3) — by design (r7 §A, X79). |
 | NFR-07 | m00 §1.1, §5.S2.10, §7.1 | Means NFR-07b (tablet/mobile shell). Counted under NFR-07b here. |
 | Other r7 families (SCAF-, UT-, TST-, GOLD-, GRID-, KEY-, A11Y-, DEP-, ACT-, GAPI-, UNDO-, FILE-, EDI-, UI-, DM-, SEED-, TPL-, PRIN-, OOS-, ARC-) | all plans | r7 ids for un-numbered SPEC items; not part of this file's required categories (v3.0 rows: r7 §F; v3.1 rows: §6 above). |
 
 ## 10. Cross-file notes found while tracing (for the implementer; none blocks a milestone)
 
-> **Status 2026-10-30:** the orchestrator fixed these in the plan files right after tracing — schema suite path (m01 → `src/server/db/schema.int.test.ts`), world self-test path (m02 → `tests/helpers/world.int.test.ts`), NFR-07b (m00), `ensureAllProjectStatuses(tx)` (m03 §1.1, PLAN X70, HANDOFF), BR-41/FR-1009 pointers and the BR-42 row (m06), m11 perf ids (PF1–PF4 + P3b), FR-210 test file (m01). The row-key prefix reuse, duplicate basenames and r7 rows-file notes remain informational.
+> **Status 2026-10-30:** the orchestrator fixed these in the plan files right after tracing — schema suite path (m01 → `src/server/db/schema.int.test.ts`), world self-test path (m02 → `tests/helpers/world.int.test.ts`), NFR-07b (m00), `ensureAllProjectStatuses(tx)` (m03 §1.1, PLAN X70, HANDOFF), BR-41/FR-1009 pointers and the BR-42 row (m06), m12 perf ids (PF1–PF4 + P3b), FR-210 test file (m01). The row-key prefix reuse, duplicate basenames and r7 rows-file notes remain informational.
 
 - **Schema test path (m01 vs the rest).** m01 §5.S4.10 writes the M1 schema checks (T-SCHEMA-01…05) to `tests/integration/schema.int.test.ts`; M0 creates and M2–M8 extend `src/server/db/schema.int.test.ts`. Either name works, but two schema suites will exist — when implementing M1, prefer extending `src/server/db/schema.int.test.ts` (the M0 file) or record the split in PROGRESS › Decisions.
 - **World self-test path (m02 vs the rest).** m02 §5.S0.14 ("Test helpers (`tests/helpers/**`)") writes its world self-test to `tests/authz/world.int.test.ts`; m01 and m03–m10 extend `tests/helpers/world.int.test.ts`. Same risk: two files; use `tests/helpers/world.int.test.ts`.
 - **NFR-07 vs NFR-07b (m00).** m00 says "NFR-07 (part)"; r7 and every other plan use NFR-07b for the tablet/mobile clause.
-- **FR-621 helper name (m03 §1.1).** The §1.1 row says `ensureProjectStatuses()` backfills older projects; m03 §5.S2.14 (and X70 in m03 §3.1, m04, m11) define the backfill as `ensureAllProjectStatuses(tx)`, with `ensureProjectStatuses(tx, projectId)` being the per-project call used by `createProject`. PLAN/HANDOFF mention only `ensureProjectStatuses`.
+- **FR-621 helper name (m03 §1.1).** The §1.1 row says `ensureProjectStatuses()` backfills older projects; m03 §5.S2.14 (and X70 in m03 §3.1, m04, m12) define the backfill as `ensureAllProjectStatuses(tx)`, with `ensureProjectStatuses(tx, projectId)` being the per-project call used by `createProject`. PLAN/HANDOFF mention only `ensureProjectStatuses`.
 - **BR-41 pointer (m06 §1.2).** m06's out-of-scope row sends `overload.ts (BR-40/41/45)` to "M7 (day level) · M9 (week level)"; m07 implements only BR-40/BR-45 at day level (X06), BR-41 (causes/excess) is M9 only. Wording only.
 - **BR-42 checksum (m05 §1.2 → m06).** m05 says M6 extends `src/server/services/time-off.int.test.ts › BR-42` with an `allocations` checksum; m06 does it in §5.S2.9 but has no §1.1 row for BR-42.
 - **FR-1009 pointer (m06 §1.2).** "FR-1009 buckets on `/my`, home load cards → M9 / M10": M10 consumes M9's bucket via FR-1101a (G48/M10-D13) and has no FR-1009 row — consistent, but the pointer reads as if M10 builds FR-1009.
 - **Row-key prefix reuse.** m09 §7.2 uses `PG-ME`, `PG-W`, `PG-CO`, `PG-MISSING`, `PG-BADQ` (person grid, `tests/authz/rows/people.ts`) while m04 uses `PG-*` for page rows (`tests/authz/rows/pages.ts`). No key collides, but `PG-*` greps mix two files.
 - **Duplicate basenames (intentional, but cite with the directory).** `allocations.int.test.ts` (repo/ and services/), `capacity.int.test.ts` (services/ and tests/golden/), `masking.int.test.ts` (src/server/services/ and tests/authz/), `milestones.int.test.ts` (repo/, services/, tests/golden/), `employees`/`positions`/`auth.int.test.ts` (src/server/** and tests/integration/ — both in m01), `holidays.test.ts`, `filter.test.ts`, `schema.test.ts`, `route.int.test.ts`, `files.test.ts`. Plan cells that give only the basename were resolved here only when the plan names one full path.
-- **m11 perf ids (m11 §1.1 vs §5.S3/§7.4).** m11 §1.1 cites "§7.4 P5/P6/P7/P8 (gate)" for NFR-02b/04/05/06 and "P3 server p95" for NFR-06, but `scripts/perf-check.ts` defines only P1–P4 (+ b/c/d/e) and the browser budgets are PF1–PF6 (`e2e/perf/m11-perf.spec.ts`, m11 §5.S3.4): NFR-02b = PF1, NFR-04 = PF2, NFR-05 = PF3, NFR-06 = PF4 + P3b (search). §5 above uses the §5.S3 ids.
+- **m12 perf ids (m12 §1.1 vs §5.S3/§7.4).** m12 §1.1 cites "§7.4 P5/P6/P7/P8 (gate)" for NFR-02b/04/05/06 and "P3 server p95" for NFR-06, but `scripts/perf-check.ts` defines only P1–P4 (+ b/c/d/e) and the browser budgets are PF1–PF6 (`e2e/perf/m12-perf.spec.ts`, m12 §5.S3.4): NFR-02b = PF1, NFR-04 = PF2, NFR-05 = PF3, NFR-06 = PF4 + P3b (search). §5 above uses the §5.S3 ids.
 - **r7 rows files superseded.** r7 §G listed `tests/authz/rows/grid.ts`; the plans put grid reads in `allocations.ts` (M6 GR-*) and `grid-day.ts` (M7 GR-D-*). `leave-types.ts` (M5) and `allocations-day.ts` (M7) are new. This file follows the plans.
 

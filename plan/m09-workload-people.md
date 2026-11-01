@@ -42,7 +42,7 @@ Legend — "Where": stream.step in §5. "Test": `unit` = Vitest node, `ui` = Vit
 | X06 (M9 part) | Week-level tones + glyphs in the grid footer (project grid aggregated; person grid = the person's full load) and excess/cause in tooltips | S3.5 | unit `load-footer.test.ts` · ui |
 | X67 (unit) | `grid.unit` applies to the person grid only; workload, overview, client page and `/people` always show days | S3, S4 | ui |
 | GOLD-F1c, F2, F3, F4 | Through the workload service **and** route; person grid masking pairs; badge per viewer | S5.3 | golden |
-| NFR-03 (smoke) | Workload 100 people × 12 weeks < 1 600 ms locally (2× the §9 800 ms; full measurement M11) | S2.12 | int `workload.perf.int.test.ts` |
+| NFR-03 (smoke) | Workload 100 people × 12 weeks < 1 600 ms locally (2× the §9 800 ms; full measurement M12) | S2.12 | int `workload.perf.int.test.ts` |
 | A11Y-1 | OVER/RISK glyph + visually hidden text, numbers on every coloured cell, badge number, striped cap-0 | S3.5, S4.3, S4.6 | ui |
 | PRIN-P4 / P6 | Overloads visible, never auto-fixed; manager reaches "who is overloaded" in one click (badge → list tab) | S4.5, S4.6 | e2e W1, W5 |
 
@@ -65,7 +65,7 @@ M9 adds **no server action** and **no table**: every new endpoint is a GET route
 | `/home` dashboard (my week, my 8-week load bars, manager "ล้นสัปดาห์นี้และสัปดาห์หน้า", team utilisation %), Cmd+K people/category search | M10 (reuses `services.workload.*`, §10) |
 | Live block "ภาระทีมโปรเจค" (`projectWorkload`) and `GET /api/pages/:pageId/embed/workload` | M10 (X78; reuses `services.workload.buildTable({ userIds })`) |
 | ◆ milestone feature itself (create/drag/late rules, project-grid row, calendar) | M8 ✅ (M9 only feeds the person context) |
-| `seed:demo`, `seed:perf` at full scale, full §9 performance measurement | M11 (X69) |
+| `seed:demo`, `seed:perf` at full scale, full §9 performance measurement | M12 (X69) |
 | Day zoom on `/workload` (weekly only); per-day overload lives in the person grid (M7 day zoom) | never (r6b M9-14, r5 M9-13) |
 | v2.1 `/alerts` page, KPI cards, filter-by-cause, quick-fix buttons ("เลื่อนงาน", "ย้ายให้คนอื่น") | never (r5 M9-08 ❌) |
 | Notifications for new overloads, Excel export, scenarios, cost/rate card, audit UI | SPEC §13 #6, #10, #11, #14, #12 |
@@ -159,7 +159,7 @@ M9 adds **no server action** and **no table**: every new endpoint is a GET route
 | M9-D20 | FR-303, X15, r7 FR-303 | `GET /api/clients/[id]/load` (`requireClient`) → Σ over the client's projects that are **visible to the viewer and not archived**, window `[weekStart(today), +12 w)`, plus per-project sums; the client page shows the total in its header (`th.workload.clientLoad.total(days)`) + a "ภาระ 12 สัปดาห์" column, with `th.workload.clientLoad.visibleOnly` for workers. | Masking: a worker never sums hidden projects. |
 | M9-D21 | §8.8, X67, r6b M9-13 | `grid.unit` applies to the person grid only; workload, overview, client page and `/people` always show days (+ % where shown). | X67. |
 | M9-D22 | PLAN §3.5, X18 | Query keys added: `qk.peopleDirectory()` = `['workload','people']`, `qk.projectLoad(id)` = `['workload','project',id]`, `qk.clientLoad(id)` = `['workload','client',id]`, `qk.personTimeOff(userId)` = `['calendar','person',userId]`; `WorkloadParams` = the parsed `workloadQuerySchema` output. A successful grid save also invalidates the **other** grid context prefix (`['grid','project']` after a person-grid save and `['grid','person']` after a project-grid save) and `qk.sidebar()`, by **appending** `invalidateQueries` calls to M6's `invalidateAfterGridSave(qc, ctx)` in `src/lib/grid/save-invalidate.ts` (C65; additive to M8's `qk.projectMilestones(ctx.id)` call, never touching the saving context's own `qk.gridAll(ctx)`). | Everything under existing prefixes → `invalidateLoad` covers it. |
-| M9-D23 | §9 NFR-03, C69 | Perf smoke: `seedGolden` + `addSyntheticWorkload(tx, { people: 95, projects: 20, weeks: 12, from: '2026-09-28' })` (same composition as M11's `seed:perf` → 100 workers on `/workload`); `workload.perf.int.test.ts` asserts `buildTable` over 12 weeks < 1 600 ms (2× budget, logged). Full measurement M11. | Regression guard without flaky CI; one builder for M9 and M11. |
+| M9-D23 | §9 NFR-03, C69 | Perf smoke: `seedGolden` + `addSyntheticWorkload(tx, { people: 95, projects: 20, weeks: 12, from: '2026-09-28' })` (same composition as M12's `seed:perf` → 100 workers on `/workload`); `workload.perf.int.test.ts` asserts `buildTable` over 12 weeks < 1 600 ms (2× budget, logged). Full measurement M12. | Regression guard without flaky CI; one builder for M9 and M12. |
 | M9-D24 | CLAUDE.md deps/DB | No new dependency, no schema change, no migration, no new server action, no new preference key. | Smallest footprint. |
 | M9-D25 | §3.3 | Workload tooltips show "Capacity X วัน (มาตรฐาน Y)" and never name a leave type or holiday (no `maskTimeOff` needed in workload responses); the person grid keeps M6's masked `timeOff` labels. | No leak path through tooltips. |
 | M9-D26 | §8.5 mock, X11, r5 M9-15 | e2e uses the combined **F2 + F3** state (the §8.5 mock) via `resetDb('F2', { alsoFixtures: ['F3'] })` (each fixture still applies only its own setup, X11). | Matches the mock: Jack 19/10 "5/4🔴", Peter 5/10 "5/3🔴". |
@@ -403,7 +403,7 @@ export async function requireVisibleUser(tx: DbOrTx, viewer: SessionUser, userId
   export interface WorkloadWindow { from: ISODate; to: ISODate }   // Mondays, `to` exclusive
   export interface BuildTableOpts { window: WorkloadWindow; positionId?: string | null; projectId?: string | null; onlyOver?: boolean
     userIds?: readonly string[] }                    // M10 embed: restrict to a project's members (still ∩ visible ∩ M9-D3 population)
-  /** Signature pinned for M10 (S1.6/S1.10, M10-D11/D18) and M11 (DM-02): buildTable(tx, viewer, { window, userIds?, positionId?, projectId?, onlyOver? }, today). */
+  /** Signature pinned for M10 (S1.6/S1.10, M10-D11/D18) and M12 (DM-02): buildTable(tx, viewer, { window, userIds?, positionId?, projectId?, onlyOver? }, today). */
   export async function buildTable(tx: DbOrTx, viewer: SessionUser, o: BuildTableOpts, today: ISODate): Promise<WorkloadResponse>
   export async function cellDetail(tx: DbOrTx, viewer: SessionUser, q: { userId: string; week: ISODate }, today: ISODate): Promise<WorkloadCellDetail>
   export async function badgeCount(tx: DbOrTx, viewer: SessionUser, today: ISODate): Promise<WorkloadBadgeResponse>
@@ -549,7 +549,7 @@ Rules: no Thai outside this file (ESLint); tests import `th`. The masked label r
 
 **S0.10 Seed builder (`scripts/lib/fixtures.ts`, M9-D23).**
 ```ts
-/** NFR-03 smoke + M11 seed:perf (C69). Composes AFTER seedGolden in the caller's transaction (`db` may be a Tx; it never opens
+/** NFR-03 smoke + M12 seed:perf (C69). Composes AFTER seedGolden in the caller's transaction (`db` may be a Tx; it never opens
  *  its own transaction and never truncates). Inserts with plain Drizzle (X59):
  *  - `people` workers: `user` rows (role worker, `email = perf-${pad2(i)}@example.com`, i = 1…people, padStart(2,'0') — unique next to
  *    the golden addresses; `name`/`nickname` = `Perf ${pad2(i)}`), no credential account (they never log in), Mon–Fri `work_schedules`
@@ -559,12 +559,12 @@ Rules: no Thai outside this file (ESLint); tests import `th`. The masked label r
  *  - worker i is a member of projects (i mod P) and ((i + 1) mod P); the first member added to a project is its LEAD, the others MEMBER;
  *  - one leaf task per (worker, project) with the project's default `status_id`, one assignment, and one WEEK allocation per week of
  *    [from, from + weeks): cd = 100 + 100 · ((i + w) mod 3) (100–300; integer cd → `cdToNumeric`).
- *  No audit rows (synthetic data, not user operations — X92, M11-D11) and no charter pages (plain Drizzle, not `createProject`; M11's
+ *  No audit rows (synthetic data, not user operations — X92, M12-D11) and no charter pages (plain Drizzle, not `createProject`; M12's
  *  `addPerfBulk` runs `ensureProjectCharters` afterwards, C100). `from` must be a Monday (RangeError otherwise). */
 export async function addSyntheticWorkload(db: DbOrTx, o: { people: number; projects: number; weeks: number; from: ISODate }):
   Promise<{ userIds: string[]; projectIds: string[] }>
 ```
-Test first `scripts/lib/fixtures.int.test.ts › addSyntheticWorkload` (after `truncateAll` + `seedGolden`, inside one transaction like M11's `seedPerf`): `{ people: 95, projects: 20, weeks: 12, from: '2026-09-28' }` → +95 users with e-mails `perf-01@example.com … perf-95@example.com` (no collision with golden ones), every one with a golden `position_id` and 5 schedule rows; +20 projects; 190 tasks each with a non-null `status_id`; 190 assignments; 2 280 allocation rows, all WEEK with `week_start` in `[2026-09-28, 2026-12-21)`; `audit_log` count unchanged; positions count unchanged (the "100 people on `/workload`" assertion lives in S2.12, because `buildTable` is a stub at G0). `{ people: 100, … }` on a fresh `seedGolden` also works (e-mails up to `perf-100@example.com`). Without `seedGolden` → throws the "run seedGolden first" error. `from: '2026-09-29'` → `RangeError`.
+Test first `scripts/lib/fixtures.int.test.ts › addSyntheticWorkload` (after `truncateAll` + `seedGolden`, inside one transaction like M12's `seedPerf`): `{ people: 95, projects: 20, weeks: 12, from: '2026-09-28' }` → +95 users with e-mails `perf-01@example.com … perf-95@example.com` (no collision with golden ones), every one with a golden `position_id` and 5 schedule rows; +20 projects; 190 tasks each with a non-null `status_id`; 190 assignments; 2 280 allocation rows, all WEEK with `week_start` in `[2026-09-28, 2026-12-21)`; `audit_log` count unchanged; positions count unchanged (the "100 people on `/workload`" assertion lives in S2.12, because `buildTable` is a stub at G0). `{ people: 100, … }` on a fresh `seedGolden` also works (e-mails up to `perf-100@example.com`). Without `seedGolden` → throws the "run seedGolden first" error. `from: '2026-09-29'` → `RangeError`.
 
 **S0.11 Test helpers (`tests/helpers/**`, PLAN §4.3).** No new world part: M9 tests use `createWorld({ with: ['allocations'] })` (M6: `w.assignments.pCoworker` WEEK 2026-10-05 = 100 on P, `w.assignments.qTaskCoworker` WEEK 2026-10-05 = 300 on Q, `pLeafLead`, `pDoneMember`, archived `aTaskMember`). Add to `factories.ts` (plain Drizzle, X59): `deactivateUser(user, on: ISODate)` (sets `banned = true`, `deactivated_on`) if M1 has no equivalent. Add `tests/helpers/json.ts`: `allNumbersInteger(body: unknown): boolean` (walks every number, BR-03) and `containsAny(body: unknown, needles: readonly string[]): string[]` (returns the needles found in `JSON.stringify(body)`). `outcomeOf` already maps 404/400.
 
@@ -972,7 +972,7 @@ Render: `<button className={styles.cell} data-tone data-palette data-level aria-
 
 Written **from SPEC §3.2/§3.3 before S2 finishes** (PLAN §4.1); rows are red until S2 lands (stubs throw `NOT_IMPLEMENTED`), green at G2. World `createWorld({ with: ['allocations', 'milestones'] })` (M6 + M8: `w.users.coworker` in P and Q, `w.assignments.pCoworker` WEEK 2026-10-05 = 100, `w.assignments.qTaskCoworker` WEEK 2026-10-05 = 300, `w.milestones.p` "Milestone P-ลับ06", `w.milestones.q` "Milestone Q-ลับ05"); `asUser`, `outcomeOf`, `outcomeOfCall`. Visibility in the world (X43): M, L → all users; Me → {member, lead, coworker, pOnly}; W → {outsider, coworker}.
 
-**S5.1 Rows (`tests/authz/rows/workload.ts`, `tests/authz/rows/people.ts`, both appended to `tests/authz/rows/index.ts` — X91, M11 AUD-00 fails on a missing registration; full table §7.2).**
+**S5.1 Rows (`tests/authz/rows/workload.ts`, `tests/authz/rows/people.ts`, both appended to `tests/authz/rows/index.ts` — X91, M12 AUD-00 fails on a missing registration; full table §7.2).**
 ```ts
 const get = (path: string, params: Record<string, string>, handler: RouteHandler) => handler(new Request(`http://t${path}`), { params: Promise.resolve(params) })
 { id: 'PERM-22', key: 'WL-TABLE', spec: '§3.3 ดู workload', action: 'GET /api/workload', mutates: false,
@@ -1180,7 +1180,7 @@ Deterministic per PLAN §4.5: production build, `APP_NOW=2026-09-30T10:00:00+07:
 ### 7.4 Golden, perf and manual checks
 
 - Golden: S5.3 (F1–F4, F2+F3, colour counts, badges, parity, FR-906) and S5.2 golden masking pairs — r8 numbers only, never re-typed from SPEC prose.
-- Perf: S2.12 (100 people × 12 weeks < 1 600 ms, badge < 800 ms, logged); full §9 measurement in M11 against `seed:perf`.
+- Perf: S2.12 (100 people × 12 weeks < 1 600 ms, badge < 800 ms, logged); full §9 measurement in M12 against `seed:perf`.
 - Manual: dark mode — workload tones, tentative palette and hatched bars readable (token contrast test from M0/X51 still green); screen reader spot check (VoiceOver) — a workload cell reads name, week, load, capacity and the status sentence; keyboard-only: Tab into the table, arrows, Enter opens the panel, Esc returns; the badge number is announced; `/people/[id]` at 1280 px and on a tablet.
 
 ---
@@ -1234,7 +1234,7 @@ Deterministic per PLAN §4.5: production build, `APP_NOW=2026-09-30T10:00:00+07:
 - Milestone table: M9 ✅ with date, commit hash and tag `m9`.
 - Decisions: copy §3.1 (X06, X09, X14, X15, X18, X22, X23, X28, X30, X31, X40–X47, X53, X57, X59, X64, X67, X74–X77 as applied) and §3.2 (M9-D1 … M9-D29).
 - Deviations: none.
-- Known issues / forward notes: **M10** reuses `services.workload.buildTable({ window: 8 weeks, userIds: <project members> })` for the `projectWorkload` embed (masking identical to `/api/workload`, AC-1303), `services.workload.personCells` for "ภาระของฉัน 8 สัปดาห์", `overloads` of `buildTable` over weeks `[weekStart(today), +2 w)` for the manager card, `MyTaskBucketsResponse` THIS_WEEK for "งานของฉันสัปดาห์นี้", the M9-D3 population for team utilisation (r8 G8: 72.5 % F1 with 5 workers), `WorkloadCell`/`workloadCellText`/`viewTone` for block cells; **M11** full NFR-03 measurement with `seed:perf` (reuse `addSyntheticWorkload`), audit sweep finds no new M9 actions.
+- Known issues / forward notes: **M10** reuses `services.workload.buildTable({ window: 8 weeks, userIds: <project members> })` for the `projectWorkload` embed (masking identical to `/api/workload`, AC-1303), `services.workload.personCells` for "ภาระของฉัน 8 สัปดาห์", `overloads` of `buildTable` over weeks `[weekStart(today), +2 w)` for the manager card, `MyTaskBucketsResponse` THIS_WEEK for "งานของฉันสัปดาห์นี้", the M9-D3 population for team utilisation (r8 G8: 72.5 % F1 with 5 workers), `WorkloadCell`/`workloadCellText`/`viewTone` for block cells; **M12** full NFR-03 measurement with `seed:perf` (reuse `addSyntheticWorkload`), audit sweep finds no new M9 actions.
 
 **Commit** (orchestrator, after G4):
 ```

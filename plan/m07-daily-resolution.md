@@ -59,10 +59,10 @@ Archived project A (X42): every PERM-12 row above → M/L/Me `403`, W `404` (AL-
 | Person grid `/people/[id]` (incl. its day zoom and masked rows) | M9 |
 | FR-906 impact-panel line "มีงาน X วันวางไว้ในวันที่ลา" / new-overload links | M9 (X23; M7-D15) |
 | ◆ milestone row in day columns, AC-701 day placement, drag ◆ ±1 day | M8 (X66) |
-| `seed:demo` composition (only the `addDayExample` builder is built now) | M11 (X69) |
+| `seed:demo` composition (only the `addDayExample` builder is built now) | M12 (X69) |
 | v2.1's third BR-24 option "เติมวันที่ยังว่าง", `EXPAND/REDISTRIBUTE`, warn-before-collapse dialog, drag task bars | never (r5 C10, C11, C34) |
 | Excel import/export, scenarios/what-if, notifications, time tracking | SPEC §13 #10, #11, #6 · §1.4 |
-| Full-scale performance measurement (`seed:perf`) | M11 (M7 runs a local smoke only, §7.4) |
+| Full-scale performance measurement (`seed:perf`) | M12 (M7 runs a local smoke only, §7.4) |
 
 ### 1.3 Carried-in items (deferred to M7 by earlier milestones)
 
@@ -301,7 +301,7 @@ M6's `ValidationError(fieldErrors, message?, extra?)` already carries `issues` (
 ```ts
 /** SPEC Appendix A.2 "Task หลายคน + รายวัน". Not in golden-fixtures.json, hence constants (M7-D16).
  *  Requires seedGolden(db) at M6 level. Idempotent (no-op when the task exists). Audit actor = null (X59).
- *  A builder with fixed A.2 dates: it takes no `today` (X90 covers services; M11 composes it as-is in seed:demo, before addMilestones). */
+ *  A builder with fixed A.2 dates: it takes no `today` (X90 covers services; M12 composes it as-is in seed:demo, before addMilestones). */
 export const DAY_EXAMPLE = { project: 'Mobile App Revamp', task: 'Kickoff workshop', assignees: ['Jack', 'Mint'] as const, day: '2026-09-07', cd: 50 } as const
 export async function addDayExample(db: DbOrTx): Promise<{ taskId: string; assignmentIds: Record<'Jack' | 'Mint', string> }>
 ```
@@ -819,7 +819,7 @@ Tests first `src/lib/grid/day-footer.test.ts`: F2 Jack 10-19 derived 125 committ
 
 **S3.12 Accessibility (§8.9, A11Y-2b, M7-D20).** `role="grid"`, contiguous `aria-colindex` over day/รวม columns; day cells' accessible name `th.grid.day.cellLabel(formatWeekday(d), formatThaiDate(d, 'short'), value)` + `aria-description` for derived values; header toggles are buttons with `aria-expanded`; ↕ button and `CellMenu` reachable by keyboard (`Shift+F10`); the BR-24 dialog traps focus and returns it to the edited cell; glyphs always have text. Contrast: derived text uses the X51 faded token (M6's token test already covers `#5B6878` on white / `--nonworking` / `--holiday`). Test: `PlanGrid.day.test.tsx › a11y` checks roles/attributes; keyboard-only flow is e2e D6.
 
-**S3.13 Performance guard.** Day zoom over the default window (16 weeks) yields ≤ 16 × 8 columns; both virtualizers stay `useFlushSync: false`; cells memoised by `(rowKey, periodKey, cell, status)`; `personDayLoads` computed once per data change (`useMemo` on the chunk data), not per cell. Local smoke (not a gate): golden data, `zoom=day`, keyboard-repeat `ArrowRight` across 40 columns without dropped frames in the Chromium performance panel; record the observation in the S3 report (full measurement M11).
+**S3.13 Performance guard.** Day zoom over the default window (16 weeks) yields ≤ 16 × 8 columns; both virtualizers stay `useFlushSync: false`; cells memoised by `(rowKey, periodKey, cell, status)`; `personDayLoads` computed once per data change (`useMemo` on the chunk data), not per cell. Local smoke (not a gate): golden data, `zoom=day`, keyboard-repeat `ArrowRight` across 40 columns without dropped frames in the Chromium performance panel; record the observation in the S3 report (full measurement M12).
 
 **S3.14 Remove M6's DAY-week skip + done-check (X27, G25).** Delete M6's "DAY week = read-only total" behaviour from every gesture and its tests:
 - `rows.ts#cellEditability`: drop the `'dayWeek'` result and the `'dayWeek'` member of `Editability` (M9 relies on "DAY weeks editable since M7"); `rows.test.ts` "DAY cell → `dayWeek`" becomes "DAY cell → `ok`".
@@ -1011,7 +1011,7 @@ Deterministic per PLAN §4.5: production build, `APP_NOW=2026-09-30T10:00:00+07:
 ### 7.4 Golden / perf / manual checks
 
 - Golden: `tests/golden/day-level.int.test.ts` (S4.3) — r8 §4.7 derived table, day levels, materialisation numbers, Kickoff totals 19 600 / 11 725; M6's F1 grid assertions unchanged (19 500 / 11 625).
-- Perf (smoke, not a gate): `GET /api/grid/project/<DW>?zoom=day` for 8 weeks on golden data returns in < 300 ms locally (log the timing in the S2 report); keyboard repeat across day columns without visible lag (S3.13). The §9 scale measurement is M11.
+- Perf (smoke, not a gate): `GET /api/grid/project/<DW>?zoom=day` for 8 weeks on golden data returns in < 300 ms locally (log the timing in the S2 report); keyboard repeat across day columns without visible lag (S3.13). The §9 scale measurement is M12.
 - Manual (integrator, `pnpm seed:golden --fixture=F2` + `pnpm dev`): Thai Kedmanee layout — `Cmd+↓`/`Cmd+↑`, `f`, `h`, digits work (e.code); dark mode — dashed derived values, grey holiday and stripes readable; screen reader (VoiceOver) reads "ค่ากระจายจากแผนรายสัปดาห์" on a derived cell and the 🔴 text; BR-24 dialog: Tab order scale → collapse → cancel, focus returns to the cell.
 
 ---
@@ -1070,7 +1070,7 @@ Deterministic per PLAN §4.5: production build, `APP_NOW=2026-09-30T10:00:00+07:
 - Decisions: copy §3.1 (X04, X06, X07, X18, X27, X28, X29, X30, X40–X42, X44–X47, X49, X51, X53, X55, X56, X59, X65, X67, X76, X82, X83, X85–X87, X90, X91 as they apply) and §3.2 (M7-D1 … M7-D28).
 - Deviations: **M7-D7** — what: stored DAY values are clamped at 1.00/day and the excess spills (BR-22 and BR-24 SCALE); why: BR-26 and the DDL check `person_days <= 1` forbid the literal results for golden F2–F4 and SCALE above capacity; instead: tiered spill with a warning toast, sums preserved, `UNREPRESENTABLE` only when no day can absorb the excess.
 - Known issues: any review finding that survived two fix rounds; the S0.1 M6 name map if any M6 name differed.
-- Forward notes: **M8** draws ◆ in day columns via `columnIndexOfPeriod` and moves ◆ ±1 day there (X66), and reuses `CellMenu` through its additive `items?` prop plus the `grid.cellMenu` shortcut; **M9** reuses `src/lib/grid/day.ts` (`dayCtxFor`, `spreadDayLoads`), `services/day-context.ts#loadDayData`, `repo.allocations.dayLoadsForProjects` (with `projectIds` for hidden projects), `day-footer.ts` (`personDayLoads` gains a masked-row branch; `personDayStatus`/`footerDayCell` unchanged) and `overload.ts` (adds BR-41 causes, excess, week-level tones, the FR-906 "มีงาน X วันวางไว้ในวันที่ลา" line, X23) and the person grid's day zoom uses `grid.zoom`; **M11** `seed:demo` composes `addDayExample` (X69).
+- Forward notes: **M8** draws ◆ in day columns via `columnIndexOfPeriod` and moves ◆ ±1 day there (X66), and reuses `CellMenu` through its additive `items?` prop plus the `grid.cellMenu` shortcut; **M9** reuses `src/lib/grid/day.ts` (`dayCtxFor`, `spreadDayLoads`), `services/day-context.ts#loadDayData`, `repo.allocations.dayLoadsForProjects` (with `projectIds` for hidden projects), `day-footer.ts` (`personDayLoads` gains a masked-row branch; `personDayStatus`/`footerDayCell` unchanged) and `overload.ts` (adds BR-41 causes, excess, week-level tones, the FR-906 "มีงาน X วันวางไว้ในวันที่ลา" line, X23) and the person grid's day zoom uses `grid.zoom`; **M12** `seed:demo` composes `addDayExample` (X69).
 
 **Commit** (orchestrator, after G4):
 ```

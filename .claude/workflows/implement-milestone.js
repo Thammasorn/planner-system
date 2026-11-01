@@ -15,7 +15,7 @@ export const meta = {
 
 // ───────────────────────── parameters ─────────────────────────
 const N = Number(args && args.milestone)
-if (!Number.isInteger(N) || N < 0 || N > 11) throw new Error('args.milestone must be an integer 0..11')
+if (!Number.isInteger(N) || N < 0 || N > 12) throw new Error('args.milestone must be an integer 0..12')
 const MAX_FIX_ROUNDS = (args && Number(args.maxFixRounds)) || 3
 const SKIP_REVIEW = Boolean(args && args.skipReview)
 const NN = String(N).padStart(2, '0')
@@ -447,7 +447,7 @@ const close = await agent(
 1. Run pnpm check and the full e2e suite (pnpm test:e2e) one final time. If either fails, do NOT commit: set the PROGRESS.md row to ⛔ with the reason and return committed=false.
 2. Walk ${kickoff.planFile} section 8 (Definition of done) and SPEC §12 ${MID}; tick every box you can verify, and list anything unverifiable in followUps.
 3. Update PROGRESS.md:
-   - row ${MID} → ✅ with a one-line note (date from \`date +%F\`); "Milestone ปัจจุบัน" → ${N < 11 ? 'M' + (N + 1) + ' — ยังไม่เริ่ม' : 'MVP เสร็จ'}.
+   - row ${MID} → ✅ with a one-line note (date from \`date +%F\`); "Milestone ปัจจุบัน" → ${N < 12 ? 'M' + (N + 1) + ' — ยังไม่เริ่ม' : 'MVP เสร็จ'}.
    - "## แผนของ milestone ปัจจุบัน": tick everything done; then clear it back to the template placeholder for the next milestone.
    - "## Decisions": add these stream decisions (dedupe; date · ref · decision · reason):
 ${decisions.length ? decisions.map(d => `     - ${d.ref} · ${d.decision} · ${d.reason} (${d.stream})`).join('\n') : '     - (none reported)'}

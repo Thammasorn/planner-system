@@ -61,7 +61,7 @@ SPEC §12 M0 has no FR/BR/AC ids. The rows below are the SPEC §12 M0 bullets pl
 | Command palette, Cmd+K, sidebar search button | M4 (X08) |
 | BlockNote, `.bn-container` font variable, upload limits / `proxyClientMaxBodySize` | M4 |
 | Home dashboard, greeting by Bangkok hour | M10 (X68) |
-| Production `docker-compose.yml`, `Dockerfile`, `.dockerignore`, Caddy, `backup.sh`, README, strict style CSP, external-URL lint/grep | M11 |
+| Production `docker-compose.yml`, `Dockerfile`, `.dockerignore`, Caddy, `backup.sh`, README, strict style CSP, external-URL lint/grep | M12 |
 | Anything in SPEC §1.4 or §13 | never in MVP |
 
 ### 1.3 Carried-in items
@@ -100,7 +100,7 @@ None — M0 is the first milestone.
 | X52 | §6.5 | The dev DB runs sessions in UTC (`-c timezone=UTC`), logs in Asia/Bangkok. | PLAN §1.4 ruling (never derive plan dates in SQL). |
 | X53 | CLAUDE.md | No `localStorage`; ESLint bans it (M0-D13). | PLAN §1.4 ruling. |
 | X84 | §8.1 | M0 fixes the nav data model later milestones extend: `NavItem { id, href, label, icon: NavIcon (string key), managerOnly? }` + `PRIMARY_NAV` (top group) + `BOTTOM_NAV` (bottom group, empty in M0). M3 adds `badge?: NavBadge`; final orders are pinned in S2.10. | PLAN §1.4 ruling (one nav model for M1–M9). |
-| X91 | §11.4 | `e2e/fixtures.ts` exports its CSP / external-request / page-error guards as **named functions** (the auto fixture calls them) so M11's `e2e/perf/fixtures.ts` imports instead of copying; `resetDb`/`loginAs` arrive in M1 with the X91 signature. | PLAN §1.4 ruling (test harness). |
+| X91 | §11.4 | `e2e/fixtures.ts` exports its CSP / external-request / page-error guards as **named functions** (the auto fixture calls them) so M12's `e2e/perf/fixtures.ts` imports instead of copying; `resetDb`/`loginAs` arrive in M1 with the X91 signature. | PLAN §1.4 ruling (test harness). |
 
 ### 3.2 New decisions
 
@@ -415,7 +415,7 @@ blob-report/
 e2e/.auth/
 affine/
 ```
-`affine/` is the owner's local AFFiNE trial install (2026-10-30, PLAN §1.7); its `data/` holds a live Postgres cluster and must never be committed. If the folder has been moved out of the repo by then, keep the line anyway. Later milestones only **append** lines (M11 adds `.perf-uploads/`); `test-results/` and `affine/` are never removed.
+`affine/` is the owner's local AFFiNE trial install (2026-10-30, PLAN §1.7); its `data/` holds a live Postgres cluster and must never be committed. If the folder has been moved out of the repo by then, keep the line anyway. Later milestones only **append** lines (M12 adds `.perf-uploads/`); `test-results/` and `affine/` are never removed.
 `.env.example` (SPEC §10.3 verbatim values, comments moved to their own lines because Node `--env-file`, Next and Compose treat inline `#` differently; M0-D20):
 ```bash
 # Team Working OS — copy to .env (never commit .env). SPEC §10.3 + PLAN.md §3.12.
@@ -607,7 +607,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;--> statement-breakpoint
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 ```
 (Editing a custom migration before it is first applied is the intended workflow; never edit it afterwards.)
-`scripts/lib/migrate.ts` (shared by `pnpm db:migrate`, the Vitest template, the e2e DB and — in M11 — the Docker `migrate` service):
+`scripts/lib/migrate.ts` (shared by `pnpm db:migrate`, the Vitest template, the e2e DB and — in M12 — the Docker `migrate` service):
 ```ts
 import path from 'node:path'
 import { drizzle } from 'drizzle-orm/postgres-js'
@@ -1556,7 +1556,7 @@ export default defineConfig({
 ```
 `next start` prints a harmless warning with `output: 'standalone'` (r4 fact 43). Process env wins over `.env`, so the dev `DATABASE_URL` in `.env` is not used.
 
-**S3.4 — `e2e/fixtures.ts`: clock pin + CSP / external-request / page-error guards (every test, auto).** The three guards are **named exports** (X91, C71) — the auto fixture calls them, and M11's `e2e/perf/fixtures.ts` imports them (never copies them).
+**S3.4 — `e2e/fixtures.ts`: clock pin + CSP / external-request / page-error guards (every test, auto).** The three guards are **named exports** (X91, C71) — the auto fixture calls them, and M12's `e2e/perf/fixtures.ts` imports them (never copies them).
 ```ts
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test'
 import { E2E } from './env'
@@ -1735,7 +1735,7 @@ Determinism: browser clock pinned to `E2E.appNow` by the auto fixture; the serve
 ### 7.4 Golden / perf / manual checks
 
 - Golden: none (no data until M1).
-- Perf: none in M0 (M6 smoke, M11 full).
+- Perf: none in M0 (M6 smoke, M12 full).
 - Manual (orchestrator, once, note results in the close-out report):
   1. Chrome at 1280 px and 800 px: shell, drawer, focus ring visible on Tab.
   2. macOS with the Thai Kedmanee keyboard layout active: `⌘\` still toggles the sidebar (X49).
@@ -1778,7 +1778,7 @@ Determinism: browser clock pinned to `E2E.appNow` by the auto fixture; the serve
 | 9 | Vitest fails with no test files; coverage thresholds with no domain files (r6a M0-08) | S0 ships `th.test.ts`, `schema.test.ts`, `schema.int.test.ts`; fallbacks in S0.15; never `--passWithNoTests` |
 | 10 | Two concurrent integration runs drop each other's DBs | per-run DB names (M0-D17, S0.13) |
 | 11 | Playwright starts `webServer` before `globalSetup`; `/api/health` needs the DB | DB prepared inside `webServer.command` and again in `globalSetup` (M0-D18, S3.2) |
-| 12 | `next start` with `output: 'standalone'` prints a warning (r4 fact 43) | harmless; Docker (M11) runs `node server.js` after copying `.next/static` + `public` |
+| 12 | `next start` with `output: 'standalone'` prints a warning (r4 fact 43) | harmless; Docker (M12) runs `node server.js` after copying `.next/static` + `public` |
 | 13 | `'strict-dynamic'` + Next bug #98015 can block boundary chunks / hang navigation (r1 §7.2) | no `'strict-dynamic'` (S1.4 test asserts it) |
 | 14 | Emotion and sonner inject `<style>` without a nonce (r4 fact 23) | `style-src 'self' 'unsafe-inline'`, never mixed with a style nonce (S1.4 test) |
 | 15 | `upgrade-insecure-requests`/HSTS break plain-HTTP LAN installs | emitted only when `SECURE_COOKIES=true` (S1.4) |
@@ -1807,7 +1807,7 @@ Determinism: browser clock pinned to `E2E.appNow` by the auto fixture; the serve
    - `## Deviations`: keep the existing MUI row (M0-D4); add
      `| <date> | §8.7 | --load-light-fg / --tentative-fg = #9C6500 | #8F5C00; added --surface, --faded-fg; dark set defined | #9C6500 on #FFEB9C = 4.12:1 < 4.5:1 required by §8.9 (X51, M0-D22) |` and
      `| <date> | §7.2 | drizzle/9999_triggers.sql | journaled custom migrations (drizzle-kit generate --custom) | the migrator runs only journaled files (M0-D25) |`.
-   - `## Known issues / TODO ถัดไป`: ESLint 9 is EOL (upgrade = own Decision); Node 22 EOL 2027-04-30; strict style CSP deferred to M11 (optional); `/home` date uses the real request time until M1 (M0-D6); date pickers not installed yet (M0-D16).
+   - `## Known issues / TODO ถัดไป`: ESLint 9 is EOL (upgrade = own Decision); Node 22 EOL 2027-04-30; strict style CSP deferred to M12 (optional); `/home` date uses the real request time until M1 (M0-D6); date pickers not installed yet (M0-D16).
 2. **Commit** (orchestrator, after G4 = §6 I1–I9 green once more):
 ```bash
 git add -A

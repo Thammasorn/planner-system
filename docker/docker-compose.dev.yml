@@ -1,4 +1,4 @@
-# Dev/test Postgres only (SPEC §10.1, PLAN.md §3.3, M0-D19). Production compose lives in docker-compose.yml (M11).
+# Dev/test Postgres only (SPEC §10.1, PLAN.md §3.3, M0-D19). Production compose lives in docker-compose.yml (M12).
 name: planner-dev
 services:
   db:

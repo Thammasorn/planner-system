@@ -4,7 +4,7 @@
 
 ## สถานะ
 
-**Milestone ปัจจุบัน:** M7 — ยังไม่เริ่ม
+**Milestone ปัจจุบัน:** M6.1 — ยังไม่เริ่ม
 
 | # | Milestone | สถานะ | หมายเหตุ |
 |---|---|---|---|
@@ -15,11 +15,13 @@
 | M4 | หน้าเอกสารแบบ Notion | ✅ | 2026-11-01 · BlockNote pages (subpage/mention/attachment blocks, Thai slash menu, Excel/TSV + screenshot paste, autosave + edit lease), `/api/files` uploads, Appendix B templates + FR-402 charters, Wiki ทีม + project page trees, project tab เอกสาร, Cmd/Ctrl+K page search; `pnpm check` (186 files, 2835 tests, 16 skipped by design) and e2e (83: m0-smoke 9 + m1-auth 14 + m2-projects 15 + m3-tasks 24 + m4-pages 21) green; tag `m4` |
 | M5 | ปฏิทิน, วันหยุด, วันลา, capacity | ✅ | 2026-11-01 · `/calendar` month grid + phone agenda, LeaveDialog (calendar selection + user menu) with capacity impact before → after, time off with overlap guard and delete/undo, settings วันหยุด (CSV import UTF-8/windows-874) and ประเภทการลา (archive when in use), `capacity.ts` BR-10..13, calendar masking, bootstrap leave types, `seed:golden --fixture`, `pnpm import:holidays`; `pnpm check` (208 files, 3369 tests, 16 skipped by design) and e2e (98: m0-smoke 9 + m1-auth 14 + m2-projects 15 + m3-tasks 24 + m4-pages 21 + m5-calendar 15) green; tag `m5` |
 | M6 | กริดวางแผนรายสัปดาห์ | ✅ | 2026-11-01 · PlanGrid (2-axis virtualisation, ±156-week timeline, every §4.8 input/delete gesture, undo/redo, footer + other-projects switch, leave/holiday/tentative marks, ⛔ badge), `allocations` + custom `allocations_week_day_guard` (trigger + exclusion), batch `saveAllocations`, `GET /api/grid/project/[projectId]`, FR-612 plan range in the task panel, BR-52 released load on every DONE path, FR-406 X, golden F1 via service + route; review fix rounds fix-r1…fix-r3; `pnpm check` (250 files, 4094 tests, 16 skipped by design) and e2e (117: m0-smoke 9 + m1-auth 14 + m2-projects 15 + m3-tasks 24 + m4-pages 21 + m5-calendar 15 + m6-grid 19) green; tag `m6` |
+| M6.1 | Task เป็นหน้าเอกสาร + ปรับ UI | ⬜ | SPEC v3.2 (เพิ่ม 2026-11-01) · `plan/m06.1-task-page-ui.md` ยังไม่เขียน |
 | M7 | รายวัน | ⬜ | |
 | M8 | Milestones | ⬜ | |
 | M9 | Workload & มุมมองรายคน | ⬜ | |
 | M10 | หน้าหลัก, การค้นหา, บล็อกข้อมูลสด | ⬜ | SPEC v3.1 |
-| M11 | Hardening & deploy | ⬜ | |
+| M11 | ฐานข้อมูลในหน้าเอกสาร + สมการ | ⬜ | SPEC v3.2 · `plan/m11-database-views.md` ยังไม่เขียน (รอเจ้าของรีวิว spec) |
+| M12 | Hardening & deploy | ⬜ | เดิมคือ M11 (เลื่อนเลข 2026-11-01, SPEC v3.2) |
 
 สัญลักษณ์: ⬜ ยังไม่เริ่ม · 🟨 กำลังทำ · ✅ เสร็จ · ⛔ ติดปัญหา
 

@@ -91,9 +91,9 @@ Ids `PERM-nn` follow `plan/research/r7-traceability.md` (§3.2 rows in table ord
 | Palette categories projects / tasks / people / clients and quick commands (สร้าง task, สร้างหน้า, แจ้งลา, ไปหน้าวันนี้) | M10 (X08, X68) |
 | Palette command "สร้าง milestone" | M8 (X08) |
 | Home card "หน้าเอกสารที่แก้ล่าสุด 8 หน้า" | M10 (FR-1101) |
-| Demo pages (POS charter filled, "บันทึก kickoff", "คู่มือทีม › วิธีใช้ระบบนี้") | M11 `addDemoPages` (X11, §3.13) |
-| Full perf run on `seed:perf` (5 000 pages), mobile/tablet viewport suite | M11 |
-| Strict `style-src` with nonces for BlockNote/Mantine (optional hardening) | M11 (r1 §7.2) |
+| Demo pages (POS charter filled, "บันทึก kickoff", "คู่มือทีม › วิธีใช้ระบบนี้") | M12 `addDemoPages` (X11, §3.13) |
+| Full perf run on `seed:perf` (5 000 pages), mobile/tablet viewport suite | M12 |
+| Strict `style-src` with nonces for BlockNote/Mantine (optional hardening) | M12 (r1 §7.2) |
 | Fetching external images server-side | never in MVP (§7.6: insert a link instead) |
 | Table merge/split cells, cell text colour, multi-row headers, code syntax highlighting, audio/video blocks | not required by FR-521/523 (M4-D11/D12) |
 | `@blocknote/xl-*` (GPL/commercial), `@blocknote/server-util`, `@blocknote/code-block` | never (PLAN §1.2) |
@@ -180,7 +180,7 @@ Ids `PERM-nn` follow `plan/research/r7-traceability.md` (§3.2 rows in table ord
 | X56 | `import 'server-only'` only in `session.ts`/`clock.ts`: `storage.ts`, services and repo stay importable from scripts and Playwright; services take `today` as input. |
 | X57 | No `loading.tsx` / Suspense above `/p/[pageId]`, `/projects/[id]/pages` (may 404); `getPageView` wrapped in `orNotFound()`. |
 | X58 | Page tree moves send intent `{ pageId, parentId, afterId }`; the r4 `SortableTree` snippet's client key generation is not copied (M3's `SortableTree` already follows this). |
-| X59 / X96 | Default: services write the audit rows inside the caller's transaction (also `ensureProjectCharters` with actor `null`). X96 exception, as written in S1.3/S1.6/S1.7: `createPage`, `renamePage`, `savePageContent` (action **and** keepalive `PUT`) and `POST /api/files` write their row in the action/route, after the service, same tx (M4-D38; M11's `AUDIT_IN_SERVICE` mirrors it). Factories `makePage`/`makeFile` insert with plain Drizzle. |
+| X59 / X96 | Default: services write the audit rows inside the caller's transaction (also `ensureProjectCharters` with actor `null`). X96 exception, as written in S1.3/S1.6/S1.7: `createPage`, `renamePage`, `savePageContent` (action **and** keepalive `PUT`) and `POST /api/files` write their row in the action/route, after the service, same tx (M4-D38; M12's `AUDIT_IN_SERVICE` mirrors it). Factories `makePage`/`makeFile` insert with plain Drizzle. |
 | X70 | `createProject` keeps M3's default-status insert; M4 appends the charter insert to the same transaction (S1.9). |
 | X78 | No live blocks, slash items or charter section "งานและภาระของทีม" in M4 (M4-D30); M10 appends to `BLOCK_TYPES`/`checkBlockProps`, the editor schema and `charterTemplate()` (M4-D37). |
 | X80 | Service/repo files kebab-case: `services/page-lease.ts`, `page-tree.ts`, `repo/page-locks.ts` (M4-D36 is now the PLAN rule); namespaces camelCase. |
@@ -234,7 +234,7 @@ Ids `PERM-nn` follow `plan/research/r7-traceability.md` (§3.2 rows in table ord
 | M4-D35 | PLAN §4.5, FR-541/542/543 | E2E never waits for the 30 s heartbeat: the lease is re-polled by dispatching `visibilitychange` (the hook's "tab visible again" POST, FR-541). The FR-543 conflict (E17) uses `page.clock.install()` + `runFor()` so the 800 ms debounce fires only after a same-user `PUT /api/pages/:id/content` has bumped the version. Test data the scenario is not about is inserted by `resetDb(undefined, { extras })` with plain Drizzle (`e2e/support/seed-pages.ts`); `resetDb` also empties `.e2e-uploads/`. | Deterministic e2e without sleeps (PLAN §4.5); no server-action calls from Playwright. |
 | M4-D36 | PLAN §3.1/§3.5/§3.11, X63 | File and key names (names only, no behaviour change; reported for PLAN): services/repo files are **kebab-case** like M1–M3's `my-tasks.ts`/`task-tree.ts` and M5's `time-off.ts` (`services/page-lease.ts`, `page-tree.ts`, `repo/page-locks.ts`) — now the PLAN rule (X80; X63 updated; M3's camelCase v3.1 services are X80's documented exception); the shared tree component is `src/components/pages/PageTree.tsx` (sidebar **and** project tab) rather than PLAN §3.1's `shell/SidebarPageTree`; PLAN §3.11's `services/pages.ts#save` is `savePageContent`; `qk.search(q, scope = 'all')` adds a `scope` argument to PLAN §3.5's `search(q)` (M10 calls `qk.search(q, 'all')`) and `qk.pagesTreeScope` is a new prefix helper. Do not rename to match PLAN while implementing M4. | One style per milestone file; renaming is a PLAN-level decision (HANDOFF G1/G2). |
 | M4-D37 | X78, X08 | Forward compatibility with M8/M10 (they extend M4 files additively, never restructure): (a) `BLOCK_TYPES` in `page-content.ts` is the **only** block-type list; `checkBlockProps` is an exported function; the editor schema-parity test compares `schema.blockSpecs` keys with `BLOCK_TYPES`, so M10 appending `taskView`/`projectWorkload` to both keeps it green; no other M4 test enumerates the full type list. (b) `normalizeQuery`/`escapeLike` are exported from `services/search.ts`; M10 moves their bodies to `src/lib/search/normalize.ts` and re-exports them from there, so M4 code and tests import them only from `@/server/services/search`. (c) Charter content assertions (unit, int, e2e) use containment (`toContain`, `arrayContaining`), never exact heading/block lists or exact `content_text`, because M10 adds the live section and `seedGolden` charters then include it; the single "no live section" check is the M4-only unit case in S0.12 (M10 S0.8 replaces it) plus the G2 grep. (d) Palette tests select options **by name inside the pages group** (`palette.group(th.palette.groups.pages)`), never by index or by total option count, and assert nothing about the absence of other groups (M8 adds "คำสั่ง", M10 adds categories and commands on an empty query). (e) `PALETTE_GROUPS` lives in `src/components/palette/groups.tsx` with the item/group shape M10 extends (S3.5). | HANDOFF C1/C46/C47/C31: later milestones must not have to weaken or rewrite M4 tests. |
-| M4-D38 | FR-1201, X59, X96, M11-D34 | **Audit placement.** `createPage`, `renamePage` and `savePageContent` (the server action and the keepalive `PUT /api/pages/[id]/content`) and `POST /api/files` (`storeUpload`) write their audit row in the **action/route**, right after the service, in the same transaction (X96 accepts it: the summary needs action-level data such as the final title); every other M4 service (`setPageIcon`, `setPageCover`, `applyTemplate`, `movePage`, `duplicatePage`, `deletePage`, `restorePageBatch`, `setPageProtected`, `createCharter`/`ensureProjectCharters`) writes its own row (X59). The four in-action services therefore never call `audit.log`, which M11's `AUDIT_IN_SERVICE` (`createPage`/`renamePage`/`savePageContent`/`storeUpload` = `false`) pins; the matrix's one-row assertion (X44) covers both placements. | One explicit rule per operation, so seeds (M11) neither double-audit nor miss a row. |
+| M4-D38 | FR-1201, X59, X96, M12-D34 | **Audit placement.** `createPage`, `renamePage` and `savePageContent` (the server action and the keepalive `PUT /api/pages/[id]/content`) and `POST /api/files` (`storeUpload`) write their audit row in the **action/route**, right after the service, in the same transaction (X96 accepts it: the summary needs action-level data such as the final title); every other M4 service (`setPageIcon`, `setPageCover`, `applyTemplate`, `movePage`, `duplicatePage`, `deletePage`, `restorePageBatch`, `setPageProtected`, `createCharter`/`ensureProjectCharters`) writes its own row (X59). The four in-action services therefore never call `audit.log`, which M12's `AUDIT_IN_SERVICE` (`createPage`/`renamePage`/`savePageContent`/`storeUpload` = `false`) pins; the matrix's one-row assertion (X44) covers both placements. | One explicit rule per operation, so seeds (M12) neither double-audit nor miss a row. |
 
 ---
 
@@ -808,8 +808,8 @@ export function charterTemplate(fill?: CharterFill): TemplateResult     // title
 export function meetingTemplate(dateLabel: string): TemplateResult      // title th.pages.meetingTitle(dateLabel), icon '📝'
 export function sopTemplate(): TemplateResult                            // title '', icon '📘'
 export function buildTemplate(id: TemplateId, ctx: { dateLabel: string }): TemplateResult   // charter without fill
-/** The one table-block builder every template uses (C68). Exported so M11's demo content (`scripts/lib/demo-content.ts`) can
- *  import it instead of re-implementing the shape (M11's demo content imports it). */
+/** The one table-block builder every template uses (C68). Exported so M12's demo content (`scripts/lib/demo-content.ts`) can
+ *  import it instead of re-implementing the shape (M12's demo content imports it). */
 export function tableBlock(rows: readonly (readonly string[])[]): TemplateBlock
   // { type: 'table', content: { type: 'tableContent', headerRows: 1, rows: rows.map((cells) => ({ cells: [...cells] })) } } — cells are plain strings
 ```
@@ -831,7 +831,7 @@ tables use `headerRows: 1` and are all built with `tableBlock(rows)`):
 Tests first — `src/i18n/templates.test.ts` (unit): every template's `content` passes `pageContentSchema`; `extractContentText(charterTemplate({
 clientName: 'Coral', leadName: 'Cindy', certaintyLabel: th.projects.certainty.CONFIRMED }).content)` contains `'ลูกค้า Coral'`, `'Project Lead Cindy'`,
 `'ความแน่นอน แน่นอน'`; charter has 5 tables and its first table has 5 rows; `meetingTemplate('30 ก.ย. 2569').title === th.pages.meetingTitle('30 ก.ย. 2569')`;
-`sopTemplate().title === ''`; `tableBlock([['ก','ข'],['','']])` deep-equals `{ type: 'table', content: { type: 'tableContent', headerRows: 1, rows: [{ cells: ['ก','ข'] }, { cells: ['',''] }] } }` and passes `pageContentSchema`; the charter's "ผู้มีส่วนได้ส่วนเสีย" table equals `tableBlock([['ชื่อ / หน่วยงาน','บทบาท','ความคาดหวัง','ช่องทางติดต่อ'],['','','','']])` (the same pair M11's parity test uses); no template contains a `subpage` or `mention`; the charter's h2 texts **contain** (`expect.arrayContaining`,
+`sopTemplate().title === ''`; `tableBlock([['ก','ข'],['','']])` deep-equals `{ type: 'table', content: { type: 'tableContent', headerRows: 1, rows: [{ cells: ['ก','ข'] }, { cells: ['',''] }] } }` and passes `pageContentSchema`; the charter's "ผู้มีส่วนได้ส่วนเสีย" table equals `tableBlock([['ชื่อ / หน่วยงาน','บทบาท','ความคาดหวัง','ช่องทางติดต่อ'],['','','','']])` (the same pair M12's parity test uses); no template contains a `subpage` or `mention`; the charter's h2 texts **contain** (`expect.arrayContaining`,
 not an exact list) `ข้อมูลโปรเจค … การสื่อสาร` in B.1 order. M4-only case, labelled `// M4-only (X78): M10 S0.8 replaces this case`:
 no charter heading equals `'งานและภาระของทีม'` (literal allowed: the file is under `src/i18n/`) and every block type is in `BLOCK_TYPES`. (S2.3 adds the headless-BlockNote check.)
 
@@ -1936,8 +1936,8 @@ E4/E14/E16 describes allow `/status of 404/` console errors; E13 allows `/status
   5 audit rows with actor `null`. M5's counts build on these (+5 pages, +5 audit rows).
 - **P-1 (NFR-05 smoke, manual before G4):** a temporary script (not committed) inserts a wiki page with 300 blocks (`complex-doc.json`
   repeated); with the production build, open it in Chrome DevTools Performance: navigation → editor editable < 1 s on the dev machine. Otherwise
-  record a Known issue for M11's perf pass (`seed:perf`).
-- **P-2 (palette):** first palette result for "Charter" < 200 ms locally (`/api/search` server timing in the network panel); full NFR-06 run is M11.
+  record a Known issue for M12's perf pass (`seed:perf`).
+- **P-2 (palette):** first palette result for "Charter" < 200 ms locally (`/api/search` server timing in the network panel); full NFR-06 run is M12.
 - **M-1 real spreadsheets (manual acceptance, brief):** copy a 4×3 range from **Windows Excel** and from **Google Sheets** (Chrome on Windows
   and macOS) into a page → one table with the same cells; repeat inside an existing table (fills cells, r3 §7.1).
 - **M-2 Thai input:** type with a Thai IME / Kedmanee layout in the title and the editor (composition does not commit early; Cmd+K, Cmd+Z by
@@ -2036,8 +2036,8 @@ E4/E14/E16 describes allow `/status of 404/` console errors; E13 allows `/status
   are reported for PLAN §3.1/X63.
 - Known issues / forward notes: live blocks `taskView`/`projectWorkload`, their slash items and the charter section "งานและภาระของทีม" → M10
   (X78, M4-D30; charters created before M10 are not migrated); palette categories projects/tasks/people/clients + quick commands → M10 (X08,
-  X68), "สร้าง milestone" → M8; home card "หน้าเอกสารที่แก้ล่าสุด" → M10; demo pages → M11 `addDemoPages`; full perf (`seed:perf` 5 000 pages,
-  NFR-05/06) and mobile/tablet suites → M11; strict `style-src` nonces → M11 (optional); anything from P-1/P-2 or M-1…M-6 that failed.
+  X68), "สร้าง milestone" → M8; home card "หน้าเอกสารที่แก้ล่าสุด" → M10; demo pages → M12 `addDemoPages`; full perf (`seed:perf` 5 000 pages,
+  NFR-05/06) and mobile/tablet suites → M12; strict `style-src` nonces → M12 (optional); anything from P-1/P-2 or M-1…M-6 that failed.
 
 **Commit** (orchestrator, after G4):
 ```text

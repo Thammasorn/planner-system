@@ -948,7 +948,7 @@ Rows are written test-first from SPEC §3.2 against the S0 stubs; until S1 lands
 **S3.1 Row harness check.** Read `tests/authz/matrix.int.test.ts` (M1). Rows call actions (session from `asUser`), route handlers (`GET(new Request('http://t/api/sidebar'), { params: Promise.resolve({}) })`) or loaders through `outcomeOfCall(async () => getProjectOverview(db, await currentUser(), w.P.id))` (S0.14). For each `mutates` allow case the harness asserts one new `audit_log` row with the row's `audit: { entity, projectId: (w) => string | null }` (M1's `AuthzRow` already has it, X91; use `projectId: 'any'` for PERM-05, whose project id is new). The `nobody → 401` and `mustChangePassword → 403` loops of M1's matrix already run for every row — no extra block.
 - **AZ-2 coverage meta-test** (`tests/authz/coverage.int.test.ts`, new; M1's `T-META-01` in `matrix.int.test.ts` keeps covering action names): import every `src/app/api/**/route.ts` except Better Auth's `api/auth/[...all]` and the public `api/health`, enumerate its exported HTTP methods, build `'<METHOD> /api/<path>'` (dynamic segments as written, e.g. `'GET /api/projects/[id]/tasks'`), and fail when no row in `tests/authz/rows/index.ts` has that string as its **`action`** (X91 route-row format — the same field action rows use; there is no separate `target` field). M2's routes: `'GET /api/sidebar'`, `'GET /api/people/options'`, `'GET /api/clients/options'`; its 12 actions are covered by T-META-01.
 
-**S3.2 Rows** — `tests/authz/rows/clients.ts`, `projects.ts`, `members.ts` (exact table in §7.2); register each in M1's `tests/authz/rows/index.ts` (one `import` + spread per file, X91/C98) — the matrix, AZ-2 and M11's audit sweep read only that index.
+**S3.2 Rows** — `tests/authz/rows/clients.ts`, `projects.ts`, `members.ts` (exact table in §7.2); register each in M1's `tests/authz/rows/index.ts` (one `import` + spread per file, X91/C98) — the matrix, AZ-2 and M12's audit sweep read only that index.
 
 **S3.3 Visibility content tests.**
 - `tests/authz/visibility.int.test.ts` (world): sidebar ids per role (M `[P,Q]`, L `[P]`, Me `[P]`, W `[Q]`); `listProjectsForViewer({archived:true})` (M/L/Me `[A]`, W `[]`); `listClientsForViewer` (M `[C1,C2]`, L/Me `[C1]`, W `[C2]`); `getClientDetail(C1)` for L lists `[A, P]`; people options contain every world user for every role (X09).
@@ -1103,7 +1103,7 @@ All blocks: `resetDb()` in `beforeAll` (golden seed incl. M2 memberships), clock
 ### 7.4 Golden / perf / manual checks
 
 - Golden: `scripts/lib/fixtures.int.test.ts › M2` (counts 4/5/10 + exact memberships) and `golden-visibility.int.test.ts` (r8 §4.3 table, Ivy/Mint visible-user sets). No load numbers in M2.
-- Perf: none required (≤ 300 projects; `GET /api/sidebar` is two indexed queries). Manual: sidebar with 300 synthetic projects is deferred to M11 perf.
+- Perf: none required (≤ 300 projects; `GET /api/sidebar` is two indexed queries). Manual: sidebar with 300 synthetic projects is deferred to M12 perf.
 - Manual a11y (integrator, 5 min): keyboard-only — Tab to sidebar `+`, open dialog, Esc closes; members Select operable by keyboard; ◐ announced as "อาจไม่ทำ" (VoiceOver); dark mode contrast of chips/banners.
 - Manual Thai keyboard (Kedmanee): Cmd+Z undo of a member removal works (M1 `e.code` helper).
 

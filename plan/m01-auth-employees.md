@@ -86,7 +86,7 @@ Test ids (`T-…`, `E2E-…`, `U-…`) appear verbatim in `it()` titles so the m
 | `InlineEditText`, `PersonPicker`, `ProjectChip`, `DateField`, `DeleteProjectDialog` | M2 / M3 |
 | Preference keys other than `theme` and `sidebar.collapsed` | the milestone that first uses each key (M2 `sidebar.expanded`, M3, M4, M6, M9) |
 | Masking, `visibleUserIds`, `requireProject` | M2 |
-| `serverActions.allowedOrigins`, reverse-proxy docs, XFF hardening notes, `seed:demo`, compose `migrate` running bootstrap | M11 |
+| `serverActions.allowedOrigins`, reverse-proxy docs, XFF hardening notes, `seed:demo`, compose `migrate` running bootstrap | M12 |
 | Audit log UI | SPEC §13 Phase 2 #12 |
 | Self-service password reset by email, verification email, SSO | not in SPEC (§13 Phase 3 for SSO) — never |
 
@@ -889,7 +889,7 @@ non-empty th.errors entry` (iterate `Object.keys(ERROR_STATUS)`).
 - `tests/authz/rows/index.ts`: `export const rows: AuthzRow[] = [...employees, ...positions, ...account, ...preferences, ...authEndpoints]`
   (S0 creates empty arrays in `rows/{employees,positions,account,preferences,auth-endpoints}.ts`; S4 fills them). This
   file is the single registry: every later milestone's test stream adds an `import` + spread for each rows file it
-  creates (X91, C72/C98); the matrix and M11's audit sweep read only this index.
+  creates (X91, C72/C98); the matrix and M12's audit sweep read only this index.
 - `tests/authz/matrix.int.test.ts`:
   ```ts
   const USER_OF: Record<Role, keyof World> = { M: 'manager', L: 'lead', Me: 'member', W: 'outsider' }
@@ -1811,7 +1811,7 @@ touch these screens.
 | R-M1-5 | Better Auth does not trim emails; direct inserts with upper case break login | zod `emailField` trims/lowercases (S0.10); T-AUTH-02 |
 | R-M1-6 | `/update-user`, `/change-password`, `/admin/*` let users bypass policy/authz | `disabledPaths` list (S2.3) verified against `routes.mjs`; BA-01…08 rows |
 | R-M1-7 | `nextCookies()` not last → login cookie not set from the server action | keep it last (S0.8); T-LOGIN-01 asserts the cookie jar |
-| R-M1-8 | Lockout counts IP from a spoofable `X-Forwarded-For` when deployed without a proxy | `trustedProxies` from env (S2.3); README note in M11; known limit recorded |
+| R-M1-8 | Lockout counts IP from a spoofable `X-Forwarded-For` when deployed without a proxy | `trustedProxies` from env (S2.3); README note in M12; known limit recorded |
 | R-M1-9 | Built-in rate limiter (3 per 10 s on `/sign-in*`) breaks e2e `loginAs` | disabled under `ALLOW_TEST_HOOKS=1`; custom rule 30/60 s in production (S2.3, M1-D11) |
 | R-M1-10 | Last-manager race between two managers | `SELECT … FOR UPDATE` of active managers inside the tx (S2.8); T-EMP-09 |
 | R-M1-11 | Fractional keys mis-ordered under `en_US.utf8`; equal keys make `generateKeyBetween` throw | `orderKey` COLLATE "C" (S0.4), advisory lock + re-key (S2.9); T-ORD-01, T-POSS-02, T-POS-08 |
@@ -1833,7 +1833,7 @@ touch these screens.
   M1-D row of §3.2 (date, SPEC ref, decision, rationale).
 - Deviations: M1-D1 (Better Auth tables hand-written instead of CLI-generated; CLI used for `auth check schema`).
 - Known issues: AC-203 picker clauses (M2/M3) and grid label (M6) still open; FR-106 IP part spoofable without a reverse
-  proxy (document in M11 README); lockout may overshoot by a few attempts under parallel bursts; schedules have no
+  proxy (document in M12 README); lockout may overshoot by a few attempts under parallel bursts; schedules have no
   effective dating (changes apply to past capacity, X60).
 - Clear "แผนของ milestone ปัจจุบัน" checklist (all ticked).
 

@@ -70,9 +70,9 @@ Ids `PERM-nn`, `KEY-nn`, `UI-nn`, `NFR-nn`, `MASK-n`, `DM-nn`, `GAPI-nn`, `TPL-B
 | Notion-style database tables, typed columns, sorting/grouping config beyond FR-1302 | SPEC §13 #3 |
 | Reordering cards inside a board column (also in the block) | SPEC §13 #8 |
 | Migrating existing charters to the new section (users insert the blocks with the slash menu) | never (M4-D30) |
-| Audit sweep (M10 adds no mutating action) | M11 §4.12 |
-| `seed:demo` pages with filled charters / live blocks (`addDemoPages`) | M11 (X11, C4: fill the existing POS charter) |
-| Full perf run of search/palette on `seed:perf` (5 000 pages, 20 000 tasks), mobile/tablet viewport suite | M11 |
+| Audit sweep (M10 adds no mutating action) | M12 §4.12 |
+| `seed:demo` pages with filled charters / live blocks (`addDemoPages`) | M12 (X11, C4: fill the existing POS charter) |
+| Full perf run of search/palette on `seed:perf` (5 000 pages, 20 000 tasks), mobile/tablet viewport suite | M12 |
 | NFKC folding of Thai sara am (U+0E33 vs U+0E4D U+0E32), search highlighting, a full search results page | not in MVP (r6b M10-11, M10-D32) |
 | Notifications (mentions, blockers finished) | SPEC §13 #6 |
 | Workload page, badge, person page, overload list | M9 (done) |
@@ -212,7 +212,7 @@ expected exports. **S0.1 greps the real code and the step that uses a name adapt
 | M10-D27 | X05 | Preference key `palette.lastProjectId: z.uuid().nullable()` default `null`. | Remember the picker choice (r6b M10-05). |
 | M10-D28 | §3.7 | i18n: extend `home`, `palette`, `shortcuts`, `editor` (`slash.taskView`, `slash.projectWorkload`, `liveBlocks`), `prefs` if M1 lists key labels there; new namespace `search`. M0's `home.placeholderTitle/Body` are removed (no consumer). | PLAN §3.7 namespaces. |
 | M10-D29 | §6.4, X10 | No schema change in M10: every §6.4 trigram index exists (`user_*_trgm` M1, `projects/clients_name_trgm` M2, `tasks_name_trgm` M3, `pages_*_trgm` M4) and the Thai-trigram check exists (M0). G2 expects `pnpm db:generate` → "No schema changes". | Nothing to migrate. |
-| M10-D30 | NFR-06 | E2E P3 measures keystroke → first option visible with `performance.now()` inside the page (local category, golden data) and asserts < 200 ms; `search.int.test.ts › timing` logs the server search duration and fails only above 500 ms (statement timeout); the full-scale check is M11's. | Deterministic on CI; real target in M11. |
+| M10-D30 | NFR-06 | E2E P3 measures keystroke → first option visible with `performance.now()` inside the page (local category, golden data) and asserts < 200 ms; `search.int.test.ts › timing` logs the server search duration and fails only above 500 ms (statement timeout); the full-scale check is M12's. | Deterministic on CI; real target in M12. |
 | M10-D31 | FR-1301, FR-1303 | Live blocks render (read-only data) in every page view mode: read-only lease, protected wiki text, archived project, and the read-only editor. Only the config toolbar depends on `editor.isEditable`. | Viewing data needs only `view`. |
 | M10-D32 | FR-1105 | No NFKC folding of Thai sara am (r6b M10-11 optional); recorded under Known issues for owner feedback. | Not required by FR-1105's example. |
 | M10-D33 | FR-1101a, X71 | The home tick uses `useMutation` with an optimistic patch of `qk.home()` (toggle `completed`), calls `completeTask({ taskIds: [id] })` / `uncompleteTask(...)`, shows `statusToastMessage(result, th.tasks.toast.completed)` with the M3 undo entry (`revertTaskStatus(changed → previous)`), then `invalidateTasks(qc, projectId)` + `invalidateLoad(qc)` (the refetched bucket no longer contains the completed task; undo restores it). Assigned tasks are leaves, so FR-608 never applies here. | Same path as every other tick. |
@@ -771,7 +771,7 @@ Done-check: `pnpm typecheck` · `pnpm vitest run --project unit src/lib/shortcut
   | `w.pages.qEmbed` / `w.pages.aEmbed` / `w.pages.wikiEmbed` | same content in Q, A (archived) and the wiki |
 
   Smoke `tests/helpers/world.int.test.ts › with home`: keys exist; `pEmbed.contentText === ''`; every task inserted has a `status_id` of its project (X70).
-- `tests/authz/rows/home.ts` (`export const rows: AuthzRow[] = []`) appended to `tests/authz/rows/index.ts` (X91: each milestone registers its own rows files; M11's AUD-00 fails on a missing one); `search.ts` and `pages.ts` (M4, already registered) get
+- `tests/authz/rows/home.ts` (`export const rows: AuthzRow[] = []`) appended to `tests/authz/rows/index.ts` (X91: each milestone registers its own rows files; M12's AUD-00 fails on a missing one); `search.ts` and `pages.ts` (M4, already registered) get
   their M10 rows from S4.
 - Done-check: `pnpm vitest run --project integration tests/helpers tests/authz`.
 
@@ -1514,7 +1514,7 @@ Clock pinned to 2026-09-30 10:00 (Bangkok, Wed); ⟲ = `resetDb` in `beforeAll` 
 - **Golden (integration, S1):** home load per user (r8 §4.10), manager utilisation F1 72.5 % / F3 74.0 %, F3 overload Peter 10-05 +200 CAPACITY, F2 none in
   this/next week, A.2 milestones per viewer (Cindy only UAT sign-off), leave visibility (Ivy sees no Peter), search visibility (Jack no CRM task).
 - **Perf:** P3 < 200 ms on golden data; `search.int.test.ts › timing` < 500 ms; full-scale palette/search on `seed:perf` (20 000 tasks, 5 000 pages) is
-  M11 (target: server p95 ≤ 100 ms, r6b M10-10).
+  M12 (target: server p95 ≤ 100 ms, r6b M10-10).
 - **Manual (before G4):** Thai Kedmanee layout — `N`, `?`, Cmd+K, Cmd+Z inside a live block still work (`e.code`); keyboard-only: open the palette, run
   "สร้าง task" end to end; tab through a board block (cards focusable, `S` opens the status menu inside the block without affecting the document); dark mode
   contrast of load bars (X51 tokens) and of the block frame; screen reader reads the bar labels, the leave lines (`dl`) and the live-block region labels;
@@ -1566,7 +1566,7 @@ Clock pinned to 2026-09-30 10:00 (Bangkok, Wed); ⟲ = `resetDb` in `beforeAll` 
 
 - `PROGRESS.md`: M10 row ✅ with date; Decisions = X-rows of §3.1 + M10-D1…D35 (no Deviations entry — M10-D2 follows SPEC §7.8); Known issues: Thai
   sara am NFKC folding not applied (M10-D32); existing charters (created before M10) do not have the live section (M4-D30/M10-D12); full-scale palette perf
-  pending M11; any M8/M9 name that needed adaptation at implementation time.
+  pending M12; any M8/M9 name that needed adaptation at implementation time.
 - `PLAN.md` (already folded in by T7 as X81/X82/X86/X88/X89 — only verify): §3.5 `qk.searchIndex`, `pageEmbedTasks(All)`, `pageEmbedWorkload(All)` and the
   `invalidateTasks`/`invalidateLoad`/`invalidateMilestones`/`invalidatePages` additions (G42); §3.1 `api/search/index` and the "route param keeps its sibling
   folder's name" rule (G43); §3.4.3 handlers parse params themselves, malformed id → 404 (M10-D1, G44, X86); §3.8 `useFallbackHotkey` rule (M10-D25, G46); §3.11 live-block event

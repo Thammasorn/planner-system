@@ -61,7 +61,7 @@ SPEC §4.9 defines **no `AC-9xx` ids**. The acceptance criteria of M5 are the th
 | Day-level overload glyphs (BR-40/45 per day) | M7 (X06) |
 | Workload tables, overload list, person page "วันลา" tab, FR-1007 badge | M9 |
 | Home "ใครลาวันนี้ / สัปดาห์นี้" card, palette quick command "แจ้งลา" (reuses `useLeaveDialog`) | M10 (X68) |
-| `seed:demo` leave entries (Appendix A.2) | M11 |
+| `seed:demo` leave entries (Appendix A.2) | M12 |
 | Leave approval, quotas, balances, HR | SPEC §1.4 (never) |
 | Seeding official Thai holidays, `is_substitute`, B.E. → C.E. auto conversion in CSV | SPEC §10.4 step 4 / D9 (never) — ISO only, X64 |
 | Google Calendar sync, notifications (e.g. "new holiday causes overload") | SPEC §13 Phase 3 / Phase 2 #6 |
@@ -79,7 +79,7 @@ SPEC §4.9 defines **no `AC-9xx` ids**. The acceptance criteria of M5 are the th
 | M1 | Authz matrix harness (`AuthzRow` with `audit`), `asUser`, `outcomeOf`, `createWorld`, `makeUser`; `scripts/lib/{db,fixtures,bootstrap}.ts`; `e2e/fixtures.ts` `resetDb()`/`loginAs()` | X11, X46 |
 | M2 | `visibleUserIds`, `visibleProjectIds`, `isLeadAnywhere`, `services/masking.ts` skeleton, `tests/authz/masking.int.test.ts` skeleton with `assertNoLeak`; `GET /api/people/options` (X09) for the manager's employee selector; `colorSchema`, `optionalText`, `userIdSchema`; `PROJECT_COLORS` | X30, X43 |
 | M3 | `DateField` (ISO ↔ Dayjs only there), `@mui/x-date-pickers` + `dayjs` + `LocalizationProvider` installed; `?` shortcut registry (`src/lib/shortcuts.ts`); restore pattern (30-day window on DB timestamps, M3-D12) | X50, X07 |
-| M4 | Nothing specific (charters/pages untouched); the M4 e2e must keep passing. `seedGolden` already writes M4's 5 charter pages + 5 audit rows, so every M5 seed/audit count assertion is **relative** (delta over the previous stage, C3/C23/M11-D28) | — |
+| M4 | Nothing specific (charters/pages untouched); the M4 e2e must keep passing. `seedGolden` already writes M4's 5 charter pages + 5 audit rows, so every M5 seed/audit count assertion is **relative** (delta over the previous stage, C3/C23/M12-D28) | — |
 
 ---
 
@@ -1069,7 +1069,7 @@ Every row also runs the generic "nobody → 401" and "mustChangePassword → 403
 
 **S4.6 Older integration tests touched by M5.**
 - `tests/integration/bootstrap.int.test.ts`: `T-BOOT-LT-01` empty DB → 4 leave types (names/colours = `th.leaveTypes.defaults`, positions strictly increasing), `seededLeaveTypes: 4`; `T-BOOT-LT-02` second run → still 4, `seededLeaveTypes: 0`; `T-BOOT-LT-03` a DB with one custom type → nothing added; `T-BOOT-HOL-01` holidays count stays 0 after bootstrap (DEP-11).
-- `tests/integration/seed-golden.int.test.ts` (M1): M5's assertions are **relative** (C3/C23, M11-D28): `leave_types` = 4 and `audit_log` rows with `entity = 'leave_type'` = 4; the total audit count is asserted as "previous stage's count + 4" (computed in the test from `entity` groups), never as a hard-coded total — M4 already adds 5 charter pages + 5 audit rows and M6 adds 10 more, so an absolute number breaks. Count-only edits go through the orchestrator (X91); never change the intent.
+- `tests/integration/seed-golden.int.test.ts` (M1): M5's assertions are **relative** (C3/C23, M12-D28): `leave_types` = 4 and `audit_log` rows with `entity = 'leave_type'` = 4; the total audit count is asserted as "previous stage's count + 4" (computed in the test from `entity` groups), never as a hard-coded total — M4 already adds 5 charter pages + 5 audit rows and M6 adds 10 more, so an absolute number breaks. Count-only edits go through the orchestrator (X91); never change the intent.
 - Done-check: `pnpm vitest run --project integration tests` (rows red until S2 lands is expected; report which).
 
 ### 5.S5 — E2E (test-engineer · owns `e2e/**`)
@@ -1196,7 +1196,7 @@ Deterministic per PLAN §4.5: `test.describe.configure({ mode: 'serial' })`; eac
 ### 7.4 Golden / perf / manual checks
 
 - Golden: `tests/golden/capacity.int.test.ts` (S4.4) — F1 500 everywhere; F2 400 for all 6 users in week 10-19; F3 Peter 300; F4 Cindy 200 (r8 §4.4). Overload numbers are M9's.
-- Perf: calendar for 100 users × 6 weeks is one indexed query + one holiday query (r5 M5-08); no measurement needed in M5 (M11 runs the perf pass).
+- Perf: calendar for 100 users × 6 weeks is one indexed query + one holiday query (r5 M5-08); no measurement needed in M5 (M12 runs the perf pass).
 - Manual: Thai Kedmanee keyboard — arrows/Shift+arrows/Enter work (e.code); dark mode — stripes and holiday background readable; open a windows-874 CSV exported from Thai Excel; `pnpm import:holidays <file> --dry-run` prints the classification.
 
 ---
