@@ -17,6 +17,14 @@ export const GRID_UNITS = ['DAYS', 'FRACTION'] as const
 export const LOAD_VIEWS = ['ALL', 'COMMITTED', 'AT_RISK'] as const
 /** M7 grid zoom (FR-802, X59: first consumer). The URL uses lowercase `week` | `day` (M7-D17). */
 export const GRID_ZOOMS = ['WEEK', 'DAY'] as const
+/** M7.1 plan-tab view (FR-810). The URL uses lowercase `?view=grid|calendar` (wins over the stored value). */
+export const PLAN_VIEWS = ['GRID', 'CALENDAR'] as const
+export type PlanView = (typeof PLAN_VIEWS)[number]
+/** M7.1 งาน column width (FR-814): 160–640 on desktop, phones go down to 120; ≤ 60 % of the grid is applied at render. */
+export const TASK_COLUMN_WIDTH_MIN = 120
+export const TASK_COLUMN_WIDTH_MAX = 640
+export const TASK_COLUMN_WIDTH_DEFAULT = 240
+const TASK_COLUMN_WIDTH = z.number().int().min(TASK_COLUMN_WIDTH_MIN).max(TASK_COLUMN_WIDTH_MAX)
 
 export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('theme'), value: z.enum(THEMES) }),
@@ -35,6 +43,11 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('load.view'), value: z.enum(LOAD_VIEWS) }),
   // M7
   z.object({ key: z.literal('grid.zoom'), value: z.enum(GRID_ZOOMS) }),
+  // M7.1 (FR-810, FR-813, FR-814, FR-816)
+  z.object({ key: z.literal('plan.view'), value: z.enum(PLAN_VIEWS) }),
+  z.object({ key: z.literal('grid.showAssignees'), value: z.boolean() }),
+  z.object({ key: z.literal('grid.taskColumnWidth'), value: TASK_COLUMN_WIDTH }),
+  z.object({ key: z.literal('grid.chart'), value: z.boolean() }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -59,6 +72,11 @@ export const preferencesSchema = z.object({
   'load.view': z.enum(LOAD_VIEWS).optional().catch(undefined),
   // M7 key: optional like the M6 keys; read with gridPreference(prefs, 'grid.zoom').
   'grid.zoom': z.enum(GRID_ZOOMS).optional().catch(undefined),
+  // M7.1 keys (X59): optional like the M6/M7 keys; read with planPreference / gridPreference.
+  'plan.view': z.enum(PLAN_VIEWS).optional().catch(undefined),
+  'grid.showAssignees': z.boolean().optional().catch(undefined),
+  'grid.taskColumnWidth': TASK_COLUMN_WIDTH.optional().catch(undefined),
+  'grid.chart': z.boolean().optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 
@@ -89,13 +107,17 @@ export function taskPreference<K extends TaskPreferenceKey>(
   return (prefs[key] ?? TASK_PREFERENCE_DEFAULTS[key]) as NonNullable<Preferences[K]>
 }
 
-/** Defaults of the optional grid keys (M6-D21: days, all load; M7: week zoom). */
+/** Defaults of the optional grid keys (M6-D21: days, all load; M7: week zoom; M7.1: assignees shown, 240 px, no chart). */
 export const GRID_PREFERENCE_DEFAULTS = {
   'grid.unit': 'DAYS',
   'load.view': 'ALL',
   'grid.zoom': 'WEEK',
+  'grid.showAssignees': true,
+  'grid.taskColumnWidth': TASK_COLUMN_WIDTH_DEFAULT,
+  'grid.chart': false,
 } as const satisfies { [K in GridPreferenceKey]-?: NonNullable<Preferences[K]> }
-export type GridPreferenceKey = 'grid.unit' | 'load.view' | 'grid.zoom'
+export type GridPreferenceKey =
+  'grid.unit' | 'load.view' | 'grid.zoom' | 'grid.showAssignees' | 'grid.taskColumnWidth' | 'grid.chart'
 
 /** The stored value of a grid key (M6/M7), or its default. */
 export function gridPreference<K extends GridPreferenceKey>(
@@ -103,4 +125,18 @@ export function gridPreference<K extends GridPreferenceKey>(
   key: K,
 ): NonNullable<Preferences[K]> {
   return (prefs[key] ?? GRID_PREFERENCE_DEFAULTS[key]) as NonNullable<Preferences[K]>
+}
+
+/** Defaults of the optional plan-tab keys (M7.1, FR-810: the grid). */
+export const PLAN_PREFERENCE_DEFAULTS = {
+  'plan.view': 'GRID',
+} as const satisfies { [K in PlanPreferenceKey]-?: NonNullable<Preferences[K]> }
+export type PlanPreferenceKey = 'plan.view'
+
+/** The stored value of a plan-tab key (M7.1), or its default. */
+export function planPreference<K extends PlanPreferenceKey>(
+  prefs: Preferences,
+  key: K,
+): NonNullable<Preferences[K]> {
+  return prefs[key] ?? PLAN_PREFERENCE_DEFAULTS[key]
 }

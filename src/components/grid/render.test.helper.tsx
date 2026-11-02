@@ -2,7 +2,10 @@
 import { useMemo, useState, type ReactElement, type ReactNode } from 'react'
 import { render } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDayjsBuddhist } from '@mui/x-date-pickers/AdapterDayjsBuddhist'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import 'dayjs/locale/th'
 import { Toaster } from 'sonner'
 import { vi } from 'vitest'
 import { UndoProvider } from '@/components/undo/UndoProvider'
@@ -38,14 +41,16 @@ export function Providers({
   return (
     <QueryClientProvider client={qc}>
       <ThemeProvider theme={theme} storageManager={null}>
-        <TodayContext value="2026-09-30">
-          <Prefs initial={{ ...DEFAULT_PREFERENCES, ...prefs }}>
-            <UndoProvider>
-              {children}
-              <Toaster />
-            </UndoProvider>
-          </Prefs>
-        </TodayContext>
+        <LocalizationProvider dateAdapter={AdapterDayjsBuddhist} adapterLocale="th">
+          <TodayContext value="2026-09-30">
+            <Prefs initial={{ ...DEFAULT_PREFERENCES, ...prefs }}>
+              <UndoProvider>
+                {children}
+                <Toaster />
+              </UndoProvider>
+            </Prefs>
+          </TodayContext>
+        </LocalizationProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )

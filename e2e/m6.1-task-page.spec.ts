@@ -94,18 +94,6 @@ const pathOf = (page: Page): string => new URL(page.url()).pathname
 async function attachShot(testInfo: TestInfo, page: Page, name: string): Promise<void> {
   await testInfo.attach(name, { body: await page.screenshot(), contentType: 'image/png' })
 }
-/** Whole week column headers between the frozen name column and the sticky "รวม" column (m6-responsive). */
-async function wholeWeekColumns(grid: Locator): Promise<number> {
-  return grid.evaluate((el) => {
-    const heads = [...el.querySelectorAll<HTMLElement>('[role="columnheader"]')]
-    const corner = heads[0]!.getBoundingClientRect()
-    const total = heads[heads.length - 1]!.getBoundingClientRect()
-    return heads
-      .slice(1, -1)
-      .map((h) => h.getBoundingClientRect())
-      .filter((r) => r.left >= corner.right - 1 && r.right <= total.left + 1).length
-  })
-}
 /** The lease POST answered (TASK bodies take the lease on first focus, M6.1-D8). Start before the focus. */
 function waitForLeasePost(page: Page) {
   return page.waitForResponse(
@@ -880,7 +868,7 @@ test.describe('V1 ⟲ (AC-1601, FR-1601) work screens use the full width · mana
       await new ShellPage(page).goto(`/projects/${pos}/plan`)
       await grid.waitReady(POS)
       expect(await rightGap(page, grid.root()), `grid @${width}`).toBeLessThanOrEqual(24)
-      weeks[width] = await wholeWeekColumns(grid.root())
+      weeks[width] = (await grid.visibleWeekColumns()).whole
 
       const tasks = new TaskListPage(page)
       await tasks.goto(pos)

@@ -5,6 +5,7 @@
 import { memo } from 'react'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import type { LoadTone, OverloadLevel } from '@/domain/overload'
+import { periodColIndex } from '@/lib/grid/columns'
 import styles from './grid.module.css'
 
 export interface FooterCellProps {
@@ -24,6 +25,8 @@ export interface FooterCellProps {
   glyphLabel?: string
   /** M7: the shared tooltip lists the people over capacity */
   tip?: boolean
+  /** M7.1 (FR-818): first column of a month */
+  monthStart?: boolean
 }
 
 export const FooterCell = memo(function FooterCell({
@@ -39,11 +42,12 @@ export const FooterCell = memo(function FooterCell({
   glyph,
   glyphLabel,
   tip,
+  monthStart,
 }: FooterCellProps) {
   return (
     <div
       role="gridcell"
-      aria-colindex={colIndex + 2}
+      aria-colindex={periodColIndex(colIndex)}
       aria-readonly="true"
       aria-label={label}
       className={styles.footerCell}
@@ -53,6 +57,7 @@ export const FooterCell = memo(function FooterCell({
       data-palette={tone ? palette : undefined}
       data-tip={tip ? 'footer' : undefined}
       data-period={periodKey}
+      data-month-start={monthStart ? '' : undefined}
     >
       {glyph && glyph !== 'OK' ? (
         <StatusGlyph kind={glyph === 'OVER' ? 'over' : 'risk'} label={glyphLabel ?? ''} />

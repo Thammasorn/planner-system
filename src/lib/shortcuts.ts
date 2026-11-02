@@ -41,7 +41,13 @@ export interface ShortcutDef {
   label: string
 }
 
-export const SHORTCUT_SCOPES: readonly ShortcutScope[] = ['global', 'taskList', 'taskPage', 'calendar', 'grid']
+export const SHORTCUT_SCOPES: readonly ShortcutScope[] = [
+  'global',
+  'taskList',
+  'taskPage',
+  'calendar',
+  'grid',
+]
 
 /** Section heading of each scope in the `?` help (M5: the calendar heading lives in its own namespace). */
 export const SHORTCUT_SCOPE_LABELS: Readonly<Record<ShortcutScope, string>> = {
@@ -175,10 +181,50 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     label: th.shortcuts.items.gridClear,
   },
   // Shift+Space selects the focused row — the keyboard path to deleting a task row (M6-D19)
-  { id: 'grid.selectRow', scope: 'grid', combos: [['Shift', 'Space']], label: th.shortcuts.items.gridSelectRow },
+  {
+    id: 'grid.selectRow',
+    scope: 'grid',
+    combos: [['Shift', 'Space']],
+    label: th.shortcuts.items.gridSelectRow,
+  },
   { id: 'grid.newTask', scope: 'grid', combos: [['N']], label: th.shortcuts.items.gridNewTask },
   // M7 day resolution (FR-803, M7-D11, M7-D23; X49 — e.code ArrowDown/ArrowUp with metaKey || ctrlKey)
-  { id: 'grid.expandWeek', scope: 'grid', combos: [['Mod', 'ArrowDown']], label: th.shortcuts.items.gridExpandWeek },
-  { id: 'grid.collapseWeek', scope: 'grid', combos: [['Mod', 'ArrowUp']], label: th.shortcuts.items.gridCollapseWeek },
+  {
+    id: 'grid.expandWeek',
+    scope: 'grid',
+    combos: [['Mod', 'ArrowDown']],
+    label: th.shortcuts.items.gridExpandWeek,
+  },
+  {
+    id: 'grid.collapseWeek',
+    scope: 'grid',
+    combos: [['Mod', 'ArrowUp']],
+    label: th.shortcuts.items.gridCollapseWeek,
+  },
   { id: 'grid.cellMenu', scope: 'grid', combos: [['Shift', 'F10']], label: th.shortcuts.items.gridCellMenu },
+  // M7.1 (FR-815, M7.1-D17, X49 — e.code Arrow* with altKey, without metaKey/ctrlKey; FR-819 Shift+F10 on a header)
+  {
+    id: 'grid.moveRow',
+    scope: 'grid',
+    combos: [
+      ['Alt', 'ArrowUp'],
+      ['Alt', 'ArrowDown'],
+    ],
+    label: th.shortcuts.items.gridMoveRow,
+  },
+  {
+    id: 'grid.indentRow',
+    scope: 'grid',
+    combos: [
+      ['Alt', 'ArrowRight'],
+      ['Alt', 'ArrowLeft'],
+    ],
+    label: th.shortcuts.items.gridIndentRow,
+  },
+  {
+    id: 'grid.addMarker',
+    scope: 'grid',
+    combos: [['Shift', 'F10']],
+    label: th.shortcuts.items.gridAddMarker,
+  },
 ]

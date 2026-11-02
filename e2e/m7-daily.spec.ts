@@ -514,27 +514,6 @@ test.describe('D7 ⟲ (F2: BR-40 day glyphs, BR-45 tone, M7-D7 spill, FR-807 hol
 })
 
 // ── V1 ───────────────────────────────────────────────────────────────────────────────────────────────────────
-/**
- * The sticky "รวม" header's left edge vs the period column headers, read in one pass from the DOM: `gap` = how far
- * it sits from the right edge of the last column header that ends at or before it (0 = abuts), `straddle` = how many
- * column headers start left of it and end right of it (a clipped sliver beside รวม).
- */
-async function totalHeaderFit(grid: GridPage): Promise<{ gap: number; straddle: number }> {
-  return grid.root().evaluate((root) => {
-    const headers = [...root.querySelectorAll<HTMLElement>('[role="columnheader"][aria-colindex]')]
-    const colindex = (el: HTMLElement) => Number(el.getAttribute('aria-colindex'))
-    const total = headers.reduce((a, b) => (colindex(b) > colindex(a) ? b : a))
-    const t = total.getBoundingClientRect().left
-    const periods = headers
-      .filter((h) => h !== total && h.hasAttribute('data-col-key'))
-      .map((h) => h.getBoundingClientRect())
-    const ends = periods.map((r) => r.right).filter((right) => right <= t + 1)
-    const gap = ends.length === 0 ? Number.POSITIVE_INFINITY : t - Math.max(...ends)
-    const straddle = periods.filter((r) => r.left < t - 1 && r.right > t + 1).length
-    return { gap: Math.abs(gap), straddle }
-  })
-}
-
 test.describe('V1 (SPEC §8.12, D19) the sticky รวม header abuts the last whole column · 1920 / 1280 × week / day · jack', () => {
   test.beforeAll(async () => {
     await resetDb()
@@ -555,7 +534,7 @@ test.describe('V1 (SPEC §8.12, D19) the sticky รวม header abuts the last 
           await expect
             .poll(
               async () => {
-                const fit = await totalHeaderFit(grid)
+                const fit = await grid.totalHeaderFit() // period row only (M7.1 adds the month row)
                 return fit.gap <= 1 && fit.straddle === 0
               },
               { message: `${level} zoom, scrolled +${by}px` },

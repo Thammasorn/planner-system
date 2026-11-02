@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planCapacityKey, planClear, planTyped, type TargetCell } from './apply'
+import { countReadOnlySum, planCapacityKey, planClear, planTyped, splitSkipped, type TargetCell } from './apply'
 
 const t = (week: string, o: Partial<TargetCell> & { cd?: number } = {}): TargetCell => {
   const { cd, ...rest } = o
@@ -134,5 +134,24 @@ describe('M7 day targets (S3.6)', () => {
     expect(r.writes.map((w) => w.cd)).toEqual([50])
     expect(r.skippedNoCapacity).toBe(1)
     expect(planCapacityKey('f', [day('2026-09-28', { capCd: 50 })]).writes[0]?.cd).toBe(50)
+  })
+})
+
+describe('countReadOnlySum / splitSkipped (FR-817, M7.1-D6)', () => {
+  const t = (editability: TargetCell['editability']): TargetCell => ({
+    rowKey: 't:x',
+    taskAssignmentId: null,
+    week: '2026-09-28',
+    editability,
+    capCd: 0,
+  })
+  it('counts only summed read-only targets', () => {
+    expect(countReadOnlySum([t('readOnlySum'), t('ok'), null, t('readOnlyRow'), t('readOnlySum')])).toBe(2)
+    expect(countReadOnlySum([])).toBe(0)
+  })
+  it('splits the skipped count into summed and other read-only cells', () => {
+    expect(splitSkipped(5, 2)).toEqual([2, 3])
+    expect(splitSkipped(1, 3)).toEqual([1, 0])
+    expect(splitSkipped(0, 0)).toEqual([0, 0])
   })
 })

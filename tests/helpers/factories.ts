@@ -22,6 +22,7 @@ import {
   holidays,
   leaveTypes,
   pages,
+  planMarkers,
   positions,
   projectMembers,
   projects,
@@ -38,6 +39,7 @@ import {
   type HolidayRow,
   type LeaveTypeRow,
   type PageRow,
+  type PlanMarkerDbRow,
   type ProjectRow,
   type ProjectMemberRow,
   type TimeOffRow,
@@ -842,4 +844,31 @@ export async function assignmentVersion(assignmentId: string): Promise<number> {
     .where(eq(taskAssignments.id, assignmentId))
   if (!row) throw new Error(`assignmentVersion: assignment ${assignmentId} not found`)
   return row.version
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M7.1 — plan markers (plan/m07.1 S0.11). Plain Drizzle (X59); `deleted` = soft-deleted with that batch.
+// ---------------------------------------------------------------------------------------------------------------
+
+export async function makePlanMarker(o: {
+  projectId: string
+  date: ISODate
+  color?: 'RED' | 'YELLOW' | 'GREEN'
+  label?: string | null
+  createdBy: string | { id: string }
+  deleted?: { daysAgo: number; batch: string }
+}): Promise<PlanMarkerDbRow> {
+  const [row] = await db
+    .insert(planMarkers)
+    .values({
+      projectId: o.projectId,
+      date: o.date,
+      color: o.color ?? 'RED',
+      label: o.label ?? null,
+      createdBy: typeof o.createdBy === 'string' ? o.createdBy : o.createdBy.id,
+      deletedAt: o.deleted ? sql`now() - make_interval(days => ${o.deleted.daysAgo})` : null,
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
 }

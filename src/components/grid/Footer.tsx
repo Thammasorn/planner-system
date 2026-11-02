@@ -2,14 +2,25 @@
 // src/components/grid/Footer.tsx — ★ the sticky footer (FR-806, FR-809, X29, M6-D8): FOOTER_ROWS = 3 rows
 // ภาระรวม (names) · Capacity · % plus the "รวมงานโปรเจคอื่นของคนเหล่านี้" switch. All values in days (any unit).
 // Rendered by VirtualGrid as the in-flow sticky sibling after the sized body (r4 §13).
+// M7.1: the label cells span both frozen columns (aria-colspan 2, FR-816); month boundaries (FR-818) and the marker
+// lines' footer piece (`overlay`, FR-820) are drawn here too.
 import Switch from '@mui/material/Switch'
 import type { VirtualItem } from '@tanstack/react-virtual'
+import type { ReactNode } from 'react'
 import { formatCd } from '@/domain/units'
 import type { LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import { footerValue, type FooterCell as FooterCellData } from '@/lib/grid/aggregate'
 import type { FooterDayCell } from '@/lib/grid/day-footer'
-import { FOOTER_ROWS, NAME_COL_W, ROW_H, TOTAL_COL_W, type GridColumn } from '@/lib/grid/columns'
+import {
+  FOOTER_ROWS,
+  FROZEN_COL_W,
+  FROZEN_COLS,
+  ROW_H,
+  totalColIndex,
+  TOTAL_COL_W,
+  type GridColumn,
+} from '@/lib/grid/columns'
 import { FooterCell } from './FooterCell'
 import styles from './grid.module.css'
 
@@ -26,6 +37,10 @@ export interface FooterProps {
   onIncludeOthers: (on: boolean) => void
   /** M7 (S3.10): day-level tone / glyph of the ภาระรวม row per D: key */
   dayCells?: ReadonlyMap<string, FooterDayCell>
+  /** M7.1 (FR-818): keys of the first column of each month */
+  monthStarts?: ReadonlySet<string>
+  /** M7.1 (FR-820): the footer piece of the marker lines */
+  overlay?: ReactNode
 }
 
 const days1 = (cd: number) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
@@ -65,19 +80,22 @@ export function Footer(p: FooterProps) {
           <div
             role="rowheader"
             aria-colindex={1}
+            aria-colspan={FROZEN_COLS}
             className={styles.footerHeader}
-            style={{ width: NAME_COL_W, height: ROW_H }}
+            style={{ width: FROZEN_COL_W, height: ROW_H }}
           >
             <span className={styles.name}>{row.label}</span>
             {row.kind === 'util' ? (
-              <label className={styles.actions}>
+              // its own slot at the right of the frozen label cell (M7.1 review §8.12): regular weight, a 32 px hit
+              // row, the text after the switch; the compact grid keeps only the switch (its aria-label names it)
+              <label className={styles.footerSwitch} data-footer-switch="">
                 <Switch
                   size="small"
                   checked={p.includeOthers}
                   onChange={(e) => p.onIncludeOthers(e.target.checked)}
                   slotProps={{ input: { 'aria-label': th.grid.toolbar.includeOthers } }}
                 />
-                <span className={styles.muted}>{th.grid.footer.withOthers}</span>
+                <span className={styles.footerSwitchText}>{th.grid.footer.withOthers}</span>
               </label>
             ) : null}
           </div>
@@ -96,6 +114,7 @@ export function Footer(p: FooterProps) {
                 left={v.start}
                 width={v.size}
                 text={text}
+                monthStart={p.monthStarts?.has(col.key) ?? false}
                 {...(day
                   ? {
                       tone: day.tone,
@@ -114,12 +133,13 @@ export function Footer(p: FooterProps) {
           })}
           <div
             role="gridcell"
-            aria-colindex={p.cols.length + 2}
+            aria-colindex={totalColIndex(p.cols.length)}
             className={styles.footerTotal}
             style={{ width: TOTAL_COL_W, height: ROW_H }}
           />
         </div>
       ))}
+      {p.overlay}
     </div>
   )
 }

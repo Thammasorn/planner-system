@@ -79,20 +79,6 @@ async function expectNoOverflow(page: Page, route: string): Promise<void> {
   expect(await docOverflow(page), `horizontal overflow on ${route}`).toBe(0)
 }
 
-/** Whole week column headers visible between the frozen name column and the sticky "รวม" column. */
-async function visibleWeekColumns(grid: Locator): Promise<{ whole: number; nameW: number; gridW: number }> {
-  return grid.evaluate((el) => {
-    const heads = [...el.querySelectorAll<HTMLElement>('[role="columnheader"]')]
-    const corner = heads[0]!.getBoundingClientRect()
-    const total = heads[heads.length - 1]!.getBoundingClientRect()
-    const whole = heads
-      .slice(1, -1)
-      .map((h) => h.getBoundingClientRect())
-      .filter((r) => r.left >= corner.right - 1 && r.right <= total.left + 1).length
-    return { whole, nameW: corner.width, gridW: el.getBoundingClientRect().width }
-  })
-}
-
 async function box(l: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
   // boundingBox() does not wait for visibility — an editor node view that is re-created (e.g. when the lease makes
   // the editor editable) would otherwise be measured while detached and return null
@@ -162,18 +148,14 @@ test.describe('R1 ⟲ responsive layout (SPEC §7 browser support)', () => {
       const grid = new GridPage(page)
       await new ShellPage(page).goto(`/projects/${projectId}/plan`)
       await grid.waitReady(PROJECT)
-      const v = await visibleWeekColumns(grid.root())
+      const v = await grid.visibleWeekColumns()
       expect(v.whole).toBeGreaterThanOrEqual(1)
-      expect(v.nameW).toBeLessThanOrEqual(v.gridW * 0.45)
+      // M7.1 (FR-814/816, M7.1-D8): the frozen area is งาน + ผู้รับผิดชอบ, capped at 60 % of the grid (M6 capped its
+      // single name column at 45 %); the task column keeps its phone minimum of 120 px
+      expect(v.frozenW).toBeLessThanOrEqual(v.gridW * 0.6)
+      expect(await grid.taskColumnWidth()).toBeGreaterThanOrEqual(120)
       // a narrow grid opens with this week in view (not only the 4 weeks of history)
-      const todayWhole = await grid.root().evaluate((el) => {
-        const heads = [...el.querySelectorAll<HTMLElement>('[role="columnheader"]')]
-        const corner = heads[0]!.getBoundingClientRect()
-        const total = heads[heads.length - 1]!.getBoundingClientRect()
-        const t = el.querySelector('[role="columnheader"][data-today="true"]')?.getBoundingClientRect()
-        return t !== undefined && t.left >= corner.right - 1 && t.right <= total.left + 1
-      })
-      expect(todayWhole, 'this week is a whole visible column').toBe(true)
+      expect(await grid.todayHeaderWhole(), 'this week is a whole visible column').toBe(true)
       await expect(grid.toolbar()).toBeVisible()
       await expectInsideViewport(page, grid.toolbar(), 'grid toolbar')
     })
@@ -314,7 +296,7 @@ test.describe('R1 ⟲ responsive layout (SPEC §7 browser support)', () => {
       const grid = new GridPage(page)
       await new ShellPage(page).goto(`/projects/${projectId}/plan`)
       await grid.waitReady(PROJECT)
-      expect((await visibleWeekColumns(grid.root())).whole).toBeGreaterThanOrEqual(4)
+      expect((await grid.visibleWeekColumns()).whole).toBeGreaterThanOrEqual(4)
     })
 
     test('the wide table scrolls inside its block', async ({ page }) => {
@@ -346,13 +328,17 @@ test.describe('R1 ⟲ responsive layout (SPEC §7 browser support)', () => {
       await editor.waitReady()
       await setSidebarCollapsed(page, true)
       try {
-        const main = await box(shell.main())
-        const column = await box(page.getByTestId('page-column'))
-        const mainCenter = main.x + main.width / 2
-        expect(
-          Math.abs(column.x + column.width / 2 - mainCenter),
-          'column centred in main',
-        ).toBeLessThanOrEqual(2)
+        // the sidebar animates its width after data-collapsed flips: poll until the layout has settled
+        await expect
+          .poll(
+            async () => {
+              const main = await box(shell.main())
+              const column = await box(page.getByTestId('page-column'))
+              return Math.abs(column.x + column.width / 2 - (main.x + main.width / 2))
+            },
+            { message: 'column centred in main' },
+          )
+          .toBeLessThanOrEqual(2)
         await expect(page.getByTestId('page-status-slot').getByTestId('save-status')).toHaveCount(1)
         // an edit shows "บันทึกแล้ว" next to the page menu, not floating over the content
         await editor.content().getByText('ท้ายเอกสาร').click()
@@ -364,7 +350,9 @@ test.describe('R1 ⟲ responsive layout (SPEC §7 browser support)', () => {
         // M6.1-D26: inside the full-width 48 px header bar, on its right half (FR-1603 "action อยู่ด้านขวา")
         expect(status.y).toBeGreaterThanOrEqual(bar.y - 1)
         expect(status.y + status.height).toBeLessThanOrEqual(bar.y + bar.height + 1)
-        expect(status.x, 'save status on the right half of the bar').toBeGreaterThanOrEqual(bar.x + bar.width / 2)
+        expect(status.x, 'save status on the right half of the bar').toBeGreaterThanOrEqual(
+          bar.x + bar.width / 2,
+        )
         expect(status.x + status.width).toBeLessThanOrEqual(bar.x + bar.width + 1)
       } finally {
         await setSidebarCollapsed(page, false)
@@ -383,7 +371,7 @@ test.describe('R1 ⟲ responsive layout (SPEC §7 browser support)', () => {
         await grid.waitReady(PROJECT)
         const g = await box(grid.root())
         expect(width - (g.x + g.width), 'grid reaches the right edge (AC-1601)').toBeLessThanOrEqual(24)
-        expect((await visibleWeekColumns(grid.root())).whole).toBeGreaterThanOrEqual(15)
+        expect((await grid.visibleWeekColumns()).whole).toBeGreaterThanOrEqual(15)
 
         const tasks = new TaskListPage(page)
         await tasks.goto(projectId)

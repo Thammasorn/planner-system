@@ -610,6 +610,43 @@ export const allocations = pgTable(
 export type AllocationDbRow = typeof allocations.$inferSelect
 export type NewAllocation = typeof allocations.$inferInsert
 
+// ---------------------------------------------------------------------------------------------------------------
+// M7.1 — plan markers (SPEC §6.2, §4.8.1 FR-819, BR-102, D24; plan/m07.1 S0.2). A marker is a dated, coloured line on
+// the project plan — not a milestone. ≤ 100 live markers per project are enforced in the service after
+// `select … from projects where id = $1 for update` (M7.1-D13). No `version`: last write wins (§7.10).
+// ---------------------------------------------------------------------------------------------------------------
+
+export const planMarkerColor = pgEnum('plan_marker_color', ['RED', 'YELLOW', 'GREEN'])
+
+export const planMarkers = pgTable(
+  'plan_markers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(), // drawn at the right edge of the column containing it (BR-102)
+    color: planMarkerColor('color').notNull().default('RED'),
+    label: text('label'),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('plan_markers_label_check', sql`${t.label} is null or length(trim(${t.label})) between 1 and 80`),
+    index('plan_markers_project_id_date_idx')
+      .on(t.projectId, t.date)
+      .where(sql`${t.deletedAt} is null`),
+  ],
+)
+
+export type PlanMarkerDbRow = typeof planMarkers.$inferSelect
+export type NewPlanMarker = typeof planMarkers.$inferInsert
+
 export type HolidayRow = typeof holidays.$inferSelect
 export type NewHoliday = typeof holidays.$inferInsert
 export type LeaveTypeRow = typeof leaveTypes.$inferSelect

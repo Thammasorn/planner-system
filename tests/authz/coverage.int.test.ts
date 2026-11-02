@@ -72,6 +72,23 @@ describe('AZ-2 route coverage', () => {
       expect(taskRows, `no TASK-page row for ${name}`).toContain(name)
   })
 
+  it('M7.1 (plan/m07.1 S5.1): GET /api/projects/[id]/plan-markers is exported and has rows; the four marker actions have rows', async () => {
+    const routes = await exportedRoutes()
+    expect(routes).toContain('GET /api/projects/[id]/plan-markers')
+    const covered = new Set(rows.map((r) => r.action))
+    for (const name of [
+      'GET /api/projects/[id]/plan-markers',
+      'createPlanMarker',
+      'updatePlanMarker',
+      'deletePlanMarker',
+      'restorePlanMarkerBatch',
+    ])
+      expect(covered.has(name), `${name} has no authz row`).toBe(true)
+    // §7.10: no new route for the chart or the calendar (they read the grid chunk / project tasks / calendar)
+    const m71 = routes.filter((r) => /plan-markers|chart|plan-calendar/.test(r))
+    expect(m71).toEqual(['GET /api/projects/[id]/plan-markers'])
+  })
+
   it('every exported route handler method has an authz row', async () => {
     const covered = new Set(rows.map((r) => r.action))
     const missing = (await exportedRoutes()).filter((r) => !covered.has(r))

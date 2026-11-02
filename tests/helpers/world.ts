@@ -13,6 +13,7 @@ import type {
   HolidayRow,
   LeaveTypeRow,
   PageRow,
+  PlanMarkerDbRow,
   ProjectRow,
   TimeOffRow,
 } from '@/server/db/schema'
@@ -35,6 +36,7 @@ import {
   makeLeaveType,
   makeMembership,
   makePage,
+  makePlanMarker,
   makeProject,
   makeStatus,
   makeStatuses,
@@ -47,9 +49,18 @@ import {
 } from './factories'
 
 /** Pinned part list (X91); each milestone adds the builder for its part(s).
- *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations · M8 milestones */
+ *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations · M7.1 planMarkers ·
+ *  M8 milestones */
 export type WorldPart =
-  'tasks' | 'pages' | 'taskBodies' | 'files' | 'timeOff' | 'allocations' | 'dayAllocations' | 'milestones'
+  | 'tasks'
+  | 'pages'
+  | 'taskBodies'
+  | 'files'
+  | 'timeOff'
+  | 'allocations'
+  | 'dayAllocations'
+  | 'planMarkers'
+  | 'milestones'
 
 /** Fixed build order of the parts. */
 export const WORLD_PART_ORDER: readonly WorldPart[] = [
@@ -60,6 +71,7 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
   'timeOff',
   'allocations',
   'dayAllocations',
+  'planMarkers', // M7.1: needs only P / Q / A
   'milestones',
 ]
 
@@ -261,6 +273,20 @@ export interface WorldDayAllocations {
   }
 }
 
+/** Part 'planMarkers' (M7.1, plan/m07.1 S0.11): live markers only, created by the project's lead (Q: the manager). */
+export interface WorldPlanMarkers {
+  planMarkers: {
+    /** P · RED · 2026-10-23 · 'UAT sign-off'. */
+    pRed: PlanMarkerDbRow
+    /** P · GREEN · 2026-11-06 · no label. */
+    pGreen: PlanMarkerDbRow
+    /** A (archived) · YELLOW · 2026-10-16 · 'A-ลับ เส้นกำกับ'. */
+    aYellow: PlanMarkerDbRow
+    /** Q (member and lead are not members) · RED · 2026-10-30 · 'Q-ลับ เส้นกำกับ'. */
+    qRed: PlanMarkerDbRow
+  }
+}
+
 /** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
 export type WorldBatches = WorldTasks['batches'] & {
   /** P root 'ลบแล้ว P', deleted 1 day ago. */
@@ -283,7 +309,8 @@ export interface World
     WorldFiles,
     WorldTimeOff,
     WorldAllocations,
-    WorldDayAllocations {
+    WorldDayAllocations,
+    WorldPlanMarkers {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
@@ -715,6 +742,39 @@ async function buildDayAllocations(w: World): Promise<void> {
   w.dayWeeks = dayWeeks
 }
 
+/** M7.1 'planMarkers' part (plan/m07.1 S0.11). */
+async function buildPlanMarkers(w: World): Promise<void> {
+  w.planMarkers = {
+    pRed: await makePlanMarker({
+      projectId: w.P.id,
+      date: '2026-10-23',
+      color: 'RED',
+      label: 'UAT sign-off',
+      createdBy: w.lead,
+    }),
+    pGreen: await makePlanMarker({
+      projectId: w.P.id,
+      date: '2026-11-06',
+      color: 'GREEN',
+      createdBy: w.lead,
+    }),
+    aYellow: await makePlanMarker({
+      projectId: w.A.id,
+      date: '2026-10-16',
+      color: 'YELLOW',
+      label: 'A-ลับ เส้นกำกับ',
+      createdBy: w.lead,
+    }),
+    qRed: await makePlanMarker({
+      projectId: w.Q.id,
+      date: '2026-10-30',
+      color: 'RED',
+      label: 'Q-ลับ เส้นกำกับ',
+      createdBy: w.manager,
+    }),
+  }
+}
+
 /** Builders by part; each milestone adds its own. */
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
@@ -724,6 +784,7 @@ const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   timeOff: buildTimeOff,
   allocations: buildAllocations,
   dayAllocations: buildDayAllocations,
+  planMarkers: buildPlanMarkers,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -787,6 +848,7 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     holidays: notBuilt('timeOff', 'holidays'),
     allocations: notBuilt('allocations', 'allocations'),
     dayWeeks: notBuilt('dayAllocations', 'dayWeeks'),
+    planMarkers: notBuilt('planMarkers', 'planMarkers'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w

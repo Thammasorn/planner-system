@@ -23,6 +23,31 @@ export const TEXT_PAIRS: ReadonlyArray<readonly [fg: string, bg: string]> = [
   ['faded-fg', 'hover-bg'],
 ]
 
+/** M7.1 (X51): non-text tokens (lines, marks, flags) that must reach 3:1 (WCAG 1.4.11) against every background they are
+ *  drawn on — grid cells (--surface), header rows (--surface-muted), weekend / holiday columns and hovered rows. */
+export const NON_TEXT_TOKENS: readonly string[] = [
+  'chart-1',
+  'chart-2',
+  'chart-3',
+  'chart-4',
+  'chart-5',
+  'chart-6',
+  'chart-7',
+  'chart-8',
+  'marker-red',
+  'marker-yellow',
+  'marker-green',
+  'border-month',
+]
+export const NON_TEXT_BACKGROUNDS: readonly string[] = [
+  'surface',
+  'surface-muted',
+  'nonworking',
+  'holiday',
+  'hover-bg',
+]
+export const NON_TEXT_MIN_RATIO = 3
+
 const HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
 
 function channel(hex2: string): number {

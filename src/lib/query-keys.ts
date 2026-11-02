@@ -48,6 +48,8 @@ export const qk = {
   gridAll: (ctx: GridCtx) => ['grid', ctx.kind, ctx.id] as const,
   /** GET /api/grid/project/[id]?from&to&includeOthers — one 8-week chunk (M6; person grid M9). */
   gridChunk: (ctx: GridCtx, c: GridChunk) => ['grid', ctx.kind, ctx.id, c] as const,
+  /** GET /api/projects/[id]/plan-markers — every live marker of a project, shared by grid, calendar and chart (M7.1-D15). */
+  planMarkers: (projectId: string) => ['planMarkers', projectId] as const,
 }
 
 /** Prefixes for load views (M6 grid = qk.gridAll(…) under ['grid'], M9 workload, M10 home). Invalidating an unused prefix is a no-op,

@@ -2,6 +2,11 @@
 // src/components/grid/GridToolbar.tsx — `[สัปดาห์] ◀ [วันนี้] ▶ ภาระ: [ทั้งหมด▾] หน่วย: [วัน▾]` (SPEC §8.3, FR-801/802/804/809,
 // M6-D12/D21). The toolbar is one set of MUI controls (not per cell). M7: `[สัปดาห์ | วัน]` is ZoomToggle (FR-802).
 // M6.1 (S5.2, §8.12): light toggles from grid.module.css (token scale, --radius-md); it sits right under the header bar.
+// M7.1 (§8.3 sketch v3.3): ☑ แสดงผู้รับผิดชอบ (FR-816), ⚑ เส้นกำกับ (N) ▾ (FR-819, MarkersMenu as `markers`) and
+// 📈 กราฟภาระ (FR-813, aria-pressed) — all optional props, absent = the M7 toolbar.
+// M7.1 review (§8.12 / §4.16, SPEC §9 phone): three wrapping groups — view (switch, zoom, ‹ วันนี้ › kept on one line),
+// filters (ภาระ, หน่วย, switches) and overlays (เส้นกำกับ, กราฟภาระ) — so a narrow toolbar wraps between groups, never
+// strands a chevron on its own line.
 import Button from '@mui/material/Button'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
@@ -11,6 +16,7 @@ import TextField from '@mui/material/TextField'
 import ChevronLeft from '@mui/icons-material/ChevronLeft'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import EventBusyOutlined from '@mui/icons-material/EventBusyOutlined'
+import type { ReactNode } from 'react'
 import type { CellUnit, LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { GridZoom } from '@/lib/contracts/grid'
@@ -33,60 +39,122 @@ export interface GridToolbarProps {
   /** M7 (FR-802) */
   zoom?: GridZoom
   onZoom?: (z: GridZoom) => void
+  /** M7.1 (FR-816) */
+  showAssignees?: boolean
+  onShowAssignees?: (on: boolean) => void
+  /** M7.1 (FR-819): the MarkersMenu */
+  markers?: ReactNode
+  /** M7.1 (FR-813) */
+  chartOpen?: boolean
+  onChart?: (open: boolean) => void
+  /** M7.1 (FR-810): rendered first — the plan page's [แผนงาน | ปฏิทิน] switch sits leftmost in the toolbar */
+  start?: ReactNode
 }
 
 export function GridToolbar(p: GridToolbarProps) {
   return (
     <div role="toolbar" aria-label={th.grid.toolbar.label} className={styles.toolbar}>
-      <ZoomToggle zoom={p.zoom ?? 'WEEK'} onChange={p.onZoom ?? (() => {})} />
-      <IconButton size="small" aria-label={th.grid.toolbar.prev} onClick={p.onPrev} className={styles.toolbarIcon}>
-        <ChevronLeft fontSize="small" />
-      </IconButton>
-      <Button size="small" variant="outlined" onClick={p.onToday} className={styles.toolbarToggle}>
-        {th.grid.toolbar.today}
-      </Button>
-      <IconButton size="small" aria-label={th.grid.toolbar.next} onClick={p.onNext} className={styles.toolbarIcon}>
-        <ChevronRight fontSize="small" />
-      </IconButton>
-      <TextField
-        select
-        size="small"
-        label={th.grid.toolbar.view}
-        value={p.view}
-        onChange={(e) => p.onView(e.target.value as LoadView)}
-        sx={{ minWidth: { xs: 140, sm: 170 } }}
-      >
-        {LOAD_VIEWS.map((v) => (
-          <MenuItem key={v} value={v}>
-            {th.grid.view[v]}
-          </MenuItem>
-        ))}
-      </TextField>
-      <TextField
-        select
-        size="small"
-        label={th.units.label}
-        value={p.unit}
-        onChange={(e) => p.onUnit(e.target.value as CellUnit)}
-        sx={{ minWidth: { xs: 96, sm: 110 } }}
-      >
-        {GRID_UNITS.map((u) => (
-          <MenuItem key={u} value={u}>
-            {th.units[u]}
-          </MenuItem>
-        ))}
-      </TextField>
-      <FormControlLabel
-        className={styles.toolbarSwitch}
-        control={
-          <Switch
+      <div className={styles.toolbarGroup} data-toolbar-group="view">
+        {p.start}
+        <ZoomToggle zoom={p.zoom ?? 'WEEK'} onChange={p.onZoom ?? (() => {})} />
+        <div className={styles.toolbarNav} data-testid="toolbar-nav">
+          <IconButton
             size="small"
-            checked={p.showCompleted}
-            onChange={(e) => p.onShowCompleted(e.target.checked)}
+            aria-label={th.grid.toolbar.prev}
+            onClick={p.onPrev}
+            className={styles.toolbarIcon}
+          >
+            <ChevronLeft fontSize="small" />
+          </IconButton>
+          <Button size="small" variant="outlined" onClick={p.onToday} className={styles.toolbarToggle}>
+            {th.grid.toolbar.today}
+          </Button>
+          <IconButton
+            size="small"
+            aria-label={th.grid.toolbar.next}
+            onClick={p.onNext}
+            className={styles.toolbarIcon}
+          >
+            <ChevronRight fontSize="small" />
+          </IconButton>
+        </div>
+      </div>
+      <div className={styles.toolbarGroup} data-toolbar-group="filters">
+        <TextField
+          select
+          size="small"
+          label={th.grid.toolbar.view}
+          value={p.view}
+          onChange={(e) => p.onView(e.target.value as LoadView)}
+          sx={{ minWidth: { xs: 128, sm: 170 } }}
+        >
+          {LOAD_VIEWS.map((v) => (
+            <MenuItem key={v} value={v}>
+              {th.grid.view[v]}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label={th.units.label}
+          value={p.unit}
+          onChange={(e) => p.onUnit(e.target.value as CellUnit)}
+          sx={{ minWidth: { xs: 96, sm: 110 } }}
+        >
+          {GRID_UNITS.map((u) => (
+            <MenuItem key={u} value={u}>
+              {th.units[u]}
+            </MenuItem>
+          ))}
+        </TextField>
+        <FormControlLabel
+          className={styles.toolbarSwitch}
+          control={
+            <Switch
+              size="small"
+              checked={p.showCompleted}
+              onChange={(e) => p.onShowCompleted(e.target.checked)}
+            />
+          }
+          label={th.grid.toolbar.showCompleted}
+        />
+        {p.onShowAssignees ? (
+          <FormControlLabel
+            className={styles.toolbarSwitch}
+            control={
+              <Switch
+                size="small"
+                checked={p.showAssignees ?? true}
+                onChange={(e) => p.onShowAssignees?.(e.target.checked)}
+                slotProps={{ input: { 'aria-label': th.grid.columns.show } }}
+              />
+            }
+            label={th.grid.columns.show}
+            data-testid="show-assignees"
           />
-        }
-        label={th.grid.toolbar.showCompleted}
-      />
+        ) : null}
+      </div>
+      {p.markers || p.onChart ? (
+        <div className={styles.toolbarGroup} data-toolbar-group="overlays">
+          {p.markers}
+          {p.onChart ? (
+            <Button
+              size="small"
+              variant="outlined"
+              className={styles.toolbarToggle}
+              aria-pressed={p.chartOpen ?? false}
+              data-testid="chart-toggle"
+              onClick={() => p.onChart?.(!(p.chartOpen ?? false))}
+            >
+              <span aria-hidden="true" className={styles.toolbarGlyph}>
+                📈
+              </span>
+              {th.loadChart.toggle}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <span className={styles.saveState} role="status" aria-live="polite" data-save-status={p.saveState}>
         {th.grid.save[p.saveState]}
       </span>

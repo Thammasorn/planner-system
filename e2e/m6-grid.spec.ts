@@ -10,7 +10,6 @@ import type { ISODate } from '../src/domain/types'
 import { formatCd } from '../src/domain/units'
 import { th } from '../src/i18n/th'
 import { formatWeekHeader } from '../src/lib/format'
-import { NAME_W } from '../src/lib/grid/columns'
 import {
   expect,
   loginAs,
@@ -67,10 +66,14 @@ async function expectValue(grid: GridPage, rowKey: string, week: ISODate, text: 
   await expect(grid.value(cell)).toHaveText(text)
 }
 
-/** The column header starts right after the sticky name column (± the grid's 1 px border). */
-async function expectRightOfNames(header: Locator, gridX: number): Promise<void> {
+/**
+ * The column header starts right after the sticky frozen columns (± the grid's 1 px border). M7.1: the frozen area is
+ * งาน + ผู้รับผิดชอบ (FR-816), measured from its two header cells instead of M6's single name-column constant.
+ */
+async function expectRightOfNames(grid: GridPage, header: Locator, gridX: number): Promise<void> {
+  const frozen = await grid.frozenWidth()
   await expect
-    .poll(async () => Math.abs((await header.boundingBox())!.x - gridX - NAME_W))
+    .poll(async () => Math.abs((await header.boundingBox())!.x - gridX - frozen))
     .toBeLessThanOrEqual(2)
 }
 
@@ -106,11 +109,13 @@ test.describe('G1 ⟲ (FR-408, FR-801, FR-802 week, toolbar) tab, timeline and c
     const gridBox = (await grid.root().boundingBox())!
     const first = grid.columnHeader('2026-08-31')
     await expect(first).toHaveText(formatWeekHeader('2026-08-31'))
-    await expectRightOfNames(first, gridBox.x)
+    await expectRightOfNames(grid, first, gridBox.x)
 
     // scrolling right 20 weeks requests the next chunk (the first 20 weeks after the window are already loaded)
-    const later: Promise<Response> = page.waitForResponse(/\/api\/grid\/project\/[0-9a-f-]{36}\?.*from=2027-04-12/)
-    await grid.root().hover({ position: { x: NAME_W + 100, y: 120 } })
+    const later: Promise<Response> = page.waitForResponse(
+      /\/api\/grid\/project\/[0-9a-f-]{36}\?.*from=2027-04-12/,
+    )
+    await grid.root().hover({ position: { x: (await grid.frozenWidth()) + 100, y: 120 } })
     await page.mouse.wheel(20 * 64, 0)
     expect((await later).status()).toBe(200)
     await expect(grid.columnHeader('2027-04-12')).toHaveText(formatWeekHeader('2027-04-12'))
@@ -119,7 +124,7 @@ test.describe('G1 ⟲ (FR-408, FR-801, FR-802 week, toolbar) tab, timeline and c
     await grid.today()
     const today = grid.columnHeader('2026-09-28')
     await expect(today).toContainText(formatWeekHeader('2026-09-28')) // + the hidden "สัปดาห์นี้" mark
-    await expectRightOfNames(today, gridBox.x)
+    await expectRightOfNames(grid, today, gridBox.x)
   })
 })
 
@@ -136,7 +141,7 @@ test.describe('G2 ⟲ (AC-801, FR-805, X76, A11Y-2b) keyboard range fill · cind
     // the roving cell is the home cell: the first row, this week (28/9); Tab from the toolbar's last control enters it
     const home = grid.root().locator('[role="gridcell"][tabindex="0"]')
     await expect(home).toHaveAttribute('data-testid', `cell-${cindy}-W:2026-09-28`)
-    await grid.showCompletedSwitch().focus()
+    await grid.lastToolbarControl().focus()
     await grid.press('Tab')
     await expect(grid.cell(cindy, '2026-09-28')).toBeFocused()
     await grid.press('ArrowRight')
@@ -170,7 +175,7 @@ test.describe('G2 ⟲ (AC-801, FR-805, X76, A11Y-2b) keyboard range fill · cind
     await next.focus()
     for (let i = 0; i < 3; i++) await grid.press('Enter')
     await expect(grid.columnHeader('2026-11-23')).toBeAttached()
-    await grid.showCompletedSwitch().focus()
+    await grid.lastToolbarControl().focus()
     await grid.press('Tab')
     await expect(grid.cell(cindy, '2026-11-23')).toBeFocused()
 
@@ -183,7 +188,7 @@ test.describe('G2 ⟲ (AC-801, FR-805, X76, A11Y-2b) keyboard range fill · cind
     for (let i = 0; i < 6; i++) await grid.press('Enter')
     await expect(focused).toHaveCount(0)
     await expect(grid.root()).toHaveAttribute('tabindex', '0')
-    await grid.showCompletedSwitch().focus()
+    await grid.lastToolbarControl().focus()
     await grid.press('Tab')
     await expect(focused).toBeFocused()
     await expect(focused).toBeInViewport()
@@ -279,7 +284,9 @@ test.describe('G5 ⟲ (AC-805, §7.5) three edits, three undos, reload', () => {
     await resetDb()
   })
 
-  test('Cmd+Z ×3 reverts in reverse order; after reload the values stay and redo does nothing', async ({ page }) => {
+  test('Cmd+Z ×3 reverts in reverse order; after reload the values stay and redo does nothing', async ({
+    page,
+  }) => {
     const grid = await openGrid(page, 'cindy', POS)
     const cindy = await grid.rowKeyOf(R1, 'Cindy')
     const [a, b, c] = ['2026-08-31', '2026-09-07', '2026-09-14'] as const
@@ -421,7 +428,10 @@ test.describe('G7 ⟲ (§4.8 การลบ, KEY-05, ? help) task rows in the g
     const unassigned = th.tasks.toast.unassigned('Ivy')
     let answered = waitForServerAction(page)
     await grid.rowHeader('งาน G7', 'Ivy').hover()
-    await grid.rowHeader('งาน G7', 'Ivy').getByRole('button', { name: th.grid.row.removeAssignee('Ivy') }).click()
+    await grid
+      .rowHeader('งาน G7', 'Ivy')
+      .getByRole('button', { name: th.grid.row.removeAssignee('Ivy') })
+      .click()
     await answered
     await expect(toastWith(page, unassigned)).toBeVisible()
     await expect(grid.rowHeader('งาน G7')).toContainText(th.grid.row.unassigned)
@@ -431,7 +441,7 @@ test.describe('G7 ⟲ (§4.8 การลบ, KEY-05, ? help) task rows in the g
     await expectValue(grid, await grid.rowKeyOf('งาน G7', 'Ivy'), '2026-11-16', d1(200))
 
     const deleted = th.tasks.toast.deleted('งาน G7')
-    await grid.rowHeader('งาน G7', 'Ivy').click()
+    await grid.selectRow('งาน G7', 'Ivy')
     answered = waitForServerAction(page)
     await grid.press('Delete')
     await answered
@@ -550,7 +560,9 @@ test.describe('G10 ⟲ (AC-604 M6 part) two people on one task · jack', () => {
     await resetDb()
   })
 
-  test('Jack 3 + Mint 2 in 11-16..11-20: task row 5.0, person rows 3.0 / 2.0, footer 5.0', async ({ page }) => {
+  test('Jack 3 + Mint 2 in 11-16..11-20: task row 5.0, person rows 3.0 / 2.0, footer 5.0', async ({
+    page,
+  }) => {
     const tasks = await openTasks(page, 'jack', MOBILE)
     await tasks.addTasks(['งาน AC604'])
     await tasks.settledId('งาน AC604')
@@ -767,7 +779,9 @@ test.describe('G15 ⟲ syntheticGrid (§9 smoke, M6-D22) 220 rows stay virtualis
     await resetDb(undefined, { syntheticGrid: true })
   })
 
-  test('first data → painted < 600 ms; keydown → cell text < 100 ms; < 60 rendered rows', async ({ page }) => {
+  test('first data → painted < 600 ms; keydown → cell text < 100 ms; < 60 rendered rows', async ({
+    page,
+  }) => {
     const grid = await openGrid(page, 'cindy', 'Perf grid')
     const paint = await page.evaluate(() => {
       const m = performance.measure('grid', 'grid:first-data', 'grid:painted')
@@ -780,7 +794,10 @@ test.describe('G15 ⟲ syntheticGrid (§9 smoke, M6-D22) 220 rows stay virtualis
     console.log(`G15 rendered rows: ${rows}`)
     expect(rows).toBeLessThan(60)
 
-    const cell = grid.root().locator('[role="gridcell"][data-cell][data-today="true"]:not([aria-readonly])').first()
+    const cell = grid
+      .root()
+      .locator('[role="gridcell"][data-cell][data-today="true"]:not([aria-readonly])')
+      .first()
     await cell.click()
     await page.keyboard.type('1')
     // keydown(Enter) → the committed number in the cell, observed in the page (no Playwright round trips inside)
@@ -788,9 +805,13 @@ test.describe('G15 ⟲ syntheticGrid (§9 smoke, M6-D22) 220 rows stay virtualis
       const w = window as unknown as { __g15: Promise<number> }
       w.__g15 = new Promise<number>((resolve) => {
         let start = 0
-        el.ownerDocument.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') start = performance.now()
-        }, { capture: true, once: true })
+        el.ownerDocument.addEventListener(
+          'keydown',
+          (e) => {
+            if (e.key === 'Enter') start = performance.now()
+          },
+          { capture: true, once: true },
+        )
         const done = () => {
           const v = el.querySelector('[data-cell-value]')
           if (start > 0 && v?.textContent === expected) {

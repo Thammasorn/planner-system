@@ -5,6 +5,8 @@ import {
   preferencesSchema,
   GRID_PREFERENCE_DEFAULTS,
   gridPreference,
+  PLAN_PREFERENCE_DEFAULTS,
+  planPreference,
   TASK_PREFERENCE_DEFAULTS,
   taskPreference,
 } from './preferences'
@@ -90,7 +92,14 @@ describe('grid preferences (M6-D21)', () => {
     expect(prefs['grid.unit']).toBeUndefined()
     expect(gridPreference(prefs, 'grid.unit')).toBe('DAYS')
     expect(gridPreference(prefs, 'load.view')).toBe('ALL')
-    expect(GRID_PREFERENCE_DEFAULTS).toEqual({ 'grid.unit': 'DAYS', 'load.view': 'ALL', 'grid.zoom': 'WEEK' })
+    expect(GRID_PREFERENCE_DEFAULTS).toEqual({
+      'grid.unit': 'DAYS',
+      'load.view': 'ALL',
+      'grid.zoom': 'WEEK',
+      'grid.showAssignees': true,
+      'grid.taskColumnWidth': 240,
+      'grid.chart': false,
+    })
     const stored = preferencesSchema.parse({ 'grid.unit': 'FRACTION', 'load.view': 'COMMITTED' })
     expect(gridPreference(stored, 'grid.unit')).toBe('FRACTION')
     expect(gridPreference(stored, 'load.view')).toBe('COMMITTED')
@@ -110,5 +119,50 @@ describe('grid.zoom preference (M7, FR-802, X59)', () => {
     expect(bad['grid.zoom']).toBeUndefined()
     expect(gridPreference(bad, 'grid.zoom')).toBe('WEEK')
     expect(gridPreference(preferencesSchema.parse({}), 'grid.zoom')).toBe('WEEK')
+  })
+})
+
+describe('M7.1 preference keys (FR-810/813/814/816, X59)', () => {
+  it('setPreference input accepts each new key with a valid value and rejects bad ones', () => {
+    const cases: Array<[string, unknown[], unknown[]]> = [
+      ['plan.view', ['GRID', 'CALENDAR'], ['calendar', 'LIST', null]],
+      ['grid.showAssignees', [true, false], ['yes', 1]],
+      ['grid.taskColumnWidth', [120, 240, 640], [119, 641, 240.5, '240']],
+      ['grid.chart', [true, false], ['on', null]],
+    ]
+    for (const [key, goods, bads] of cases) {
+      for (const value of goods)
+        expect(preferenceInput.safeParse({ key, value }).success, `${key}=${String(value)}`).toBe(true)
+      for (const value of bads)
+        expect(preferenceInput.safeParse({ key, value }).success, `${key}=${String(value)}`).toBe(false)
+    }
+  })
+
+  it('bad stored values fall back to the defaults (no error)', () => {
+    const bad = preferencesSchema.parse({
+      'plan.view': 'MONTH',
+      'grid.showAssignees': 'no',
+      'grid.taskColumnWidth': 9999,
+      'grid.chart': 1,
+    })
+    expect(bad).toEqual(DEFAULT_PREFERENCES)
+    expect(planPreference(bad, 'plan.view')).toBe('GRID')
+    expect(gridPreference(bad, 'grid.showAssignees')).toBe(true)
+    expect(gridPreference(bad, 'grid.taskColumnWidth')).toBe(240)
+    expect(gridPreference(bad, 'grid.chart')).toBe(false)
+    expect(PLAN_PREFERENCE_DEFAULTS).toEqual({ 'plan.view': 'GRID' })
+  })
+
+  it('stored values are kept', () => {
+    const p = preferencesSchema.parse({
+      'plan.view': 'CALENDAR',
+      'grid.showAssignees': false,
+      'grid.taskColumnWidth': 320,
+      'grid.chart': true,
+    })
+    expect(planPreference(p, 'plan.view')).toBe('CALENDAR')
+    expect(gridPreference(p, 'grid.showAssignees')).toBe(false)
+    expect(gridPreference(p, 'grid.taskColumnWidth')).toBe(320)
+    expect(gridPreference(p, 'grid.chart')).toBe(true)
   })
 })

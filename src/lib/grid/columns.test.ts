@@ -4,33 +4,50 @@ import {
   chunksForRange,
   chunkStartOf,
   columnIndexOfPeriod,
+  FOOTER_ROWS,
+  FROZEN_COLS,
+  gridContentHeight,
+  HEADER_H,
+  HEADER_ROWS,
+  HEADER_TOTAL_H,
   initialScrollIndex,
-  NAME_MIN_W,
-  NAME_W,
-  nameColumnWidth,
+  MONTH_H,
+  periodColIndex,
+  ROW_H,
   stickyTotalWidth,
+  totalColIndex,
   timelineStart,
   timelineWeeks,
   TOTAL_W,
   WEEK_W,
 } from './columns'
+import { frozenWidths } from './frozen'
+
+/** The default desktop frozen area (both frozen columns at their default widths, M7.1-D8). */
+const defaultFrozen = frozenWidths(1600, undefined, true)
+const NAME_W = defaultFrozen.task + defaultFrozen.assignee
 
 const today = '2026-09-30'
 const cols = buildColumns(timelineWeeks(today), new Set(), new Map())
 
-describe('nameColumnWidth (SPEC §7 browser support)', () => {
-  it('keeps NAME_W on wide grids and before the grid is measured', () => {
-    expect(nameColumnWidth(0)).toBe(NAME_W)
-    expect(nameColumnWidth(1200)).toBe(NAME_W)
-    expect(nameColumnWidth(736)).toBe(NAME_W)
+describe('header / frozen bookkeeping (M7.1-D8, M7.1-D10, X85)', () => {
+  it('two header rows (month + period); the header block is MONTH_H + HEADER_H tall', () => {
+    expect(HEADER_ROWS).toBe(2)
+    expect(HEADER_TOTAL_H).toBe(MONTH_H + HEADER_H)
+    expect(FOOTER_ROWS).toBe(3)
   })
-  it('takes 40 % on narrow grids, never below NAME_MIN_W', () => {
-    expect(nameColumnWidth(358)).toBe(143)
-    expect(nameColumnWidth(200)).toBe(NAME_MIN_W)
+  it('period columns start after the two frozen columns; รวม is last', () => {
+    expect(FROZEN_COLS).toBe(2)
+    expect(periodColIndex(0)).toBe(3)
+    expect(totalColIndex(313)).toBe(316)
   })
-  it('leaves room for at least one whole week column at phone width', () => {
-    const w = 358 // 390 px viewport − 2 × 16 px page padding
-    expect(w - nameColumnWidth(w) - TOTAL_W).toBeGreaterThanOrEqual(WEEK_W)
+  it('the default desktop frozen area = งาน 240 + ผู้รับผิดชอบ 112', () => {
+    expect(NAME_W).toBe(352)
+  })
+  it('a phone still shows one whole week column beside both frozen columns', () => {
+    const vw = 358 // 390 px viewport − 2 × 16 px page padding
+    const w = frozenWidths(vw, undefined, true)
+    expect(vw - w.task - w.assignee - TOTAL_W).toBeGreaterThanOrEqual(WEEK_W)
   })
 })
 
@@ -122,5 +139,15 @@ describe('stickyTotalWidth (SPEC §8.12 / D19: รวม abuts the last whole co
   })
   it('falls back to TOTAL_W when no whole column fits beside the name column', () => {
     expect(stickyTotalWidth(cols, 0, NAME_W + TOTAL_W + 10, NAME_W)).toBe(TOTAL_W)
+  })
+})
+
+describe('gridContentHeight (§8.12 / D19: the scroller hugs a short plan)', () => {
+  it('header + rows + footer + borders (+ scrollbar)', () => {
+    expect(gridContentHeight(HEADER_TOTAL_H + 4 * ROW_H)).toBe(HEADER_TOTAL_H + (4 + FOOTER_ROWS) * ROW_H + 4)
+    expect(gridContentHeight(HEADER_TOTAL_H + 4 * ROW_H, 15)).toBe(HEADER_TOTAL_H + (4 + FOOTER_ROWS) * ROW_H + 19)
+  })
+  it('an empty body still has the header', () => {
+    expect(gridContentHeight(0)).toBe(HEADER_TOTAL_H + FOOTER_ROWS * ROW_H + 4)
   })
 })

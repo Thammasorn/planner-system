@@ -6,11 +6,12 @@ import { useCallback, type ClipboardEvent, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { th } from '@/i18n/th'
 import { copyText } from '@/lib/copy-text'
+import type { TargetCell } from '@/lib/grid/apply'
 import { clipTargets, sameKindRun } from '@/lib/grid/kinds'
 import { planPaste } from '@/lib/grid/paste'
 import { cellsOf, rectSize } from '@/lib/grid/selection'
 import { copyValues, parseTsv, serializeTsv } from '@/lib/grid/tsv'
-import { selectionRect, type GridAccess } from './useGridEditing'
+import { selectionRect, toastSkipped, type GridAccess } from './useGridEditing'
 
 function fromGridCell(e: ClipboardEvent<HTMLElement>): boolean {
   const t = e.target as HTMLElement
@@ -54,7 +55,14 @@ export function useGridClipboard(acc: RefObject<GridAccess | null>) {
         void a.gesture(th.grid.undo.paste, r.writes)
         toast(th.grid.toast.pasted(r.pasted))
       }
-      if (r.skippedReadOnly > 0) toast(th.grid.toast.readOnlySkipped(r.skippedReadOnly))
+      if (r.skippedReadOnly > 0) {
+        // M7.1 (FR-817): summed cells of the pasted area are counted with their own text
+        const rows = Math.max(size.rows, block.length)
+        const area: (TargetCell | null)[] = []
+        const cols = Math.max(size.cols, width)
+        for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) area.push(a.target(rect.r0 + i, rect.c0 + j))
+        toastSkipped(r.skippedReadOnly, area)
+      }
       if (r.invalid > 0) toast(th.grid.toast.invalidSkipped(r.invalid))
     },
     [acc],

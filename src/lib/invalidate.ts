@@ -99,3 +99,10 @@ export function patchTaskHasBody(qc: QueryClient, projectId: string, taskId: str
 export function invalidateTaskViews(qc: QueryClient, projectId: string): Promise<void> {
   return invalidateAll(qc, [qk.projectTasks(projectId), qkPrefix.myTasks, qkPrefix.teamTasks])
 }
+
+// ── M7.1 (plan/m07.1 S0.5, X82) ─────────────────────────────────────────────────────────────────────────────────────
+
+/** After any plan-marker create / update / delete / restore: that project's markers only (grid, calendar, chart). */
+export function invalidatePlanMarkers(qc: QueryClient, projectId: string): Promise<void> {
+  return invalidateAll(qc, [qk.planMarkers(projectId)])
+}

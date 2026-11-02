@@ -7,7 +7,7 @@ import type { Cd, CellUnit, ISODate } from '@/domain/types'
 import type { AssigneeCell } from '@/lib/contracts/grid'
 import { dayCapacityKey, parseDayInput, writeFor } from './day-input'
 import type { CellWrite } from './queue'
-import type { Editability, RowKey } from './rows'
+import type { RowKey, SumEditability } from './rows'
 
 /** BR-26: a WEEK cell holds at most 7 days. */
 export const MAX_WEEK_CD = 700
@@ -17,7 +17,8 @@ export interface TargetCell {
   /** null on task rows (no assignment to write to) */
   taskAssignmentId: string | null
   week: ISODate
-  editability: Editability
+  /** M7.1: 'readOnlySum' = a summed cell (assignee column hidden, BR-101) */
+  editability: SumEditability
   /** the cell's own capacity: people[u].capacity[W:week] (week / รวม) or [D:date] (day column); 0 when missing */
   capCd: Cd
   cell?: AssigneeCell
@@ -112,4 +113,20 @@ export function planClear(targets: readonly TargetCell[]): PlanResult {
     if (t.cell && t.cell.cd !== 0) r.writes.push(writeFor(t, null))
   }
   return r
+}
+
+/** M7.1 (FR-817, M7.1-D6): how many of the targets are summed read-only cells (assignee column hidden). */
+export function countReadOnlySum(targets: readonly (TargetCell | null)[]): number {
+  let n = 0
+  for (const t of targets) if (t?.editability === 'readOnlySum') n++
+  return n
+}
+
+/**
+ * The skip toasts of a range gesture (FR-817): summed cells get `th.grid.sumMode.skipped(n)` once; the other read-only
+ * cells keep M6's "ข้าม N ช่องที่แก้ไม่ได้". Returns [sumSkipped, otherSkipped].
+ */
+export function splitSkipped(skippedReadOnly: number, sumCount: number): [number, number] {
+  const sum = Math.min(skippedReadOnly, sumCount)
+  return [sum, skippedReadOnly - sum]
 }

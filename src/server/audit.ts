@@ -5,7 +5,7 @@ import { auditLog } from './db/schema'
 import type { DbOrTx } from './db/types'
 
 /** Grows to exactly the X93 list: M2 client, project, project_member · M3 task, task_assignment, task_status,
- *  task_blocker · M4 page, file · M5 holiday, leave_type, time_off · M6 allocation · M8 milestone. */
+ *  task_blocker · M4 page, file · M5 holiday, leave_type, time_off · M6 allocation · M7.1 plan_marker · M8 milestone. */
 export type AuditEntity =
   | 'user'
   | 'position'
@@ -22,6 +22,7 @@ export type AuditEntity =
   | 'leave_type'
   | 'time_off'
   | 'allocation'
+  | 'plan_marker'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
 export interface AuditInput {

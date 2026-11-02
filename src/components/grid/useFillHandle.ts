@@ -6,6 +6,7 @@
 import { useCallback, useRef, type PointerEvent, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { th } from '@/i18n/th'
+import { countReadOnlySum, type TargetCell } from '@/lib/grid/apply'
 import { planFill } from '@/lib/grid/fill'
 import { clipTargets, fillRun } from '@/lib/grid/kinds'
 import { fillTargetRect, type CellPos, type Rect } from '@/lib/grid/selection'
@@ -99,6 +100,11 @@ export function useFillHandle(acc: RefObject<GridAccess | null>, editing: GridEd
       // the source columns stay readable (planFill copies from them); only targets are clipped
       const res = planFill(src, target, (r, c) => (c >= src.c0 && c <= src.c1 ? a.target(r, c) : clipped(r, c)))
       if (res.writes.length > 0) void a.gesture(th.grid.undo.fill, res.writes)
+      // M7.1 (FR-817): summed cells (assignee column hidden) are skipped with their own toast, once
+      const area: (TargetCell | null)[] = []
+      for (let r = target.r0; r <= target.r1; r++) for (let c = target.c0; c <= target.c1; c++) area.push(clipped(r, c))
+      const sum = countReadOnlySum(area)
+      if (sum > 0) toast(th.grid.sumMode.skipped(sum))
       const r0 = Math.min(d.source.r0, target.r0)
       const c0 = Math.min(d.source.c0, target.c0)
       const r1 = Math.max(d.source.r1, target.r1)

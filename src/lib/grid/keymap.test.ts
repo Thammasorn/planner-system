@@ -119,3 +119,20 @@ describe('asciiForCode', () => {
     expect(asciiForCode('KeyA')).toBeNull()
   })
 })
+
+describe('gridKeyAction moveRow (FR-815, M7.1-D17, X49)', () => {
+  const row = { rowSelected: true, taskRowSelected: true }
+  it('Alt+arrows on a selected task row → up / down / in / out, by e.code (Thai layout: key is ignored)', () => {
+    expect(gridKeyAction(k('ArrowUp', { altKey: true, key: 'ArrowUp' }), 'nav', row)).toEqual({ kind: 'moveRow', dir: 'up' })
+    expect(gridKeyAction(k('ArrowDown', { altKey: true }), 'nav', row)).toEqual({ kind: 'moveRow', dir: 'down' })
+    expect(gridKeyAction(k('ArrowRight', { altKey: true }), 'nav', row)).toEqual({ kind: 'moveRow', dir: 'in' })
+    expect(gridKeyAction(k('ArrowLeft', { altKey: true }), 'nav', row)).toEqual({ kind: 'moveRow', dir: 'out' })
+  })
+  it('no task row selected, Alt+Shift, Alt+Mod or the editor → null', () => {
+    expect(gridKeyAction(k('ArrowUp', { altKey: true }), 'nav', nav)).toBeNull()
+    expect(gridKeyAction(k('ArrowUp', { altKey: true, shiftKey: true }), 'nav', row)).toBeNull()
+    expect(gridKeyAction(k('ArrowUp', { altKey: true, metaKey: true }), 'nav', row)).toBeNull()
+    expect(gridKeyAction(k('ArrowUp', { altKey: true }), 'edit', row)).toBeNull()
+    expect(gridKeyAction(k('KeyA', { altKey: true }), 'nav', row)).toBeNull()
+  })
+})

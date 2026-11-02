@@ -1,12 +1,16 @@
 'use client'
-// src/components/grid/RowHeader.tsx — the sticky name column of one row (SPEC §8.3, FR-805/808, FR-643, FR-685, AC-203,
-// M6-D18/D19/D31/D33, M6.1-D17). Indent by depth, ▸/▾ for parents, name (click selects the row, double-click — or
-// Enter on the selected row header, PlanGrid — opens the panel), ↗ = a real link to the task page `/t/<id>` (hover /
-// focus-within, always on touch; Cmd/Ctrl/middle click open a new tab natively), assignee via M1 UserName
-// ("(ปิดใช้งาน)" for deactivated people), × unassigns, "+ คน" (hover and focus-within) opens PlanGrid's
-// AddPersonPopover (M3's AssigneePicker; owned by PlanGrid so it survives the row re-keying t:<task> → a:<assignment>
-// after the first pick), ⛔ via M3's BlockerBadge, ◐ + "*" for tentative.
-import { memo, useCallback, useId, type MouseEvent } from 'react'
+// src/components/grid/RowHeader.tsx — the frozen part of one row (SPEC §8.3, FR-805/808/815/816, FR-643, FR-685,
+// AC-203, M6-D18/D19/D31/D33, M6.1-D17, M7.1-D8). One role="rowheader" spanning the two frozen ARIA columns
+// (aria-colspan 2) holds two visual cells:
+// - TaskCell (--grid-task-w): ⠿ drag handle (M7.1, editable task rows only), indent by depth, ▸/▾ for parents, the task
+//   name (… + title tooltip; click selects the row, double-click — or Enter on the selected row header, PlanGrid —
+//   opens the panel), "👥 N" on summed rows, ◐ + "*" for tentative, ⛔ via M3's BlockerBadge, ↗ = a real link to
+//   `/t/<id>` (hover / focus-within, always on touch), "+ คน" (hover and focus-within) opening PlanGrid's
+//   AddPersonPopover (owned by PlanGrid so it survives the row re-keying t:<task> → a:<assignment> after the first pick).
+// - AssigneeCell (--grid-assignee-w, absent when the column is hidden): the person via M1 UserName ("(ปิดใช้งาน)")
+//   and × to unassign; empty on task rows.
+// Keeping one rowheader keeps the roving tab stop, the row selection and the accessible name ("task · person").
+import { memo, useCallback, useId, type MouseEvent, type PointerEvent } from 'react'
 import Tooltip from '@mui/material/Tooltip'
 import Link from '@/components/Link'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
@@ -14,10 +18,10 @@ import { UserName } from '@/components/common/UserName'
 import { BlockerBadge } from '@/components/tasks/blockers/BlockerBadge'
 import { blockerBadge } from '@/domain/blockers'
 import { th } from '@/i18n/th'
-import { NAME_COL_W } from '@/lib/grid/columns'
+import { ASSIGNEE_COL_W, FROZEN_COL_W, FROZEN_COLS, TASK_COL_W } from '@/lib/grid/columns'
 import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick } from '@/lib/nav/task-href'
-import type { ViewRow } from '@/lib/grid/rows'
+import { sumPeopleCount, type GridViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
 import styles from './grid.module.css'
 
@@ -35,7 +39,7 @@ const indent = (depth: number): string => `calc(var(--space-2) + ${depth} * var(
 export interface RowHeaderProps {
   store: GridStore
   r: number
-  row: ViewRow
+  row: GridViewRow
   height: number
   personName: string | null
   personActive: boolean
@@ -50,14 +54,21 @@ export interface RowHeaderProps {
   onOpenTask: (taskId: string) => void
   onToggle: (taskId: string) => void
   onUnassign: (taskAssignmentId: string, name: string) => void
+  /** M7.1 (FR-816): false = no assignee cell (the task cell spans both frozen columns) */
+  showAssignees?: boolean
+  /** M7.1 (FR-815): ⠿ on task / merged / sum rows when the task may be moved (editable, not archived) */
+  draggable?: boolean
+  onDragHandle?: (e: PointerEvent<HTMLElement>, taskId: string) => void
+  /** this row's task is being dragged (dimmed, data-dragging) */
+  dragging?: boolean
 }
 
 /** The row states as text (SPEC §8.9, A11Y-1): the rowheader keeps its short name (task · person) and exposes these
  *  through aria-describedby, since its aria-label replaces the hidden glyph texts inside it. */
-export function rowStateTexts(row: ViewRow, personActive: boolean): string[] {
+export function rowStateTexts(row: GridViewRow, personActive: boolean): string[] {
   const task = row.task
   const out: string[] = []
-  if (row.kind !== 'task' && !personActive) out.push(th.users.deactivatedSuffix)
+  if ((row.kind === 'merged' || row.kind === 'assignee') && !personActive) out.push(th.users.deactivatedSuffix)
   if (row.kind === 'assignee') return out
   if (task.certainty === 'TENTATIVE') {
     out.push(th.grid.glyph.tentative)
@@ -71,13 +82,17 @@ export function rowStateTexts(row: ViewRow, personActive: boolean): string[] {
     out.push(
       badge.kind === 'WAITING' ? th.tasks.blockers.badgeWaiting(badge.open) : th.tasks.blockers.badgeCleared,
     )
-  if (row.kind === 'task' && !task.hasChildren && task.assigneeCount === 0) out.push(th.grid.row.unassigned)
+  const people = sumPeopleCount(row)
+  if (people !== null) out.push(th.grid.sumMode.people(people))
+  if ((row.kind === 'task' || row.kind === 'sum') && !task.hasChildren && task.assigneeCount === 0)
+    out.push(th.grid.row.unassigned)
   return out
 }
 
 export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const { row } = p
   const task = row.task
+  const showAssignees = p.showAssignees ?? true
   // buttons are tabbable only inside the focused / selected row (roving focus, §8.9)
   const active = useGridSel(
     p.store,
@@ -86,8 +101,11 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const selected = useGridSel(p.store, (s) => s.rowSelection === row.key)
   const tab = active ? 0 : -1
   const isLeaf = !task.hasChildren
-  const ownName = row.kind === 'assignee' ? (p.personName ?? '') : task.name
-  const label = row.kind === 'task' ? task.name : `${task.name} · ${p.personName ?? ''}`
+  const assignee = row.kind === 'merged' || row.kind === 'assignee' ? row.assignee : null
+  const hasToggle = (row.kind === 'task' || row.kind === 'sum') && task.hasChildren
+  const collapsed = row.kind === 'task' || row.kind === 'sum' ? row.collapsed : false
+  const label = assignee ? `${task.name} · ${p.personName ?? ''}` : task.name
+  const people = sumPeopleCount(row)
   const stop = (e: MouseEvent) => e.stopPropagation()
   const descId = useId()
   // keep keyboard focus inside the grid when the row goes away under it (delete, unassign — like GridCell)
@@ -99,21 +117,24 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
     }
   }, [])
   const states = rowStateTexts(row, p.personActive)
+  const ownsTask = row.kind !== 'assignee'
 
   return (
     <div
       ref={setRef}
       role="rowheader"
       aria-colindex={1}
+      aria-colspan={FROZEN_COLS}
       aria-label={label}
       aria-describedby={states.length > 0 ? descId : undefined}
       aria-selected={selected}
       tabIndex={selected ? 0 : -1}
       className={styles.rowHeader}
-      style={{ width: NAME_COL_W, height: p.height, paddingLeft: indent(row.depth) }}
+      style={{ width: FROZEN_COL_W, height: p.height }}
       data-row-header=""
       data-row-key={row.key}
       data-r={p.r}
+      data-dragging={p.dragging ? 'true' : undefined}
       onClick={() => p.onSelectRow(p.r)}
       onDoubleClick={() => p.onOpenTask(task.id)}
     >
@@ -122,113 +143,141 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
           {th.grid.row.states(states.join(' · '))}
         </span>
       ) : null}
-      {row.kind === 'task' && task.hasChildren ? (
-        <button
-          type="button"
-          className={styles.toggle}
-          tabIndex={tab}
-          aria-expanded={!row.collapsed}
-          aria-label={row.collapsed ? th.grid.row.expand : th.grid.row.collapse}
-          onClick={(e) => {
-            stop(e)
-            p.onToggle(task.id)
-          }}
-        >
-          {row.collapsed ? '▸' : '▾'}
-        </button>
-      ) : null}
-      {row.kind === 'assignee' ? (
-        <span className={styles.name}>
-          <UserName user={{ name: ownName, active: p.personActive }} />
-        </span>
-      ) : (
-        <span className={styles.name}>{task.name}</span>
-      )}
-      {row.kind === 'merged' ? (
-        <span className={styles.person}>
-          <UserName user={{ name: p.personName ?? '', active: p.personActive }} />
-        </span>
-      ) : null}
-      {row.kind !== 'assignee' && task.certainty === 'TENTATIVE' ? (
-        <Tooltip
-          title={
-            task.certaintySource === 'task'
-              ? th.grid.row.sourceTask
-              : task.certaintySource === 'ancestor'
-                ? th.grid.row.sourceAncestor(task.certaintySourceName ?? '')
-                : th.grid.row.tentative
-          }
-          describeChild
-        >
-          <span className={styles.muted}>
-            <StatusGlyph kind="tentative" />
-            {task.certaintySource === 'task' ? '*' : null}
+      <div className={styles.taskCell} style={{ width: TASK_COL_W, paddingLeft: indent(row.depth) }} data-task-cell="">
+        {ownsTask && p.draggable ? (
+          // the keyboard path is Alt+↑/↓/→/← on the selected row (M7.1-D17); the button names the gesture
+          <button
+            type="button"
+            tabIndex={tab}
+            className={styles.dragHandle}
+            aria-label={th.grid.reorder.handle}
+            data-drag-handle=""
+            onClick={stop}
+            onDoubleClick={stop}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              p.onDragHandle?.(e, task.id)
+            }}
+          >
+            ⠿
+          </button>
+        ) : null}
+        {hasToggle ? (
+          <button
+            type="button"
+            className={styles.toggle}
+            tabIndex={tab}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? th.grid.row.expand : th.grid.row.collapse}
+            onClick={(e) => {
+              stop(e)
+              p.onToggle(task.id)
+            }}
+          >
+            {collapsed ? '▸' : '▾'}
+          </button>
+        ) : null}
+        {ownsTask ? (
+          <span className={styles.name} title={task.name}>
+            {task.name}
           </span>
-        </Tooltip>
-      ) : null}
-      {row.kind !== 'assignee' && task.completed ? (
-        <span className={styles.muted}>{th.grid.row.completed}</span>
-      ) : null}
-      {row.kind !== 'assignee' && task.blockers.total > 0 ? (
-        <BlockerBadge
-          open={task.blockers.open}
-          total={task.blockers.total}
-          names={p.blockerNames}
-          focusable={false}
-        />
-      ) : null}
-      {row.kind === 'task' && isLeaf && task.assigneeCount === 0 ? (
-        <span className={styles.muted}>{th.grid.row.unassigned}</span>
-      ) : null}
-      <span className={styles.actions} onClick={stop} onDoubleClick={stop}>
-        {row.kind !== 'assignee' ? (
-          // M6.1-D17: the page link. The click only stops propagation (no row selection), so Next's Link navigates
-          // in-app and modified / middle clicks stay native; no prefetch per visible row (dense surface, §9). A plain
-          // click remembers the grid box's scroll (both axes) so ← / Esc on /t come back to this place (FR-686).
-          <Link
-            href={`/t/${task.id}`}
-            prefetch={false}
-            className={styles.openPage}
-            tabIndex={tab}
-            aria-label={th.grid.row.openTaskPage(task.name)}
-            data-open-page=""
-            onClick={rememberGridScroll}
-          >
-            ↗
-          </Link>
         ) : null}
-        {row.kind !== 'task' && p.canEdit && row.assignee.editable ? (
-          <button
-            type="button"
-            className={styles.iconButton}
-            tabIndex={tab}
-            aria-label={th.grid.row.removeAssignee(p.personName ?? '')}
-            onClick={(e) => {
-              stop(e)
-              p.onUnassign(row.assignee.taskAssignmentId, p.personName ?? '')
-            }}
-          >
-            ×
-          </button>
+        {people !== null ? (
+          <span className={styles.muted} aria-hidden="true" data-sum-people={people}>
+            {th.grid.sumMode.people(people)}
+          </span>
         ) : null}
-        {row.kind !== 'assignee' && isLeaf && p.canEdit && p.canAddPerson ? (
-          <button
-            type="button"
-            className={styles.addPerson}
-            tabIndex={tab}
-            aria-label={th.grid.row.addPersonLabel(task.name)}
-            aria-haspopup="dialog"
-            aria-expanded={p.addPersonOpen}
-            data-add-person=""
-            onClick={(e) => {
-              stop(e)
-              p.onAddPerson(task.id)
-            }}
+        {ownsTask && task.certainty === 'TENTATIVE' ? (
+          <Tooltip
+            title={
+              task.certaintySource === 'task'
+                ? th.grid.row.sourceTask
+                : task.certaintySource === 'ancestor'
+                  ? th.grid.row.sourceAncestor(task.certaintySourceName ?? '')
+                  : th.grid.row.tentative
+            }
+            describeChild
           >
-            {th.grid.row.addPerson}
-          </button>
+            <span className={styles.muted}>
+              <StatusGlyph kind="tentative" />
+              {task.certaintySource === 'task' ? '*' : null}
+            </span>
+          </Tooltip>
         ) : null}
-      </span>
+        {ownsTask && task.completed ? <span className={styles.muted}>{th.grid.row.completed}</span> : null}
+        {ownsTask && task.blockers.total > 0 ? (
+          <BlockerBadge
+            open={task.blockers.open}
+            total={task.blockers.total}
+            names={p.blockerNames}
+            focusable={false}
+          />
+        ) : null}
+        {(row.kind === 'task' || row.kind === 'sum') && isLeaf && task.assigneeCount === 0 ? (
+          <span className={styles.muted}>{th.grid.row.unassigned}</span>
+        ) : null}
+        {ownsTask ? (
+          <span className={styles.actions} onClick={stop} onDoubleClick={stop}>
+            {/* M6.1-D17: the page link. The click only stops propagation (no row selection), so Next's Link
+                navigates in-app and modified / middle clicks stay native; no prefetch per visible row (dense surface,
+                §9). A plain click remembers the grid box's scroll (both axes) so ← / Esc on /t come back here. */}
+            <Link
+              href={`/t/${task.id}`}
+              prefetch={false}
+              className={styles.openPage}
+              tabIndex={tab}
+              aria-label={th.grid.row.openTaskPage(task.name)}
+              data-open-page=""
+              onClick={rememberGridScroll}
+            >
+              ↗
+            </Link>
+            {isLeaf && p.canEdit && p.canAddPerson ? (
+              <button
+                type="button"
+                className={styles.addPerson}
+                tabIndex={tab}
+                aria-label={th.grid.row.addPersonLabel(task.name)}
+                aria-haspopup="dialog"
+                aria-expanded={p.addPersonOpen}
+                data-add-person=""
+                onClick={(e) => {
+                  stop(e)
+                  p.onAddPerson(task.id)
+                }}
+              >
+                {th.grid.row.addPerson}
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
+      {showAssignees ? (
+        <div className={styles.assigneeCell} style={{ width: ASSIGNEE_COL_W }} data-assignee-cell="">
+          {assignee ? (
+            <>
+              <span className={styles.person}>
+                <UserName user={{ name: p.personName ?? '', active: p.personActive }} />
+              </span>
+              {p.canEdit && assignee.editable ? (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  tabIndex={tab}
+                  aria-label={th.grid.row.removeAssignee(p.personName ?? '')}
+                  onClick={(e) => {
+                    stop(e)
+                    p.onUnassign(assignee.taskAssignmentId, p.personName ?? '')
+                  }}
+                  onDoubleClick={stop}
+                >
+                  ×
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 })

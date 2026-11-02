@@ -1,9 +1,13 @@
 'use client'
 // src/components/grid/VirtualGrid.tsx — one scroll container with a row and a column virtualizer (PLAN §3.10;
 // plan/research/snippets/r4/client/components/grid/VirtualGrid.tsx, verified in Chromium, r4 §12–§16).
-// Sticky name column, sticky header row, sticky "รวม" column (right: 0) and a sticky footer that is an in-flow sibling
+// Sticky frozen columns, sticky header rows, sticky "รวม" column (right: 0) and a sticky footer that is an in-flow sibling
 // after the sized body. Rows are absolutely positioned via `top`. ARIA row / column indexes derive from HEADER_ROWS /
-// FOOTER_ROWS (C27) so M8's ◆ header row needs no other change.
+// FOOTER_ROWS / FROZEN_COLS (C27, X85) so M8's ◆ header row needs no other change.
+// M7.1 (M7.1-D8/D9/D10): two frozen columns งาน / ผู้รับผิดชอบ (frozenWidths → --grid-task-w / --grid-assignee-w /
+// --grid-frozen-w on the root, the column virtualizer's paddingStart = their sum); the header block is HEADER_TOTAL_H
+// (month row + period row); during a column resize the task width is written to the root's CSS variable in rAF
+// (setLiveTaskWidth, no React render per pixel) and the virtualizer re-measures once the new width is committed.
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import {
   useCallback,
@@ -23,17 +27,18 @@ import {
 } from 'react'
 import {
   FOOTER_ROWS,
-  HEADER_H,
+  gridContentHeight,
   HEADER_ROWS,
-  NAME_COMPACT_W,
-  NAME_W,
-  nameColumnWidth,
+  HEADER_TOTAL_H,
   ROW_H,
   stickyTotalWidth,
+  TASK_COMPACT_W,
+  totalColIndex,
   TOTAL_W,
   WEEK_W,
   type GridColumn,
 } from '@/lib/grid/columns'
+import { frozenWidths } from '@/lib/grid/frozen'
 import styles from './grid.module.css'
 
 export interface VirtualGridHandle {
@@ -44,6 +49,10 @@ export interface VirtualGridHandle {
   /** whole week columns that fit beside the frozen columns (0 = not measured) */
   fittingColumns: () => number
   element: () => HTMLDivElement | null
+  /** M7.1: the frozen widths in effect (task, assignee) and the scroller's clientWidth (0 = not measured) */
+  frozen: () => { task: number; assignee: number; gridWidth: number }
+  /** M7.1-D9: live task width during a resize drag — CSS variables only, next animation frame */
+  setLiveTaskWidth: (px: number) => void
 }
 
 export interface VirtualGridProps {
@@ -54,8 +63,26 @@ export interface VirtualGridProps {
   rowCount: number
   rowKey: (i: number) => string
   renderRow: (i: number, vCols: readonly VirtualItem[], top: number, totalWidth: number) => ReactNode
-  renderHeader: (vCols: readonly VirtualItem[], totalWidth: number) => ReactNode
+  /** `view` = the visible period area in column-offset space (null until the scroller is measured) */
+  renderHeader: (
+    vCols: readonly VirtualItem[],
+    totalWidth: number,
+    view: { from: number; to: number } | null,
+  ) => ReactNode
   renderFooter: (vCols: readonly VirtualItem[], totalWidth: number, firstRowIndex: number) => ReactNode
+  /** M7.1: drawn inside the sized body after the rows (marker lines, the drop indicator); `frozenW` = task + assignee */
+  renderOverlay?: (
+    vCols: readonly VirtualItem[],
+    totalWidth: number,
+    bodyHeight: number,
+    frozenW: number,
+  ) => ReactNode
+  /** M7.1 (FR-814): the `grid.taskColumnWidth` preference (clamped by frozenWidths); undefined = 240 */
+  taskWidth?: number
+  /** M7.1 (FR-816): false = no assignee column (the task cells span both frozen ARIA columns) */
+  showAssignees?: boolean
+  /** M7.1: the scroller's clientWidth after each measure (the resize handle clamps against it) */
+  onWidthChange?: (width: number) => void
   /** shown in the body (loading / empty), below the rows when there are some (the quick-add row of an empty grid) */
   message?: ReactNode
   onRangeChange: (firstIdx: number, lastIdx: number) => void
@@ -81,23 +108,54 @@ const TAB_STOP = '[data-cell][tabindex="0"], [data-row-header][tabindex="0"]'
 export function VirtualGrid(p: VirtualGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const { cols, rowKey } = p
-  // The frozen name column shrinks with the grid (phones / narrow tablets) so week columns stay visible (SPEC §7).
-  // Its width reaches the sticky cells through --grid-name-w; the virtualizer needs the number.
-  const [nameW, setNameW] = useState(NAME_W)
-  // the scroller's clientWidth (0 = not measured): the sticky "รวม" column absorbs the leftover (stickyTotalWidth)
+  const showAssignees = p.showAssignees ?? true
+  // the scroller's clientWidth (0 = not measured): the frozen columns are clamped against it (phones keep week columns
+  // visible, SPEC §7) and the sticky "รวม" column absorbs the leftover (stickyTotalWidth)
   const [viewW, setViewW] = useState(0)
+  // horizontal scrollbar thickness (0 with overlay scrollbars): part of the scroller's natural height
+  const [scrollbarH, setScrollbarH] = useState(0)
+  const fw = frozenWidths(viewW, p.taskWidth, showAssignees)
+  const nameW = fw.task + fw.assignee
+  const liveRaf = useRef(0)
+  const { onWidthChange } = p
+  useEffect(() => {
+    onWidthChange?.(viewW)
+  }, [viewW, onWidthChange])
+  useEffect(() => () => cancelAnimationFrame(liveRaf.current), [])
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
+    // M7.1-D20: the plan page hides the grid with display:none while the calendar shows. A hidden scroller reports
+    // scrollLeft/Top 0 (the virtualizers read that on resize and render the timeline start) and may come back with
+    // its offsets dropped; nothing fires a scroll event when it is shown again. So the last visible position is
+    // kept here, put back on show, and a synthetic scroll event resyncs the virtualizers with the real offsets.
+    let hidden = false
+    let last: { left: number; top: number } | null = null
     const measure = () => {
-      setNameW(nameColumnWidth(el.clientWidth))
-      setViewW(el.clientWidth)
+      const w = el.clientWidth
+      if (w > 0 && hidden) {
+        if (last) {
+          el.scrollLeft = last.left
+          el.scrollTop = last.top
+        }
+        el.dispatchEvent(new Event('scroll'))
+      }
+      hidden = w === 0
+      setViewW(w)
+      if (!hidden) setScrollbarH(Math.max(0, el.offsetHeight - el.clientHeight - el.clientTop * 2))
+    }
+    const remember = () => {
+      if (!hidden && el.clientWidth > 0) last = { left: el.scrollLeft, top: el.scrollTop }
     }
     measure()
-    if (typeof ResizeObserver === 'undefined') return
+    el.addEventListener('scroll', remember, { passive: true })
+    if (typeof ResizeObserver === 'undefined') return () => el.removeEventListener('scroll', remember)
     const ro = new ResizeObserver(measure)
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', remember)
+    }
   }, [])
 
   const rowV = useVirtualizer({
@@ -105,8 +163,8 @@ export function VirtualGrid(p: VirtualGridProps) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
     getItemKey: useCallback((i: number) => rowKey(i), [rowKey]),
-    paddingStart: HEADER_H,
-    scrollPaddingStart: HEADER_H,
+    paddingStart: HEADER_TOTAL_H,
+    scrollPaddingStart: HEADER_TOTAL_H,
     scrollPaddingEnd: FOOTER_ROWS * ROW_H,
     overscan: 8,
     useFlushSync: false, // React 19: no "flushSync was called from inside a lifecycle method" (r4 §15)
@@ -149,9 +207,21 @@ export function VirtualGrid(p: VirtualGridProps) {
     },
     fittingColumns: () => {
       const w = scrollRef.current?.clientWidth ?? 0
-      return w > 0 ? Math.max(1, Math.floor((w - nameColumnWidth(w) - TOTAL_W) / WEEK_W)) : 0
+      if (w <= 0) return 0
+      const f = frozenWidths(w, p.taskWidth, showAssignees)
+      return Math.max(1, Math.floor((w - f.task - f.assignee - TOTAL_W) / WEEK_W))
     },
     element: () => scrollRef.current,
+    frozen: () => ({ task: fw.task, assignee: fw.assignee, gridWidth: viewW }),
+    setLiveTaskWidth: (px) => {
+      cancelAnimationFrame(liveRaf.current)
+      liveRaf.current = requestAnimationFrame(() => {
+        const el = scrollRef.current
+        if (!el) return
+        el.style.setProperty('--grid-task-w', `${px}px`)
+        el.style.setProperty('--grid-frozen-w', `${px + fw.assignee}px`)
+      })
+    },
   }))
 
   const vCols = colV.getVirtualItems()
@@ -206,6 +276,11 @@ export function VirtualGrid(p: VirtualGridProps) {
   // SPEC §8.12 / D19: no clipped sliver of a column beside "รวม" — it widens to abut the last whole column
   const totalColW = stickyTotalWidth(cols, colV.scrollOffset ?? 0, viewW, nameW)
   const totalH = rowV.getTotalSize()
+  // SPEC §8.12 / D19: sized to its content (shrinking to fit the screen), so a short plan leaves no empty slab and the
+  // กราฟภาระ pane sits right under it; with a message (loading / empty) the scroller fills as before
+  const contentH = p.message ? undefined : gridContentHeight(totalH, scrollbarH)
+  const scrollX = colV.scrollOffset ?? 0
+  const headerView = viewW > 0 ? { from: scrollX, to: scrollX + viewW - nameW - totalColW } : null
 
   return (
     <div
@@ -213,14 +288,24 @@ export function VirtualGrid(p: VirtualGridProps) {
       role="grid"
       aria-label={p.label}
       aria-rowcount={HEADER_ROWS + p.rowCount + FOOTER_ROWS}
-      aria-colcount={cols.length + 2}
+      aria-colcount={totalColIndex(cols.length)}
       aria-multiselectable="true"
       data-save-state={p.saveState}
       // initial value only: syncTabStop owns it afterwards (React never rewrites an unchanged prop)
       tabIndex={-1}
       className={styles.scroller}
-      style={{ '--grid-name-w': `${nameW}px`, '--grid-total-w': `${totalColW}px` } as CSSProperties}
-      data-compact={nameW < NAME_COMPACT_W ? 'true' : undefined}
+      style={
+        {
+          '--grid-task-w': `${fw.task}px`,
+          '--grid-assignee-w': `${fw.assignee}px`,
+          '--grid-frozen-w': `${nameW}px`,
+          '--grid-total-w': `${totalColW}px`,
+          ...(contentH === undefined ? {} : { '--grid-content-h': `${contentH}px` }),
+        } as CSSProperties
+      }
+      data-fit={contentH === undefined ? undefined : 'content'}
+      data-compact={fw.task < TASK_COMPACT_W ? 'true' : undefined}
+      data-assignees={showAssignees ? undefined : 'hidden'}
       onKeyDown={p.onKeyDown}
       onFocus={onFocus}
       onPointerDownCapture={() => {
@@ -240,17 +325,18 @@ export function VirtualGrid(p: VirtualGridProps) {
         // with a message the box grows with it (in flow, sticky-left) instead of clipping it
         style={
           p.message
-            ? { width: totalW, minHeight: Math.max(totalH, HEADER_H) }
-            : { width: totalW, height: Math.max(totalH, HEADER_H) }
+            ? { width: totalW, minHeight: Math.max(totalH, HEADER_TOTAL_H) }
+            : { width: totalW, height: Math.max(totalH, HEADER_TOTAL_H) }
         }
       >
-        {p.renderHeader(vCols, totalW)}
+        {p.renderHeader(vCols, totalW, headerView)}
         {p.message ? (
-          <div className={styles.message} style={{ marginTop: Math.max(0, totalH - HEADER_H) }}>
+          <div className={styles.message} style={{ marginTop: Math.max(0, totalH - HEADER_TOTAL_H) }}>
             {p.message}
           </div>
         ) : null}
         {vRows.map((r) => p.renderRow(r.index, vCols, r.start, totalW))}
+        {p.renderOverlay?.(vCols, totalW, Math.max(0, totalH - HEADER_TOTAL_H), nameW)}
       </div>
       {p.renderFooter(vCols, totalW, HEADER_ROWS + p.rowCount + 1)}
     </div>

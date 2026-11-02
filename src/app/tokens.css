@@ -5,6 +5,10 @@
    M6.1 (SPEC §8.12, M6.1-D21): typography / spacing / radius / layout tokens (declared once under :root — the same in
    dark) and the surface colours --border-subtle, --hover-bg, --text-secondary, --surface-muted (light + dark).
    DEVIATION (like X51): --text-secondary is #646A75 instead of #6B7280 (4.39:1 on --hover-bg < 4.5:1).
+   M7.1 (X51, plan/m07.1 S0.9): --chart-1…8 (categorical, one per person in the load chart), --marker-red/yellow/green
+   (plan markers) and --border-month (month boundary line) — non-text, ≥ 3:1 against --surface, --surface-muted,
+   --nonworking, --holiday and --hover-bg in both themes (contrast.test.ts). DEVIATION (like X51): --border-month is
+   #7b8597 / dark #7c8aa0 instead of the plan's #94A3B8 (2.56:1) / #64748B (2.64:1 on dark --holiday).
    src/lib/theme/tokens.ts mirrors this file (tokens.test.ts checks the parity). */
 
 :root {
@@ -36,6 +40,19 @@
   --hover-bg: #f3f4f6;
   --text-secondary: #646a75;
   --surface-muted: #f9fafb;
+  /* M7.1 chart series, plan markers, month boundary (non-text, ≥ 3:1) */
+  --chart-1: #2563eb;
+  --chart-2: #c2410c;
+  --chart-3: #0f766e;
+  --chart-4: #9333ea;
+  --chart-5: #be185d;
+  --chart-6: #4d7c0f;
+  --chart-7: #0369a1;
+  --chart-8: #b45309;
+  --marker-red: #dc2626;
+  --marker-yellow: #a16207;
+  --marker-green: #15803d;
+  --border-month: #7b8597;
   /* M6.1 typography — UI 14 px, documents 16 px */
   --font-xs: 12px;
   --font-sm: 13px;
@@ -97,4 +114,17 @@
   --hover-bg: #24272c;
   --text-secondary: #a3a9b4;
   --surface-muted: #1a1c1f;
+  /* M7.1 (X51) */
+  --chart-1: #60a5fa;
+  --chart-2: #fb923c;
+  --chart-3: #2dd4bf;
+  --chart-4: #c084fc;
+  --chart-5: #f472b6;
+  --chart-6: #a3e635;
+  --chart-7: #38bdf8;
+  --chart-8: #fbbf24;
+  --marker-red: #f87171;
+  --marker-yellow: #facc15;
+  --marker-green: #4ade80;
+  --border-month: #7c8aa0;
 }

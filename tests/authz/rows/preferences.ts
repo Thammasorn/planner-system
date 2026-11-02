@@ -1,6 +1,33 @@
 // X05 user_preferences (M1-D17): every signed-in user writes only their own row; not audited (X44 exception).
+import { eq } from 'drizzle-orm'
+import { expect } from 'vitest'
+import type { ActionResult, Ok } from '@/lib/action-result'
+import type { PreferenceInput } from '@/lib/schemas/preferences'
 import { setPreference } from '@/server/actions/preferences'
+import { db } from '@/server/db/client'
+import { userPreferences } from '@/server/db/schema'
+import type { TestUser } from '../../helpers/factories'
 import { defineRow, type AuthzRow } from '../types'
+
+const ALL = { M: 'allow', L: 'allow', Me: 'allow', W: 'allow' } as const
+
+/** setPreference, then (on success) the stored value of the actor's own row equals the input (M7.1 keys, X53/X59). */
+async function setAndStored(actor: TestUser, input: PreferenceInput): Promise<ActionResult<object>> {
+  const r: ActionResult<Ok> = await setPreference(input)
+  if (r.ok) {
+    const [row] = await db.select().from(userPreferences).where(eq(userPreferences.userId, actor.id))
+    expect(row?.data[input.key], `${input.key} stored`).toEqual(input.value)
+  }
+  return r
+}
+
+/** M7.1 (plan/m07.1 §7.2 PREF-M7.1 ×4, M7.1-D22): one allow row per new key, all roles, not audited. */
+const M7_1_KEYS: { id: string; input: PreferenceInput }[] = [
+  { id: 'PREF-M7.1-VIEW', input: { key: 'plan.view', value: 'CALENDAR' } },
+  { id: 'PREF-M7.1-ASSIGNEES', input: { key: 'grid.showAssignees', value: false } },
+  { id: 'PREF-M7.1-WIDTH', input: { key: 'grid.taskColumnWidth', value: 420 } },
+  { id: 'PREF-M7.1-CHART', input: { key: 'grid.chart', value: true } },
+]
 
 export const rows: AuthzRow[] = [
   defineRow({
@@ -42,5 +69,39 @@ export const rows: AuthzRow[] = [
     mutates: false,
     expect: { M: '400', L: '400', Me: '400', W: '400' },
     run: () => setPreference({ key: 'grid.unit', value: 'MONTH' } as never),
+  }),
+  // ── M7.1 (SPEC §6.2 user_preferences keys plan.view / grid.showAssignees / grid.taskColumnWidth / grid.chart) ──
+  ...M7_1_KEYS.map(({ id, input }) =>
+    defineRow({
+      id,
+      spec: `X05 + M7.1-D22 setPreference ${input.key} (own row, not audited)`,
+      action: 'setPreference',
+      mutates: true,
+      audit: false,
+      expect: ALL,
+      run: (_w, _ctx, actor) => setAndStored(actor, input),
+    }),
+  ),
+  defineRow({
+    id: 'PREF-M7.1-BAD',
+    spec: 'X05 + FR-814 setPreference grid.taskColumnWidth 2000 / 100 / 240.5 / plan.view MONTH → VALIDATION',
+    action: 'setPreference',
+    mutates: false,
+    expect: { M: '400', L: '400', Me: '400', W: '400' },
+    run: async () => {
+      const bad = [
+        { key: 'grid.taskColumnWidth', value: 2000 },
+        { key: 'grid.taskColumnWidth', value: 100 },
+        { key: 'grid.taskColumnWidth', value: 240.5 },
+        { key: 'plan.view', value: 'MONTH' },
+        { key: 'grid.showAssignees', value: 'yes' },
+      ]
+      let last: ActionResult<object> | undefined
+      for (const input of bad) {
+        last = await setPreference(input as never)
+        if (last.ok || String(last.code) !== 'VALIDATION') return last
+      }
+      return last!
+    },
   }),
 ]

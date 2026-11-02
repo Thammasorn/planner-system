@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { TEXT_PAIRS, contrastRatio, parseTokenBlocks } from './contrast'
+import {
+  NON_TEXT_BACKGROUNDS,
+  NON_TEXT_MIN_RATIO,
+  NON_TEXT_TOKENS,
+  TEXT_PAIRS,
+  contrastRatio,
+  parseTokenBlocks,
+} from './contrast'
 
 /** SPEC §8.7 token names (21). */
 const SPEC_TOKENS = [
@@ -74,6 +81,8 @@ describe('design tokens', () => {
       'hover-bg',
       'text-secondary',
       'surface-muted',
+      // M7.1 (X51)
+      ...NON_TEXT_TOKENS,
     ]
     for (const name of expected) {
       expect(blocks.light, `light --${name}`).toHaveProperty([name])
@@ -115,5 +124,42 @@ describe('design tokens', () => {
 
   it('rejects malformed colours', () => {
     expect(() => contrastRatio('#FFF', '#000000')).toThrow(RangeError)
+  })
+})
+
+describe('M7.1 non-text tokens (X51: chart series, plan markers, month boundary)', () => {
+  const cases = NON_TEXT_TOKENS.flatMap((fg) =>
+    NON_TEXT_BACKGROUNDS.flatMap((bg) =>
+      (['light', 'dark'] as const).map((scheme) => [`${fg} on ${bg} (${scheme})`, fg, bg, scheme] as const),
+    ),
+  )
+  it.each(cases)('%s ≥ 3:1', (_label, fg, bg, scheme) => {
+    const f = blocks[scheme][fg]
+    const b = blocks[scheme][bg]
+    expect(f, `--${fg}`).toBeDefined()
+    expect(b, `--${bg}`).toBeDefined()
+    expect(contrastRatio(f ?? '', b ?? '')).toBeGreaterThanOrEqual(NON_TEXT_MIN_RATIO)
+  })
+
+  it('marker colours are the plan values; --border-month deviates because the plan sample fails 3:1', () => {
+    expect(blocks.light).toMatchObject({
+      'marker-red': '#dc2626',
+      'marker-yellow': '#a16207',
+      'marker-green': '#15803d',
+    })
+    expect(blocks.dark).toMatchObject({
+      'marker-red': '#f87171',
+      'marker-yellow': '#facc15',
+      'marker-green': '#4ade80',
+    })
+    expect(contrastRatio('#94A3B8', '#FFFFFF')).toBeLessThan(3)
+    expect(contrastRatio('#64748B', '#273449')).toBeLessThan(3)
+  })
+
+  it('the eight chart colours are distinct in each theme', () => {
+    for (const scheme of ['light', 'dark'] as const) {
+      const values = NON_TEXT_TOKENS.filter((t) => t.startsWith('chart-')).map((t) => blocks[scheme][t])
+      expect(new Set(values).size, scheme).toBe(8)
+    }
   })
 })

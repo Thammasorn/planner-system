@@ -3,6 +3,7 @@
 // e.code first (src/lib/grid/keymap.ts); every handled action calls preventDefault (Cmd+←/→ would go Back, Cmd+S would
 // save the page). Undo / redo go to the shared M1 stack. M7: Mod+↓ / Mod+↑ expand / collapse the focused week (view
 // only, no-ops in day zoom — PlanGrid decides), Shift+F10 / ContextMenu open the cell menu.
+// M7.1 (FR-815, M7.1-D17): Alt+↑/↓/→/← on a selected task row header move / indent / outdent it (M3's mutations).
 import type { KeyboardEvent, RefObject } from 'react'
 import { gridKeyAction } from '@/lib/grid/keymap'
 import { movePos } from '@/lib/grid/selection'
@@ -25,6 +26,9 @@ export interface GridKeyHandlers {
   collapseWeek: () => void
   /** M7: Shift+F10 / ContextMenu key on a cell */
   cellMenu: () => void
+  /** M7.1: the selected row header's task may be moved (editable, not archived) */
+  rowMovable: () => boolean
+  moveRow: (dir: 'up' | 'down' | 'in' | 'out') => void
 }
 
 export function useGridKeyboard(
@@ -64,12 +68,13 @@ export function useGridKeyboard(
     const action = gridKeyAction(e.nativeEvent, mode, {
       rowSelected: inRowHeader && s.rowSelection !== null && handlers.rowDeletable(),
       hasSelection: s.hasSelection || inRowHeader,
+      taskRowSelected: inRowHeader && s.rowSelection !== null && handlers.rowMovable(),
     })
     if (!action) return
     // the row header only takes row-level keys
     if (
       inRowHeader &&
-      !['deleteRow', 'cancel', 'undo', 'redo', 'flush', 'newTask', 'move', 'clear'].includes(action.kind)
+      !['deleteRow', 'cancel', 'undo', 'redo', 'flush', 'newTask', 'move', 'clear', 'moveRow'].includes(action.kind)
     )
       return
     // nothing left to cancel (no edit, no row / cell selection): this Esc is not the grid's — it bubbles unhandled
@@ -146,6 +151,9 @@ export function useGridKeyboard(
         break
       case 'cellMenu':
         handlers.cellMenu()
+        break
+      case 'moveRow':
+        handlers.moveRow(action.dir)
         break
     }
   }

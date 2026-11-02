@@ -32,15 +32,27 @@
   outline: none;
 }
 
+/* SPEC §8.12 / D19: the scroller takes its content height (VirtualGrid sets --grid-content-h) and only shrinks below
+   it to fit the screen — no empty slab under a short plan, the กราฟภาระ pane directly beneath */
+.scroller[data-fit='content'] {
+  flex: 0 1 auto;
+  height: var(--grid-content-h);
+}
+
 .sized {
   position: relative;
 }
 
-/* ── header ── */
-.headerRow {
+/* ── header (M7.1: one sticky group = month row + period row, M7.1-D10) ── */
+.headerGroup {
   position: sticky;
   top: 0;
   z-index: 3;
+  background: var(--surface-muted);
+}
+
+.headerRow {
+  position: relative;
   display: flex;
   background: var(--surface-muted);
   border-bottom: 1px solid var(--border-subtle);
@@ -67,6 +79,143 @@
   font-weight: var(--weight-bold);
   color: var(--text-secondary);
   background: var(--surface-muted);
+}
+
+/* M7.1 (FR-816): the ผู้รับผิดชอบ header sticks right of the งาน header */
+.cornerAssignee {
+  position: sticky;
+  left: var(--grid-task-w);
+  z-index: 4;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0 var(--space-2);
+  box-sizing: border-box;
+  font-weight: var(--weight-bold);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.cornerLabel {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.cornerButton {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--brand-blue);
+  font: inherit;
+  font-size: var(--font-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cornerButton:hover {
+  background: var(--hover-bg);
+}
+
+.cornerButton:focus-visible,
+.resizeHandle:focus-visible,
+.dragHandle:focus-visible,
+.markerFlag:focus-visible,
+.markerMore:focus-visible,
+.markerColor:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+/* ⇔ FR-814: a 9 px grab area over the งาน header's right border */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 9px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.resizeHandle::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 3px;
+  width: 3px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.resizeHandle:hover::after,
+.resizeHandle:focus-visible::after {
+  background: var(--brand-blue);
+}
+
+/* the month row (FR-818): spans are absolute over the period columns; the label sticks beside the frozen columns */
+.monthRow {
+  position: relative;
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-bold);
+  color: var(--text-secondary);
+}
+
+.monthCorner,
+.monthTotal {
+  flex: none;
+  box-sizing: border-box;
+  background: var(--surface-muted);
+}
+
+.monthCorner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.monthTotal {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  margin-left: auto;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.monthSpan {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.monthLabel {
+  position: sticky;
+  left: var(--grid-frozen-w);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .colHeader {
@@ -124,16 +273,33 @@
 
 /* narrow frozen column (phones, SPEC §7): the person label and the footer switch caption give way to the task name;
    the switch keeps its accessible name and the full name is in the row's aria-label */
-.scroller[data-compact='true'] .person {
-  max-width: 48px;
-}
-
 .scroller[data-compact='true'] .rowHeader:not([aria-selected='true'], :focus-within) .actions {
   display: none;
 }
 
-.scroller[data-compact='true'] .footerHeader .actions .muted {
+.scroller[data-compact='true'] .footerSwitchText {
   display: none;
+}
+
+/* "รวมงานโปรเจคอื่น" in the "% ใช้กำลังคน" label cell (FR-806, §8 sketch): its own right-aligned slot, separated from
+   the bold row label by a hairline, regular weight, the text never clipped mid-word (M7.1 review §8.12) */
+.footerSwitch {
+  margin-left: auto;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  height: 100%;
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+  font-weight: var(--weight-regular);
+  cursor: pointer;
+}
+
+.footerSwitchText {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .corner {
@@ -159,6 +325,93 @@
 .rowHeader {
   z-index: 2;
   outline: none;
+  padding: 0;
+  gap: 0;
+}
+
+/* M7.1 (FR-816): the two visual cells inside the frozen row header */
+.taskCell,
+.assigneeCell {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding-right: var(--space-2);
+}
+
+.assigneeCell {
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.assigneeCell .person {
+  flex: 1 1 auto;
+  max-width: none;
+  min-width: 0;
+}
+
+.rowHeader[data-dragging='true'],
+.row[data-dragging='true'] .cell {
+  opacity: 0.55;
+}
+
+/* ⠿ FR-815: visible on hover / focus within the row and always on touch */
+.dragHandle {
+  composes: iconButton;
+  min-width: 14px;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+}
+
+.row:hover .dragHandle,
+.row:focus-within .dragHandle,
+.rowHeader[aria-selected='true'] .dragHandle {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .dragHandle {
+    opacity: 1;
+  }
+}
+
+.dropIndicator {
+  position: absolute;
+  left: 0;
+  height: 2px;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--brand-blue);
+}
+
+.dropIndicator[data-valid='false'] {
+  background: repeating-linear-gradient(90deg, var(--load-over-fg) 0 6px, transparent 6px 10px);
+}
+
+.dropMarker {
+  position: sticky;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  transform: translateY(-50%);
+  font-size: var(--font-xs);
+  color: var(--load-over-fg);
+  white-space: nowrap;
+}
+
+.dropMarker::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--brand-blue);
+  background: var(--surface);
 }
 
 .rowHeader[aria-selected='true'] {
@@ -461,8 +714,27 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-3);
   padding: var(--space-2) 0;
+}
+
+/* M7.1 review (§8.12): the toolbar wraps between these groups first; inside a group controls wrap only when the
+   group alone is wider than the toolbar */
+.toolbarGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* ‹ วันนี้ › never break apart (SPEC §9 phone) */
+.toolbarNav {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 /* light toggles: hairline --border-subtle, --radius-md, --hover-bg on hover; the pressed one is --brand-navy on
@@ -738,7 +1010,7 @@
 }
 
 .zoomGroup {
-  gap: var(--space-1);
+  flex: none;
 }
 
 /* BR-24 dialog */
@@ -770,4 +1042,261 @@
 .br24ChoiceTitle {
   font-weight: var(--weight-bold);
   font-size: var(--font-md);
+}
+
+/* ── M7.1 (plan/m07.1 S3; FR-818/819/820, FR-813, FR-817) ── */
+
+/* month boundary (FR-818): a 2 px --border-month line at the left edge of each month's first column, through the
+   header, body and footer; drawn as a pseudo-element so today / selection box-shadows keep working */
+.colHeader[data-month-start]::before,
+.dayHeader[data-month-start]::before,
+.weekTotalHeader[data-month-start]::before,
+.monthSpan[data-month-start]::before,
+.cell[data-month-start]::before,
+.footerCell[data-month-start]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--border-month);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* marker lines (FR-820): 2 px, pattern per tone (never colour alone) */
+.markerLine {
+  position: absolute;
+  width: 0;
+  border-left: 2px solid var(--marker-red);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.markerLine[data-tone='YELLOW'] {
+  border-left-style: dashed;
+  border-left-color: var(--marker-yellow);
+}
+
+.markerLine[data-tone='GREEN'] {
+  border-left-style: dotted;
+  border-left-color: var(--marker-green);
+}
+
+.markerLine[data-tone='MILESTONE'] {
+  border-left-style: dashed;
+  border-left-color: var(--milestone);
+}
+
+.markerFlagGroup {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  transform: translateX(-100%);
+  padding-right: var(--space-1);
+  max-width: 160px;
+}
+
+.markerFlag,
+.markerMore {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+  height: 18px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--marker-red);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.markerFlag[data-tone='YELLOW'] {
+  border-style: dashed;
+  border-color: var(--marker-yellow);
+}
+
+.markerFlag[data-tone='GREEN'] {
+  border-style: dotted;
+  border-color: var(--marker-green);
+}
+
+.markerFlag[data-tone='MILESTONE'] {
+  border-color: var(--milestone);
+}
+
+.markerFlag > [aria-hidden='true']:first-child {
+  color: var(--marker-red);
+}
+
+.markerFlag[data-tone='YELLOW'] > [aria-hidden='true']:first-child {
+  color: var(--marker-yellow);
+}
+
+.markerFlag[data-tone='GREEN'] > [aria-hidden='true']:first-child {
+  color: var(--marker-green);
+}
+
+.markerMore {
+  flex: none;
+  border-color: var(--border-subtle);
+}
+
+.markerFlagText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* marker popover (FR-1604 light form) */
+.markerForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  width: 300px;
+}
+
+.markerColors {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.markerColor {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.markerColor:hover {
+  background: var(--hover-bg);
+}
+
+.markerColor[aria-pressed='true'] {
+  background: var(--brand-light);
+  color: var(--brand-navy);
+  font-weight: var(--weight-bold);
+}
+
+.markerSwatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--marker-red);
+  margin-right: var(--space-1);
+}
+
+.markerSwatch[data-tone='YELLOW'] {
+  background: var(--marker-yellow);
+}
+
+.markerSwatch[data-tone='GREEN'] {
+  background: var(--marker-green);
+}
+
+.markerFormRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.markerReadOnly {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--font-sm);
+}
+
+.markerReadOnly dt {
+  color: var(--text-secondary);
+}
+
+.markerReadOnly dd {
+  margin: 0;
+}
+
+.markerReadOnly dd:nth-last-child(-n + 2) {
+  grid-column: 1 / -1;
+}
+
+.markersMenuText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.toolbarGlyph {
+  margin: 0 var(--space-1);
+}
+
+/* the summed-cell hint (FR-817) */
+.hintPopper {
+  z-index: 1400;
+}
+
+.sumHint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 360px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sm);
+}
+
+/* the Alt+Enter route on [แสดงผู้รับผิดชอบ] (FR-817, P1 keyboard-first) */
+.hintKey {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+/* the กราฟภาระ pane (FR-813, §8.13): at most 320 px under the grid. The grid never shrinks below the header rows +
+   6 body rows + the footer (64 + 6 × 32 + 3 × 32 + 2 border = 354 px; grid-css.test.ts ties it to columns.ts): when
+   both do not fit, the pane container scrolls instead of clipping the task rows (§4.16 / §8.12, M7.1 review). */
+.root[data-chart-open='true'] {
+  overflow-y: auto;
+}
+
+.root[data-chart-open='true'] > .scroller {
+  min-height: min(354px, var(--grid-content-h, 354px));
+}
+
+.chartPane {
+  flex: none;
+  min-height: 0;
+  margin-top: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: auto;
+  max-height: 320px;
 }

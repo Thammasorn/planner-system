@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { FOOTER_ROWS, HEADER_TOTAL_H, ROW_H } from '@/lib/grid/columns'
 import { contrastRatio, parseTokenBlocks, type TokenSet } from '@/lib/theme/contrast'
 
 const css = readFileSync(fileURLToPath(new URL('./grid.module.css', import.meta.url)), 'utf8').replace(
@@ -132,5 +133,38 @@ describe('grid.module.css (§8.9)', () => {
     const shadow = decl(both, 'box-shadow') ?? ''
     expect(shadow).toContain('inset 4px 0 0 var(--tentative-fg)')
     expect(shadow).toContain('inset 0 0 0 2px var(--brand-blue)')
+  })
+
+  it('the กราฟภาระ pane never squeezes the grid below header + 6 rows + footer; the pane container scrolls instead', () => {
+    // min(<floor>, content height): a short plan is not padded up to the floor (§8.12 / D19)
+    const minDecl = decl(find(".root[data-chart-open='true'] > .scroller"), 'min-height') ?? ''
+    expect(minDecl).toMatch(/^min\(\d+px, var\(--grid-content-h/)
+    const minH = Number.parseFloat(/\d+px/.exec(minDecl)?.[0] ?? '')
+    // + 2 px: the scroller's 1 px border top and bottom
+    expect(minH).toBeGreaterThanOrEqual(HEADER_TOTAL_H + (6 + FOOTER_ROWS) * ROW_H + 2)
+    expect(decl(find(".root[data-chart-open='true']"), 'overflow-y')).toBe('auto')
+    expect(Number.parseFloat(decl(find('.chartPane'), 'max-height') ?? '')).toBeLessThanOrEqual(320)
+  })
+
+  it('toolbar: ‹ วันนี้ › never wrap apart; the footer switch has its own regular-weight slot (M7.1 review §8.12)', () => {
+    expect(decl(find('.toolbarNav'), 'flex-wrap')).toBe('nowrap')
+    expect(decl(find('.toolbarNav'), 'flex')).toBe('none')
+    const slot = find('.footerSwitch')
+    expect(decl(slot, 'margin-left')).toBe('auto')
+    expect(decl(slot, 'font-weight')).toBe('var(--weight-regular)')
+    expect(decl(find('.footerSwitchText'), 'white-space')).toBe('nowrap')
+  })
+
+  it('the scroller is sized to its content and only shrinks to fit (§8.12 / D19: no empty slab at 1920/2560)', () => {
+    const fit = find(".scroller[data-fit='content']")
+    expect(decl(fit, 'height')).toBe('var(--grid-content-h)')
+    expect(decl(fit, 'flex')).toBe('0 1 auto')
+  })
+
+  it('month label: ellipsis inside its span, never a clipped glyph (FR-818, §8.12)', () => {
+    const l = find('.monthLabel')
+    expect(decl(l, 'overflow')).toBe('hidden')
+    expect(decl(l, 'text-overflow')).toBe('ellipsis')
+    expect(decl(l, 'max-width')).toBe('100%')
   })
 })

@@ -42,6 +42,9 @@ describe('grid scope (M6, X07)', () => {
       'grid.expandWeek',
       'grid.collapseWeek',
       'grid.cellMenu',
+      'grid.moveRow',
+      'grid.indentRow',
+      'grid.addMarker',
     ])
     expect(grid.find((s) => s.id === 'grid.full')?.combos).toEqual([['F']])
     expect(grid.find((s) => s.id === 'grid.shift')?.combos).toEqual([
@@ -88,5 +91,34 @@ describe('task page (M6.1, FR-685/686)', () => {
     ])
     expect(SHORTCUT_SCOPES.indexOf('taskPage')).toBe(SHORTCUT_SCOPES.indexOf('taskList') + 1)
     expect(SHORTCUT_SCOPE_LABELS.taskPage).toBe(th.shortcuts.scopes.taskPage)
+  })
+})
+
+describe('grid rows and markers (M7.1, FR-815/819, X07)', () => {
+  it('Alt+↑/↓ moves the row, Alt+→/← indents/outdents, Shift+F10 on a header adds a marker — listed in the help', () => {
+    const by = (id: string) => SHORTCUTS.find((s) => s.id === id)
+    expect(by('grid.moveRow')).toMatchObject({
+      scope: 'grid',
+      combos: [
+        ['Alt', 'ArrowUp'],
+        ['Alt', 'ArrowDown'],
+      ],
+      label: th.shortcuts.items.gridMoveRow,
+    })
+    expect(by('grid.indentRow')).toMatchObject({
+      scope: 'grid',
+      combos: [
+        ['Alt', 'ArrowRight'],
+        ['Alt', 'ArrowLeft'],
+      ],
+      label: th.shortcuts.items.gridIndentRow,
+    })
+    expect(by('grid.addMarker')).toMatchObject({
+      scope: 'grid',
+      combos: [['Shift', 'F10']],
+      label: th.shortcuts.items.gridAddMarker,
+    })
+    // The `?` help renders SHORTCUTS grouped by SHORTCUT_SCOPES, so a registered grid entry is a listed one.
+    expect(SHORTCUT_SCOPES).toContain('grid')
   })
 })

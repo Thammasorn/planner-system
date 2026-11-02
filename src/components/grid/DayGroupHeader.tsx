@@ -9,7 +9,7 @@ import { VisuallyHidden } from '@/components/common/VisuallyHidden'
 import { isoWeekday } from '@/domain/dates'
 import { th } from '@/i18n/th'
 import { formatThaiDate, formatWeekHeader } from '@/lib/format'
-import { HEADER_H, type GridColumn } from '@/lib/grid/columns'
+import { HEADER_H, periodColIndex, type GridColumn } from '@/lib/grid/columns'
 import styles from './grid.module.css'
 
 export interface DayHeaderCellProps {
@@ -26,6 +26,8 @@ export interface DayHeaderCellProps {
   /** false in day zoom (headers are not toggles there) */
   toggle: boolean
   onToggleWeek: (week: string) => void
+  /** M7.1 (FR-818): first column of a month */
+  monthStart?: boolean
 }
 
 export const DayHeaderCell = memo(function DayHeaderCell(p: DayHeaderCellProps) {
@@ -41,10 +43,12 @@ export const DayHeaderCell = memo(function DayHeaderCell(p: DayHeaderCellProps) 
   return (
     <div
       role="columnheader"
-      aria-colindex={p.c + 2}
+      aria-colindex={periodColIndex(p.c)}
       className={styles.dayHeader}
       style={{ left: p.left, width: p.width, height: HEADER_H }}
       data-col-key={p.col.key}
+      data-c={p.c}
+      data-month-start={p.monthStart ? '' : undefined}
       data-col-kind="D"
       data-today={p.today ? 'true' : undefined}
       data-holiday={p.holiday !== null ? 'true' : undefined}
@@ -88,15 +92,19 @@ export const WeekTotalHeaderCell = memo(function WeekTotalHeaderCell(p: {
   c: number
   left: number
   width: number
+  /** M7.1 (FR-818) */
+  monthStart?: boolean
 }) {
   return (
     <div
       role="columnheader"
-      aria-colindex={p.c + 2}
+      aria-colindex={periodColIndex(p.c)}
       aria-label={th.grid.day.totalColumnLabel(formatWeekHeader(p.col.weekStart))}
       className={styles.weekTotalHeader}
       style={{ left: p.left, width: p.width, height: HEADER_H }}
       data-col-key={p.col.key}
+      data-c={p.c}
+      data-month-start={p.monthStart ? '' : undefined}
       data-col-role="weekTotal"
       data-week={p.col.weekStart}
     >

@@ -142,8 +142,9 @@ describe('RowHeader ↗ = task page link (M6.1-D17)', () => {
 })
 
 describe('RowHeader indentation (token scale)', () => {
-  it('indents by depth in --space-4 steps after the --space-2 gutter', () => {
+  it('indents the task cell by depth in --space-4 steps after the --space-2 gutter', () => {
     const { header } = renderRow({ ...merged, depth: 2 })
-    expect(header.style.paddingLeft).toBe('calc(var(--space-2) + 2 * var(--space-4))')
+    const taskCell = header.querySelector<HTMLElement>('[data-task-cell]')!
+    expect(taskCell.style.paddingLeft).toBe('calc(var(--space-2) + 2 * var(--space-4))')
   })
 })

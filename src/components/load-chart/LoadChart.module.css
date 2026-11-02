@@ -1,0 +1,153 @@
+/* "กราฟภาระ" pane (FR-813, §8.13, PLAN §3.9): plain elements + theme CSS variables, §8.12 scale (M7.1-D21).
+   Never colour alone: each person = colour + mark shape + name; OVER/RISK = ring + glyph + text. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-primary);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-height: 32px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: var(--weight-bold);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.legendItem:hover {
+  background: var(--hover-bg);
+}
+
+.legendItem[aria-pressed='true'] {
+  border-color: currentColor;
+  font-weight: var(--weight-bold);
+}
+
+.legendItem:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.hint {
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+}
+
+.chart {
+  height: 240px;
+  min-width: 0;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4) 0;
+  font-size: var(--font-sm);
+  color: var(--mui-palette-text-secondary);
+}
+
+.tableWrap {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.table caption {
+  padding-bottom: var(--space-1);
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+  text-align: start;
+}
+
+.table th,
+.table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: end;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--mui-palette-background-paper);
+  font-weight: var(--weight-bold);
+}
+
+.table th[scope='row'] {
+  position: sticky;
+  left: 0;
+  background: var(--mui-palette-background-paper);
+  text-align: start;
+  font-weight: var(--weight-medium);
+}
+
+.rowName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.table td[data-level='OVER'] {
+  font-weight: var(--weight-bold);
+}
+
+.glyph {
+  margin-inline-start: var(--space-1);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.toggle {
+  white-space: nowrap;
+}

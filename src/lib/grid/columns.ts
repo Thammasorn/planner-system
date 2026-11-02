@@ -3,36 +3,59 @@
 // M7 adds the day / "รวม" columns of expanded weeks without changing a signature (G26).
 import { addWeeks, daysOfWeek, diffDays, weekStart } from '@/domain/dates'
 import type { ISODate, PeriodKey } from '@/domain/types'
+import { ASSIGNEE_W, TASK_W_DEFAULT } from './frozen'
 
 export const WEEK_W = 64
-export const NAME_W = 260
-/** Narrowest frozen task/assignee column (phones): the week area keeps the rest (SPEC §7 browser support). */
-export const NAME_MIN_W = 120
-/** Share of the grid's width the frozen column may take before it is capped at NAME_W. */
-export const NAME_SHARE = 0.4
-/** Below this frozen-column width the row header switches to its compact layout (shorter person label). */
-export const NAME_COMPACT_W = 200
+/** M7.1-D8: the frozen area is two columns; their widths come from src/lib/grid/frozen.ts#frozenWidths(). */
 export const TOTAL_W = 72
-/** CSS width of the sticky name cells: VirtualGrid sets --grid-name-w from nameColumnWidth(). */
-export const NAME_COL_W = `var(--grid-name-w, ${NAME_W}px)`
+/** CSS widths of the frozen cells: VirtualGrid sets --grid-task-w / --grid-assignee-w from frozenWidths() (M7.1-D8). */
+export const TASK_COL_W = `var(--grid-task-w, ${TASK_W_DEFAULT}px)`
+export const ASSIGNEE_COL_W = `var(--grid-assignee-w, ${ASSIGNEE_W}px)`
+/** task + assignee (0 when hidden): row headers, footer labels and header corners span both. */
+export const FROZEN_COL_W = `calc(${TASK_COL_W} + ${ASSIGNEE_COL_W})`
+/** Below this task-column width the row header switches to its compact layout (M7.1-D8). */
+export const TASK_COMPACT_W = 200
 export const ROW_H = 32
+/** The period (week / day) header row. */
 export const HEADER_H = 40
+/** M7.1 (FR-818, M7.1-D10): the month-year row above it. */
+export const MONTH_H = 24
+/** Everything above the first body row; the row virtualizer's paddingStart / scrollPaddingStart. */
+export const HEADER_TOTAL_H = MONTH_H + HEADER_H
 export const CHUNK_WEEKS = 8
 export const TIMELINE_WEEKS = 156
 
+/** ARIA bookkeeping (C27, X85): header rows above the body (M7.1: month row + period row = 2; M8 adds the ◆ row → 3)
+ *  and footer rows below it. Every aria-rowindex / aria-rowcount is computed from these — never a literal. */
+export const HEADER_ROWS = 2
+export const FOOTER_ROWS = 3
+/** Frozen ARIA columns before the first period column: งาน (1) and ผู้รับผิดชอบ (2). With the assignee column hidden
+ *  the task cells span both (aria-colspan 2), so period column indexes never shift (M7.1-D8). */
+export const FROZEN_COLS = 2
+/** The sticky footer's top border (grid.module.css .footer) and the scroller's own border (top + bottom), px. */
+export const FOOTER_BORDER_H = 2
+export const SCROLLER_BORDER_H = 2
+
 /**
- * Width of the frozen task/assignee column for a grid `gridWidth` px wide: 40 % of it, clamped to
- * [NAME_MIN_W, NAME_W], so a phone still shows whole week columns next to it. 0 (not measured yet) → NAME_W.
+ * Natural height (px) of the grid scroller: header group + body rows + sticky footer + borders + a horizontal
+ * scrollbar when the platform draws one. The scroller is sized to this and only shrinks below it to fit the screen
+ * (SPEC §8.12 / D19: no empty slab under a short plan; the กราฟภาระ pane sits right under the grid).
  */
-export function nameColumnWidth(gridWidth: number): number {
-  if (!(gridWidth > 0)) return NAME_W
-  return Math.max(NAME_MIN_W, Math.min(NAME_W, Math.round(gridWidth * NAME_SHARE)))
+export function gridContentHeight(bodyH: number, scrollbarH = 0): number {
+  return (
+    Math.max(bodyH, HEADER_TOTAL_H) + FOOTER_ROWS * ROW_H + FOOTER_BORDER_H + SCROLLER_BORDER_H + Math.max(0, scrollbarH)
+  )
 }
 
-/** ARIA bookkeeping (C27): header rows above the body (M8 adds the ◆ row → 2) and footer rows below it. Every
- *  aria-rowindex / aria-rowcount is computed from these — never a literal. */
-export const HEADER_ROWS = 1
-export const FOOTER_ROWS = 3
+/** aria-colindex of period column `c` (0-based). */
+export function periodColIndex(c: number): number {
+  return c + FROZEN_COLS + 1
+}
+
+/** aria-colindex of the sticky "รวม" column; also the grid's aria-colcount. */
+export function totalColIndex(colCount: number): number {
+  return colCount + FROZEN_COLS + 1
+}
 
 /** W = week column (M7: also the "รวม" column of an expanded week); D = day column (M7). */
 export type ColKind = 'W' | 'D'
@@ -87,7 +110,8 @@ export function buildColumns(
       continue
     }
     const dates = dayDatesByWeek.get(w) ?? daysOfWeek(w).slice(0, 5)
-    for (const d of dates) push({ key: `D:${d}`, kind: 'D', role: 'day', weekStart: w, date: d, width: DAY_W })
+    for (const d of dates)
+      push({ key: `D:${d}`, kind: 'D', role: 'day', weekStart: w, date: d, width: DAY_W })
     push({ key: `W:${w}`, kind: 'W', role: 'weekTotal', weekStart: w, date: w, width: WEEK_TOTAL_W })
   }
   return out
@@ -100,7 +124,7 @@ export const TOTAL_COL_W = `var(--grid-total-w, ${TOTAL_W}px)`
  * SPEC §8.12 / D19: the sticky "รวม" column absorbs the space left of it that no whole column fills, so it always abuts
  * the last fully visible week / day column instead of sitting beside a clipped sliver of the next one, at any container
  * width and in day zoom (mixed 44 / 52 / 64 px columns). `scrollLeft` / `viewportW` are the scroller's
- * scrollLeft and clientWidth, `nameW` the frozen name column. Never below TOTAL_W; TOTAL_W until measured.
+ * scrollLeft and clientWidth, `nameW` the frozen area (task + assignee, M7.1-D8). Never below TOTAL_W; TOTAL_W until measured.
  */
 export function stickyTotalWidth(
   cols: readonly GridColumn[],

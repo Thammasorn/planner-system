@@ -5,13 +5,29 @@
 // expanded weeks render DayGroupHeader cells + the รวม header; in day zoom headers are not toggles. Shift+click
 // selects that column over the editable rows (M6, unchanged). The toggles are buttons out of the Tab order (the grid
 // keeps one Tab stop, §8.9); their keyboard path is Mod+↓ / Mod+↑ on a cell (M7-D11).
-import { memo, type PointerEvent } from 'react'
+// M7.1: this is header row 2 (aria-rowindex HEADER_ROWS; the month row is above it, MonthHeader) and it is no longer
+// sticky itself (the header group is). Two frozen header cells — "งาน" (+ ⇔ ColumnResizeHandle, FR-814) and
+// "ผู้รับผิดชอบ" (+ the icon-only "ซ่อน" button, FR-816; absent when hidden: "งาน" spans both ARIA columns) — each sticky at its own left
+// offset; the first column of every month carries data-month-start (FR-818).
+import { memo, type PointerEvent, type ReactNode } from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
+import VisibilityOffOutlined from '@mui/icons-material/VisibilityOffOutlined'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { VisuallyHidden } from '@/components/common/VisuallyHidden'
 import { th } from '@/i18n/th'
 import { formatWeekHeader } from '@/lib/format'
-import { HEADER_H, HEADER_ROWS, NAME_COL_W, TOTAL_COL_W, type GridColumn } from '@/lib/grid/columns'
+import {
+  ASSIGNEE_COL_W,
+  FROZEN_COL_W,
+  FROZEN_COLS,
+  HEADER_H,
+  HEADER_ROWS,
+  periodColIndex,
+  TASK_COL_W,
+  totalColIndex,
+  TOTAL_COL_W,
+  type GridColumn,
+} from '@/lib/grid/columns'
 import { DayHeaderCell, WeekTotalHeaderCell } from './DayGroupHeader'
 import styles from './grid.module.css'
 
@@ -27,6 +43,14 @@ export interface GridHeaderProps {
   holidays?: ReadonlyMap<string, string>
   toggle?: boolean
   onToggleWeek?: (week: string) => void
+  /** M7.1 (FR-816): the assignee column is shown (default) */
+  showAssignees?: boolean
+  /** M7.1: "ซ่อน" on the ผู้รับผิดชอบ header */
+  onHideAssignees?: () => void
+  /** M7.1 (FR-814): the ⇔ separator, rendered inside the งาน header */
+  resizeHandle?: ReactNode
+  /** M7.1 (FR-818): keys of the first column of each month */
+  monthStarts?: ReadonlySet<string>
 }
 
 const NO_HOLIDAYS: ReadonlyMap<string, string> = new Map()
@@ -42,6 +66,7 @@ const HeaderCell = memo(function HeaderCell({
   onSelectColumn,
   toggle,
   onToggleWeek,
+  monthStart,
 }: {
   col: GridColumn
   c: number
@@ -52,6 +77,7 @@ const HeaderCell = memo(function HeaderCell({
   onSelectColumn: (c: number) => void
   toggle: boolean
   onToggleWeek: (week: string) => void
+  monthStart: boolean
 }) {
   const label = formatWeekHeader(col.weekStart)
   // the aria-label replaces the content, so it carries the today / holiday texts itself (§8.9, FR-807)
@@ -70,11 +96,13 @@ const HeaderCell = memo(function HeaderCell({
   return (
     <div
       role="columnheader"
-      aria-colindex={c + 2}
+      aria-colindex={periodColIndex(c)}
       aria-label={name}
       className={styles.colHeader}
       style={{ left, width, height: HEADER_H }}
       data-col-key={col.key}
+      data-c={c}
+      data-month-start={monthStart ? '' : undefined}
       data-today={today ? 'true' : undefined}
       data-tip={holiday ? 'header' : undefined}
       data-week={col.weekStart}
@@ -104,7 +132,11 @@ const HeaderCell = memo(function HeaderCell({
   )
 })
 
+const NO_STARTS: ReadonlySet<string> = new Set()
+
 export function GridHeader(p: GridHeaderProps) {
+  const showAssignees = p.showAssignees ?? true
+  const starts = p.monthStarts ?? NO_STARTS
   return (
     <div
       role="row"
@@ -115,16 +147,55 @@ export function GridHeader(p: GridHeaderProps) {
       <div
         role="columnheader"
         aria-colindex={1}
+        aria-colspan={showAssignees ? undefined : FROZEN_COLS}
         className={styles.corner}
-        style={{ width: NAME_COL_W, height: HEADER_H }}
+        style={{ width: showAssignees ? TASK_COL_W : FROZEN_COL_W, height: HEADER_H }}
+        data-frozen-header="task"
       >
-        {th.grid.header.name}
+        <span className={styles.cornerLabel}>{th.grid.columns.task}</span>
+        {p.resizeHandle}
       </div>
+      {showAssignees ? (
+        <div
+          role="columnheader"
+          aria-colindex={2}
+          className={styles.cornerAssignee}
+          style={{ width: ASSIGNEE_COL_W, height: HEADER_H }}
+          data-frozen-header="assignee"
+        >
+          <span className={styles.cornerLabel}>{th.grid.columns.assignee}</span>
+          {p.onHideAssignees ? (
+            // out of the Tab order (the grid keeps one Tab stop, §8.9): the toolbar switch is its keyboard path
+            <button
+              type="button"
+              tabIndex={-1}
+              className={styles.cornerButton}
+              onClick={p.onHideAssignees}
+              data-testid="hide-assignees"
+              // icon-only so "ผู้รับผิดชอบ" fits the fixed 112 px column (FR-816, §8.12 no clipped text)
+              aria-label={th.grid.columns.hide}
+              title={th.grid.columns.hide}
+            >
+              <VisibilityOffOutlined fontSize="inherit" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {p.vCols.map((v) => {
         const col = p.cols[v.index]
         if (!col) return null
+        const monthStart = starts.has(col.key)
         if (col.role === 'weekTotal')
-          return <WeekTotalHeaderCell key={v.key} col={col} c={v.index} left={v.start} width={v.size} />
+          return (
+            <WeekTotalHeaderCell
+              key={v.key}
+              col={col}
+              c={v.index}
+              left={v.start}
+              width={v.size}
+              monthStart={monthStart}
+            />
+          )
         if (col.role === 'day') {
           const prev = p.cols[v.index - 1]
           const first = prev?.kind !== 'D' || prev.weekStart !== col.weekStart
@@ -145,6 +216,7 @@ export function GridHeader(p: GridHeaderProps) {
               holiday={(p.holidays ?? NO_HOLIDAYS).get(col.date) ?? null}
               toggle={p.toggle ?? false}
               onToggleWeek={p.onToggleWeek ?? noop}
+              monthStart={monthStart}
             />
           )
         }
@@ -160,12 +232,13 @@ export function GridHeader(p: GridHeaderProps) {
             onSelectColumn={p.onSelectColumn}
             toggle={p.toggle ?? false}
             onToggleWeek={p.onToggleWeek ?? noop}
+            monthStart={monthStart}
           />
         )
       })}
       <div
         role="columnheader"
-        aria-colindex={p.cols.length + 2}
+        aria-colindex={totalColIndex(p.cols.length)}
         className={styles.totalHeader}
         style={{ width: TOTAL_COL_W, height: HEADER_H }}
       >

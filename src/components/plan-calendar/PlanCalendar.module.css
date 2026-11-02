@@ -1,0 +1,408 @@
+/* Project month calendar (FR-811/812, §8.13, PLAN §3.9): the /calendar look (M5 MonthGrid) with task bars.
+   Plain elements + theme CSS variables, §8.12 scale (M7.1-D21). Never colour alone: tentative = ◐ + yellow edge,
+   done = strike-through + text, holiday = background + 🎌 + name, today = ring + "วันนี้", marker = ⚑ + label. */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-height: 40px;
+}
+
+/* MUI's FormControlLabel pulls itself 11 px left (to align the checkbox ripple); beside "วันนี้" on a wrapped
+   phone toolbar that drew the label over the button (P9 @390) — keep it in its own box, like the grid toolbar. */
+.toolbarCheck {
+  margin: 0;
+}
+
+.monthTitle {
+  min-width: 8em;
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: var(--space-3);
+  align-items: start;
+  min-width: 0;
+}
+
+@media (max-width: 899.98px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-primary);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.columnheader {
+  padding: calc(var(--space-1) * 1.5) var(--space-2);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-bold);
+  color: var(--mui-palette-text-secondary);
+  border-bottom: 1px solid var(--mui-palette-divider);
+}
+
+/* Head 24 px + 3 lanes × 22 px + "+N" 20 px + padding (BAR_TOP / LANE_H in PlanCalendar.tsx). */
+.cell {
+  position: relative;
+  min-width: 0;
+  min-height: 120px;
+  padding: var(--space-1);
+  border-inline-end: 1px solid var(--mui-palette-divider);
+  border-bottom: 1px solid var(--mui-palette-divider);
+  outline: none;
+}
+
+.row:last-child .cell {
+  border-bottom: 0;
+}
+
+.cell:last-child {
+  border-inline-end: 0;
+}
+
+.cell[data-weekend] {
+  background: var(--nonworking);
+}
+
+.cell[data-holiday] {
+  background: var(--holiday);
+}
+
+.cell:focus-visible {
+  outline: 3px solid var(--brand-blue);
+  outline-offset: -3px;
+}
+
+.dayHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dayNum {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: calc(var(--radius-lg) * 2);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-bold);
+}
+
+.cell[data-outside] .dayNum {
+  color: var(--faded-fg);
+  font-weight: var(--weight-regular);
+}
+
+.cell[aria-current='date'] .dayNum {
+  box-shadow: inset 0 0 0 2px var(--today);
+}
+
+.todayTag {
+  flex: none;
+  padding: 0 calc(var(--space-1) * 1.5);
+  border: 1px solid var(--today);
+  border-radius: calc(var(--radius-lg) * 2);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+}
+
+.holidayGlyph {
+  flex: none;
+  font-size: var(--font-xs);
+}
+
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+  font-size: var(--font-xs);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flagGlyph {
+  flex: none;
+}
+
+.flagText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--mui-palette-text-primary);
+}
+
+/* A bar = absolutely positioned wrapper inside its first day cell, spanning `--span` cells (incl. 1 px borders). */
+.bar {
+  position: absolute;
+  z-index: 1;
+  left: 2px;
+  top: calc(28px + var(--lane) * 22px);
+  width: calc(var(--span) * 100% + (var(--span) - 1) * 1px - 4px);
+  height: 20px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-inline-start: 4px solid var(--bar-color);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bar-color) 16%, var(--mui-palette-background-paper));
+}
+
+.bar[data-tentative] {
+  border: 1px dashed var(--tentative-fg);
+  border-inline-start: 4px solid var(--tentative-fg);
+}
+
+.bar[data-cut-left] {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.bar[data-cut-right] {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.barButton {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+  line-height: 1.2;
+  text-align: start;
+  cursor: pointer;
+}
+
+.barButton:hover .barText {
+  text-decoration: underline;
+}
+
+.bar[data-done] .barText {
+  text-decoration: line-through;
+  color: var(--mui-palette-text-secondary);
+}
+
+.barButton:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.barText {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.barGlyph {
+  flex: none;
+}
+
+.more {
+  position: absolute;
+  left: var(--space-1);
+  top: calc(28px + 3 * 22px);
+  padding: 0 var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--brand-blue);
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--weight-bold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+/* "ไม่มีวันที่ (N)" side list (collapses under the grid below 900 px). */
+.side {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: var(--radius-lg);
+  background: var(--mui-palette-background-paper);
+}
+
+.sideHeading {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-md);
+  font-weight: var(--weight-bold);
+}
+
+.sideHint {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.listItem:hover {
+  background: var(--hover-bg);
+}
+
+.listButton {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  text-align: start;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.listButton:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.listItem[data-done] .listButton {
+  text-decoration: line-through;
+  color: var(--mui-palette-text-secondary);
+}
+
+.popoverList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 240px;
+  max-width: 360px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Phone agenda (< 600 px, FR-812) */
+.agenda {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agendaDay {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: var(--radius-lg);
+  background: var(--mui-palette-background-paper);
+}
+
+.agendaDay[data-holiday] {
+  background: var(--holiday);
+}
+
+.agendaDay[aria-current='date'] {
+  box-shadow: inset 4px 0 0 var(--today);
+}
+
+.agendaHeading {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-md);
+  font-weight: var(--weight-bold);
+}
+
+.agendaMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-1);
+  font-size: var(--font-xs);
+}
+
+.agendaItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 36px;
+  margin-top: var(--space-1);
+  padding-inline-start: var(--space-2);
+  border-inline-start: 4px solid var(--bar-color);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bar-color) 12%, var(--mui-palette-background-paper));
+}
+
+.agendaItem[data-tentative] {
+  border-inline-start-color: var(--tentative-fg);
+}
+
+.agendaItem[data-done] .barText {
+  text-decoration: line-through;
+  color: var(--mui-palette-text-secondary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

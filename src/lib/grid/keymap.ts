@@ -25,6 +25,8 @@ export type GridKeyAction =
   | { kind: 'collapseWeek' }
   /** M7: Shift+F10 / ContextMenu key → the cell menu (↕ รวมเป็นรายสัปดาห์; M8 adds items) */
   | { kind: 'cellMenu' }
+  /** M7.1 (FR-815, M7.1-D17, X49): Alt+↑/↓ move the selected task row among its siblings, Alt+→/← indent / outdent */
+  | { kind: 'moveRow'; dir: 'up' | 'down' | 'in' | 'out' }
 
 type KeyEv = Pick<
   KeyboardEvent,
@@ -56,6 +58,13 @@ const ARROWS: Readonly<Record<string, [number, number]>> = {
   ArrowRight: [0, 1],
 }
 
+const ALT_MOVES: Readonly<Record<string, 'up' | 'down' | 'in' | 'out'>> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowRight: 'in',
+  ArrowLeft: 'out',
+}
+
 /**
  * Maps a keydown to a grid action, or null to leave the event alone (the cell editor and the DOM copy/paste events
  * handle everything else). `sel.hasSelection === false` (after a second Esc) lets Tab leave the grid (no trap).
@@ -63,7 +72,7 @@ const ARROWS: Readonly<Record<string, [number, number]>> = {
 export function gridKeyAction(
   e: KeyEv,
   mode: 'nav' | 'edit',
-  sel: { rowSelected: boolean; hasSelection?: boolean },
+  sel: { rowSelected: boolean; hasSelection?: boolean; taskRowSelected?: boolean },
 ): GridKeyAction | null {
   if (e.isComposing) return null
   const mod = e.metaKey || e.ctrlKey
@@ -79,7 +88,11 @@ export function gridKeyAction(
 
   if (isUndoKey(e)) return { kind: 'undo' }
   if (isRedoKey(e)) return { kind: 'redo' }
-  if (e.altKey) return null
+  if (e.altKey) {
+    // X49: e.code (works on the Thai layout); Alt+Shift / Alt+Mod stay free
+    const dir = mod || e.shiftKey ? undefined : ALT_MOVES[e.code]
+    return dir && sel.taskRowSelected ? { kind: 'moveRow', dir } : null
+  }
   if (mod) {
     if (e.shiftKey) return null
     if (e.code === 'ArrowLeft') return { kind: 'shift', dir: -1 }

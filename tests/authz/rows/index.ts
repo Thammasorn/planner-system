@@ -15,6 +15,7 @@ import { rows as holidays } from './holidays'
 import { rows as leaveTypes } from './leave-types'
 import { rows as members } from './members'
 import { rows as pages } from './pages'
+import { rows as planMarkers } from './plan-markers'
 import { rows as positions } from './positions'
 import { rows as preferences } from './preferences'
 import { rows as projects } from './projects'
@@ -59,4 +60,6 @@ export const rows: AuthzRow[] = [
   // M7
   ...gridDay,
   ...allocationsDay,
+  // M7.1
+  ...planMarkers,
 ]

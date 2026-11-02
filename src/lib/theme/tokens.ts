@@ -75,3 +75,27 @@ export function spaceVar(factor: number): string {
 export function fontVar(name: FontName): string {
   return `var(--font-${name})`
 }
+
+/** M7.1 (X51) non-text colours, as in tokens.css: one categorical colour per chart series (person i →
+ *  `--chart-{(i mod 8) + 1}`, M7.1-D4), the three plan-marker colours and the month boundary line. */
+export const CHART_SERIES_COUNT = 8
+export const CHART = {
+  light: ['#2563eb', '#c2410c', '#0f766e', '#9333ea', '#be185d', '#4d7c0f', '#0369a1', '#b45309'],
+  dark: ['#60a5fa', '#fb923c', '#2dd4bf', '#c084fc', '#f472b6', '#a3e635', '#38bdf8', '#fbbf24'],
+} as const
+export const MARKER = {
+  light: { 'marker-red': '#dc2626', 'marker-yellow': '#a16207', 'marker-green': '#15803d' },
+  dark: { 'marker-red': '#f87171', 'marker-yellow': '#facc15', 'marker-green': '#4ade80' },
+} as const
+export const BORDER_MONTH = { light: '#7b8597', dark: '#7c8aa0' } as const
+
+/** `var(--chart-n)` of the i-th series (0-based; wraps every 8). */
+export function chartVar(index: number): string {
+  const n = (((index % CHART_SERIES_COUNT) + CHART_SERIES_COUNT) % CHART_SERIES_COUNT) + 1
+  return `var(--chart-${n})`
+}
+
+/** `var(--marker-red|yellow|green)` of a plan-marker colour. */
+export function markerVar(color: 'RED' | 'YELLOW' | 'GREEN'): string {
+  return `var(--marker-${color.toLowerCase()})`
+}

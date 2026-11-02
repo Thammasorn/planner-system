@@ -37,3 +37,5 @@ export * as allocations from './allocations'
 export * as grid from './grid'
 // M6.1 (task bodies, task page, full width)
 export * as taskPages from './task-pages'
+// M7.1 (plan/m07.1 S0.6)
+export * as planMarkers from './plan-markers'

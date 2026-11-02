@@ -10,7 +10,12 @@ import {
   SPACING_FACTORS,
   SURFACE,
   WEIGHT,
+  BORDER_MONTH,
+  CHART,
+  MARKER,
+  chartVar,
   fontVar,
+  markerVar,
   spaceVar,
 } from './tokens'
 
@@ -89,5 +94,26 @@ describe('tokens.ts ↔ tokens.css (SPEC §8.12, M6.1-D21)', () => {
 
   it('fontVar', () => {
     expect(fontVar('3xl')).toBe('var(--font-3xl)')
+  })
+})
+
+describe('M7.1 colours ↔ tokens.css (X51)', () => {
+  it('CHART, MARKER and BORDER_MONTH mirror :root and .dark', () => {
+    CHART.light.forEach((v, i) => expect(root[`chart-${i + 1}`], `--chart-${i + 1}`).toBe(v))
+    CHART.dark.forEach((v, i) => expect(dark[`chart-${i + 1}`], `.dark --chart-${i + 1}`).toBe(v))
+    for (const [name, value] of Object.entries(MARKER.light)) expect(root[name], `--${name}`).toBe(value)
+    for (const [name, value] of Object.entries(MARKER.dark)) expect(dark[name], `.dark --${name}`).toBe(value)
+    expect(root['border-month']).toBe(BORDER_MONTH.light)
+    expect(dark['border-month']).toBe(BORDER_MONTH.dark)
+  })
+
+  it('chartVar wraps every 8 series; markerVar maps the colour enum', () => {
+    expect(chartVar(0)).toBe('var(--chart-1)')
+    expect(chartVar(7)).toBe('var(--chart-8)')
+    expect(chartVar(8)).toBe('var(--chart-1)')
+    expect(chartVar(-1)).toBe('var(--chart-8)')
+    expect(markerVar('RED')).toBe('var(--marker-red)')
+    expect(markerVar('YELLOW')).toBe('var(--marker-yellow)')
+    expect(markerVar('GREEN')).toBe('var(--marker-green)')
   })
 })

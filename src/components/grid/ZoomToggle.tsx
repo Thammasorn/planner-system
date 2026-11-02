@@ -1,6 +1,8 @@
 'use client'
 // src/components/grid/ZoomToggle.tsx — "[สัปดาห์ | วัน]" (SPEC §8.3, FR-802). A view action: never writes data; the
-// caller persists the choice in the `grid.zoom` preference (X53, no localStorage).
+// caller persists the choice in the `grid.zoom` preference (X53, no localStorage). M7.1 review (§8.12 consistent
+// controls): the same segmented control as the plan page's [แผนงาน | ปฏิทิน] switch beside it (aria-pressed + the
+// selected fill, never colour alone: the pressed state is also announced).
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import { th } from '@/i18n/th'
@@ -23,11 +25,12 @@ export function ZoomToggle({ zoom, onChange }: ZoomToggleProps) {
         if (v !== null && v !== zoom) onChange(v)
       }}
       className={styles.zoomGroup}
+      sx={{ flex: 'none', '& .MuiToggleButton-root': { px: 1.5, py: 0.5, fontSize: 'var(--font-sm)' } }}
     >
-      <ToggleButton value="WEEK" disableRipple className={styles.toolbarToggle} data-testid="zoom-week">
+      <ToggleButton value="WEEK" disableRipple data-testid="zoom-week">
         {th.grid.toolbar.zoomWeek}
       </ToggleButton>
-      <ToggleButton value="DAY" disableRipple className={styles.toolbarToggle} data-testid="zoom-day">
+      <ToggleButton value="DAY" disableRipple data-testid="zoom-day">
         {th.grid.toolbar.zoomDay}
       </ToggleButton>
     </ToggleButtonGroup>

@@ -6,6 +6,8 @@
 // error body of a cross-project blocker. Later milestones append describe blocks (M5 calendar, M6 grid, M9
 // workload/person, M10 search/home). plan/m02-clients-projects-authz.md S3.4.
 // M6 (plan/m06 S5.2): project grid (leave labels, otherProjects numbers only) and plan-save error bodies.
+// M7.1 (plan/m07.1 S5.2): the load chart (computed from the same grid chunk, M7.1-D3 — numbers only for other projects)
+// and the plan-markers route (markers are per project, §3.3).
 // M6.1 (plan/m06.1 S6.3): task bodies — task search group, page trees/titles without TASK pages, body/page/lease/file
 // 404 bodies, hasBody without body text, /my statusesByProject of the viewer's projects only.
 import { readFileSync } from 'node:fs'
@@ -25,6 +27,7 @@ import type {
   CalendarTimeOffMasked,
 } from '@/lib/contracts/calendar'
 import type { GridPerson, GridResponse, SaveItemResult } from '@/lib/contracts/grid'
+import type { PlanMarkersResponse } from '@/lib/contracts/plan-markers'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
 import type { SearchResponse } from '@/lib/contracts/search'
@@ -42,7 +45,7 @@ import {
 import * as services from '@/server/services'
 import { addDayExample, applyFixture, DAY_EXAMPLE, GOLDEN_PATH, seedGolden } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
-import { allocationRows, makeBlocker, makePage, type TestUser } from '../helpers/factories'
+import { allocationRows, makeBlocker, makePage, makePlanMarker, type TestUser } from '../helpers/factories'
 import { outcomeOf } from '../helpers/outcome'
 import { createWorld, type World } from '../helpers/world'
 import { goldenProjectId, goldenTaskNames, goldenUser, type GoldenProject } from './_support/golden'
@@ -52,6 +55,7 @@ import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './row
 import { calendarGet } from './rows/_m5'
 import { gridGet, save, weekItem } from './rows/_m6'
 import { bodyGet } from './rows/_m6_1'
+import { markersGet } from './rows/_m7_1'
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -1246,5 +1250,74 @@ describe('masking — grid day (M7, plan/m07 S4.2; §3.3, X29, X30)', () => {
     const hidden: string[] = [...goldenTaskNames(['POS Upgrade', 'Data Warehouse', 'CRM Migration'])]
     for (const n of ['POS Upgrade', 'Data Warehouse', 'CRM Migration'] as const) hidden.push(n, await goldenProjectId(n))
     assertNoLeak(body, hidden)
+  })
+})
+
+describe('masking — M7.1 chart + plan markers (plan/m07.1 S5.2; §3.3, X29, AC-807, AC-812)', () => {
+  // AC-807: Mint is a member of POS (and Mobile), not of CRM / Data Warehouse / Store Analytics.
+  const NOT_MINT: GoldenProject[] = ['CRM Migration', 'Data Warehouse', 'Store Analytics Dashboard']
+  const CHART_WEEKS = ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26']
+  const CHART_RANGE = 'from=2026-09-14&to=2026-11-02&includeOthers=1'
+
+  it('Mint, POS chunk with includeOthers=1: Cindy’s CRM load reaches the chart as a number; no CRM name, task or id anywhere', async () => {
+    await seedGolden(db)
+    const posId = await goldenProjectId('POS Upgrade')
+    const cindy = await goldenUser('Cindy')
+    const body = await gridOk(await goldenUser('Mint'), posId, CHART_RANGE)
+    // the footer / chart source: numbers only (X29)
+    expect(personOf(body, cindy.id).otherProjects?.['W:2026-10-05']).toEqual({ total: 250, committed: 0 })
+    for (const p of Object.values(body.people))
+      for (const [key, v] of Object.entries(p.otherProjects ?? {}))
+        expect(Object.keys(v ?? {}).sort(), key).toEqual(['committed', 'total'])
+    // the chart is computed client-side from exactly this body (M7.1-D3, no new route): its series over these numbers are
+    // checked in tests/golden/plan-chart.int.test.ts › Mint; here the payload itself is the leak surface
+    expect(body.periods.map((p) => p.key)).toEqual(CHART_WEEKS.map((w) => `W:${w}`))
+    // §11.2: neither the response nor the computed chart carries anything of CRM (or the other hidden projects)
+    const hidden: string[] = ['CRM Migration', 'ย้ายข้อมูลลูกค้า', ...goldenTaskNames(NOT_MINT)]
+    for (const n of NOT_MINT) hidden.push(n, await goldenProjectId(n))
+    assertContains(body, ['POS Upgrade'])
+    assertNoLeak(body, hidden)
+  })
+
+  it('Peter (not in POS): the POS grid chunk and the POS markers route are 404s without POS names, ids or labels', async () => {
+    await seedGolden(db)
+    const posId = await goldenProjectId('POS Upgrade')
+    const cindy = await goldenUser('Cindy')
+    await makePlanMarker({ projectId: posId, date: '2026-10-23', color: 'RED', label: 'UAT sign-off', createdBy: cindy })
+    const peter = await goldenUser('Peter')
+    const grid = await gridAs(peter, posId, CHART_RANGE)
+    expect(grid.status).toBe(404)
+    assertNoLeak(grid.body, ['POS Upgrade', posId, ...goldenTaskNames(['POS Upgrade'])])
+    asUser(peter)
+    const markers = await bodyOf(await markersGet(posId))
+    expect(markers.status).toBe(404)
+    assertNoLeak(markers.body, ['POS Upgrade', posId, 'UAT sign-off'])
+    // and Cindy (POS lead) does see it — the 404 is about Peter, not a missing marker
+    asUser(cindy)
+    const own = await bodyOf(await markersGet(posId))
+    expect(own.status).toBe(200)
+    assertContains(own.body, ['UAT sign-off'])
+  })
+
+  it('markers are per project: Q’s and A’s markers never appear in P’s response, whoever asks', async () => {
+    const w = await createWorld({ with: ['planMarkers'] })
+    const { pRed, pGreen, aYellow, qRed } = w.planMarkers
+    for (const viewer of [w.manager, w.lead, w.member]) {
+      asUser(viewer)
+      const { status, body } = await bodyOf(await markersGet(w.P.id))
+      expect(status, viewer.name).toBe(200)
+      expect((body as PlanMarkersResponse).markers.map((m) => m.id), viewer.name).toEqual([pRed.id, pGreen.id])
+      assertNoLeak(body, [qRed.id, qRed.label!, w.Q.id, w.Q.name, aYellow.id, aYellow.label!, w.A.id])
+    }
+    // the member is not in Q: Q's markers are a 404 with nothing of Q
+    asUser(w.member)
+    const q = await bodyOf(await markersGet(w.Q.id))
+    expect(q.status).toBe(404)
+    assertNoLeak(q.body, [qRed.id, qRed.label!, w.Q.name])
+    // the outsider sees neither P's markers nor P
+    asUser(w.outsider)
+    const p = await bodyOf(await markersGet(w.P.id))
+    expect(p.status).toBe(404)
+    assertNoLeak(p.body, [pRed.id, pRed.label!, pGreen.id, w.P.name])
   })
 })

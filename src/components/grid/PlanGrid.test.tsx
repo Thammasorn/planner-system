@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
-import { FOOTER_ROWS, HEADER_ROWS } from '@/lib/grid/columns'
+import { FOOTER_ROWS, HEADER_ROWS, periodColIndex, totalColIndex } from '@/lib/grid/columns'
 import { gridResponse, POS_PEOPLE, POS_TASKS, type FxTask } from '@/lib/grid/fixtures.test.data'
 import type { GridChunk } from '@/lib/query-keys'
 import { PID, projectTasksResponse, stubScrollTo } from './grid.test.mocks'
@@ -120,6 +120,40 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     })
   })
 
+  describe('opens with this week in view and keeps it while it settles (SPEC §7, M7.1 review)', () => {
+    it('a drop back to the timeline start before the user acts is corrected', async () => {
+      renderPos()
+      const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
+      const opened = grid.scrollLeft
+      expect(opened, 'opened past the timeline start').toBeGreaterThan(0)
+      grid.scrollLeft = 0 // a lost scroll / re-layout
+      fireEvent.scroll(grid)
+      expect(grid.scrollLeft).toBe(opened)
+      await screen.findByRole('rowheader', { name: 'Rollout สาขา · Mint' })
+      grid.scrollLeft = 0
+      fireEvent.scroll(grid)
+      expect(grid.scrollLeft).toBe(opened)
+    })
+
+    it('released by user input or a scroll elsewhere: never fights the user', async () => {
+      renderPos()
+      const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
+      const opened = grid.scrollLeft
+      grid.scrollLeft = opened + 640
+      fireEvent.scroll(grid)
+      grid.scrollLeft = 0
+      fireEvent.scroll(grid)
+      expect(grid.scrollLeft).toBe(0)
+
+      renderPos()
+      const [, again] = screen.getAllByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
+      fireEvent.pointerDown(again!)
+      again!.scrollLeft = 0
+      fireEvent.scroll(again!)
+      expect(again!.scrollLeft).toBe(0)
+    })
+  })
+
   it('renders the labelled grid with three merged POS rows', async () => {
     renderPos()
     const grid = screen.getByRole('grid', { name: th.grid.gridLabel('POS Upgrade') })
@@ -176,13 +210,13 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     const viewRows = 3
     const quickAdd = 1
     expect(grid).toHaveAttribute('aria-rowcount', String(HEADER_ROWS + viewRows + quickAdd + FOOTER_ROWS))
-    expect(grid).toHaveAttribute('aria-colcount', String(313 + 2))
+    expect(grid).toHaveAttribute('aria-colcount', String(totalColIndex(313)))
     const firstBody = grid.querySelector('[data-row-key="a:a-cindy-pos"][role="row"]')!
     expect(firstBody).toHaveAttribute('aria-rowindex', String(HEADER_ROWS + 1))
     const home = screen.getByTestId('cell-a:a-cindy-pos-W:2026-09-28')
     expect(home).toHaveAttribute('tabindex', '0')
     expect(screen.getByTestId('cell-a:a-cindy-pos-W:2026-09-21')).toHaveAttribute('tabindex', '-1')
-    expect(home).toHaveAttribute('aria-colindex', String(156 + 2))
+    expect(home).toHaveAttribute('aria-colindex', String(periodColIndex(156)))
   })
 
   it('the toolbar shows [สัปดาห์] pressed and the view / unit selects', async () => {
@@ -308,7 +342,7 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(screen.getByRole('button', { name: th.grid.reload })).toBeInTheDocument()
   })
 
-  it('Shift+Space → Tab reaches ↗ (page link), × and + คน; Enter on the row header opens the panel (§8.9, M6.1-D17)', async () => {
+  it('Shift+Space → Tab reaches ⠿, ↗ (page link), + คน and ×; Enter on the row header opens the panel (§8.9, M6.1-D17, M7.1)', async () => {
     const onOpenTask = vi.fn()
     const user = userEvent.setup()
     renderPos({ onOpenTask })
@@ -325,6 +359,9 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     await user.keyboard('{Enter}')
     expect(onOpenTask).toHaveBeenCalledWith('t-rollout')
     await user.tab()
+    // M7.1 (FR-815): the drag handle comes first in the task cell
+    expect(within(header).getByRole('button', { name: th.grid.reorder.handle })).toHaveFocus()
+    await user.tab()
     const link = within(header).getByRole('link', { name: th.grid.row.openTaskPage('Rollout สาขา') })
     expect(link).toHaveFocus()
     expect(link).toHaveAttribute('href', '/t/t-rollout')
@@ -332,11 +369,12 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(fireEvent.keyDown(link, { key: 'Enter', code: 'Enter' })).toBe(true)
     expect(onOpenTask).toHaveBeenCalledTimes(1)
     await user.tab()
-    expect(within(header).getByRole('button', { name: th.grid.row.removeAssignee('Mint') })).toHaveFocus()
-    await user.tab()
     expect(
       within(header).getByRole('button', { name: th.grid.row.addPersonLabel('Rollout สาขา') }),
     ).toHaveFocus()
+    // M7.1 (FR-816): × now sits in the ผู้รับผิดชอบ cell, after the task cell
+    await user.tab()
+    expect(within(header).getByRole('button', { name: th.grid.row.removeAssignee('Mint') })).toHaveFocus()
   })
 
   it('Shift+Space → Delete moves focus to a body cell, not to <body>', async () => {

@@ -988,6 +988,10 @@ export const th = {
       gridExpandWeek: 'ขยายสัปดาห์เป็นรายวัน',
       gridCollapseWeek: 'ยุบสัปดาห์',
       gridCellMenu: 'เมนูเซลล์ (รวมเป็นรายสัปดาห์)',
+      // M7.1 (FR-815, FR-819)
+      gridMoveRow: 'เลื่อนแถวงานขึ้น/ลง',
+      gridIndentRow: 'ย่อเป็นงานย่อย/ดึงออก',
+      gridAddMarker: 'เพิ่มเส้นกำกับ (บนหัวคอลัมน์)',
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
@@ -1549,6 +1553,36 @@ export const th = {
     loading: 'กำลังโหลดแผน…',
     loadError: 'โหลดแผนไม่สำเร็จ',
     reload: 'ลองใหม่',
+    // M7.1 (plan/m07.1 S0.7) — build-time owner after S0: S3
+    columns: {
+      task: 'งาน',
+      assignee: 'ผู้รับผิดชอบ',
+      hide: 'ซ่อน',
+      show: 'แสดงผู้รับผิดชอบ',
+      resize: 'ปรับความกว้างคอลัมน์งาน',
+      resizeHint: 'ลากหรือกด ←/→ เพื่อปรับความกว้าง · ดับเบิลคลิกหรือ Enter เพื่อกลับค่าเริ่มต้น',
+    },
+    sumMode: {
+      readOnlyHint: (n: number) =>
+        n > 1
+          ? `ช่องนี้เป็นผลรวมของผู้รับผิดชอบ ${n} คน — แสดงผู้รับผิดชอบเพื่อแก้แผนรายคน`
+          : 'ช่องนี้เป็นผลรวม — แสดงผู้รับผิดชอบเพื่อแก้แผนรายคน',
+      showAssignees: 'แสดงผู้รับผิดชอบ',
+      /** the keyboard route to the button while the hint is open (shown on it) */
+      showAssigneesKey: 'Alt+Enter',
+      skipped: (n: number) => `ข้าม ${n} ช่องที่เป็นผลรวม (แก้ไม่ได้เมื่อซ่อนผู้รับผิดชอบ)`,
+      people: (n: number) => `👥 ${n}`,
+    },
+    reorder: {
+      handle: 'ลากเพื่อย้ายงาน',
+      moved: 'ย้ายงานแล้ว',
+      dropInside: (name: string) => `ย้ายไปเป็นงานย่อยของ ${name}`,
+      invalid: 'ย้ายงานไปตรงนี้ไม่ได้',
+    },
+    months: {
+      long: (month: string, beYear: number) => `${month} ${beYear}`,
+      short: (month: string, yy: string) => `${month} ${yy}`,
+    },
     errors: {
       weekNotMonday: 'สัปดาห์ต้องเริ่มวันจันทร์',
       badRange: 'ช่วงวันที่ไม่ถูกต้อง',
@@ -1589,6 +1623,94 @@ export const th = {
       rangeTooLong: 'ช่วงยาวได้ไม่เกิน 53 สัปดาห์',
       invalidTotal: 'ใส่จำนวนวันเป็นตัวเลข เช่น 3 หรือ 2.5',
       unrepresentable: 'ช่วงวันสั้นเกินไปสำหรับจำนวนวันนี้ (เกิน 1 วันต่อวัน) — ขยายช่วงหรือลดจำนวนวัน',
+    },
+  },
+  // ---------------------------------------------------------------------------------------------------------------
+  // M7.1 — plan grid improvements (plan/m07.1 S0.7). Build-time owners after S0: S2 → planMarkers.errors, audit;
+  // S3 → grid, planMarkers (except errors); S4 → planView, planCalendar, loadChart.
+  // ---------------------------------------------------------------------------------------------------------------
+  planView: {
+    label: 'มุมมองแผนงาน',
+    grid: 'แผนงาน',
+    calendar: 'ปฏิทิน',
+  },
+  planCalendar: {
+    title: (month: string, beYear: number) => `${month} ${beYear}`,
+    today: 'วันนี้',
+    prev: 'เดือนก่อน',
+    next: 'เดือนถัดไป',
+    noDates: (n: number) => `ไม่มีวันที่ (${n})`,
+    more: (n: number) => `+${n}`,
+    /** SPEC FR-811: "ไม่มีคน = รอมอบหมาย" (S4 aligned the S0 value with the SPEC wording). */
+    unassigned: 'รอมอบหมาย',
+    assigneesMore: (names: string, n: number) => `${names} +${n}`,
+    continuesLeft: 'ต่อจากสัปดาห์ก่อน',
+    continuesRight: 'ต่อในสัปดาห์ถัดไป',
+    empty: 'เดือนนี้ไม่มีงานที่มีวันที่',
+    agendaEmpty: 'ไม่มีงานในเดือนนี้',
+    gridLabel: (title: string) => `ปฏิทินงาน ${title}`,
+    agendaLabel: (title: string) => `รายการงาน ${title}`,
+    dayLabel: (date: string, n: number) => (n > 0 ? `${date} · ${n} งาน` : date),
+    holiday: (name: string) => `วันหยุด ${name}`,
+    dayTasks: (date: string) => `งานวันที่ ${date}`,
+    moreLabel: (n: number) => `ดูอีก ${n} งาน`,
+    done: 'เสร็จแล้ว',
+    noDatesLabel: 'งานที่ไม่มีวันที่',
+    noDatesHint: 'เปิด panel เพื่อตั้งวันที่',
+    noDatesNone: 'ทุกงานมีวันที่แล้ว',
+    loading: 'กำลังโหลดปฏิทิน…',
+    loadError: 'โหลดปฏิทินไม่สำเร็จ',
+    retry: 'ลองอีกครั้ง',
+    toolbar: 'เครื่องมือปฏิทิน',
+  },
+  loadChart: {
+    toggle: 'กราฟภาระ',
+    title: 'กราฟภาระรายคน',
+    includeOthers: 'รวมงานโปรเจคอื่น',
+    table: 'ดูเป็นตาราง',
+    chart: 'ดูเป็นกราฟ',
+    capacity: 'capacity',
+    fullCapacity: 'เต็ม capacity',
+    over: (days: string) => `เกิน capacity ${days} วัน`,
+    risk: 'เสี่ยงล้น (รวมงานที่ยังไม่แน่นอน)',
+    noCapacity: 'ไม่มี capacity ในสัปดาห์นี้',
+    empty: 'ยังไม่มีใครมีภาระในช่วงนี้',
+    person: (name: string) => `ภาระของ ${name}`,
+    week: (label: string) => `สัปดาห์ ${label}`,
+    unitDays: 'วัน-คน',
+    unitFraction: 'สัดส่วนของ capacity',
+    legend: 'คนในกราฟ',
+    focusHint: 'คลิกชื่อเพื่อเน้นคนนั้นและแสดง capacity',
+    capacityOf: (name: string) => `capacity ของ ${name}`,
+    daysValue: (load: string, cap: string) => `${load} / ${cap} วัน`,
+    notLoaded: 'ยังไม่ได้โหลด',
+    loading: 'กำลังโหลดกราฟ…',
+    personHeader: 'คน',
+    tableCaption: (unit: string) => `ภาระรายคนต่อสัปดาห์ (${unit})`,
+  },
+  planMarkers: {
+    menu: (n: number) => `เส้นกำกับ (${n})`,
+    add: '+ เพิ่มเส้นกำกับ…',
+    addHere: 'เพิ่มเส้นกำกับที่ขอบขวา',
+    edit: 'แก้เส้นกำกับ',
+    delete: 'ลบเส้นกำกับ',
+    deleted: 'ลบเส้นกำกับแล้ว',
+    restore: 'กู้คืนเส้นกำกับ',
+    color: { RED: 'แดง', YELLOW: 'เหลือง', GREEN: 'เขียว' },
+    label: 'ข้อความ',
+    labelPlaceholder: 'เช่น UAT sign-off',
+    date: 'วันที่',
+    /** Flag tooltip / accessible name; `label` null → date only. */
+    flag: (label: string | null, date: string) => (label ? `${label} · ${date}` : `เส้นกำกับ ${date}`),
+    by: (date: string) => `แก้ล่าสุด ${date}`,
+    readOnly: 'ดูได้อย่างเดียว — แก้เส้นกำกับได้เมื่อแก้แผนได้',
+    limit: (max: number) => `ครบ ${max} เส้นแล้ว — ลบเส้นที่ไม่ใช้ก่อน`,
+    errors: {
+      limit: (max: number) => `โปรเจคหนึ่งมีเส้นกำกับได้ไม่เกิน ${max} เส้น`,
+      label: (max: number) => `ข้อความยาวได้ไม่เกิน ${max} ตัวอักษร`,
+      invalidDate: 'วันที่ไม่ถูกต้อง',
+      noChange: 'ไม่มีค่าที่จะแก้',
+      restoreExpired: 'กู้คืนไม่ได้ เพราะลบไปนานกว่า 30 วันแล้ว',
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
@@ -1719,6 +1841,15 @@ export const th = {
     taskBodySaved: (name: string) => `บันทึกเนื้อหางาน ${name}`,
     pageFullWidthOn: (title: string) => `เปิดเต็มความกว้าง ${quoted(title)}`,
     pageFullWidthOff: (title: string) => `ปิดเต็มความกว้าง ${quoted(title)}`,
+    // M7.1 (FR-819, X44) — date = Thai display date; label may be null
+    planMarkerCreated: (date: string, label: string | null) =>
+      `เพิ่มเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
+    planMarkerUpdated: (date: string, label: string | null) =>
+      `แก้เส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
+    planMarkerDeleted: (date: string, label: string | null) =>
+      `ลบเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
+    planMarkerRestored: (date: string, label: string | null) =>
+      `กู้คืนเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
   },
 } as const
 

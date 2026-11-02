@@ -9,7 +9,8 @@ import { memo, useCallback, useEffect, useRef, type KeyboardEvent } from 'react'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { VisuallyHidden } from '@/components/common/VisuallyHidden'
 import { th } from '@/i18n/th'
-import type { Editability } from '@/lib/grid/rows'
+import { periodColIndex } from '@/lib/grid/columns'
+import type { SumEditability } from '@/lib/grid/rows'
 import { asciiForCode } from '@/lib/grid/keymap'
 import {
   CELL_EDITING,
@@ -34,7 +35,7 @@ export interface GridCellProps {
   text: string
   /** accessible name: th.grid.cell.label(row, week, value + glyph texts) */
   label: string
-  editability: Editability
+  editability: SumEditability
   resolution: 'WEEK' | 'DAY' | undefined
   tentative: boolean
   leave: boolean
@@ -65,6 +66,8 @@ export interface GridCellProps {
   /** the รวม cell of a DAY week on an editable row: ↕ รวมเป็นรายสัปดาห์ */
   collapsible?: boolean
   onCollapse?: (rowKey: string, periodKey: string) => void
+  /** M7.1 (FR-818): first column of a month (the month boundary line) */
+  monthStart?: boolean
 }
 
 function CellEditor({
@@ -138,7 +141,7 @@ export const GridCell = memo(function GridCell(p: GridCellProps) {
     <div
       ref={setRef}
       role="gridcell"
-      aria-colindex={p.c + 2}
+      aria-colindex={periodColIndex(p.c)}
       aria-selected={(flags & CELL_SELECTED) !== 0}
       aria-readonly={p.editability !== 'ok' ? true : undefined}
       aria-label={p.label}
@@ -158,6 +161,7 @@ export const GridCell = memo(function GridCell(p: GridCellProps) {
       data-no-capacity={p.noCapacity ? 'true' : undefined}
       data-not-counted={p.notCounted ? 'true' : undefined}
       data-today={p.today ? 'true' : undefined}
+      data-month-start={p.monthStart ? '' : undefined}
       data-focused={focused ? 'true' : undefined}
       data-fill={(flags & CELL_FILL) !== 0 ? 'true' : undefined}
       data-col-kind={p.colKind}
