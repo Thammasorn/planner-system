@@ -19,4 +19,8 @@ export function invalidateAfterGridSave(qc: QueryClient, ctx: GridCtx): void {
     void qc.invalidateQueries({ queryKey: qk.projectTasks(ctx.id) })
   }
   void qc.invalidateQueries({ queryKey: qkPrefix.calendar })
+  // M9 (M9-D22, C65): the OTHER grid context only (the saving one is patched via setQueriesData) + the sidebar
+  // "งานของฉัน N" (M9-D17: the count depends on plans)
+  void qc.invalidateQueries({ queryKey: ['grid', ctx.kind === 'person' ? 'project' : 'person'] })
+  void qc.invalidateQueries({ queryKey: qk.sidebar() })
 }

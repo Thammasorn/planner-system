@@ -167,4 +167,16 @@ describe('grid.module.css (§8.9)', () => {
     expect(decl(l, 'text-overflow')).toBe('ellipsis')
     expect(decl(l, 'max-width')).toBe('100%')
   })
+
+  it('the sticky total columns stack above the month-start lines of cells scrolled under them (FR-818, §8.12)', () => {
+    const line = Number(decl(find('.footerCell[data-month-start]::before'), 'z-index'))
+    const zOf = (sel: string) =>
+      Number(
+        rules
+          .filter((r) => r.selector === sel && decl(r, 'z-index') !== undefined)
+          .sort((a, b) => b.order - a.order)[0]
+          ?.body.match(/z-index\s*:\s*(\d+)/)?.[1] ?? 0,
+      )
+    expect(zOf('.footerTotal'), '.footerTotal').toBeGreaterThan(line)
+  })
 })

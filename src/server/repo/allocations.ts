@@ -6,7 +6,7 @@
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { WeekPlan } from '@/domain/allocation'
-import { addDays, compareISO, daysOfWeek, isoWeekday, maxISO, minISO } from '@/domain/dates'
+import { addDays, compareISO, daysOfWeek, isoWeekday, maxISO, minISO, weekStart } from '@/domain/dates'
 import type { Cd, ISODate, LoadPair } from '@/domain/types'
 import type { DayLoadRow } from '@/lib/contracts/grid'
 import { cdToNumeric, numericToCd } from '@/domain/units'
@@ -348,4 +348,122 @@ export async function listProjectFuture(
     .where(and(eq(tasks.projectId, projectId), inWeeks(range)))
     .groupBy(allocations.weekStart, tasks.completedWeek)
     .orderBy(asc(allocations.weekStart))
+}
+
+// ── M9 (plan/m09 S0.6/S2.1/S2.8/S2.9, M9-D17/D18/D27) ──
+
+/** §6.5 grouped by (user, project, week) — M9-D27: live assignment + task, project not deleted and not archived
+ *  (BR-44), BR-50, effective certainty coalesce(t, parent, grandparent, project); integer cd. `projectIds` narrows.
+ *  Users / projects / weeks without counted load are absent. Statuses (FR-628/BR-87) and milestones (BR-72) never
+ *  enter; unassigned tasks have no rows (BR-43). */
+export async function loadByUserProjectWeek(
+  tx: DbOrTx,
+  o: { userIds: readonly string[]; range: WeekRange; projectIds?: readonly string[] },
+): Promise<Map<string /* userId */, Map<string /* projectId */, Record<ISODate, LoadPair>>>> {
+  const out = new Map<string, Map<string, Record<ISODate, LoadPair>>>()
+  if (o.userIds.length === 0 || compareISO(o.range.from, o.range.to) >= 0) return out
+  if (o.projectIds !== undefined && o.projectIds.length === 0) return out
+  const p1 = alias(tasks, 'p1')
+  const p2 = alias(tasks, 'p2')
+  const effective = sql`coalesce(${tasks.certaintyOverride}, ${p1.certaintyOverride}, ${p2.certaintyOverride}, ${projects.certainty})`
+  const rows = await tx
+    .select({
+      userId: taskAssignments.userId,
+      projectId: tasks.projectId,
+      weekStart: allocations.weekStart,
+      total: cdSum,
+      committed:
+        sql<number>`(coalesce(sum(${allocations.personDays}) filter (where ${effective} = 'CONFIRMED'), 0) * 100)::int`.mapWith(
+          Number,
+        ),
+    })
+    .from(allocations)
+    .innerJoin(
+      taskAssignments,
+      and(eq(taskAssignments.id, allocations.taskAssignmentId), isNull(taskAssignments.deletedAt)),
+    )
+    .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
+    .leftJoin(p1, eq(p1.id, tasks.parentId))
+    .leftJoin(p2, eq(p2.id, p1.parentId))
+    .innerJoin(
+      projects,
+      and(eq(projects.id, tasks.projectId), isNull(projects.deletedAt), isNull(projects.archivedAt)),
+    )
+    .where(
+      and(
+        inWeeks(o.range),
+        countedSql,
+        inArray(taskAssignments.userId, [...new Set(o.userIds)]),
+        o.projectIds === undefined ? undefined : inArray(tasks.projectId, [...new Set(o.projectIds)]),
+      ),
+    )
+    .groupBy(taskAssignments.userId, tasks.projectId, allocations.weekStart)
+  for (const r of rows) {
+    if (r.total === 0 && r.committed === 0) continue
+    let byProject = out.get(r.userId)
+    if (!byProject) out.set(r.userId, (byProject = new Map<string, Record<ISODate, LoadPair>>()))
+    let weeks = byProject.get(r.projectId)
+    if (!weeks) byProject.set(r.projectId, (weeks = {}))
+    weeks[r.weekStart] = { total: r.total, committed: r.committed }
+  }
+  return out
+}
+
+/** Σ DAY rows per date of one user on [from, toInclusive] (FR-906 onTimeOffDays, M7-D15), bounded by week_start;
+ *  same live / non-archived / BR-50 filters as §6.5. Dates without DAY load are absent; ascending. */
+export async function sumDayRowsByDate(
+  tx: DbOrTx,
+  userId: string,
+  from: ISODate,
+  toInclusive: ISODate,
+): Promise<{ date: ISODate; cd: Cd }[]> {
+  if (compareISO(from, toInclusive) > 0) return []
+  const rows = await tx
+    .select({ date: allocations.periodStart, cd: cdSum })
+    .from(allocations)
+    .innerJoin(
+      taskAssignments,
+      and(eq(taskAssignments.id, allocations.taskAssignmentId), isNull(taskAssignments.deletedAt)),
+    )
+    .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
+    .innerJoin(
+      projects,
+      and(eq(projects.id, tasks.projectId), isNull(projects.deletedAt), isNull(projects.archivedAt)),
+    )
+    .where(
+      and(
+        eq(allocations.granularity, 'DAY'),
+        gte(allocations.weekStart, weekStart(from)),
+        lte(allocations.weekStart, weekStart(toInclusive)),
+        gte(allocations.periodStart, from),
+        lte(allocations.periodStart, toInclusive),
+        eq(taskAssignments.userId, userId),
+        countedSql,
+      ),
+    )
+    .groupBy(allocations.periodStart)
+    .orderBy(asc(allocations.periodStart))
+  return rows.filter((r) => r.cd > 0)
+}
+
+/** FR-1009 (M9-D17): per assignment, the earliest week in `range` whose Σ cd > 0 and that week's cd. Assignments
+ *  without such a week are absent. Callers pass open tasks only (BR-50 has no effect on them). */
+export async function firstPlannedWeekByAssignment(
+  tx: DbOrTx,
+  assignmentIds: readonly string[],
+  range: WeekRange,
+): Promise<Map<string, { week: ISODate; cd: Cd }>> {
+  if (assignmentIds.length === 0 || compareISO(range.from, range.to) >= 0) return new Map()
+  const rows = await tx
+    .selectDistinctOn([allocations.taskAssignmentId], {
+      id: allocations.taskAssignmentId,
+      week: allocations.weekStart,
+      cd: cdSum,
+    })
+    .from(allocations)
+    .where(and(inArray(allocations.taskAssignmentId, [...new Set(assignmentIds)]), inWeeks(range)))
+    .groupBy(allocations.taskAssignmentId, allocations.weekStart)
+    .having(sql`sum(${allocations.personDays}) > 0`)
+    .orderBy(asc(allocations.taskAssignmentId), asc(allocations.weekStart))
+  return new Map(rows.map((r) => [r.id, { week: r.week, cd: r.cd }]))
 }

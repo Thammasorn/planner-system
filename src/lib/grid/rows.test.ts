@@ -5,9 +5,14 @@ import type { LoadView, PeriodKey } from '@/domain/types'
 import type { GridTaskRow } from '@/lib/contracts/grid'
 import { gridResponse, posChunks, POS_PEOPLE, POS_TASKS, type FxTask } from './fixtures.test.data'
 import { mergeChunks } from './merge'
+import { ivyResponse, IVY_PROJECTS, personResponse } from './person.test.data'
 import {
+  buildPersonViewRows,
   buildViewRows,
   cellEditability,
+  isTaskViewRow,
+  rowKeyOfMasked,
+  rowKeyOfProject,
   cellRowOf,
   sumPeopleCount,
   rowKeyOfAssignment,
@@ -335,5 +340,79 @@ describe('cellRowOf / sumPeopleCount (M7.1-D6, S3.3)', () => {
     const tm = model()
     expect(sumPeopleCount(buildViewRows(tm, hidden).find((r) => r.key === 't:parent')!)).toBeNull()
     expect(sumPeopleCount(buildViewRows(tm, open).find((r) => r.key === 't:pair')!)).toBeNull()
+  })
+})
+
+describe('person context (M9 S3.2, M9-D12/D28)', () => {
+  const pm = (o: Parameters<typeof ivyResponse>[0] = {}) => mergeChunks([ivyResponse(o)])!
+  it('Ivy: project row then its merged rows, per project in server order', () => {
+    const rows = buildPersonViewRows(pm(), open)
+    expect(rows.map((r) => r.key)).toEqual(['p:p-crm', 'a:a-ivy-crm', 'p:p-pos', 'a:a-ivy-uat'])
+    expect(rows.map((r) => r.kind)).toEqual(['project', 'merged', 'project', 'merged'])
+    expect(rows.map((r) => r.depth)).toEqual([0, 1, 0, 1])
+  })
+  it('a task with assigneeCount 2 still yields one merged row', () => {
+    const uat = buildPersonViewRows(pm(), open).find((r) => r.key === 'a:a-ivy-uat')!
+    expect(uat.kind).toBe('merged')
+    if (uat.kind === 'merged') expect(uat.task.assigneeCount).toBe(2)
+  })
+  it('collapsing p:<id> (in-memory set keyed p:) hides only its merged rows', () => {
+    const rows = buildPersonViewRows(pm(), { showCompleted: true, collapsed: new Set(['p:p-pos']) })
+    expect(rows.map((r) => r.key)).toEqual(['p:p-crm', 'a:a-ivy-crm', 'p:p-pos'])
+    const p = rows[2]!
+    expect(p.kind === 'project' && p.collapsed).toBe(true)
+  })
+  it('completed tasks are hidden when showCompleted is false (M6-D12)', () => {
+    const m = mergeChunks([
+      personResponse({
+        from: '2026-09-28',
+        userId: 'ivy',
+        person: { name: 'Ivy' },
+        projects: [
+          { id: 'p-pos', name: 'POS', tasks: [{ ...POS_TASKS[1]!, completedWeek: '2026-09-28', completed: true }] },
+        ],
+      }),
+    ])!
+    expect(buildPersonViewRows(m, { showCompleted: false, collapsed: new Set() }).map((r) => r.key)).toEqual([
+      'p:p-pos',
+    ])
+    expect(buildPersonViewRows(m, open).map((r) => r.key)).toEqual(['p:p-pos', 'a:a-ivy-uat'])
+  })
+  it('the masked row comes last with key m:<userId>, wherever the server put it', () => {
+    const resp = ivyResponse({ masked: { '2026-10-05': { total: 100, committed: 100 } } })
+    const masked = resp.rows.pop()!
+    resp.rows.unshift(masked)
+    const rows = buildPersonViewRows(mergeChunks([resp])!, open)
+    expect(rows[rows.length - 1]?.key).toBe(rowKeyOfMasked('ivy'))
+    expect(rowKeyOfMasked('ivy')).toBe('m:ivy')
+    expect(rowKeyOfProject('x')).toBe('p:x')
+  })
+  it('editability: p: and m: rows → readOnlyRow; merged rows of a project without canEdit → noEdit', () => {
+    const m = mergeChunks([
+      personResponse({
+        from: '2026-09-28',
+        userId: 'ivy',
+        person: { name: 'Ivy' },
+        projects: [IVY_PROJECTS[0]!, { ...IVY_PROJECTS[1]!, canEdit: false }],
+        masked: { '2026-10-05': { total: 100, committed: 100 } },
+      }),
+    ])!
+    const rows = buildPersonViewRows(m, open)
+    const of = (k: string) => rows.find((r) => r.key === k)!
+    expect(cellEditability(of('p:p-crm'), undefined, m)).toBe('readOnlyRow')
+    expect(cellEditability(of('m:ivy'), undefined, m)).toBe('readOnlyRow')
+    expect(cellEditability(of('a:a-ivy-crm'), undefined, m)).toBe('ok')
+    expect(cellEditability(of('a:a-ivy-uat'), undefined, m)).toBe('noEdit')
+  })
+  it('a viewer without edit rights → noEdit everywhere but the read-only rows', () => {
+    const m = pm({ canEdit: false })
+    const rows = buildPersonViewRows(m, open)
+    expect(rows.map((r) => cellEditability(r, undefined, m))).toEqual(['readOnlyRow', 'noEdit', 'readOnlyRow', 'noEdit'])
+  })
+  it('cellRowOf returns person rows unchanged; isTaskViewRow narrows', () => {
+    for (const r of buildPersonViewRows(pm(), open)) {
+      expect(cellRowOf(r)).toBe(r)
+      expect(isTaskViewRow(r)).toBe(r.kind === 'merged')
+    }
   })
 })

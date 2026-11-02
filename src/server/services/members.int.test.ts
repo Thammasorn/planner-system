@@ -20,7 +20,7 @@ import { db } from '../db/client'
 import { projectMembers, taskAssignments } from '../db/schema'
 import { ConflictError, NotFoundError } from '../errors'
 import { addMember, changeMemberRole, removeMember } from './members'
-import { countMyOpenTasks, listMyTasks } from './my-tasks'
+import { countMyOpenTasks, listMyTaskBuckets } from './my-tasks'
 
 const S = toSessionUser
 
@@ -322,10 +322,10 @@ describe('FR-404', () => {
     const [row] = await db.select().from(taskAssignments).where(eq(taskAssignments.id, asg.id))
     expect(row!.deletedAt).not.toBeNull()
     expect(await restoreTaskAction({ batch: del.batch })).toMatchObject({ ok: true })
-    const mine = await listMyTasks(db, S(ivy))
-    expect(mine.count).toBe(0)
+    const mine = await listMyTaskBuckets(db, S(ivy), '2026-09-30')
+    expect(mine.buckets.flatMap((b) => b.tasks)).toEqual([])
     expect(JSON.stringify(mine)).not.toContain('Ivy secret task')
-    expect(await countMyOpenTasks(db, ivy.id)).toBe(0)
+    expect(await countMyOpenTasks(db, ivy.id, '2026-09-30')).toBe(0)
   })
 
   it('/my never lists an assignment of a non-member, even a stray one (defence in depth, §3.3)', async () => {
@@ -333,8 +333,8 @@ describe('FR-404', () => {
     const stray = await makeUser({ nickname: 'Stray' })
     const t = await makeTask({ project: w.P, name: 'Hidden task', createdBy: w.manager })
     await db.insert(taskAssignments).values({ taskId: t.id, userId: stray.id })
-    expect((await listMyTasks(db, S(stray))).groups).toEqual([])
-    expect(await countMyOpenTasks(db, stray.id)).toBe(0)
+    expect((await listMyTaskBuckets(db, S(stray), '2026-09-30')).buckets.flatMap((b) => b.tasks)).toEqual([])
+    expect(await countMyOpenTasks(db, stray.id, '2026-09-30')).toBe(0)
   })
 
   it('removeMemberWithAssignments → row gone, 3 assignments share one batch; restoreRemovedMember → all back', async () => {

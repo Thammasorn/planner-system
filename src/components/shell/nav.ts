@@ -1,11 +1,11 @@
 import { th } from '@/i18n/th'
 
-/** A key of Sidebar's icon map — nav.ts stays data-only (no component imports). Later keys:
- *  M9 'workload' | 'people'. */
-export type NavIcon = 'home' | 'settings' | 'projects' | 'clients' | 'my' | 'teamTasks' | 'calendar'
+/** A key of Sidebar's icon map (NavRow NAV_ICONS) — nav.ts stays data-only (no component imports). */
+export type NavIcon =
+  'home' | 'settings' | 'projects' | 'clients' | 'my' | 'teamTasks' | 'calendar' | 'workload' | 'people'
 
-/** A count shown as text after the label (M3-D40); M9 widens it to 'myTaskCount' | 'workloadOver'. */
-export type NavBadge = 'myTaskCount'
+/** A count shown as text after the label (M3-D40); M9 adds 'workloadOver' (the ●N OVER-cell badge, M9-D11). */
+export type NavBadge = 'myTaskCount' | 'workloadOver'
 
 export interface NavItem {
   /** stable id used by tests and badges: 'home', 'my', 'tasks', 'workload', 'calendar', 'people', 'clients', 'settings' (X84) */
@@ -27,7 +27,9 @@ export const PRIMARY_NAV: readonly NavItem[] = [
   { id: 'home', href: '/home', label: th.nav.home, icon: 'home' },
   { id: 'my', href: '/my', label: th.nav.my, icon: 'my', badge: 'myTaskCount' },
   { id: 'tasks', href: '/tasks', label: th.nav.teamTasks, icon: 'teamTasks' },
-  // M5 (X84): appended after tasks; M9 inserts 'workload' before it.
+  // M9 (X84, M9-D11): directly after tasks, before calendar.
+  { id: 'workload', href: '/workload', label: th.nav.workload, icon: 'workload', badge: 'workloadOver' },
+  // M5 (X84): appended after tasks.
   { id: 'calendar', href: '/calendar', label: th.nav.calendar, icon: 'calendar' },
 ]
 
@@ -35,6 +37,8 @@ export const PRIMARY_NAV: readonly NavItem[] = [
  *  Final order: people (M9), clients (M2), settings (M1, managerOnly) — settings stays last: M2 inserts clients
  *  before it, M9 people before clients. The projects section header (M2) is a separate constant. */
 export const BOTTOM_NAV: readonly NavItem[] = [
+  // M9 (X33, M4-D27): directly before clients.
+  { id: 'people', href: '/people', label: th.nav.people, icon: 'people' },
   { id: 'clients', href: '/clients', label: th.nav.clients, icon: 'clients' },
   {
     id: 'settings',

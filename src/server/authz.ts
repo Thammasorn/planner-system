@@ -530,3 +530,24 @@ export async function requireTimeOffEdit(tx: DbOrTx, user: SessionUser, targetUs
 export function canSeeLeaveDetails(viewer: Pick<SessionUser, 'id' | 'role'>, ownerId: string): boolean {
   return isManager(viewer) || viewer.id === ownerId
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// M9 — person pages / workload (SPEC §3.2 PERM-22, §3.3, X41/X86/X87; plan/m09 S0.5). Signature by S0; body by S2.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** 404 unless canSeeUserDetails(viewer, userId) — also for unknown/malformed ids (X41, X86). Returns the visibility
+ *  sets (visibleUserIds = totals, visibleProjectIds = details, X43) for reuse by the caller. */
+export async function requireVisibleUser(
+  tx: DbOrTx,
+  viewer: SessionUser,
+  userId: string,
+): Promise<{ visibleUsers: 'ALL' | Set<string>; visibleProjects: 'ALL' | Set<string> }> {
+  requireUser(viewer)
+  const visibleUsers = await visibleUserIds(tx, viewer)
+  if (visibleUsers !== 'ALL' && !visibleUsers.has(userId)) throw new NotFoundError()
+  // Unknown ids are a 404 too (managers see 'ALL'); user.id is text, so no cast error is possible (X86).
+  const [hit] = await tx.select({ id: userTable.id }).from(userTable).where(eq(userTable.id, userId))
+  if (!hit) throw new NotFoundError()
+  const visibleProjects = await visibleProjectIds(tx, viewer)
+  return { visibleUsers, visibleProjects }
+}

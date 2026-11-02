@@ -1,0 +1,120 @@
+/* FR-409 load part (M9-D19): 12 weekly bars of the project total — committed solid, tentative hatched + text. */
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+  height: 120px;
+  padding: var(--space-2) 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* One scroll container for the bars and their labels (their 12 × 40 px minimum exceeds a 390 px viewport). */
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.barCol {
+  flex: 1 0 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+/* height: 100% gives the segments' percentage heights a definite base (the .barCol is 100% of the 120 px .bars);
+   without it they resolve to 0 and the chart collapses to a 1 px hairline */
+.bar {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  height: 100%;
+  min-height: 1px;
+}
+
+.bar > * {
+  flex: none;
+}
+
+.committed {
+  background: var(--brand-blue);
+}
+
+.tentative {
+  background-color: var(--tentative-bg);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--tentative-fg) 0,
+    var(--tentative-fg) 1px,
+    transparent 1px,
+    transparent 5px
+  );
+}
+
+.labels {
+  display: flex;
+  gap: var(--space-1);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.labels > span {
+  flex: 1 0 40px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-1);
+  vertical-align: middle;
+  border-radius: var(--radius-sm);
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-sm);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table th {
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th.num,
+.table td.num {
+  text-align: right;
+}
+
+.role {
+  margin-left: var(--space-1);
+  font-size: var(--font-xs);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}

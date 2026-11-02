@@ -15,7 +15,9 @@ import { CertaintyBadge } from '@/components/common/CertaintyBadge'
 import { ProjectChip } from '@/components/common/ProjectChip'
 import { UserName } from '@/components/common/UserName'
 import { th } from '@/i18n/th'
+import type { LoadPair } from '@/domain/types'
 import type { ProjectListItem } from '@/lib/contracts/projects'
+import { twoDecimals } from '@/lib/workload/format'
 import { projectTabHref } from './project-tabs'
 
 interface Column {
@@ -80,14 +82,36 @@ const COLUMNS: readonly Column[] = [
   },
 ]
 
-/** `/projects` and client-detail project list (FR-303 part). Rows arrive sorted by compareThai from the server. */
-export function ProjectsTable({ items, label }: { items: ProjectListItem[]; label?: string }) {
+/** M9 FR-303 load part (M9-D20): the 12-week load column, only on the client page; "–" when 0 or absent. */
+function loadColumn(loadByProject: Record<string, LoadPair>): Column {
+  return {
+    id: 'load',
+    label: th.workload.clientLoad.column,
+    render: (p) => {
+      const cd = loadByProject[p.id]?.total ?? 0
+      return cd === 0 ? th.workload.cell.empty : th.workload.tooltip.days(twoDecimals(cd))
+    },
+  }
+}
+
+/** `/projects` and client-detail project list (FR-303 part). Rows arrive sorted by compareThai from the server.
+ *  `loadByProject` (M9, client page only) adds the "ภาระ 12 สัปดาห์" column last; `/projects` passes nothing. */
+export function ProjectsTable({
+  items,
+  label,
+  loadByProject,
+}: {
+  items: ProjectListItem[]
+  label?: string
+  loadByProject?: Record<string, LoadPair>
+}) {
+  const columns = loadByProject ? [...COLUMNS, loadColumn(loadByProject)] : COLUMNS
   return (
     <TableContainer component={Paper} variant="outlined">
       <Table size="small" aria-label={label ?? th.projects.listTitle}>
         <TableHead>
           <TableRow>
-            {COLUMNS.map((c) => (
+            {columns.map((c) => (
               <TableCell key={c.id}>{c.label}</TableCell>
             ))}
           </TableRow>
@@ -95,8 +119,10 @@ export function ProjectsTable({ items, label }: { items: ProjectListItem[]; labe
         <TableBody>
           {items.map((p) => (
             <TableRow key={p.id} data-testid={`project-row-${p.id}`} hover>
-              {COLUMNS.map((c) => (
-                <TableCell key={c.id}>{c.render(p)}</TableCell>
+              {columns.map((c) => (
+                <TableCell key={c.id} data-col={c.id}>
+                  {c.render(p)}
+                </TableCell>
               ))}
             </TableRow>
           ))}

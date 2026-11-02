@@ -66,13 +66,14 @@ describe('Sidebar M3 nav (X33, M3-D40)', () => {
 })
 
 describe('Sidebar M5 nav (X84)', () => {
-  it('primary order is home, my, tasks, calendar; ปฏิทินทีม links to /calendar right after งานของทีม', () => {
-    expect(PRIMARY_NAV.map((i) => i.id)).toEqual(['home', 'my', 'tasks', 'calendar'])
+  it('primary order is home, my, tasks, workload, calendar (M9 inserts Workload ทีม between งานของทีม and ปฏิทินทีม)', () => {
+    expect(PRIMARY_NAV.map((i) => i.id)).toEqual(['home', 'my', 'tasks', 'workload', 'calendar'])
     const nav = renderSidebar()
     const links = within(nav).getAllByRole('link')
     const calendar = within(nav).getByRole('link', { name: th.nav.calendar })
     expect(calendar).toHaveAttribute('href', '/calendar')
-    expect(links[links.indexOf(calendar) - 1]).toHaveAttribute('href', '/tasks')
+    expect(links[links.indexOf(calendar) - 1]).toHaveAttribute('href', '/workload')
+    expect(links[links.indexOf(calendar) - 2]).toHaveAttribute('href', '/tasks')
   })
 })
 
@@ -130,5 +131,49 @@ describe('Sidebar M4 (M4-D27, X08, FR-506)', () => {
       parentId: null,
     })
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/p/${PAGE}`))
+  })
+})
+
+describe('Sidebar M9 nav (FR-1007, X84, M9-D11)', () => {
+  it('order: หน้าหลัก, งานของฉัน, งานของทีม, Workload ทีม, ปฏิทินทีม; bottom ทีมงาน before ลูกค้า', () => {
+    const nav = renderSidebar()
+    const hrefs = within(nav)
+      .getAllByRole('link')
+      .map((l) => l.getAttribute('href'))
+    const primary = ['/home', '/my', '/tasks', '/workload', '/calendar']
+    const idx = primary.map((h) => hrefs.indexOf(h))
+    expect(idx.every((i, k) => i >= 0 && (k === 0 || i === idx[k - 1]! + 1))).toBe(true)
+    expect(within(nav).getByRole('link', { name: th.nav.workload })).toHaveAttribute('href', '/workload')
+    const people = hrefs.indexOf('/people')
+    expect(people).toBeGreaterThan(-1)
+    expect(hrefs[people + 1]).toBe('/clients')
+    expect(within(nav).getByRole('link', { name: th.nav.people })).toBeInTheDocument()
+  })
+
+  it('Workload ทีม shows ●N from the server-rendered value (never colour alone)', () => {
+    renderTasks(<Sidebar collapsed={false} initialWorkloadOver={2} />, {
+      seed: (qc) => qc.setQueryData(qk.sidebar(), data),
+    })
+    const nav = screen.getByRole('navigation', { name: th.nav.sidebarLabel })
+    const link = within(nav).getByRole('link', { name: `${th.nav.workload} ${th.workload.badge.label(2)}` })
+    expect(within(link).getByRole('img', { name: th.workload.badge.label(2) })).toHaveTextContent('2')
+    // the my-task count is not shown on the workload row
+    expect(within(link).queryByTestId('nav-badge-workload')).toBeNull()
+  })
+
+  it('collapsed rail: the number is in the accessible name; 0 shows no badge', () => {
+    renderTasks(<Sidebar collapsed initialWorkloadOver={3} />, {
+      seed: (qc) => qc.setQueryData(qk.sidebar(), data),
+    })
+    const nav = screen.getByRole('navigation', { name: th.nav.sidebarLabel })
+    expect(
+      within(nav).getByRole('link', { name: `${th.nav.workload} ${th.workload.badge.label(3)}` }),
+    ).toBeInTheDocument()
+  })
+
+  it('0 → no badge, plain label', () => {
+    const nav = renderSidebar()
+    expect(within(nav).getByRole('link', { name: th.nav.workload })).toBeInTheDocument()
+    expect(within(nav).queryByTestId('workload-badge')).toBeNull()
   })
 })

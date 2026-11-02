@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { DeleteProjectDialog } from '@/components/common/DeleteProjectDialog'
 import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
-import { invalidateProjects } from '@/lib/invalidate'
+import { invalidateLoad, invalidateProjects } from '@/lib/invalidate'
 import { deleteProjectPermanently } from '@/server/actions/projects'
 import { errorMessage } from './errors'
 
@@ -25,7 +25,8 @@ export function DeleteProjectButton({ projectId, name }: { projectId: string; na
       toast.error(errorMessage(err))
       throw err
     }
-    await invalidateProjects(qc)
+    // M9 (X18, BR-44): a deleted project's load leaves every workload / grid / /my figure
+    await Promise.all([invalidateProjects(qc), invalidateLoad(qc)])
     router.replace('/projects')
     toast.success(th.projects.toasts.deleted(name))
   }

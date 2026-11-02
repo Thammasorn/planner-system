@@ -98,3 +98,21 @@ export async function existsArchivedVisible(tx: DbOrTx, ids: 'ALL' | ReadonlySet
     .limit(1)
   return row !== undefined
 }
+
+/** M9 (person grid, workload names): live projects among `ids` — archived ones included (callers filter). */
+export async function listByIds(
+  tx: DbOrTx,
+  ids: readonly string[],
+): Promise<{ id: string; name: string; color: string; certainty: Certainty; archivedAt: Date | null }[]> {
+  if (ids.length === 0) return []
+  return tx
+    .select({
+      id: projects.id,
+      name: projects.name,
+      color: projects.color,
+      certainty: projects.certainty,
+      archivedAt: projects.archivedAt,
+    })
+    .from(projects)
+    .where(and(live, inArray(projects.id, [...new Set(ids)])))
+}

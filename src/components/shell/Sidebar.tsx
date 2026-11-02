@@ -21,10 +21,13 @@ export function Sidebar({
   collapsed,
   onToggle,
   onNavigate,
+  initialWorkloadOver = 0,
 }: {
   collapsed: boolean
   onToggle?: () => void
   onNavigate?: () => void
+  /** M9-D11 (X31): the server-rendered Workload ทีม ●N. */
+  initialWorkloadOver?: number
 }) {
   const pathname = usePathname()
   const isManager = useCurrentUser()?.role === 'manager'
@@ -59,6 +62,7 @@ export function Sidebar({
                 pathname={pathname}
                 collapsed={collapsed}
                 onNavigate={onNavigate}
+                initialWorkloadOver={initialWorkloadOver}
               />
             ))}
           </ul>

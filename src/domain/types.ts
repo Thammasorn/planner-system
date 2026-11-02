@@ -42,3 +42,11 @@ export type CellUnit = 'DAYS' | 'FRACTION'
 export type MilestoneStatus = 'DONE' | 'OVERDUE' | 'DUE_SOON' | 'UPCOMING'
 /** BR-71: why a bound task is late for its milestone (M8-D6). */
 export type LateReason = 'WEEK_PLAN' | 'DAY_PLAN' | 'DUE_DATE'
+/** BR-41 cause of an OVER/RISK week (M9, X67). */
+export type OverloadCause = 'WORKLOAD' | 'CAPACITY' | 'BOTH'
+/** BR-40 level + X67 excess (OVER = committed − cap, RISK = total − cap, 0 when OK) + BR-41 cause (null when OK). M9. */
+export interface OverloadStatus {
+  level: 'OK' | 'RISK' | 'OVER'
+  excessCd: Cd
+  cause: OverloadCause | null
+}

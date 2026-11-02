@@ -911,3 +911,13 @@ export async function bindTask(task: { id: string }, milestone: { id: string } |
     .set({ milestoneId: milestone?.id ?? null })
     .where(eq(tasks.id, task.id))
 }
+
+/** M9 (plan/m09 S0.11, X64): deactivate an existing user from `on` — banned = true, ban_reason 'DEACTIVATED',
+ *  deactivated_on = on (same columns as makeUser({ deactivated })); their sessions are removed. Plain Drizzle. */
+export async function deactivateUser(u: { id: string }, on: ISODate): Promise<void> {
+  await db
+    .update(user)
+    .set({ banned: true, banReason: 'DEACTIVATED', banExpires: null, deactivatedOn: on })
+    .where(eq(user.id, u.id))
+  await db.delete(session).where(eq(session.userId, u.id))
+}

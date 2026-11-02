@@ -80,6 +80,8 @@ export function MembersPanel({
   const headingId = useId()
   const me = useCurrentUser()
   const qc = useQueryClient()
+  // M9 (X18, M9-D3/D19): membership and role feed the workload population and the overview load table
+  const refreshMembers = () => Promise.all([invalidateProjects(qc), invalidateLoad(qc)]).then(() => {})
   const router = useRouter()
   const undo = useUndo()
   const [list, apply] = useOptimistic(members, applyOp)
@@ -136,7 +138,7 @@ export function MembersPanel({
       try {
         await unwrap(addMember({ projectId, userId: p.id }))
         toast.success(th.members.toasts.added(name))
-        await invalidateProjects(qc)
+        await refreshMembers()
       } catch (err) {
         toast.error(errorMessage(err))
       }
@@ -152,7 +154,7 @@ export function MembersPanel({
         const r = await unwrap(changeMemberRole({ projectId, userId: m.userId, role }))
         if (r.warning === 'NO_LEAD') toast.warning(th.members.toasts.noLeadWarning)
         else toast.success(th.members.toasts.roleChanged(name, th.members.roles[role]))
-        await invalidateProjects(qc)
+        await refreshMembers()
       } catch (err) {
         toast.error(errorMessage(err)) // BR-62 CONFLICT: "โปรเจคต้องมี LEAD อย่างน้อย 1 คน"; the select reverts
       }
@@ -174,7 +176,7 @@ export function MembersPanel({
         }
         if (r.selfRemoved) {
           // M2-D19: the action skipped refresh(); this project is no longer visible to the viewer.
-          await invalidateProjects(qc)
+          await refreshMembers()
           toast(th.members.toasts.removed(name))
           router.push('/projects')
           return
@@ -185,15 +187,13 @@ export function MembersPanel({
           {
             label,
             undo: () =>
-              unwrap(addMember({ projectId, userId, role: r.removedRole })).then(() =>
-                invalidateProjects(qc),
-              ),
-            redo: () => unwrap(removeMember({ projectId, userId })).then(() => invalidateProjects(qc)),
+              unwrap(addMember({ projectId, userId, role: r.removedRole })).then(() => refreshMembers()),
+            redo: () => unwrap(removeMember({ projectId, userId })).then(() => refreshMembers()),
           },
           { toast: label },
         )
         // Undo is registered as soon as the removal commits (Cmd+Z works at once); the sidebar refetch follows.
-        await invalidateProjects(qc)
+        await refreshMembers()
       } catch (err) {
         toast.error(errorMessage(err))
       }

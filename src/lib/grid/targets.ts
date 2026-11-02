@@ -4,7 +4,7 @@ import type { AssigneeCell } from '@/lib/contracts/grid'
 import type { TargetCell } from './apply'
 import type { GridColumn } from './columns'
 import type { GridModel } from './merge'
-import { cellEditability, cellRowOf, type GridViewRow, type ViewRow } from './rows'
+import { cellEditability, cellRowOf, type AnyViewRow, type ViewRow } from './rows'
 
 /** The assignee cell of a merged / assignee row at a column. */
 export function cellAt(m: GridModel, row: ViewRow, col: GridColumn): AssigneeCell | undefined {
@@ -21,10 +21,28 @@ export function capacityAt(m: GridModel, row: ViewRow, key: PeriodKey): number {
  *  a summed task row whose editability is 'readOnlySum' / 'unassigned' (never distributed, D23). */
 export function targetFor(
   m: GridModel,
-  viewRow: GridViewRow,
+  viewRow: AnyViewRow,
   col: GridColumn,
   taskTotals?: ReadonlyMap<string, Partial<Record<PeriodKey, LoadPair>>>,
+  projectTotals?: ReadonlyMap<string, Partial<Record<PeriodKey, LoadPair>>>,
 ): TargetCell {
+  // M9 person context: project / masked rows are read-only sums (copy reads their total)
+  if (viewRow.kind === 'project' || viewRow.kind === 'masked') {
+    const totals =
+      viewRow.kind === 'project'
+        ? (projectTotals?.get(viewRow.project.id) ?? viewRow.project.totals)
+        : viewRow.masked.totals
+    const total = totals[col.key]?.total ?? 0
+    return {
+      rowKey: viewRow.key,
+      taskAssignmentId: null,
+      week: col.weekStart,
+      editability: 'readOnlyRow',
+      capCd: 0,
+      ...(total > 0 ? { cell: { cd: total, resolution: 'WEEK' as const, derived: false } } : {}),
+      ...(col.kind === 'D' ? { granularity: 'DAY' as const, date: col.date } : {}),
+    }
+  }
   const row = cellRowOf(viewRow)
   const own = cellAt(m, row, col)
   const total = row.kind === 'task' ? (taskTotals?.get(row.task.id)?.[col.key]?.total ?? 0) : 0
@@ -44,13 +62,14 @@ export function targetFor(
 /** A lookup over visible rows × columns for the planners (null outside the grid). */
 export function targetGrid(
   m: GridModel,
-  rows: readonly GridViewRow[],
+  rows: readonly AnyViewRow[],
   cols: readonly GridColumn[],
   taskTotals?: ReadonlyMap<string, Partial<Record<PeriodKey, LoadPair>>>,
+  projectTotals?: ReadonlyMap<string, Partial<Record<PeriodKey, LoadPair>>>,
 ): (r: number, c: number) => TargetCell | null {
   return (r, c) => {
     const row = rows[r]
     const col = cols[c]
-    return row && col ? targetFor(m, row, col, taskTotals) : null
+    return row && col ? targetFor(m, row, col, taskTotals, projectTotals) : null
   }
 }

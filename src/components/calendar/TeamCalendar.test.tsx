@@ -240,7 +240,7 @@ describe('TeamCalendar (FR-907, M5-D8/D13)', () => {
     actions.createTimeOff.mockResolvedValue({
       ok: true,
       id: '7a1c2c38-5a8e-4a6c-9a0e-0000000000ac',
-      impact: { userId: IDS.peter, userName: 'Peter', weeks: [] },
+      impact: { userId: IDS.peter, userName: 'Peter', weeks: [], overloads: [], onTimeOffDays: [] },
     })
     renderCalendarUi(<TeamCalendar initialMonth="2026-10" />)
     ;(await screen.findByTestId('day-2026-10-12')).focus()

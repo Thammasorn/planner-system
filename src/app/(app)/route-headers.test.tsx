@@ -27,11 +27,14 @@ vi.mock('@/server/db/client', () => ({ db: {} }))
 vi.mock('@/server/services', () => ({
   projects: { listProjectsForViewer: () => Promise.resolve(mocks.projects) },
   clients: { listClientsForViewer: () => Promise.resolve([]) },
+  preferences: { getPreferences: () => Promise.resolve({}) },
 }))
 vi.mock('@/server/actions/projects', () => ({ createProject: vi.fn(), updateProject: vi.fn() }))
 vi.mock('@/server/actions/clients', () => ({}))
-vi.mock('@/components/tasks/MyTasks', () => ({ MyTasks: () => <div data-testid="my-tasks" /> }))
+vi.mock('@/components/tasks/MyTasks', () => ({ MyTasksView: () => <div data-testid="my-tasks" /> }))
 vi.mock('@/components/tasks/team/TeamTasks', () => ({ TeamTasks: () => <div data-testid="team-tasks" /> }))
+vi.mock('@/components/workload/WorkloadPage', () => ({ WorkloadPage: () => <div data-testid="workload" /> }))
+vi.mock('@/components/people/PeopleDirectory', () => ({ PeopleDirectory: () => <div data-testid="people" /> }))
 
 const bar = () => screen.getByTestId('page-header')
 const crumbsText = () =>
@@ -57,6 +60,21 @@ describe('header bar on every signed-in route (S4.4)', () => {
     await renderRoute(() => Page())
     expect(within(bar()).getByRole('heading', { level: 1 })).toHaveTextContent(th.my.title)
     expect(screen.getByTestId('my-tasks')).toBeInTheDocument()
+  })
+
+  it('/workload — Workload ทีม (M9)', async () => {
+    const { default: Page } = await import('./workload/page')
+    await renderRoute(() => Page())
+    expect(within(bar()).getByRole('heading', { level: 1 })).toHaveTextContent(th.workload.title)
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByTestId('workload')).toBeInTheDocument()
+  })
+
+  it('/people — ทีมงาน (M9)', async () => {
+    const { default: Page } = await import('./people/page')
+    await renderRoute(() => Page())
+    expect(within(bar()).getByRole('heading', { level: 1 })).toHaveTextContent(th.people.title)
+    expect(screen.getByTestId('people')).toBeInTheDocument()
   })
 
   it('/tasks — งานของทีม', async () => {

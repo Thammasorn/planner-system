@@ -9,7 +9,7 @@ import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
 import type { SidebarResponse } from '@/lib/contracts/sidebar'
-import type { MyTasksResponse } from '@/lib/contracts/tasks'
+import type { MyTaskBucketsResponse } from '@/lib/contracts/tasks'
 import {
   completeTask,
   createTask,
@@ -27,6 +27,7 @@ import { makeTask, type TestUser } from '../../helpers/factories'
 import type { World } from '../../helpers/world'
 import { callRoute } from '../_support/http'
 import { defineRow, type AuthzRow } from '../types'
+import { pinToday } from './_m5'
 
 const TASKS = ['tasks'] as const
 const ALL = { M: 'allow', L: 'allow', Me: 'allow', W: 'allow' } as const
@@ -45,6 +46,9 @@ const auditTaskA = { entity: 'task', projectId: (w: World) => w.A.id } as const
  * (aTask is in archived A), outsider → qTask, manager → none.
  */
 const myTaskCount = (w: World, actor: TestUser): number => (actor.id === w.manager.id ? 0 : 1)
+/** M9 (FR-1009, M9-D17, X22/X95): /my is grouped by the first planned week from today; the 'tasks' world has no plans,
+ *  so every open task is ยังไม่วางแผน and the count (= สัปดาห์นี้ = the sidebar number) is 0. */
+const MY_BUCKETS = ['THIS_WEEK', 'NEXT_WEEK', 'LATER', 'UNPLANNED'] as const
 
 export const rows: AuthzRow[] = [
   // ── reads ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -83,10 +87,16 @@ export const rows: AuthzRow[] = [
     with: TASKS,
     expect: ALL,
     run: async (w, _ctx, actor) => {
+      pinToday()
       const res = await callRoute(getMyTasks, '/api/tasks/my')
       if (res.status === 200) {
-        const body = (await res.clone().json()) as MyTasksResponse
-        expect(body.count, 'X22 my open assigned leaf tasks').toBe(myTaskCount(w, actor))
+        const body = (await res.clone().json()) as MyTaskBucketsResponse
+        expect(body.today).toBe('2026-09-30')
+        expect(body.buckets.map((b) => b.key), 'four buckets in key order (X95)').toEqual([...MY_BUCKETS])
+        const all = body.buckets.flatMap((b) => b.tasks)
+        expect(all.length, 'X22 my open assigned leaf tasks').toBe(myTaskCount(w, actor))
+        expect(body.buckets.find((b) => b.key === 'UNPLANNED')?.tasks.length).toBe(myTaskCount(w, actor))
+        expect(body.count, 'M9-D17 count = สัปดาห์นี้ (no plans in this world)').toBe(0)
       }
       return res
     },
@@ -98,11 +108,15 @@ export const rows: AuthzRow[] = [
     mutates: false,
     with: TASKS,
     expect: ALL,
-    run: async (w, _ctx, actor) => {
+    run: async () => {
+      pinToday()
       const res = await callRoute(getSidebar, '/api/sidebar')
       if (res.status === 200) {
         const body = (await res.clone().json()) as SidebarResponse
-        expect(body.myTaskCount, 'sidebar count = number of tasks on /my (X22)').toBe(myTaskCount(w, actor))
+        const my = (await (await callRoute(getMyTasks, '/api/tasks/my')).json()) as MyTaskBucketsResponse
+        // M9-D17 / X22: the sidebar number = /my count = tasks in สัปดาห์นี้ (0 here: the 'tasks' world has no plans)
+        expect(body.myTaskCount, 'sidebar count = /my สัปดาห์นี้ (X22, M9-D17)').toBe(my.count)
+        expect(body.myTaskCount).toBe(0)
       }
       return res
     },

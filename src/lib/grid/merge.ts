@@ -4,9 +4,11 @@ import type { ISODate, PeriodKey } from '@/domain/types'
 import type {
   AssigneeCell,
   GridAssigneeRow,
+  GridMaskedRow,
   GridMilestone,
   GridPeriod,
   GridPerson,
+  GridProjectRow,
   GridResponse,
   GridRow,
   GridTaskRow,
@@ -29,7 +31,14 @@ export interface GridModel {
   milestones: GridMilestone[]
 }
 
-const identity = (r: GridRow): string => (r.kind === 'task' ? `t:${r.id}` : `a:${r.taskAssignmentId}`)
+const identity = (r: GridRow): string =>
+  r.kind === 'task'
+    ? `t:${r.id}`
+    : r.kind === 'assignee'
+      ? `a:${r.taskAssignmentId}`
+      : r.kind === 'project'
+        ? `p:${r.id}`
+        : `m:${r.userId}` // M9 row keys (X85)
 
 function mergePerson(a: GridPerson | undefined, b: GridPerson): GridPerson {
   if (!a) return { ...b, capacity: { ...b.capacity }, standard: { ...b.standard }, timeOff: [...b.timeOff] }
@@ -80,6 +89,8 @@ export function mergeChunks(chunks: readonly (GridResponse | undefined)[]): Grid
 
   const tasks = new Map<string, GridTaskRow>()
   const assignees = new Map<string, GridAssigneeRow>()
+  // M9 person context (S3.1): project rows by id, the masked row by user — latest fields, totals unioned per key
+  const others = new Map<string, GridProjectRow | GridMaskedRow>()
   const cells = new Map<string, Map<PeriodKey, AssigneeCell>>()
   const people: Record<string, GridPerson> = {}
   const holidays = new Map<ISODate, string>()
@@ -93,6 +104,10 @@ export function mergeChunks(chunks: readonly (GridResponse | undefined)[]): Grid
       if (r.kind === 'task') {
         const prev = tasks.get(r.id)
         tasks.set(r.id, { ...r, totals: { ...prev?.totals, ...r.totals } })
+      } else if (r.kind === 'project' || r.kind === 'masked') {
+        const key = identity(r)
+        const prev = others.get(key)
+        others.set(key, { ...r, totals: { ...prev?.totals, ...r.totals } })
       } else {
         const key = `a:${r.taskAssignmentId}`
         const prev = assignees.get(key)
@@ -109,7 +124,7 @@ export function mergeChunks(chunks: readonly (GridResponse | undefined)[]): Grid
 
   const rows: GridRow[] = []
   for (const id of order) {
-    const r = id.startsWith('t:') ? tasks.get(id.slice(2)) : assignees.get(id)
+    const r = id.startsWith('t:') ? tasks.get(id.slice(2)) : id.startsWith('a:') ? assignees.get(id) : others.get(id)
     if (r) rows.push(r)
   }
   const sortedPeriods = [...periods.values()].sort(

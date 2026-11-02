@@ -178,11 +178,25 @@ export interface MyTaskDTO {
   hasBody: boolean
 }
 
-/** GET /api/tasks/my (X22, M3-D8). */
-export interface MyTasksResponse {
-  groups: { project: { id: string; name: string; color: string; certainty: Certainty }; tasks: MyTaskDTO[] }[]
+// ── M9 (FR-1009 buckets, M9-D17, X95) ──
+
+export type MyBucketKey = 'THIS_WEEK' | 'NEXT_WEEK' | 'LATER' | 'UNPLANNED'
+
+export interface MyBucketTask extends MyTaskDTO {
+  project: { id: string; name: string; color: string; certainty: Certainty }
+  /** Earliest week ≥ weekStart(today) with my counted cd > 0; null when UNPLANNED. */
+  firstWeek: ISODate | null
+  /** My cd in firstWeek; null when UNPLANNED. */
+  plannedCd: Cd | null
+}
+
+/** GET /api/tasks/my from M9 (replaced M3's MyTasksResponse, X95): 4 buckets always, in key order;
+ *  count = THIS_WEEK length (= the sidebar number). */
+export interface MyTaskBucketsResponse {
+  today: ISODate
+  buckets: { key: MyBucketKey; tasks: MyBucketTask[] }[]
   count: number
-  /** M6.1-D12/D25 (FR-1606 "/my เปลี่ยนสถานะ"): live statuses of the projects in `groups` only. */
+  /** M6.1-D12/D25 (FR-1606 "/my เปลี่ยนสถานะ"): live statuses of the projects of the listed tasks only. */
   statusesByProject: Record<string, TaskStatusDTO[]>
 }
 

@@ -3,6 +3,7 @@
 // permanent project delete removing bodies and their files (FR-689).
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { MyTaskBucketsResponse } from '@/lib/contracts/tasks'
 import { deleteProjectPermanently } from '../actions/projects'
 import { deleteTaskTree, restoreTaskBatch, updateTask } from '../actions/tasks'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
@@ -11,12 +12,18 @@ import { createWorld, type World } from '../../../tests/helpers/world'
 import { db } from '../db/client'
 import { files, pageLocks, pages, type PageRow } from '../db/schema'
 import * as services from '../services'
-import { listMyTasks } from './my-tasks'
+import { listMyTaskBuckets } from './my-tasks'
 import { acquireLease } from './page-lease'
 import { listProjectTasks } from './tasks'
 import { listTeamTasks } from './teamTasks'
 
 const S = toSessionUser
+/** The /my "today" of these cases (X45). */
+const TODAY = '2026-09-30'
+/** Project ids of every task on /my, in first-seen order. */
+const projectIdsOf = (r: MyTaskBucketsResponse): string[] => [
+  ...new Set(r.buckets.flatMap((b) => b.tasks.map((t) => t.projectId))),
+]
 let w: World
 
 beforeEach(async () => {
@@ -65,29 +72,29 @@ describe('hasBody (FR-691, M6.1-D11)', () => {
     const card = (id: string) => team.cards.find((c) => c.id === id)
     expect(card(w.tasks.pLeaf.id)?.hasBody).toBe(true)
     expect(card(w.tasks.pChildB.id)?.hasBody).toBe(false)
-    const mine = await listMyTasks(db, S(w.lead)) // lead is assigned to pLeaf
-    const leaf = mine.groups.flatMap((g) => g.tasks).find((t) => t.id === w.tasks.pLeaf.id)
+    const mine = await listMyTaskBuckets(db, S(w.lead), TODAY) // lead is assigned to pLeaf
+    const leaf = mine.buckets.flatMap((b) => b.tasks).find((t) => t.id === w.tasks.pLeaf.id)
     expect(leaf?.hasBody).toBe(true)
   })
 })
 
 describe('/my statusesByProject (FR-1606, M6.1-D12)', () => {
-  it('live statuses of exactly the projects in the groups', async () => {
-    const mine = await listMyTasks(db, S(w.lead))
-    const ids = mine.groups.map((g) => g.project.id)
+  it('live statuses of exactly the projects of the listed tasks', async () => {
+    const mine = await listMyTaskBuckets(db, S(w.lead), TODAY)
+    const ids = projectIdsOf(mine)
     expect(ids).toEqual([w.P.id])
-    expect(Object.keys(mine.statusesByProject ?? {})).toEqual(ids)
-    const names = (mine.statusesByProject?.[w.P.id] ?? []).map((s) => s.id)
+    expect(Object.keys(mine.statusesByProject)).toEqual(ids)
+    const names = (mine.statusesByProject[w.P.id] ?? []).map((s) => s.id)
     expect(names).toContain(w.statuses.P.todo.id)
     expect(names).toContain(w.statuses.P.pSecret.id)
-    const outsider = await listMyTasks(db, S(w.outsider))
-    expect(Object.keys(outsider.statusesByProject ?? {})).toEqual([w.Q.id])
+    const outsider = await listMyTaskBuckets(db, S(w.outsider), TODAY)
+    expect(Object.keys(outsider.statusesByProject)).toEqual([w.Q.id])
     expect(JSON.stringify(outsider)).not.toContain(w.statuses.P.pSecret.name)
   })
 
-  it('no groups → an empty map', async () => {
-    const mine = await listMyTasks(db, S(w.manager))
-    expect(mine.groups).toEqual([])
+  it('no tasks → an empty map', async () => {
+    const mine = await listMyTaskBuckets(db, S(w.manager), TODAY)
+    expect(mine.buckets.flatMap((b) => b.tasks)).toEqual([])
     expect(mine.statusesByProject).toEqual({})
   })
 })

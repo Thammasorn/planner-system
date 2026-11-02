@@ -1,7 +1,8 @@
 'use client'
 // src/components/grid/FooterCell.tsx — ★ one memoised footer cell (FR-806, M6-D33). M7 (S3.10, X06/X67, M7-D13): day
 // cells of the ภาระรวม row carry the BR-45 tone (data-tone / data-palette) AND the BR-40 glyph + number — never the
-// colour alone; M9 adds week tones through the same additive props (C87).
+// colour alone; M9 adds week tones through the same additive props (C87) — a cap-0 stripe (tone noCapacity) carries
+// ▨ + the hidden th.grid.glyph.noCapacity text.
 import { memo } from 'react'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import type { LoadTone, OverloadLevel } from '@/domain/overload'
@@ -61,6 +62,8 @@ export const FooterCell = memo(function FooterCell({
     >
       {glyph && glyph !== 'OK' ? (
         <StatusGlyph kind={glyph === 'OVER' ? 'over' : 'risk'} label={glyphLabel ?? ''} />
+      ) : tone === 'noCapacity' ? (
+        <StatusGlyph kind="noCapacity" />
       ) : null}
       {text}
     </div>

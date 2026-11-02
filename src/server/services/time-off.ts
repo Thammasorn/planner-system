@@ -4,11 +4,16 @@
 // transaction; the EXCLUDE constraint (23P01 → OVERLAP via mapDbError) is the backstop. Never touch tasks /
 // assignments / allocations (BR-42). Audit before/after never carry the note.
 import { randomUUID } from 'node:crypto'
-import { affectedWeeks, toTimeOffSpan, weekCapacityImpact } from '@/domain/capacity'
+import { affectedWeeks, standardWeekCd, toTimeOffSpan, weekCapacityImpact } from '@/domain/capacity'
 import { addDays } from '@/domain/dates'
-import type { HalfDay, ISODate } from '@/domain/types'
+import type { Cd, HalfDay, ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
-import type { TimeOffDeleteResult, TimeOffRestoreResult, TimeOffSaveResult } from '@/lib/contracts/time-off'
+import type {
+  TimeOffDeleteResult,
+  TimeOffImpact,
+  TimeOffRestoreResult,
+  TimeOffSaveResult,
+} from '@/lib/contracts/time-off'
 import type { CapacityImpactWeek } from '@/lib/contracts/capacity'
 import { displayName } from '@/lib/display-name'
 import { formatLeaveRange } from '@/lib/format'
@@ -17,9 +22,12 @@ import type { TimeOffRow } from '../db/schema'
 import type { DbOrTx } from '../db/types'
 import { ConflictError, NotFoundError, pgErrorInfo, ValidationError } from '../errors'
 import * as repo from '../repo'
+import type { SessionUser } from '../session'
 import { loadCapacityInputs, type TimeOffSpanWithId } from './capacity'
+import { overloadImpact } from './workload'
 
-type Actor = { id: string } | null
+/** M9 (M9-D18): the session user (FR-906 lines are masked for them); null = a system write (seed). */
+type Actor = SessionUser | null
 
 export interface TimeOffInput {
   userId: string
@@ -84,14 +92,15 @@ async function personName(tx: DbOrTx, userId: string): Promise<string> {
 
 /**
  * FR-906 (M5-D5): capacity of `userId` per affected week with the live leave before the write vs `after(before)`.
- * Must run before the write so the loader still sees the old state.
+ * Must run before the write so the loader still sees the old state. `standardCd` (schedule only, BR-41/X64) feeds
+ * the M9 overload lines (M9-D18).
  */
 async function computeImpact(
   tx: DbOrTx,
   userId: string,
   ranges: readonly Range[],
   after: (before: readonly TimeOffSpanWithId[]) => TimeOffSpanWithId[],
-): Promise<CapacityImpactWeek[]> {
+): Promise<{ weeks: CapacityImpactWeek[]; standardCd: Cd }> {
   const weeks = affectedWeeks(ranges)
   const from = weeks[0]!
   const to = addDays(weeks.at(-1)!, 7)
@@ -99,7 +108,34 @@ async function computeImpact(
   const u = inputs.users.get(userId)
   if (!u) throw new NotFoundError()
   const profile = { schedule: u.schedule, holidays: inputs.holidays, deactivatedOn: u.deactivatedOn }
-  return weekCapacityImpact(profile, u.timeOff, after(u.timeOff), weeks)
+  return {
+    weeks: weekCapacityImpact(profile, u.timeOff, after(u.timeOff), weeks),
+    standardCd: standardWeekCd(u.schedule),
+  }
+}
+
+/** M9-D18 (after the write, same transaction): worsened OVER/RISK weeks + Σ DAY rows on the new leave dates.
+ *  Read-only — plans are never touched (BR-42). */
+async function impactOf(
+  tx: DbOrTx,
+  actor: Actor,
+  userId: string,
+  userName: string,
+  cap: { weeks: CapacityImpactWeek[]; standardCd: Cd },
+  range: Range,
+): Promise<TimeOffImpact> {
+  const before = new Map(cap.weeks.map((w) => [w.weekStart, { capacityCd: w.beforeCd, standardCd: cap.standardCd }]))
+  const after = new Map(cap.weeks.map((w) => [w.weekStart, { capacityCd: w.afterCd, standardCd: cap.standardCd }]))
+  const overloads = await overloadImpact(
+    tx,
+    actor,
+    userId,
+    cap.weeks.map((w) => w.weekStart),
+    before,
+    after,
+  )
+  const onTimeOffDays = await repo.allocations.sumDayRowsByDate(tx, userId, range.startDate, range.endDate)
+  return { userId, userName, weeks: cap.weeks, overloads, onTimeOffDays }
 }
 
 export async function createTimeOff(
@@ -111,7 +147,7 @@ export async function createTimeOff(
   await assertUsableType(tx, input.leaveTypeId, null)
   await assertNoOverlap(tx, input.userId, input, [])
   const name = await personName(tx, input.userId)
-  const weeks = await computeImpact(tx, input.userId, [input], (before) => [
+  const cap = await computeImpact(tx, input.userId, [input], (before) => [
     ...before,
     { id: '', ...toTimeOffSpan(input) },
   ])
@@ -131,7 +167,7 @@ export async function createTimeOff(
     summary: th.audit.timeOffCreated(name, formatLeaveRange(row.startDate, row.endDate, row.half)),
     after: snapshot(row),
   })
-  return { id: row.id, impact: { userId: row.userId, userName: name, weeks } }
+  return { id: row.id, impact: await impactOf(tx, actor, row.userId, name, cap, row) }
 }
 
 /** `existing` = the live row the action loaded (owner fixed); impact covers the union of old and new ranges. */
@@ -145,7 +181,7 @@ export async function updateTimeOff(
   await assertUsableType(tx, input.leaveTypeId, existing.leaveTypeId)
   await assertNoOverlap(tx, existing.userId, input, [existing.id])
   const name = await personName(tx, existing.userId)
-  const weeks = await computeImpact(tx, existing.userId, [existing, input], (before) => [
+  const cap = await computeImpact(tx, existing.userId, [existing, input], (before) => [
     ...before.filter((s) => s.id !== existing.id),
     { id: existing.id, ...toTimeOffSpan(input) },
   ])
@@ -164,7 +200,7 @@ export async function updateTimeOff(
     before: snapshot(existing),
     after: snapshot(row),
   })
-  return { id: row.id, impact: { userId: row.userId, userName: name, weeks } }
+  return { id: row.id, impact: await impactOf(tx, actor, row.userId, name, cap, row) }
 }
 
 /** Soft delete under a fresh batch (FR-909, X04). */

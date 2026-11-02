@@ -239,3 +239,26 @@ export async function activeIdsForMember(tx: DbOrTx, projectId: string, userId: 
     .orderBy(asc(taskAssignments.id))
   return rows.map((r) => r.id)
 }
+
+/** M9 (C52, person grid / cell detail): live assignments of one user on live tasks of live, non-archived projects,
+ *  ORDER BY project, task position (COLLATE "C"), task id. No allocations read here. */
+export async function listActiveForUserLive(
+  tx: DbOrTx,
+  userId: string,
+): Promise<{ id: string; taskId: string; projectId: string; version: number }[]> {
+  return tx
+    .select({
+      id: taskAssignments.id,
+      taskId: taskAssignments.taskId,
+      projectId: tasks.projectId,
+      version: taskAssignments.version,
+    })
+    .from(taskAssignments)
+    .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
+    .innerJoin(
+      projects,
+      and(eq(projects.id, tasks.projectId), isNull(projects.deletedAt), isNull(projects.archivedAt)),
+    )
+    .where(and(eq(taskAssignments.userId, userId), isNull(taskAssignments.deletedAt)))
+    .orderBy(asc(tasks.projectId), sql`${tasks.position} collate "C"`, asc(tasks.id))
+}

@@ -241,6 +241,55 @@ describe('authz matrix', () => {
     )
   })
 
+  it('M9 meta (plan/m09 §7.2, S5.1): every WL-*, PEOPLE, PGRID-*, PH-*, PT-*, PJ-LOAD-*, CL-LOAD-* and AL-PERSON row exists, PERM-04/06/12/22 are cited, rows run on the allocations + milestones world; M9 adds no action', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...['TABLE', 'DEFAULT', 'PROJ-P', 'PROJ-Q', 'PROJ-MISSING', 'BADQ', 'SPAN'].map((k) => `WL-${k}`),
+      ...['ME', 'W', 'CO', 'MISSING', 'BADQ'].map((k) => `WL-CELL-${k}`),
+      'WL-BADGE',
+      'PEOPLE',
+      ...['ME', 'W', 'CO', 'DEFAULT', 'MISSING', 'BADID', 'BADQ'].map((k) => `PGRID-${k}`),
+      ...['ME', 'W', 'MISSING'].map((k) => `PH-${k}`),
+      ...['ME', 'W', 'MISSING'].map((k) => `PT-${k}`),
+      'PJ-LOAD',
+      ...['ARCH', 'MISSING', 'BADID'].map((k) => `PJ-LOAD-${k}`),
+      ...['C1', 'C2', 'MISSING'].map((k) => `CL-LOAD-${k}`),
+      'AL-PERSON',
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M9 rows').toEqual([])
+    const m9 = rows.filter((r) => /^(WL|PGRID|PH|PT|PJ-LOAD|CL-LOAD)(-|$)/.test(r.id) || ['PEOPLE', 'AL-PERSON'].includes(r.id))
+    for (const perm of ['PERM-04', 'PERM-06', 'PERM-12', 'PERM-22'])
+      expect(m9.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M9 row`).toBe(true)
+    for (const r of m9) {
+      const parts = [...expandParts(r.with ?? [])]
+      expect(parts, `${r.id} needs the allocations world`).toContain('allocations')
+      expect(parts, `${r.id} needs the milestones world`).toContain('milestones')
+    }
+    // X44 / M9-D24: no new action — the only write is M6's saveAllocations with its allocation audit row of P
+    const writes = m9.filter((r) => r.mutates)
+    expect(writes.map((r) => r.id)).toEqual(['AL-PERSON'])
+    expect(writes[0]!.audit).toMatchObject({ entity: 'allocation' })
+    expect(new Set(m9.map((r) => r.action))).toEqual(
+      new Set([
+        'GET /api/workload',
+        'GET /api/workload/cell',
+        'GET /api/workload/badge',
+        'GET /api/grid/person/[userId]',
+        'GET /api/people',
+        'GET /api/people/[userId]/time-off',
+        'GET /api/projects/[id]/load',
+        'GET /api/clients/[id]/load',
+        'services.people.getPersonHeader',
+        'saveAllocations',
+      ]),
+    )
+    // §3.3 visibility (X43): the outsider never reaches the member, and the member never reaches the outsider
+    for (const id of ['WL-CELL-ME', 'PGRID-ME', 'PH-ME', 'PT-ME'])
+      expect(rows.find((r) => r.id === id)?.expect, id).toEqual({ M: 'allow', L: 'allow', Me: 'allow', W: '404' })
+    for (const id of ['WL-CELL-W', 'PGRID-W', 'PH-W', 'PT-W'])
+      expect(rows.find((r) => r.id === id)?.expect, id).toEqual({ M: 'allow', L: 'allow', Me: '404', W: 'allow' })
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })

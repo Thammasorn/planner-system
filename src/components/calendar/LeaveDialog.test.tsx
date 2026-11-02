@@ -26,6 +26,8 @@ const impact = (weeks: TimeOffImpact['weeks']): TimeOffImpact => ({
   userId: IDS.peter,
   userName: 'Peter',
   weeks,
+  overloads: [],
+  onTimeOffDays: [],
 })
 
 beforeEach(() => {

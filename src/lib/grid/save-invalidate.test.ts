@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
-import { qk } from '@/lib/query-keys'
+import { qk, type GridChunk } from '@/lib/query-keys'
 import { invalidateAfterGridSave } from './save-invalidate'
 
 describe('invalidateAfterGridSave (X82)', () => {
@@ -35,5 +35,34 @@ describe('invalidateAfterGridSave (X82)', () => {
     qc.setQueryData(qk.projectMilestones('u'), {})
     invalidateAfterGridSave(qc, { kind: 'person', id: 'u' })
     expect(qc.getQueryState(qk.projectMilestones('u'))?.isInvalidated).toBe(false)
+  })
+
+  describe('M9 (S3.7, M9-D22): the OTHER grid context + the sidebar', () => {
+    const chunk: GridChunk = { from: '2026-09-28', expand: [], zoom: 'WEEK', includeOthers: false }
+    it('a person save invalidates project grids, the badge and the sidebar — never its own chunks', () => {
+      const qc = new QueryClient()
+      const project = qk.gridChunk({ kind: 'project', id: 'p' }, chunk)
+      const own = qk.gridChunk({ kind: 'person', id: 'u' }, chunk)
+      const otherPerson = qk.gridChunk({ kind: 'person', id: 'v' }, chunk)
+      for (const k of [project, own, otherPerson, qk.workloadBadge(), qk.sidebar()]) qc.setQueryData(k, {})
+      invalidateAfterGridSave(qc, { kind: 'person', id: 'u' })
+      expect(qc.getQueryState(project)?.isInvalidated).toBe(true)
+      expect(qc.getQueryState(qk.workloadBadge())?.isInvalidated).toBe(true)
+      expect(qc.getQueryState(qk.sidebar())?.isInvalidated).toBe(true)
+      expect(qc.getQueryState(own)?.isInvalidated).toBe(false)
+      expect(qc.getQueryState(otherPerson)?.isInvalidated).toBe(false)
+    })
+
+    it('a project save invalidates person grids and keeps M8\'s projectMilestones — never its own chunks', () => {
+      const qc = new QueryClient()
+      const person = qk.gridChunk({ kind: 'person', id: 'u' }, chunk)
+      const own = qk.gridChunk({ kind: 'project', id: 'p' }, chunk)
+      for (const k of [person, own, qk.projectMilestones('p'), qk.sidebar()]) qc.setQueryData(k, {})
+      invalidateAfterGridSave(qc, { kind: 'project', id: 'p' })
+      expect(qc.getQueryState(person)?.isInvalidated).toBe(true)
+      expect(qc.getQueryState(qk.projectMilestones('p'))?.isInvalidated).toBe(true)
+      expect(qc.getQueryState(qk.sidebar())?.isInvalidated).toBe(true)
+      expect(qc.getQueryState(own)?.isInvalidated).toBe(false)
+    })
   })
 })

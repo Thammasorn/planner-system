@@ -3,6 +3,7 @@
 // groups in src/lib/invalidate.ts.
 import type { ISODate } from '@/domain/types'
 import type { PageSpace } from '@/lib/contracts/pages'
+import type { WorkloadParams } from '@/lib/contracts/workload'
 import type { TeamTasksQuery } from '@/lib/schemas/tasks'
 
 /** Planning-grid context (PLAN §3.5, M6): a project grid (M6) or a person grid (M9). */
@@ -54,6 +55,22 @@ export const qk = {
   projectMilestones: (projectId: string) => ['projects', projectId, 'milestones'] as const,
   /** GET /api/milestones/targets — projects where the viewer may create a milestone (palette, M8-D18). */
   milestoneTargets: () => ['milestones', 'targets'] as const,
+  // ── M9 (PLAN §3.5, X82, M9-D22): everything under ['workload'] (or ['calendar']) so invalidateLoad /
+  // invalidateCalendar reach it (X18). ──
+  /** GET /api/workload with the parsed filters + default window (M9-D2). */
+  workload: (p: WorkloadParams) => ['workload', 'table', p] as const,
+  /** GET /api/workload/cell?userId&week (M9-D9). */
+  workloadCell: (userId: string, week: ISODate) => ['workload', 'cell', userId, week] as const,
+  /** GET /api/workload/badge — the sidebar ●N (M9-D11). */
+  workloadBadge: () => ['workload', 'badge'] as const,
+  /** GET /api/people — the ทีมงาน directory (M9-D14). */
+  peopleDirectory: () => ['workload', 'people'] as const,
+  /** GET /api/projects/[id]/load — overview load section (M9-D19). */
+  projectLoad: (projectId: string) => ['workload', 'project', projectId] as const,
+  /** GET /api/clients/[id]/load — client page load (M9-D20). */
+  clientLoad: (clientId: string) => ['workload', 'client', clientId] as const,
+  /** GET /api/people/[userId]/time-off — person page วันลา tab (M9-D16); under ['calendar']. */
+  personTimeOff: (userId: string) => ['calendar', 'person', userId] as const,
 }
 
 /** Prefixes for load views (M6 grid = qk.gridAll(…) under ['grid'], M9 workload, M10 home). Invalidating an unused prefix is a no-op,

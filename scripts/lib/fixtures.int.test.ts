@@ -15,15 +15,18 @@ import {
   projectMembers,
   projects,
   taskAssignments,
+  positions,
   taskStatuses,
   tasks,
   timeOff,
   user,
+  workSchedules,
 } from '@/server/db/schema'
 import {
   addDayExample,
   addMilestones,
   addSyntheticGridProject,
+  addSyntheticWorkload,
   applyFixture,
   DAY_EXAMPLE,
   DEMO_MILESTONES,
@@ -514,5 +517,99 @@ describe('M8 — addMilestones (SPEC App. A.2, M8-D20, X70, BR-72; plan/m08 S0.9
     expect(tasksAfter?.n).toBe(tasksBefore?.n)
     expect(await allocationTotals()).toEqual(allocBefore)
     expect(allocBefore).toEqual({ n: 57, total: '195.00' })
+  })
+})
+
+describe('M9 — addSyntheticWorkload (NFR-03 smoke + M12 seed:perf, X92, M9-D23; plan/m09 S0.10)', () => {
+  const window = and(gte(allocations.weekStart, '2026-01-05'), lt(allocations.weekStart, '2028-01-03'))
+  const counts = async () => ({
+    users: (await db.select({ n: count() }).from(user))[0]!.n,
+    projects: (await db.select({ n: count() }).from(projects))[0]!.n,
+    tasks: (await db.select({ n: count() }).from(tasks))[0]!.n,
+    assignments: (await db.select({ n: count() }).from(taskAssignments))[0]!.n,
+    allocations: (await db.select({ n: count() }).from(allocations).where(window))[0]!.n,
+    audit: (await db.select({ n: count() }).from(auditLog))[0]!.n,
+    positions: (await db.select({ n: count() }).from(positions))[0]!.n,
+  })
+
+  it('95 people × 20 projects × 12 weeks after seedGolden in one transaction: rows, e-mails, positions, no audit', async () => {
+    let before: Awaited<ReturnType<typeof counts>> | undefined
+    let out: { userIds: string[]; projectIds: string[] } | undefined
+    await db.transaction(async (tx) => {
+      await seedGolden(tx)
+      before = {
+        users: (await tx.select({ n: count() }).from(user))[0]!.n,
+        projects: (await tx.select({ n: count() }).from(projects))[0]!.n,
+        tasks: (await tx.select({ n: count() }).from(tasks))[0]!.n,
+        assignments: (await tx.select({ n: count() }).from(taskAssignments))[0]!.n,
+        allocations: (await tx.select({ n: count() }).from(allocations).where(window))[0]!.n,
+        audit: (await tx.select({ n: count() }).from(auditLog))[0]!.n,
+        positions: (await tx.select({ n: count() }).from(positions))[0]!.n,
+      }
+      out = await addSyntheticWorkload(tx, { people: 95, projects: 20, weeks: 12, from: '2026-09-28' })
+    })
+    const after = await counts()
+    expect(out!.userIds).toHaveLength(95)
+    expect(out!.projectIds).toHaveLength(20)
+    expect(after).toEqual({
+      users: before!.users + 95,
+      projects: before!.projects + 20,
+      tasks: before!.tasks + 190,
+      assignments: before!.assignments + 190,
+      allocations: before!.allocations + 2280,
+      audit: before!.audit,
+      positions: before!.positions,
+    })
+    const perf = await db.select().from(user).where(inArray(user.id, out!.userIds))
+    expect(perf.map((u) => u.email).sort()).toEqual(
+      Array.from({ length: 95 }, (_, i) => `perf-${String(i + 1).padStart(2, '0')}@example.com`).sort(),
+    )
+    const goldenPositions = new Set((await db.select({ id: positions.id }).from(positions)).map((p) => p.id))
+    for (const u of perf) {
+      expect(u.role).toBe('worker')
+      expect(u.positionId !== null && goldenPositions.has(u.positionId)).toBe(true)
+    }
+    const schedules = await db.select().from(workSchedules).where(inArray(workSchedules.userId, out!.userIds))
+    expect(schedules).toHaveLength(95 * 5)
+    expect(schedules.every((r) => r.fraction === '1.00' && r.weekday >= 1 && r.weekday <= 5)).toBe(true)
+    const perfProjects = await db.select().from(projects).where(inArray(projects.id, out!.projectIds))
+    expect(perfProjects.every((p) => p.clientId === null && p.certainty === 'CONFIRMED')).toBe(true)
+    const perfTasks = await db.select().from(tasks).where(inArray(tasks.projectId, out!.projectIds))
+    expect(perfTasks).toHaveLength(190)
+    expect(perfTasks.every((t) => t.statusId !== null)).toBe(true)
+    const leads = await db
+      .select({ n: count() })
+      .from(projectMembers)
+      .where(and(inArray(projectMembers.projectId, out!.projectIds), eq(projectMembers.role, 'LEAD')))
+    expect(leads[0]!.n).toBe(20)
+    const rows = await db
+      .select()
+      .from(allocations)
+      .innerJoin(taskAssignments, eq(taskAssignments.id, allocations.taskAssignmentId))
+      .where(and(window, inArray(taskAssignments.userId, out!.userIds)))
+    expect(rows).toHaveLength(2280)
+    for (const { allocations: a } of rows) {
+      expect(a.granularity).toBe('WEEK')
+      expect(a.weekStart >= '2026-09-28' && a.weekStart < '2026-12-21').toBe(true)
+      expect(['1.00', '2.00', '3.00']).toContain(a.personDays)
+    }
+  })
+
+  it('100 people also works (e-mails up to perf-100@example.com)', async () => {
+    await seedGolden(db)
+    const out = await addSyntheticWorkload(db, { people: 100, projects: 20, weeks: 1, from: '2026-09-28' })
+    const emails = (await db.select({ e: user.email }).from(user).where(inArray(user.id, out.userIds))).map((r) => r.e)
+    expect(emails).toContain('perf-100@example.com')
+    expect(emails).toContain('perf-01@example.com')
+    expect(new Set(emails).size).toBe(100)
+  })
+
+  it('without seedGolden → "run seedGolden first"; a Tuesday → RangeError', async () => {
+    await expect(
+      addSyntheticWorkload(db, { people: 2, projects: 1, weeks: 1, from: '2026-09-28' }),
+    ).rejects.toThrow('addSyntheticWorkload: run seedGolden first')
+    await expect(
+      addSyntheticWorkload(db, { people: 2, projects: 1, weeks: 1, from: '2026-09-29' }),
+    ).rejects.toBeInstanceOf(RangeError)
   })
 })

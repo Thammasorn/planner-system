@@ -29,3 +29,5 @@ export * as allocations from './allocations'
 export * as planMarkers from './plan-markers'
 // M8 (X87, plan/m08 S0.5)
 export * as milestones from './milestones'
+// M9 (plan/m09 S2.2)
+export * as workload from './workload'

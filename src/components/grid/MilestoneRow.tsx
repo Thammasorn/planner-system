@@ -7,7 +7,7 @@
 // State is never colour alone (§8.9). Gestures: click / Enter / Space on ◆ → popover; Shift+F10 / ContextMenu key /
 // right click → the cell menu; pointer drag (useMilestoneDrag, managers only); a click on the empty part of a cell or
 // Enter on a focused empty cell → create (managers only). Reads only `canManage` (C40), never the context kind; M9 adds
-// the optional `projectLabel` prefix without changing this call site.
+// the optional `projectLabel` prefix (per milestone in the person grid, S3.6).
 import { memo, useMemo, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import type { ISODate } from '@/domain/types'
@@ -48,8 +48,22 @@ export interface MilestoneRowProps {
   onDragStart?(e: PointerEvent<HTMLElement>, m: GridMilestone): void
   /** true when the click that follows a drag must be ignored */
   consumeClick?(): boolean
-  /** M9 (C76): project-name prefix on ◆ in the person grid */
-  projectLabel?: string
+  /** M9 (C76, S3.6): project-name prefix on ◆ in the person grid — a fixed string, or per milestone by its projectId
+   *  (null = no prefix). Absent → M8 output unchanged. */
+  projectLabel?: MilestoneProjectLabel
+}
+
+export type MilestoneProjectLabel = string | ((projectId: string) => string | null)
+
+/** The prefix of one ◆ (undefined = none). */
+export function projectLabelOf(m: GridMilestone, label: MilestoneProjectLabel | undefined): string | undefined {
+  const v = typeof label === 'function' ? label(m.projectId) : label
+  return v ?? undefined
+}
+
+/** "<project> · <name>" when prefixed. */
+export function milestoneDisplayName(m: GridMilestone, projectLabel?: string): string {
+  return projectLabel ? `${projectLabel} · ${m.name}` : m.name
 }
 
 const STATUS_GLYPH: Record<GridMilestone['status'], string> = {
@@ -61,7 +75,7 @@ const STATUS_GLYPH: Record<GridMilestone['status'], string> = {
 
 /** The accessible name of a ◆ (S3.3): diamondLabel(name, date, status) + "เลย milestone N งาน" when late. */
 export function milestoneLabel(m: GridMilestone, projectLabel?: string): string {
-  const name = projectLabel ? `${projectLabel} · ${m.name}` : m.name
+  const name = milestoneDisplayName(m, projectLabel)
   const base = th.milestones.grid.diamondLabel(name, formatThaiDate(m.date, 'medium'), th.milestones.status[m.status])
   return m.late ? `${base} ${th.milestones.lateTasks(m.lateTaskCount)}` : base
 }
@@ -151,11 +165,12 @@ export const MilestoneRow = memo(function MilestoneRow(p: MilestoneRowProps) {
 
   const renderDiamond = (m: GridMilestone, key: string) => {
     const glyph = STATUS_GLYPH[m.status]
+    const prefix = projectLabelOf(m, p.projectLabel)
     return (
       <button
         type="button"
         className={styles.msDiamond}
-        aria-label={milestoneLabel(m, p.projectLabel)}
+        aria-label={milestoneLabel(m, prefix)}
         data-testid={`ms-${m.id}`}
         data-ms-id={m.id}
         data-status={m.status}
@@ -181,7 +196,7 @@ export const MilestoneRow = memo(function MilestoneRow(p: MilestoneRowProps) {
           </span>
         ) : null}
         <span aria-hidden="true" className={styles.msName}>
-          {p.projectLabel ? `${p.projectLabel} · ${m.name}` : m.name}
+          {milestoneDisplayName(m, prefix)}
         </span>
         {m.late ? (
           <span aria-hidden="true" className={styles.msLate}>

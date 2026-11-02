@@ -7,11 +7,12 @@ import { CHUNK_WEEKS } from './columns'
 
 /**
  * URL mapping pinned here: GridChunk.zoom 'WEEK'|'DAY' → zoom=week|day (omitted when 'WEEK'); expand[] → comma list
- * (omitted when empty); includeOthers → '1' (omitted when false); to = from + 8 weeks (exclusive).
+ * (omitted when empty); includeOthers → '1' (omitted when false, and never for the person context — its masked row
+ * already carries every other project, M9-D12); to = from + 8 weeks (exclusive).
  */
 export function gridChunkUrl(ctx: GridCtx, chunk: GridChunk): string {
   const qs = new URLSearchParams({ from: chunk.from, to: addWeeks(chunk.from, CHUNK_WEEKS) })
-  if (chunk.includeOthers) qs.set('includeOthers', '1')
+  if (chunk.includeOthers && ctx.kind === 'project') qs.set('includeOthers', '1')
   if (chunk.expand.length > 0) qs.set('expand', chunk.expand.join(','))
   if (chunk.zoom === 'DAY') qs.set('zoom', 'day')
   // URLSearchParams encodes ',' — keep the comma list readable (dates contain no reserved characters)

@@ -21,7 +21,14 @@ export { useShellDrawer } from '@/components/layout/ShellDrawer'
  *  main landmark and the command palette (Cmd/Ctrl+K, X08 — mounted once here). The collapsed state is the
  *  `sidebar.collapsed` preference (saved, debounced — X05). The one leave dialog (M5-D14) is hosted here so the
  *  user menu, /calendar and later pages open it through `useLeaveDialog()`. */
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  initialWorkloadOver = 0,
+}: {
+  children: ReactNode
+  /** M9-D11 (X31): the Workload ทีม ●N computed by the (app) layout. */
+  initialWorkloadOver?: number
+}) {
   const { prefs, setPreference } = usePreferences()
   const collapsed = prefs['sidebar.collapsed']
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -42,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               data-collapsed={String(collapsed)}
               className={styles.sidebar}
             >
-              <Sidebar collapsed={collapsed} onToggle={toggle} />
+              <Sidebar collapsed={collapsed} onToggle={toggle} initialWorkloadOver={initialWorkloadOver} />
             </aside>
             <Drawer
               variant="temporary"
@@ -52,7 +59,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 paper: { 'aria-label': th.nav.sidebarLabel, sx: { width: 'var(--sidebar-width)' } },
               }}
             >
-              <Sidebar collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+              <Sidebar
+                collapsed={false}
+                onNavigate={() => setDrawerOpen(false)}
+                initialWorkloadOver={initialWorkloadOver}
+              />
             </Drawer>
             <main id="main" tabIndex={-1} className={styles.main}>
               <InAppHistoryProvider>{children}</InAppHistoryProvider>

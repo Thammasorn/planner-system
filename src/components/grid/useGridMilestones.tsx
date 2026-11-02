@@ -30,7 +30,7 @@ import { milestoneTooltipFor } from '@/lib/grid/tooltip'
 import { qk, type GridCtx } from '@/lib/query-keys'
 import { CellMenu, type CellMenuItem } from './CellMenu'
 import { MilestoneCreatePopover, MilestonePopover, MilestoneStackPopover } from './MilestonePopover'
-import { MilestoneRow, type MilestoneMenuTarget } from './MilestoneRow'
+import { milestoneDisplayName, MilestoneRow, type MilestoneMenuTarget } from './MilestoneRow'
 import { useMilestoneDrag } from './useMilestoneDrag'
 
 const NO_MILESTONES: readonly GridMilestone[] = []
@@ -58,8 +58,10 @@ export function useGridMilestones(o: {
   scrollEl: RefObject<HTMLElement | null>
   today: ISODate
   thisWeek: ISODate
+  /** M9 (S3.6): person grid only — each ◆ prefixed with its project's name (null = none) */
+  projectLabel?: (projectId: string) => string | null
 }): GridMilestones {
-  const { context, model, cols, today, thisWeek } = o
+  const { context, model, cols, today, thisWeek, projectLabel } = o
   const canManage = model?.context.canManage ?? false
   const milestones = model?.milestones ?? NO_MILESTONES
   const byId = useMemo(() => new Map(milestones.map((m) => [m.id, m])), [milestones])
@@ -195,6 +197,7 @@ export function useGridMilestones(o: {
         onToggleComplete={toggleComplete}
         onDelete={remove}
         onClose={() => setOpened(null)}
+        {...(projectLabel && openedMilestone ? { projectLabel: projectLabel(openedMilestone.projectId) } : {})}
       />
       <MilestoneCreatePopover
         at={creating}
@@ -229,15 +232,19 @@ export function useGridMilestones(o: {
       drag={drag.drag}
       onDragStart={drag.onPointerDown}
       consumeClick={drag.consumeClick}
+      {...(projectLabel ? { projectLabel } : {})}
     />
   )
 
   const tooltipFor = useCallback(
     (el: HTMLElement) => {
       const m = byId.get(el.dataset.msId ?? '')
-      return m ? milestoneTooltipFor(m) : null
+      if (!m) return null
+      const lines = milestoneTooltipFor(m)
+      const prefix = projectLabel?.(m.projectId)
+      return prefix ? [milestoneDisplayName(m, prefix), ...lines.slice(1)] : lines
     },
-    [byId],
+    [byId, projectLabel],
   )
 
   return { canManage, milestones, byId, markerViews, row, overlays, openCreate, tooltipFor }

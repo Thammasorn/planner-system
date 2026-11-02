@@ -8,6 +8,7 @@ import { resolveCertainty, splitLoad, addLoad, type CertaintyNode } from '@/doma
 import { countsTowardLoad } from '@/domain/completed'
 import { addDays, isoWeekday, weekRange, weekStart } from '@/domain/dates'
 import type { Cd, Certainty, ISODate, LoadPair, PeriodKey, Weekday } from '@/domain/types'
+import { compareThai } from '@/lib/collate'
 import { displayName } from '@/lib/display-name'
 import type { UserCapacity } from '@/lib/contracts/capacity'
 import type {
@@ -22,6 +23,7 @@ import type {
   GridTaskRow,
   GridTimeOff,
 } from '@/lib/contracts/grid'
+import type { GridCtx } from '@/lib/query-keys'
 import { dayCellsFromPlan, dayCtxFor, dKey, spreadDayLoads, visibleDayDates, weekCellFromPlan, wKey } from '@/lib/grid/day'
 import * as authz from '../authz'
 import type { DbOrTx } from '../db/types'
@@ -34,7 +36,7 @@ import type { SessionUser } from '../session'
 import * as capacity from './capacity'
 import { dayKeysFor } from './day-context'
 import * as holidaysSvc from './holidays'
-import { maskTimeOff } from './masking'
+import { maskedGridRow, maskTimeOff, partitionByProject } from './masking'
 import * as milestonesSvc from './milestones'
 import { timelineBound } from './timeline'
 
@@ -84,13 +86,15 @@ function byPositionThenId(a: { position: string; id: string }, b: { position: st
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+/** M9 (X85, PLAN §3.10): `ctx.kind === 'person'` → buildPersonChunk (GET /api/grid/person/[userId]). */
 export async function buildChunk(
   tx: DbOrTx,
   user: SessionUser,
-  ctx: { kind: 'project'; id: string },
+  ctx: GridCtx,
   p: ChunkParams,
   today: ISODate,
 ): Promise<GridResponse> {
+  if (ctx.kind === 'person') return buildPersonChunk(tx, user, ctx.id, p, today)
   const access = await authz.requireProject(tx, user, ctx.id, 'view') // 404 invisible; archived allowed (X42)
   const project = await repo.projects.getProject(tx, ctx.id)
   if (!project) throw new NotFoundError() // unreachable after requireProject; keeps the type non-null
@@ -150,6 +154,255 @@ export async function buildChunk(
     today,
     viewer: user,
   })
+}
+
+/** M9-D12 person grid chunk (GET /api/grid/person/[userId], SPEC §7.4, X28/X67/X76): authz.requireVisibleUser (404)
+ *  first → per visible non-archived project one `project` row, the person's task + assignee rows, one `masked` row
+ *  for the load of every hidden project (numbers only — hidden projects are never queried for task data, R1/R2);
+ *  context `{ kind: 'person', canManage: false }` (M9-D29). `includeOthers` is ignored. */
+export async function buildPersonChunk(
+  tx: DbOrTx,
+  user: SessionUser,
+  userId: string,
+  p: ChunkParams,
+  today: ISODate,
+): Promise<GridResponse> {
+  const { visibleProjects } = await authz.requireVisibleUser(tx, user, userId) // 404 first (X86)
+  const [person] = await repo.users.listCalendarPeople(tx, [userId])
+  if (!person) throw new NotFoundError()
+  const deactivatedOn = (await repo.users.listDeactivatedOn(tx, [userId])).get(userId) ?? null
+  const mine = await repo.assignments.listActiveForUserLive(tx, userId) // live, non-archived projects (BR-44)
+  const { visible, hidden } = partitionByProject(mine, visibleProjects)
+  const projectRows = await repo.projects.listByIds(tx, unique(visible.map((a) => a.projectId)))
+  const projects: PersonAssembleInput['projects'][number][] = []
+  const taskTrees = new Map<string, TaskListRow[]>()
+  const assigneeCounts = new Map<string, number>()
+  for (const pr of projectRows) {
+    if (pr.archivedAt !== null) continue // BR-44 (listActiveForUserLive already drops them)
+    const access = await authz.projectAccess(tx, user, pr.id)
+    projects.push({
+      id: pr.id,
+      name: pr.name,
+      color: pr.color,
+      certainty: pr.certainty,
+      canEdit: access !== null && !access.archived,
+    })
+    taskTrees.set(pr.id, await repo.tasks.listLiveWithBlockerCounts(tx, pr.id)) // milestoneId live (M8)
+    for (const a of await repo.assignments.listActiveForProject(tx, pr.id)) {
+      assigneeCounts.set(a.taskId, (assigneeCounts.get(a.taskId) ?? 0) + 1)
+    }
+  }
+  const kept = new Set(projects.map((pr) => pr.id))
+  const assignments = visible.filter((a) => kept.has(a.projectId))
+  const range = { from: p.from, to: p.to }
+  const weeks = weekRange(p.from, p.to)
+  const expanded = [...expandedWeeks(p, weeks)]
+  const rows = await repo.allocations.listForWeeks(
+    tx,
+    assignments.map((a) => a.id),
+    weeks,
+  )
+  const totals = await repo.allocations.sumCountedByAssignment(
+    tx,
+    assignments.map((a) => a.id),
+    timelineBound(today),
+  )
+  const hiddenIds = unique(hidden.map((a) => a.projectId))
+  const hiddenLoad =
+    hiddenIds.length > 0
+      ? await repo.allocations.loadByUserProjectWeek(tx, { userIds: [userId], range, projectIds: hiddenIds })
+      : new Map<string, Map<string, Record<ISODate, LoadPair>>>()
+  const hiddenWeeks: Record<ISODate, LoadPair> = {}
+  for (const byWeek of hiddenLoad.get(userId)?.values() ?? []) {
+    for (const [w, v] of Object.entries(byWeek)) hiddenWeeks[w] = addLoad(hiddenWeeks[w] ?? { total: 0, committed: 0 }, v)
+  }
+  // C39: M7's other-projects day aggregate, restricted to the HIDDEN ids (numbers only)
+  const hiddenDays =
+    hiddenIds.length > 0 && expanded.length > 0
+      ? await repo.allocations.dayLoadsForProjects(tx, { userIds: [userId], weeks: expanded, projectIds: hiddenIds })
+      : []
+  const cap = await capacity.loadCapacity(tx, [userId], range)
+  const leave = await repo.timeOff.listForCalendar(tx, [userId], p.from, p.to)
+  const holidays = await holidaysSvc.listHolidaysInRange(tx, range)
+  // FR-705 person part (X28, MASK-6): milestones of the visible projects of this person only (never 'ALL')
+  const msRows = projects.length > 0 ? await repo.milestones.listForProjects(tx, projects.map((pr) => pr.id)) : []
+  const milestones = await milestonesSvc.toDTOs(tx, msRows, today)
+  const lateness =
+    assignments.length > 0
+      ? await milestonesSvc.computeLateness(tx, { boundTaskIds: unique(assignments.map((a) => a.taskId)) })
+      : { byTask: new Map<string, boolean>() }
+  return assemblePersonGrid({
+    person: { id: userId, name: displayName(person), active: person.active, deactivatedOn },
+    projects,
+    taskTrees,
+    assignments,
+    assigneeCounts,
+    rows,
+    totals,
+    hiddenWeeks,
+    hiddenDays,
+    capacity: cap,
+    leave,
+    holidays,
+    milestones,
+    lateForMilestone: lateness.byTask,
+    p,
+    today,
+    viewer: user,
+  })
+}
+
+export interface PersonAssembleInput {
+  person: { id: string; name: string; active: boolean; deactivatedOn: ISODate | null }
+  /** Visible, non-archived projects in which the person has live assignments. */
+  projects: readonly { id: string; name: string; color: string; certainty: Certainty; canEdit: boolean }[]
+  taskTrees: ReadonlyMap<string, readonly TaskListRow[]>
+  /** The person's live assignments in `projects`. */
+  assignments: readonly { id: string; taskId: string; projectId: string; version: number }[]
+  /** Task id → its real number of live assignments (every user). */
+  assigneeCounts: ReadonlyMap<string, number>
+  rows: readonly AllocRow[]
+  totals: ReadonlyMap<string, Cd>
+  /** Σ counted load of every hidden project per week (W: keys of the masked row). */
+  hiddenWeeks: Readonly<Record<ISODate, LoadPair>>
+  /** dayLoadsForProjects rows of the hidden projects in expanded weeks (D: keys of the masked row). */
+  hiddenDays: readonly DayLoadRow[]
+  capacity: ReadonlyMap<string, UserCapacity>
+  leave: readonly CalendarTimeOffRow[]
+  holidays: readonly { date: ISODate; name: string }[]
+  milestones: readonly GridMilestone[]
+  lateForMilestone: ReadonlyMap<string, boolean>
+  p: ChunkParams
+  today: ISODate
+  viewer: Pick<SessionUser, 'id' | 'role'>
+}
+
+/** Pure (grid-person-assemble.test.ts): the person grid from per-project assembleGrid passes, keeping only the
+ *  person's task rows (flattened: depth 0, breadcrumb, projectId) and assignee rows, plus project and masked rows. */
+export function assemblePersonGrid(i: PersonAssembleInput): GridResponse {
+  const { p } = i
+  const weeks = weekRange(p.from, p.to)
+  const expanded = expandedWeeks(p, weeks)
+  const personList = [i.person]
+  const dayWeeks = new Set(i.rows.filter((r) => r.granularity === 'DAY').map((r) => r.weekStart))
+  const people = gridPeople({
+    people: personList,
+    capacity: i.capacity,
+    leave: i.leave,
+    viewer: i.viewer,
+    weeks,
+    expanded,
+    dayWeeksOf: new Map([[i.person.id, dayWeeks]]),
+    others: null,
+    othersDay: null,
+  })
+
+  const out: GridRow[] = []
+  const sortedProjects = [...i.projects].sort((a, b) => compareThai(a.name, b.name) || (a.id < b.id ? -1 : 1))
+  for (const pr of sortedProjects) {
+    const mine = i.assignments.filter((a) => a.projectId === pr.id)
+    if (mine.length === 0) continue
+    const tree = i.taskTrees.get(pr.id) ?? []
+    const ids = new Set(mine.map((a) => a.id))
+    const sub = assembleGrid({
+      project: { id: pr.id, name: pr.name, certainty: pr.certainty, archived: !pr.canEdit, canManage: false },
+      tasks: tree,
+      milestones: [],
+      lateForMilestone: i.lateForMilestone,
+      assignments: mine.map((a) => ({ id: a.id, taskId: a.taskId, userId: i.person.id, version: a.version })),
+      rows: i.rows.filter((r) => ids.has(r.taskAssignmentId)),
+      totals: i.totals,
+      people: personList,
+      capacity: i.capacity,
+      leave: [],
+      holidays: [],
+      others: null,
+      p,
+      today: i.today,
+      viewer: i.viewer,
+    })
+    const byId = new Map(tree.map((t) => [t.id, t]))
+    const breadcrumbOf = (taskId: string): string[] => {
+      const names: string[] = []
+      let cur = byId.get(taskId)?.parentId ?? null
+      while (cur !== null && names.length < 3) {
+        const t = byId.get(cur)
+        if (!t) break
+        names.unshift(t.name)
+        cur = t.parentId
+      }
+      return names
+    }
+    const projectTotals: Partial<Record<PeriodKey, LoadPair>> = {}
+    const body: GridRow[] = []
+    for (let k = 0; k < sub.rows.length; k++) {
+      const row = sub.rows[k]!
+      if (row.kind !== 'task') continue
+      const own: GridAssigneeRow[] = []
+      for (let j = k + 1; j < sub.rows.length && sub.rows[j]!.kind === 'assignee'; j++) own.push(sub.rows[j] as GridAssigneeRow)
+      if (own.length === 0) continue
+      const taskRow: GridTaskRow = {
+        ...row,
+        depth: 0,
+        parentId: null,
+        hasChildren: false,
+        assigneeCount: i.assigneeCounts.get(row.id) ?? own.length,
+        projectId: pr.id,
+        breadcrumb: breadcrumbOf(row.id),
+      }
+      for (const [key, v] of Object.entries(row.totals) as [PeriodKey, LoadPair][]) addInto(projectTotals, key, v)
+      body.push(taskRow, ...own)
+    }
+    if (body.length === 0) continue
+    out.push({
+      kind: 'project',
+      id: pr.id,
+      name: pr.name,
+      color: pr.color,
+      certainty: pr.certainty,
+      canEdit: pr.canEdit,
+      totals: projectTotals,
+    })
+    out.push(...body)
+  }
+
+  // SPEC §7.4 masked row: W: Σ hidden per week + D: hidden day loads of expanded weeks (WEEK rows spread, M7-D27)
+  const maskedTotals: Partial<Record<PeriodKey, LoadPair>> = {}
+  for (const w of weeks) {
+    const v = i.hiddenWeeks[w]
+    if (v) addInto(maskedTotals, wk(w), v)
+  }
+  const spread = spreadDayLoads(i.hiddenDays, (uid, w) => dayCtxFor(people[uid], w))
+  Object.assign(maskedTotals, spread.get(i.person.id) ?? {})
+  const masked = maskedGridRow(i.person.id, maskedTotals)
+  if (masked) out.push(masked)
+
+  const dayRowDates = new Set([
+    ...i.rows.filter((r) => r.granularity === 'DAY' && expanded.has(r.weekStart)).map((r) => r.periodStart),
+    ...i.hiddenDays.filter((r) => r.granularity === 'DAY' && expanded.has(r.weekStart)).map((r) => r.periodStart),
+  ])
+  const canEdit = out.some((r) => r.kind === 'assignee' && r.editable)
+  return {
+    context: {
+      kind: 'person',
+      id: i.person.id,
+      name: i.person.name,
+      active: i.person.active,
+      deactivatedOn: i.person.deactivatedOn,
+      canEdit,
+      canManage: false, // M9-D29
+    },
+    window: { from: p.from, to: p.to, expand: [...p.expand], zoom: p.zoom, includeOthers: false },
+    today: i.today,
+    periods: buildPeriods(weeks, expanded, {
+      scheduledWeekdays: scheduledWeekdays({ capacity: i.capacity, people: personList }),
+      dayRowDates,
+    }),
+    rows: out,
+    milestones: [...i.milestones],
+    people,
+    holidays: i.holidays.map((h) => ({ date: h.date, name: h.name })),
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -258,6 +511,73 @@ function scheduledWeekdays(i: Pick<AssembleInput, 'capacity' | 'people'>): Set<W
   return out
 }
 
+/** FR-806/807, §3.3: `people[u]` of a chunk — W: capacity/standard per week, D: keys for expanded weeks and the
+ *  person's DAY weeks (M7-D19), masked leave labels, and (project grid, includeOthers) the X29 other-projects load. */
+export function gridPeople(i: {
+  people: AssembleInput['people']
+  capacity: AssembleInput['capacity']
+  leave: AssembleInput['leave']
+  viewer: AssembleInput['viewer']
+  weeks: readonly ISODate[]
+  expanded: ReadonlySet<ISODate>
+  dayWeeksOf: ReadonlyMap<string, ReadonlySet<ISODate>>
+  others: AssembleInput['others']
+  othersDay: readonly DayLoadRow[] | null
+}): Record<string, GridPerson> {
+  const { weeks, expanded, dayWeeksOf } = i
+  const leaveBy = new Map<string, GridTimeOff[]>()
+  for (const row of i.leave) {
+    const m = maskTimeOff(row, authz.canSeeLeaveDetails(i.viewer, row.userId))
+    const entry: GridTimeOff = {
+      start: m.startDate,
+      end: m.endDate,
+      half: m.half,
+      label: m.kind === 'full' ? m.leaveTypeName : m.label,
+    }
+    const list = leaveBy.get(row.userId) ?? []
+    list.push(entry)
+    leaveBy.set(row.userId, list)
+  }
+  const people: Record<string, GridPerson> = {}
+  for (const u of i.people) {
+    const cap = i.capacity.get(u.id)
+    const capacityCd: Partial<Record<PeriodKey, Cd>> = {}
+    const standardCd: Partial<Record<PeriodKey, Cd>> = {}
+    for (const w of weeks) {
+      capacityCd[wk(w)] = cap?.weeks[w]?.capacityCd ?? 0
+      standardCd[wk(w)] = cap?.weeks[w]?.standardCd ?? 0
+    }
+    // M7-D19: D: keys for every day of expanded weeks and of weeks where this person has a DAY cell (zeros omitted)
+    const dk = dayKeysFor(cap?.days, new Set([...expanded, ...(dayWeeksOf.get(u.id) ?? [])]))
+    Object.assign(capacityCd, dk.capacity)
+    Object.assign(standardCd, dk.standard)
+    const person: GridPerson = {
+      name: u.name,
+      active: u.active,
+      deactivatedOn: u.deactivatedOn,
+      capacity: capacityCd,
+      standard: standardCd,
+      timeOff: leaveBy.get(u.id) ?? [],
+    }
+    if (i.others) {
+      const other: Partial<Record<PeriodKey, LoadPair>> = {}
+      for (const [w, v] of Object.entries(i.others.get(u.id) ?? {})) other[wk(w)] = { total: v.total, committed: v.committed }
+      person.otherProjects = other
+    }
+    people[u.id] = person
+  }
+  // X29 day keys (M7-D27): WEEK rows spread separately for committed and tentative parts; no ids or names
+  if (i.others && i.othersDay) {
+    const spread = spreadDayLoads(i.othersDay, (userId, w) => dayCtxFor(people[userId], w))
+    for (const [userId, loads] of spread) {
+      const person = people[userId]
+      if (person?.otherProjects) Object.assign(person.otherProjects, loads)
+    }
+  }
+
+  return people
+}
+
 export function assembleGrid(i: AssembleInput): GridResponse {
   const { p } = i
   const canEdit = !i.project.archived // M, L, Me all edit (PERM-12); archived → read-only (X42)
@@ -313,56 +633,17 @@ export function assembleGrid(i: AssembleInput): GridResponse {
     }
   }
 
-  // people (FR-806/807, §3.3): every assignee user
-  const leaveBy = new Map<string, GridTimeOff[]>()
-  for (const row of i.leave) {
-    const m = maskTimeOff(row, authz.canSeeLeaveDetails(i.viewer, row.userId))
-    const entry: GridTimeOff = {
-      start: m.startDate,
-      end: m.endDate,
-      half: m.half,
-      label: m.kind === 'full' ? m.leaveTypeName : m.label,
-    }
-    const list = leaveBy.get(row.userId) ?? []
-    list.push(entry)
-    leaveBy.set(row.userId, list)
-  }
-  const people: Record<string, GridPerson> = {}
-  for (const u of i.people) {
-    const cap = i.capacity.get(u.id)
-    const capacityCd: Partial<Record<PeriodKey, Cd>> = {}
-    const standardCd: Partial<Record<PeriodKey, Cd>> = {}
-    for (const w of weeks) {
-      capacityCd[wk(w)] = cap?.weeks[w]?.capacityCd ?? 0
-      standardCd[wk(w)] = cap?.weeks[w]?.standardCd ?? 0
-    }
-    // M7-D19: D: keys for every day of expanded weeks and of weeks where this person has a DAY cell (zeros omitted)
-    const dk = dayKeysFor(cap?.days, new Set([...expanded, ...(dayWeeksOf.get(u.id) ?? [])]))
-    Object.assign(capacityCd, dk.capacity)
-    Object.assign(standardCd, dk.standard)
-    const person: GridPerson = {
-      name: u.name,
-      active: u.active,
-      deactivatedOn: u.deactivatedOn,
-      capacity: capacityCd,
-      standard: standardCd,
-      timeOff: leaveBy.get(u.id) ?? [],
-    }
-    if (i.others) {
-      const other: Partial<Record<PeriodKey, LoadPair>> = {}
-      for (const [w, v] of Object.entries(i.others.get(u.id) ?? {})) other[wk(w)] = { total: v.total, committed: v.committed }
-      person.otherProjects = other
-    }
-    people[u.id] = person
-  }
-  // X29 day keys (M7-D27): WEEK rows spread separately for committed and tentative parts; no ids or names
-  if (i.others && i.othersDay) {
-    const spread = spreadDayLoads(i.othersDay, (userId, w) => dayCtxFor(people[userId], w))
-    for (const [userId, loads] of spread) {
-      const person = people[userId]
-      if (person?.otherProjects) Object.assign(person.otherProjects, loads)
-    }
-  }
+  const people = gridPeople({
+    people: i.people,
+    capacity: i.capacity,
+    leave: i.leave,
+    viewer: i.viewer,
+    weeks,
+    expanded,
+    dayWeeksOf,
+    others: i.others,
+    othersDay: i.othersDay ?? null,
+  })
 
   // assignee cells: W: per week (BR-20/20a, BR-21a fallback flag) + D: per expanded week (BR-20 derived / BR-20a stored)
   const cellsOf = new Map<string, Partial<Record<PeriodKey, AssigneeCell>>>()

@@ -9,6 +9,8 @@
 // sticky itself (the header group is). Two frozen header cells — "งาน" (+ ⇔ ColumnResizeHandle, FR-814) and
 // "ผู้รับผิดชอบ" (+ the icon-only "ซ่อน" button, FR-816; absent when hidden: "งาน" spans both ARIA columns) — each sticky at its own left
 // offset; the first column of every month carries data-month-start (FR-818).
+// M9 (M9-D28, S3.4): the person grid's `?week=` header carries data-focus-week (outline, not colour alone) + an
+// aria-description.
 import { memo, type PointerEvent, type ReactNode } from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import VisibilityOffOutlined from '@mui/icons-material/VisibilityOffOutlined'
@@ -51,6 +53,8 @@ export interface GridHeaderProps {
   resizeHandle?: ReactNode
   /** M7.1 (FR-818): keys of the first column of each month */
   monthStarts?: ReadonlySet<string>
+  /** M9 (M9-D28): the Monday marked as the focus week (person grid `?week=`) */
+  focusWeek?: string
 }
 
 const NO_HOLIDAYS: ReadonlyMap<string, string> = new Map()
@@ -67,6 +71,7 @@ const HeaderCell = memo(function HeaderCell({
   toggle,
   onToggleWeek,
   monthStart,
+  focus,
 }: {
   col: GridColumn
   c: number
@@ -78,6 +83,7 @@ const HeaderCell = memo(function HeaderCell({
   toggle: boolean
   onToggleWeek: (week: string) => void
   monthStart: boolean
+  focus: boolean
 }) {
   const label = formatWeekHeader(col.weekStart)
   // the aria-label replaces the content, so it carries the today / holiday texts itself (§8.9, FR-807)
@@ -94,16 +100,19 @@ const HeaderCell = memo(function HeaderCell({
     onSelectColumn(c)
   }
   return (
+    // eslint-disable-next-line jsx-a11y/role-supports-aria-props -- aria-description is a global ARIA 1.3 attribute (M9-D28 focus week)
     <div
       role="columnheader"
       aria-colindex={periodColIndex(c)}
       aria-label={name}
+      aria-description={focus ? th.people.grid.focusWeek : undefined}
       className={styles.colHeader}
       style={{ left, width, height: HEADER_H }}
       data-col-key={col.key}
       data-c={c}
       data-month-start={monthStart ? '' : undefined}
       data-today={today ? 'true' : undefined}
+      data-focus-week={focus ? 'true' : undefined}
       data-tip={holiday ? 'header' : undefined}
       data-week={col.weekStart}
       onPointerDown={onPointerDown}
@@ -233,6 +242,7 @@ export function GridHeader(p: GridHeaderProps) {
             toggle={p.toggle ?? false}
             onToggleWeek={p.onToggleWeek ?? noop}
             monthStart={monthStart}
+            focus={p.focusWeek === col.weekStart}
           />
         )
       })}

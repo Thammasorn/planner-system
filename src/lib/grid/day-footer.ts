@@ -22,6 +22,9 @@ function addInto(map: Map<string, DayLoads>, userId: string, key: PeriodKey, p: 
 /**
  * Per person per D: period: Σ of that person's assignee D cells (+ Σ extra.get(user)[key]), committed by the row's
  * effective certainty; a row of a completed task counts only if period.weekStart ≤ completedWeek (BR-50, M7-D14).
+ * M9 (C88, the additive masked-row branch): a `masked` row adds its D: totals to `masked.userId` — the person context
+ * passes no `extra`, so hidden projects are never counted twice; `project` rows are skipped (their totals duplicate the
+ * merged rows).
  */
 export function personDayLoads(
   rows: readonly GridRow[],
@@ -33,6 +36,15 @@ export function personDayLoads(
   const tasks = new Map<string, GridTaskRow>()
   for (const r of rows) if (r.kind === 'task') tasks.set(r.id, r)
   for (const r of rows) {
+    if (r.kind === 'masked') {
+      // typed as possibly absent: a malformed row is skipped, never thrown on (M7's contract for unknown rows)
+      const totals: DayLoads | undefined = r.totals
+      for (const p of days) {
+        const v = totals?.[p.key]
+        if (v) addInto(out, r.userId, p.key, v)
+      }
+      continue
+    }
     if (r.kind !== 'assignee') continue
     const task = tasks.get(r.taskId)
     if (!task) continue

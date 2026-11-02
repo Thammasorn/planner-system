@@ -14,18 +14,20 @@ import { ProjectsTable } from '@/components/projects/ProjectsTable'
 import { th } from '@/i18n/th'
 import type { ClientDetail } from '@/lib/contracts/clients'
 import { ClientFormDialog } from './ClientFormDialog'
+import { ClientLoadSummary, useClientLoadView } from './ClientLoad'
 import { useClientArchive } from './useClientArchive'
 
 /**
  * `/clients/[id]` (FR-303 part): the header bar (ลูกค้า › ◼ name as the <h1>; code, archived chip, แก้ไข and
- * archive on the right — FR-1603) + the client's projects the viewer can see. No load figure until M9 (X15).
- * Managers edit / archive (undo toast) / unarchive here too.
+ * archive on the right — FR-1603) + the client's projects the viewer can see, with the 12-week load (M9-D20: total
+ * line + a column, visible non-archived projects only). Managers edit / archive (undo toast) / unarchive here too.
  */
 export function ClientDetailView({ detail }: { detail: ClientDetail }) {
   const { client, projects, can } = detail
   const [editing, setEditing] = useState(false)
   const [pending, startTransition] = useTransition()
   const { archive, unarchive } = useClientArchive()
+  const load = useClientLoadView(client.id)
   const toggle = () =>
     startTransition(async () => {
       await (client.archived ? unarchive(client) : archive(client)).catch(() => {}) // already toasted
@@ -63,6 +65,7 @@ export function ClientDetailView({ detail }: { detail: ClientDetail }) {
         }
       />
       <Stack spacing={3}>
+        <ClientLoadSummary data={load.data} />
         {client.note ? (
           <Typography sx={{ color: 'text.secondary', whiteSpace: 'pre-wrap' }}>{client.note}</Typography>
         ) : null}
@@ -73,7 +76,11 @@ export function ClientDetailView({ detail }: { detail: ClientDetail }) {
           {projects.length === 0 ? (
             <EmptyState title={th.clients.noProjects} />
           ) : (
-            <ProjectsTable items={projects} label={th.clients.projectsHeading} />
+            <ProjectsTable
+              items={projects}
+              label={th.clients.projectsHeading}
+              loadByProject={load.loadByProject}
+            />
           )}
         </Stack>
         {can.manage ? (

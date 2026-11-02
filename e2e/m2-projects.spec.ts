@@ -202,6 +202,10 @@ test.describe('E3 (FR-301, FR-302, FR-303 part) clients', () => {
     await clients.goto()
     await expect(clients.nameLinks()).toHaveText(byThai(['Coral', 'Sunrise']))
     await expect(clients.addButton()).toHaveCount(0)
+    // M9 (FR-303 load part, plan/m09 S6.3): the client page shows the 12-week load line (visible projects only)
+    await clients.nameLinks().filter({ hasText: 'Coral' }).click()
+    await page.waitForURL(/\/clients\/[0-9a-f-]{36}$/)
+    await expect(page.getByTestId('client-load')).toContainText(th.workload.clientLoad.visibleOnly)
   })
 })
 
@@ -443,6 +447,10 @@ test.describe('E8 (FR-408 part) project tabs', () => {
     await expect(project.tab('pages')).toHaveAttribute('aria-selected', 'false')
     await expect(project.tab('pages')).toHaveAttribute('href', `/projects/${mobile}/pages`)
     await expect(project.tabList().getByRole('tab', { disabled: true })).toHaveCount(0)
+    // M9 (FR-409 load part, plan/m09 S6.3): the overview gains the 12-week load section
+    await expect(
+      project.main().getByRole('heading', { name: th.workload.projectLoad.heading, exact: true }),
+    ).toBeVisible()
   })
 })
 
@@ -484,7 +492,7 @@ test.describe('X33 nav entries for every golden role', () => {
   })
 
   for (const who of ['manager', 'cindy', 'ivy', 'peter', 'jack', 'mint'] as const) {
-    test(`${who}: the ${th.nav.projects} section header, ${th.nav.clients}, ${th.nav.my}, ${th.nav.teamTasks} and ${th.nav.calendar} are in the sidebar`, async ({
+    test(`${who}: the ${th.nav.projects} section header, ${th.nav.clients}, ${th.nav.my}, ${th.nav.teamTasks}, ${th.nav.workload}, ${th.nav.calendar} and ${th.nav.people} are in the sidebar`, async ({
       page,
     }) => {
       await loginAs(page, who)
@@ -499,6 +507,21 @@ test.describe('X33 nav entries for every golden role', () => {
       await expect(sidebar.teamTasksLink()).toHaveAttribute('href', '/tasks')
       // M5 (X84): ปฏิทินทีม for every role
       await expect(sidebar.calendarLink()).toHaveAttribute('href', '/calendar')
+      // M9 (X84, X33, plan/m09 S6.3): Workload ทีม after งานของทีม, ทีมงาน before ลูกค้า
+      await expect(sidebar.workloadLink()).toHaveAttribute('href', '/workload')
+      await expect(sidebar.peopleLink()).toHaveAttribute('href', '/people')
+      await expect
+        .poll(() => sidebar.navIds())
+        .toEqual([
+          'home',
+          'my',
+          'tasks',
+          'workload',
+          'calendar',
+          'people',
+          'clients',
+          ...(who === 'manager' ? ['settings'] : []),
+        ])
     })
   }
 })

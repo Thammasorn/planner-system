@@ -49,11 +49,11 @@ function seeded(): QueryClient {
 const invalidated = (qc: QueryClient, key: readonly unknown[]) => qc.getQueryState(key)?.isInvalidated
 
 describe('invalidate (X18)', () => {
-  it('invalidateLoad invalidates grid, workload, home, tasks.my and tasks.team only', async () => {
+  it('invalidateLoad invalidates grid, workload, home, tasks.my, tasks.team and (M9-D17) the sidebar only', async () => {
     const qc = seeded()
     await invalidateLoad(qc)
     for (const key of LOAD_KEYS) expect(invalidated(qc, key), JSON.stringify(key)).toBe(true)
-    expect(invalidated(qc, qk.sidebar())).toBe(false)
+    expect(invalidated(qc, qk.sidebar())).toBe(true)
     expect(invalidated(qc, qk.peopleOptions())).toBe(false)
     expect(invalidated(qc, qk.clientOptions(null))).toBe(false)
     expect(invalidated(qc, qk.projectTasks('p1'))).toBe(false)
@@ -278,5 +278,58 @@ describe('milestones (M8 S0.6, M8-D22)', () => {
     await invalidateTasks(qc, 'p')
     expect(invalidated(qc, qk.projectMilestones('p'))).toBe(true)
     expect(invalidated(qc, qk.projectMilestones('q'))).toBe(false)
+  })
+})
+
+describe('workload / people keys (M9 S0.7, M9-D17/D22, X82)', () => {
+  const chunk: GridChunk = { from: '2026-09-28', expand: [], zoom: 'WEEK', includeOthers: false }
+  const params = { from: '2026-09-28', to: '2026-12-21', positionId: null, projectId: null, onlyOver: false }
+
+  it('keys live under the workload / calendar prefixes', () => {
+    expect(qk.workload(params)).toEqual(['workload', 'table', params])
+    expect(qk.workloadCell('u', '2026-10-05')).toEqual(['workload', 'cell', 'u', '2026-10-05'])
+    expect(qk.workloadBadge()).toEqual(['workload', 'badge'])
+    expect(qk.peopleDirectory()).toEqual(['workload', 'people'])
+    expect(qk.projectLoad('p')).toEqual(['workload', 'project', 'p'])
+    expect(qk.clientLoad('c')).toEqual(['workload', 'client', 'c'])
+    expect(qk.personTimeOff('u')).toEqual(['calendar', 'person', 'u'])
+  })
+
+  it('invalidateLoad reaches every workload view, person grids and the sidebar, but not the person leave tab', async () => {
+    const qc = new QueryClient()
+    const keys = {
+      table: qk.workload(params),
+      cell: qk.workloadCell('u', '2026-10-05'),
+      badge: qk.workloadBadge(),
+      project: qk.projectLoad('p'),
+      client: qk.clientLoad('c'),
+      people: qk.peopleDirectory(),
+      personGrid: qk.gridChunk({ kind: 'person', id: 'u' }, chunk),
+      sidebar: qk.sidebar(),
+      personTimeOff: qk.personTimeOff('u'),
+    }
+    for (const key of Object.values(keys)) qc.setQueryData(key, 1)
+    await invalidateLoad(qc)
+    for (const k of [
+      'table',
+      'cell',
+      'badge',
+      'project',
+      'client',
+      'people',
+      'personGrid',
+      'sidebar',
+    ] as const)
+      expect(invalidated(qc, keys[k]), k).toBe(true)
+    expect(invalidated(qc, keys.personTimeOff)).toBe(false)
+  })
+
+  it('invalidateCalendar reaches the person leave tab', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(qk.personTimeOff('u'), 1)
+    qc.setQueryData(qk.workloadBadge(), 1)
+    await invalidateCalendar(qc)
+    expect(invalidated(qc, qk.personTimeOff('u'))).toBe(true)
+    expect(invalidated(qc, qk.workloadBadge())).toBe(false)
   })
 })

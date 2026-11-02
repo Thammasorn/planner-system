@@ -16,6 +16,7 @@ import { loadGolden } from '../scripts/lib/fixtures'
 import { cdToNumeric } from '../src/domain/units'
 import { th } from '../src/i18n/th'
 import { formatLeaveRange, formatThaiDate } from '../src/lib/format'
+import { twoDecimals } from '../src/lib/workload/format'
 import { expect, idOf, loginAs, resetDb, test, waitForServerAction } from './fixtures'
 import { CalendarPage, chipLabel, monthTitleOf } from './pages/calendar'
 import { HolidaysPage } from './pages/holidays'
@@ -43,6 +44,16 @@ const OCT_FROM = '2026-09-28'
 /** th.capacity.impactLine for a week, from integer centi-days (FR-906, M5-D5). */
 function impactLine(weekStart: string, beforeCd: number, afterCd: number): string {
   return th.capacity.impactLine(formatThaiDate(weekStart), cdToNumeric(beforeCd), cdToNumeric(afterCd))
+}
+
+/** M9 (FR-906 overload part, M9-D18; plan/m09 S6.3): th.overload.impact.line of a new OVER week, from integer cd. */
+function overLine(weekStart: string, excessCd: number, cause: keyof typeof th.overload.cause): string {
+  return th.overload.impact.line(
+    formatThaiDate(weekStart),
+    th.overload.level.OVER,
+    th.overload.excess(twoDecimals(excessCd)),
+    th.overload.cause[cause],
+  )
 }
 
 /** Global Cmd/Ctrl+Z from a non-editable target (body); waits for the server action the undo runs. */
@@ -103,6 +114,8 @@ test.describe('E1–E3, E8 ⟲ (AC-M5-a, AC-M5-b, FR-903…909) Peter records, o
     await expect(dialog.saved()).toBeVisible()
     await expect(dialog.impact()).toContainText(th.capacity.impactFor('Peter'))
     await expect(dialog.impactLines()).toHaveText([impactLine('2026-10-05', 500, 300)])
+    // M9: the week is now OVER (DW 5.00 vs cap 3.00) → one new overload line below the capacity line
+    await expect(dialog.overloadLine('2026-10-05')).toContainText(overLine('2026-10-05', 200, 'CAPACITY'))
     await dialog.close()
 
     await expect(cal.chip('2026-10-05', PETER_VACATION)).toBeVisible()
@@ -316,6 +329,8 @@ test.describe('E5 ⟲ F4 (MASK-5, PERM-21, FR-906) manager records for Peter; ot
     await expect(dialog.saved()).toBeVisible()
     await expect(dialog.impact()).toContainText(th.capacity.impactFor('Peter'))
     await expect(dialog.impactLines()).toHaveText([impactLine('2026-10-12', 500, 300)])
+    // M9: DW 3.75 vs cap 3.00 → week 12 ต.ค. becomes OVER +0.75
+    await expect(dialog.overloadLine('2026-10-12')).toContainText(overLine('2026-10-12', 75, 'CAPACITY'))
     await dialog.close()
     await expect(cal.chip('2026-10-15', chipLabel('Peter', VACATION))).toBeVisible()
     await expect(cal.chip('2026-10-16', chipLabel('Peter', VACATION))).toBeVisible()

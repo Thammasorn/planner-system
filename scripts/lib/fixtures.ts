@@ -1,12 +1,13 @@
 // scripts/lib/fixtures.ts — golden seed (SPEC §11.3, X11, SEED-A1, PLAN.md §3.13). Builders go through the real
 // services (audit with actor = null). M5 widens FixtureId to 'F2' | 'F3' | 'F4' and adds applyFixture; later
 // milestones add stages. Reads docs/reference/golden-fixtures.json (never re-typed; seeds/tests only, never runtime).
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { z } from 'zod'
-import { addWeeks, weekStart } from '@/domain/dates'
+import { addWeeks, isoWeekday, weekStart } from '@/domain/dates'
 import { defaultStatus } from '@/domain/status'
 import type { Cd, ISODate } from '@/domain/types'
 import { cdToNumeric } from '@/domain/units'
@@ -16,10 +17,13 @@ import {
   auditLog,
   milestones,
   type NewAllocation,
+  positions,
+  projectMembers,
   projects,
   taskAssignments,
   tasks,
   user,
+  workSchedules,
 } from '@/server/db/schema'
 import type { DbOrTx } from '@/server/db/types'
 import * as repo from '@/server/repo'
@@ -379,6 +383,139 @@ export async function addSyntheticGridProject(
   for (let i = 0; i < rows.length; i += INSERT_CHUNK)
     await db.insert(allocations).values(rows.slice(i, i + INSERT_CHUNK))
   return { projectId }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M9 — synthetic workload (NFR-03 smoke, M12 seed:perf; X92, M9-D23, C69; plan/m09 S0.10)
+// ---------------------------------------------------------------------------------------------------------------
+
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+
+/** NFR-03 smoke + M12 seed:perf (C69). Composes AFTER seedGolden in the caller's transaction (`db` may be a Tx; it never
+ *  opens its own transaction and never truncates). Inserts with plain Drizzle (X59):
+ *  - `people` workers: `user` rows (role worker, `email = perf-${pad2(i)}@example.com`, i = 1…people — unique next to the
+ *    golden addresses; `name`/`nickname` = `Perf ${pad2(i)}`), no credential account (they never log in), Mon–Fri
+ *    `work_schedules` rows `fraction '1.00'`; `position_id` round-robin over the EXISTING positions (`ORDER BY position,
+ *    id`; throws `Error('addSyntheticWorkload: run seedGolden first')` when there is none) — no new position;
+ *  - `projects` projects `Perf workload ${pad2(j)}` (CONFIRMED, `client_id` null), each with the default status set (X70);
+ *  - worker i is a member of projects (i mod P) and ((i + 1) mod P); the first member added to a project is its LEAD;
+ *  - one depth-0 leaf task per (worker, project) on the project's default status, one assignment, and one WEEK
+ *    allocation per week of [from, from + weeks): cd = 100 + 100 · ((i + w) mod 3).
+ *  No audit rows (X92, M12-D11) and no charter pages (M12's addPerfBulk runs ensureProjectCharters, C100).
+ *  `from` must be a Monday (RangeError otherwise). */
+export async function addSyntheticWorkload(
+  db: DbOrTx,
+  o: { people: number; projects: number; weeks: number; from: ISODate },
+): Promise<{ userIds: string[]; projectIds: string[] }> {
+  if (isoWeekday(o.from) !== 1) throw new RangeError(`addSyntheticWorkload: from must be a Monday: ${o.from}`)
+  if (o.projects < 1) throw new RangeError('addSyntheticWorkload: projects must be ≥ 1')
+  const positionRows = await db
+    .select({ id: positions.id })
+    .from(positions)
+    .orderBy(asc(positions.position), asc(positions.id))
+  const [manager] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'manager')).limit(1)
+  if (positionRows.length === 0 || !manager) throw new Error('addSyntheticWorkload: run seedGolden first')
+
+  const workers = Array.from({ length: o.people }, (_, k) => ({ i: k + 1, id: randomUUID() }))
+  if (workers.length > 0) {
+    await db.insert(user).values(
+      workers.map(({ i, id }) => ({
+        id,
+        name: `Perf ${pad2(i)}`,
+        nickname: `Perf ${pad2(i)}`,
+        email: `perf-${pad2(i)}@example.com`,
+        role: 'worker',
+        mustChangePassword: false,
+        positionId: positionRows[(i - 1) % positionRows.length]!.id,
+      })),
+    )
+    await db
+      .insert(workSchedules)
+      .values(
+        workers.flatMap(({ id }) =>
+          [1, 2, 3, 4, 5].map((weekday) => ({ userId: id, weekday, fraction: '1.00' })),
+        ),
+      )
+  }
+
+  const projectIds = Array.from({ length: o.projects }, () => randomUUID())
+  await db.insert(projects).values(
+    projectIds.map((id, j) => ({
+      id,
+      name: `Perf workload ${pad2(j + 1)}`,
+      clientId: null,
+      certainty: 'CONFIRMED' as const,
+      createdBy: manager.id,
+    })),
+  )
+  const statusOf = new Map<string, string>()
+  for (const projectId of projectIds) {
+    await services.taskStatuses.ensureProjectStatuses(db, projectId)
+    statusOf.set(projectId, defaultStatus(await repo.statuses.listLiveStatuses(db, projectId)).id)
+  }
+
+  // memberships in worker order (first member of a project = LEAD) and one (worker, project) pair per membership
+  const pairs: { i: number; userId: string; projectId: string }[] = []
+  const members: (typeof projectMembers.$inferInsert)[] = []
+  const hasLead = new Set<string>()
+  for (const { i, id } of workers) {
+    for (const projectId of new Set([projectIds[i % o.projects]!, projectIds[(i + 1) % o.projects]!])) {
+      members.push({
+        projectId,
+        userId: id,
+        role: hasLead.has(projectId) ? 'MEMBER' : 'LEAD',
+        addedBy: manager.id,
+      })
+      hasLead.add(projectId)
+      pairs.push({ i, userId: id, projectId })
+    }
+  }
+  for (let k = 0; k < members.length; k += INSERT_CHUNK)
+    await db.insert(projectMembers).values(members.slice(k, k + INSERT_CHUNK))
+
+  const perProject = new Map<string, number>()
+  for (const p of pairs) perProject.set(p.projectId, (perProject.get(p.projectId) ?? 0) + 1)
+  const keys = new Map([...perProject].map(([projectId, n]) => [projectId, repo.order.rekey(n)]))
+  const used = new Map<string, number>()
+  const leaves = pairs.map((p) => {
+    const k = used.get(p.projectId) ?? 0
+    used.set(p.projectId, k + 1)
+    return { ...p, taskId: randomUUID(), assignmentId: randomUUID(), position: keys.get(p.projectId)![k]! }
+  })
+  for (let k = 0; k < leaves.length; k += INSERT_CHUNK) {
+    const chunk = leaves.slice(k, k + INSERT_CHUNK)
+    await db.insert(tasks).values(
+      chunk.map((l) => ({
+        id: l.taskId,
+        projectId: l.projectId,
+        depth: 0,
+        name: `Perf task ${pad2(l.i)}`,
+        position: l.position,
+        statusId: statusOf.get(l.projectId)!,
+        createdBy: manager.id,
+      })),
+    )
+    await db
+      .insert(taskAssignments)
+      .values(chunk.map((l) => ({ id: l.assignmentId, taskId: l.taskId, userId: l.userId })))
+  }
+
+  const rows: NewAllocation[] = leaves.flatMap((l) =>
+    Array.from({ length: o.weeks }, (_, w) => {
+      const week = addWeeks(o.from, w)
+      const cd: Cd = 100 + 100 * ((l.i + w) % 3)
+      return {
+        taskAssignmentId: l.assignmentId,
+        granularity: 'WEEK' as const,
+        periodStart: week,
+        weekStart: week,
+        personDays: cdToNumeric(cd),
+      }
+    }),
+  )
+  for (let k = 0; k < rows.length; k += INSERT_CHUNK)
+    await db.insert(allocations).values(rows.slice(k, k + INSERT_CHUNK))
+  return { userIds: workers.map((w) => w.id), projectIds }
 }
 
 // ---------------------------------------------------------------------------------------------------------------

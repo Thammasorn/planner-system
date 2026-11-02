@@ -18,6 +18,7 @@ import { CertaintyToggle } from './CertaintyToggle'
 import { DeleteProjectButton } from './DeleteProjectButton'
 import { MembersPanel } from './MembersPanel'
 import { ProjectFormDialog } from './ProjectFormDialog'
+import { ProjectLoadSection } from './ProjectLoadSection'
 import { ProjectMilestones } from './ProjectMilestones'
 import { StatusSettings } from './StatusSettings'
 
@@ -142,6 +143,8 @@ export function ProjectOverview({
       <ProjectMilestones projectId={project.id} />
       <MembersPanel projectId={project.id} members={members} canManage={project.can.manage} />
       {progress ? <StatusSettings projectId={project.id} /> : null}
+      {/* M9 FR-409 load part (M9-D19, C41): appended last, before the footer actions */}
+      <ProjectLoadSection projectId={project.id} />
       <ProjectActions project={project} />
     </Stack>
   )

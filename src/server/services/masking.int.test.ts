@@ -1,7 +1,17 @@
 // X30 / MASK-7 skeleton: pure helpers (no DB rows needed); runs in the integration project with src/server/**.
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import { isVisible, maskHidden, maskTimeOff, partitionByProject, type TimeOffWithType } from './masking'
+import {
+  isVisible,
+  maskCellItems,
+  maskedGridRow,
+  maskHidden,
+  maskProjectParts,
+  maskTimeOff,
+  namedProjectParts,
+  partitionByProject,
+  type TimeOffWithType,
+} from './masking'
 
 const rows = [
   { projectId: 'p', v: 1 },
@@ -70,5 +80,69 @@ describe('maskTimeOff (SPEC §3.3, MASK-5, M5-D7)', () => {
 
   it('visible details → kind full with the note, type and colour', () => {
     expect(maskTimeOff(row, true)).toEqual({ kind: 'full', ...row })
+  })
+})
+
+describe('M9 masking completion (M9-D8, SPEC §7.4, FR-1005, FR-906)', () => {
+  const parts = new Map([
+    ['P', { total: 100, committed: 100 }],
+    ['Q', { total: 300, committed: 300 }],
+    ['Z', { total: 0, committed: 0 }],
+  ])
+  const names = new Map([
+    ['P', 'Project P'],
+    ['Q', 'Secret Q'],
+  ])
+
+  it('maskProjectParts: visible parts + one null part; no Q anywhere; ALL → no null part; zero parts dropped', () => {
+    const out = maskProjectParts(parts, new Set(['P']), names)
+    expect(out).toEqual([
+      { projectId: 'P', total: 100, committed: 100 },
+      { projectId: null, total: 300, committed: 300 },
+    ])
+    expect(JSON.stringify(out)).not.toContain('Q')
+    expect(maskProjectParts(parts, 'ALL', names)).toEqual([
+      { projectId: 'P', total: 100, committed: 100 },
+      { projectId: 'Q', total: 300, committed: 300 },
+    ])
+    expect(maskProjectParts(new Map(), new Set(['P']), names)).toEqual([])
+  })
+
+  it('visible parts are sorted by compareThai(name)', () => {
+    const n = new Map([
+      ['a', 'ข'],
+      ['b', 'ก'],
+    ])
+    const p = new Map([
+      ['a', { total: 1, committed: 0 }],
+      ['b', { total: 2, committed: 0 }],
+    ])
+    expect(maskProjectParts(p, 'ALL', n).map((x) => x.projectId)).toEqual(['b', 'a'])
+  })
+
+  it('namedProjectParts names the hidden part th.masking.otherProjects', () => {
+    expect(namedProjectParts(parts, new Set(['P']), names)).toEqual([
+      { projectId: 'P', name: 'Project P', load: { total: 100, committed: 100 } },
+      { projectId: null, name: th.masking.otherProjects, load: { total: 300, committed: 300 } },
+    ])
+  })
+
+  it('maskedGridRow: zero keys dropped; all zero → null', () => {
+    expect(maskedGridRow('u', { 'W:2026-10-05': { total: 0, committed: 0 } })).toBeNull()
+    expect(
+      maskedGridRow('u', { 'W:2026-10-05': { total: 0, committed: 0 }, 'W:2026-10-12': { total: 50, committed: 0 } }),
+    ).toEqual({
+      kind: 'masked',
+      userId: 'u',
+      label: th.masking.otherProjects,
+      totals: { 'W:2026-10-12': { total: 50, committed: 0 } },
+    })
+  })
+
+  it('maskCellItems: one masked item without id/count when hidden ≠ 0', () => {
+    expect(maskCellItems([], { total: 0, committed: 0 })).toEqual([])
+    expect(maskCellItems([], { total: 300, committed: 300 })).toEqual([
+      { kind: 'masked', label: th.masking.otherProjects, load: { total: 300, committed: 300 } },
+    ])
   })
 })

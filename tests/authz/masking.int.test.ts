@@ -13,6 +13,7 @@
 // M6.1 (plan/m06.1 S6.3): task bodies — task search group, page trees/titles without TASK pages, body/page/lease/file
 // 404 bodies, hasBody without body text, /my statusesByProject of the viewer's projects only.
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { GET as getClientOptions } from '@/app/api/clients/options/route'
 import { GET as getPeopleOptions } from '@/app/api/people/options/route'
@@ -21,25 +22,49 @@ import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
 import { GET as getTeamTasks } from '@/app/api/tasks/route'
-import { eq, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
+import { weekRange } from '@/domain/dates'
 import { th } from '@/i18n/th'
 import type {
   CalendarResponse,
   CalendarTimeOffFull,
   CalendarTimeOffMasked,
 } from '@/lib/contracts/calendar'
-import type { GridPerson, GridResponse, SaveItemResult } from '@/lib/contracts/grid'
+import type {
+  GridMaskedRow,
+  GridPerson,
+  GridProjectRow,
+  GridResponse,
+  SaveItemResult,
+} from '@/lib/contracts/grid'
+import type {
+  ClientLoadResponse,
+  PeopleDirectoryResponse,
+  PersonTimeOffResponse,
+  ProjectLoadResponse,
+  WorkloadBadgeResponse,
+  WorkloadCellDetail,
+  WorkloadPerson,
+  WorkloadResponse,
+} from '@/lib/contracts/workload'
 import type { MilestoneTargetsResponse } from '@/lib/contracts/milestones'
 import type { PlanMarkersResponse } from '@/lib/contracts/plan-markers'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
 import type { SearchResponse } from '@/lib/contracts/search'
-import type { MyTasksResponse, ProjectTasksResponse, TeamTasksResponse } from '@/lib/contracts/tasks'
+import type {
+  MyBucketTask,
+  MyTaskBucketsResponse,
+  ProjectTasksResponse,
+  TeamTasksResponse,
+} from '@/lib/contracts/tasks'
 import { createPage, movePage } from '@/server/actions/pages'
 import { addTaskBlocker } from '@/server/actions/task-blockers'
 import { db } from '@/server/db/client'
 import {
   pageLocks,
+  taskAssignments,
+  tasks as tasksTable,
   timeOff,
   type LeaveTypeRow,
   type PageRow,
@@ -51,14 +76,23 @@ import {
   addMilestones,
   applyFixture,
   DAY_EXAMPLE,
+  DEMO_MILESTONES,
   GOLDEN_PATH,
   seedGolden,
 } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
 import { allocationRows, makeBlocker, makePage, makePlanMarker, type TestUser } from '../helpers/factories'
-import { outcomeOf } from '../helpers/outcome'
+import { allNumbersInteger, containsAny } from '../helpers/json'
+import { outcomeOf, outcomeOfCall } from '../helpers/outcome'
 import { createWorld, type World } from '../helpers/world'
-import { goldenProjectId, goldenTaskNames, goldenUser, type GoldenProject } from './_support/golden'
+import {
+  GOLDEN_PROJECTS,
+  goldenProjectId,
+  goldenTaskNames,
+  goldenUser,
+  type GoldenProject,
+  type GoldenViewer,
+} from './_support/golden'
 import { callRoute, okJson } from './_support/http'
 import { assertContains, assertNoLeak } from './_support/leak'
 import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './rows/_m4'
@@ -74,6 +108,23 @@ import {
   targetsGet,
   teamTasksGet,
 } from './rows/_m8'
+import {
+  clientLoadGet,
+  peopleGet,
+  PERSON_GRID_RANGE,
+  personGridGet,
+  personTimeOffGet,
+  pNeedles,
+  projectLoadGet,
+  qNeedles,
+  WORKLOAD_RANGE,
+  workloadBadgeGet,
+  workloadCellGet,
+  workloadGet,
+} from './rows/_m9'
+
+/** Every task of the M9 /my buckets (X95). */
+const myTasksOf = (b: MyTaskBucketsResponse): MyBucketTask[] => b.buckets.flatMap((x) => x.tasks)
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -240,10 +291,11 @@ describe('masking — tasks (M3, plan/m03 S4.3)', () => {
   it('outsider: GET /api/tasks/my has only Q content (งาน Q-ลับ02), nothing of P or A', async () => {
     const w = await createWorld({ with: ['tasks'] })
     asUser(w.outsider)
-    const body = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
+    const body = await okJson<MyTaskBucketsResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
     assertContains(body, [w.tasks.qTask.name])
     assertNoLeak(body, pAndA(w))
-    expect(body.groups.map((g) => g.project.id)).toEqual([w.Q.id])
+    // M9 (X95): the same tasks, grouped into the FR-1009 buckets instead of projects
+    expect([...new Set(myTasksOf(body).map((t) => t.project.id))]).toEqual([w.Q.id])
   })
 
   it('outsider: GET /api/sidebar (with tasks) has no P/A task names; member: none of Q', async () => {
@@ -392,8 +444,9 @@ describe('masking — golden (r6a M2-17, r8 §4.3)', () => {
     const team = await okJson<TeamTasksResponse>(await callRoute(getTeamTasks, '/api/tasks'))
     assertContains(team, goldenTaskNames(['Data Warehouse', 'Store Analytics Dashboard']))
     assertNoLeak(team, hidden)
-    const my = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
+    const my = await okJson<MyTaskBucketsResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
     assertNoLeak(my, hidden)
+    expect(myTasksOf(my).length, 'Peter has open DW / Store tasks on /my').toBeGreaterThan(0)
   })
 })
 
@@ -1164,14 +1217,16 @@ describe('masking — task bodies (M6.1, plan/m06.1 S6.3; FR-682, FR-687, FR-690
   it('outsider: GET /api/tasks/my statusesByProject has only Q’s statuses; member: none of Q (M6.1-D12)', async () => {
     const w = await createWorld({ with: ['taskBodies'] })
     asUser(w.outsider)
-    const out = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
+    // M9 (X95) replaced the response with MyTaskBucketsResponse, which keeps FR-1606's statusesByProject (M6.1-D12).
+    const out = await okJson<MyTaskBucketsResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
     expect(out.statusesByProject, 'S1.10 fills statusesByProject').toBeDefined()
-    expect(Object.keys(out.statusesByProject ?? {})).toEqual([w.Q.id])
+    expect(Object.keys(out.statusesByProject)).toEqual([w.Q.id])
     assertNoLeak(out, [...pBodies(w), w.statuses.P.pSecret.name, w.statuses.P.todo.id, w.statuses.A.todo.id])
     asUser(w.member)
-    const mine = await okJson<MyTasksResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
-    expect(Object.keys(mine.statusesByProject ?? {}).sort()).toEqual(mine.groups.map((g) => g.project.id).sort())
-    expect(mine.groups.length).toBeGreaterThan(0)
+    const mine = await okJson<MyTaskBucketsResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
+    const mineProjects = [...new Set(myTasksOf(mine).map((t) => t.project.id))].sort()
+    expect(Object.keys(mine.statusesByProject).sort()).toEqual(mineProjects)
+    expect(mineProjects.length).toBeGreaterThan(0)
     assertNoLeak(mine, [...qBodies(w), w.statuses.Q.waitData.name, w.statuses.Q.todo.id])
   })
 
@@ -1468,4 +1523,324 @@ describe('masking — milestones (M8, plan/m08 S5.2)', () => {
     assertContains(bodies, ['Pipeline พร้อมใช้งาน', 'Dashboard v1 review'])
     for (const b of bodies) assertNoLeak(b, ['UAT sign-off', 'Go-live สาขาแรก', 'Data migration complete', 'Design freeze'])
   })
+})
+
+// ── M9 workload & people (plan/m09 S5.2; SPEC §3.3 every masking line, §11.2, MASK-1…7, M9-D8/D9/D12/D16) ────────────
+// World createWorld({ with: ['allocations', 'milestones'] }). Week 2026-10-05 of the coworker (MEMBER of P and Q):
+// P 'งานร่วม P-ลับ03' 100 + Q 'งาน Q-ลับ02' 300 (both CONFIRMED). Visibility (X43): Me → {member, lead, coworker,
+// pOnly}; W → {outsider, coworker}. Each case asserts the needles are absent **and** the masked totals are present,
+// so a test cannot pass on an empty body.
+
+const M9W = ['allocations', 'milestones'] as const
+const W1005 = '2026-10-05'
+
+/** Ids + names of users the viewer may not see at all. */
+const usersNeedles = (...us: TestUser[]): string[] => us.flatMap((u) => [u.id, u.name])
+
+const workloadPerson = (b: WorkloadResponse, userId: string): WorkloadPerson | undefined =>
+  b.groups.flatMap((g) => g.people).find((p) => p.userId === userId)
+
+const maskedRowsOf = (g: GridResponse): GridMaskedRow[] => g.rows.filter((r): r is GridMaskedRow => r.kind === 'masked')
+const projectRowsOf = (g: GridResponse): GridProjectRow[] =>
+  g.rows.filter((r): r is GridProjectRow => r.kind === 'project')
+
+describe('masking — workload & people (M9)', () => {
+  it('outsider: GET /api/workload has only outsider + coworker; coworker 10-05 = Q 3.00 + one masked 1.00; nothing of P', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const body = await okJson<WorkloadResponse>(await workloadGet(WORKLOAD_RANGE))
+    expect(containsAny(body, [...usersNeedles(w.manager, w.lead, w.member, w.users.pOnly!), ...pNeedles(w)])).toEqual([])
+    expect(
+      body.groups.flatMap((g) => g.people.map((p) => p.userId)).sort(),
+      'MASK-1 population = the outsider and her co-member',
+    ).toEqual([w.outsider.id, w.users.coworker!.id].sort())
+    expect(workloadPerson(body, w.users.coworker!.id)?.cells[W1005]?.byProject).toEqual([
+      { projectId: w.Q.id, total: 300, committed: 300 },
+      { projectId: null, total: 100, committed: 100 },
+    ])
+    expect(workloadPerson(body, w.users.coworker!.id)?.cells[W1005]).toMatchObject({ total: 400, committed: 400 })
+    for (const id of Object.keys(body.projects)) expect([w.Q.id], 'projects ⊆ visible').toContain(id)
+    expect(allNumbersInteger(body), 'BR-03 integer cd').toBe(true)
+  })
+
+  it('member: GET /api/workload has no Q content and no outsider; coworker 10-05 = P 1.00 + masked 3.00', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.member)
+    const body = await okJson<WorkloadResponse>(await workloadGet())
+    expect(containsAny(body, [...qNeedles(w), ...usersNeedles(w.outsider), w.milestones.q.name])).toEqual([])
+    expect(workloadPerson(body, w.users.coworker!.id)?.cells[W1005]?.byProject).toEqual([
+      { projectId: w.P.id, total: 100, committed: 100 },
+      { projectId: null, total: 300, committed: 300 },
+    ])
+    expect(Object.keys(body.projects)).not.toContain(w.Q.id)
+  })
+
+  it('lead (LEAD → everyone’s totals, §3.3): the outsider row is present but its Q load is one masked part', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.lead)
+    const body = await okJson<WorkloadResponse>(await workloadGet(WORKLOAD_RANGE))
+    expect(containsAny(body, qNeedles(w))).toEqual([])
+    expect(workloadPerson(body, w.outsider.id)?.cells['2026-09-28']?.byProject).toEqual([
+      { projectId: null, total: 300, committed: 300 },
+    ])
+  })
+
+  it('manager (M9-D8): sees every project by id — no masked part anywhere', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.manager)
+    const body = await okJson<WorkloadResponse>(await workloadGet(WORKLOAD_RANGE))
+    const parts = body.groups.flatMap((g) => g.people.flatMap((p) => Object.values(p.cells).flatMap((c) => c.byProject)))
+    expect(parts.length).toBeGreaterThan(0)
+    expect(parts.filter((x) => x.projectId === null)).toEqual([])
+    expect(workloadPerson(body, w.users.coworker!.id)?.cells[W1005]?.byProject.map((x) => x.projectId).sort()).toEqual(
+      [w.P.id, w.Q.id].sort(),
+    )
+  })
+
+  it('member: GET /api/workload/cell (coworker, 10-05) lists the P task and one masked 3.00 item without Q content', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.member)
+    const body = await okJson<WorkloadCellDetail>(await workloadCellGet(w.users.coworker!.id, W1005))
+    expect(containsAny(body, qNeedles(w))).toEqual([])
+    const tasks = body.items.filter((i) => i.kind === 'task')
+    expect(tasks.map((t) => [t.taskName, t.projectId, t.load])).toEqual([
+      ['งานร่วม P-ลับ03', w.P.id, { total: 100, committed: 100 }],
+    ])
+    const masked = body.items.filter((i) => i.kind === 'masked')
+    expect(masked).toEqual([{ kind: 'masked', label: th.masking.otherProjects, load: { total: 300, committed: 300 } }])
+  })
+
+  it('outsider: GET /api/workload/cell (coworker, 10-05) lists the Q task and one masked 1.00 item without P content', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const body = await okJson<WorkloadCellDetail>(await workloadCellGet(w.users.coworker!.id, W1005))
+    expect(containsAny(body, pNeedles(w))).toEqual([])
+    expect(body.items.filter((i) => i.kind === 'task').map((t) => t.taskName)).toEqual([w.tasks.qTask.name])
+    expect(body.items.filter((i) => i.kind === 'masked')).toEqual([
+      { kind: 'masked', label: th.masking.otherProjects, load: { total: 100, committed: 100 } },
+    ])
+  })
+
+  it('member: GET /api/grid/person/{coworker} — project row P, one masked row 10-05 = 3.00, no Q content or ◆', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.member)
+    const body = await okJson<GridResponse>(await personGridGet(w.users.coworker!.id, PERSON_GRID_RANGE))
+    expect(containsAny(body, [...qNeedles(w), ...qMilestoneSecrets(w)])).toEqual([])
+    expect(projectRowsOf(body).map((r) => r.id)).toEqual([w.P.id])
+    const masked = maskedRowsOf(body)
+    expect(masked).toHaveLength(1)
+    expect(Object.keys(masked[0]!).sort(), 'no id, name or count of hidden projects').toEqual([
+      'kind',
+      'label',
+      'totals',
+      'userId',
+    ])
+    expect(masked[0]).toMatchObject({ userId: w.users.coworker!.id, label: th.masking.otherProjects })
+    expect(masked[0]!.totals['W:2026-10-05']).toEqual({ total: 300, committed: 300 })
+    assertContains(body, [w.tasks.pCoworker.name])
+    for (const m of body.milestones) expect(m.projectId, 'MASK-6 ◆ of visible projects only').toBe(w.P.id)
+  })
+
+  it('outsider: GET /api/grid/person/{coworker} — project row Q, one masked row 10-05 = 1.00, nothing of P', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const body = await okJson<GridResponse>(await personGridGet(w.users.coworker!.id, PERSON_GRID_RANGE))
+    expect(containsAny(body, [...pNeedles(w), ...pAndAMilestoneSecrets(w)])).toEqual([])
+    expect(projectRowsOf(body).map((r) => r.id)).toEqual([w.Q.id])
+    const masked = maskedRowsOf(body)
+    expect(masked).toHaveLength(1)
+    expect(masked[0]!.totals['W:2026-10-05']).toEqual({ total: 100, committed: 100 })
+    assertContains(body, [w.tasks.qTask.name])
+  })
+
+  it('outsider: GET /api/grid/person/{member} → 404 whose body has nothing of the member or P', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const { status, body } = await bodyOf(await personGridGet(w.member.id, PERSON_GRID_RANGE))
+    expect(status).toBe(404)
+    expect(containsAny(body, [...usersNeedles(w.member), w.member.email, ...pNeedles(w)])).toEqual([])
+  })
+
+  it('outsider: GET /api/people lists only the outsider and the coworker', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const body = await okJson<PeopleDirectoryResponse>(await peopleGet())
+    expect(containsAny(body, [...usersNeedles(w.member, w.lead, w.users.pOnly!, w.manager), ...pNeedles(w)])).toEqual(
+      [],
+    )
+    expect(body.groups.flatMap((g) => g.people.map((p) => p.userId)).sort()).toEqual(
+      [w.outsider.id, w.users.coworker!.id].sort(),
+    )
+  })
+
+  it('outsider: GET /api/people/{coworker}/time-off — one masked entry “ลา” 11-09..11-10, no type, note or id (MASK-5)', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const body = await okJson<PersonTimeOffResponse>(await personTimeOffGet(w.users.coworker!.id))
+    expect(
+      containsAny(body, [
+        'โน้ตลับ-โลก-01',
+        w.leaveTypes.vacation.name,
+        w.leaveTypes.vacation.id,
+        w.leaveTypes.vacation.color,
+        w.timeOff.coworker.id,
+      ]),
+    ).toEqual([])
+    expect(body.entries).toEqual([
+      {
+        kind: 'masked',
+        userId: w.users.coworker!.id,
+        startDate: '2026-11-09',
+        endDate: '2026-11-10',
+        half: null,
+        label: th.masking.leave,
+      },
+    ])
+    expect(body.canEdit).toBe(false)
+    // the owner sees her own details (not vacuous)
+    asUser(w.users.coworker!)
+    const own = await okJson<PersonTimeOffResponse>(await personTimeOffGet(w.users.coworker!.id))
+    assertContains(own, ['โน้ตลับ-โลก-01', w.leaveTypes.vacation.name])
+    expect(own.canEdit).toBe(true)
+  })
+
+  it('outsider: GET /api/workload/badge carries exactly { overCount, from, to } and no name', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.outsider)
+    const body = await okJson<WorkloadBadgeResponse>(await workloadBadgeGet())
+    expect(Object.keys(body).sort()).toEqual(['from', 'overCount', 'to'])
+    expect(typeof body.overCount).toBe('number')
+    expect(containsAny(body, [...usersNeedles(w.users.coworker!, w.outsider), ...pNeedles(w), ...qNeedles(w)])).toEqual(
+      [],
+    )
+  })
+
+  it('lead: GET /api/clients/{C2}/load → 404 without Q or C2 names', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.lead)
+    const { status, body } = await bodyOf(await clientLoadGet(w.C2.id))
+    expect(status).toBe(404)
+    expect(containsAny(body, [w.C2.name, w.C2.id, ...qNeedles(w)])).toEqual([])
+  })
+
+  it('member: project load of P and client load of C1 are numbers of P only — no Q content (FR-409, FR-303)', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.member)
+    const pl = await okJson<ProjectLoadResponse>(await projectLoadGet(w.P.id))
+    expect(containsAny(pl, qNeedles(w))).toEqual([])
+    expect(pl.members.find((m) => m.userId === w.users.coworker!.id)?.thisWeek, 'this week (09-28): no P plan').toEqual({
+      total: 0,
+      committed: 0,
+    })
+    expect(pl.weekly['2026-10-05'], 'P only: lead 5.00 + coworker 1.00 (pDone 10-05 not counted, BR-50)').toEqual({
+      total: 600,
+      committed: 600,
+    })
+    const cl = await okJson<ClientLoadResponse>(await clientLoadGet(w.C1.id))
+    expect(containsAny(cl, qNeedles(w))).toEqual([])
+    expect(cl.projects.map((p) => p.projectId)).toEqual([w.P.id])
+  })
+
+  it('member: GET /api/tasks?userId={coworker} (person tab, X75) has P cards only', async () => {
+    const w = await createWorld({ with: M9W })
+    asUser(w.member)
+    const body = await okJson<TeamTasksResponse>(await teamTasksGet(`userId=${w.users.coworker!.id}`))
+    expect(containsAny(body, qNeedles(w))).toEqual([])
+    expect(body.cards.map((c) => c.name)).toEqual([w.tasks.pCoworker.name])
+  })
+})
+
+// ── golden person grid masking (r8 §4.3, §6.4; facts.json › masking / invisiblePairs; M8-D23) ─────────────────────────
+
+interface R8MaskingFacts {
+  masking: { viewer: GoldenViewer; target: GoldenViewer; byWeek: Record<string, number>; mustNotContain: string[] }[]
+  invisiblePairs: string[]
+  visibility: Record<GoldenViewer, { users: GoldenViewer[]; detailProjects: GoldenProject[] }>
+}
+const R8_FACTS = JSON.parse(
+  readFileSync(path.join(process.cwd(), 'plan/research/snippets/r8/facts.json'), 'utf8'),
+) as R8MaskingFacts
+const GOLDEN_FROM = '2026-08-31'
+const GOLDEN_TO = '2027-01-04'
+const GOLDEN_WEEKS = weekRange(GOLDEN_FROM, GOLDEN_TO)
+
+/** Ids of the projects the viewer may not open, their live and deleted tasks and every assignment on them. */
+async function hiddenIdsFor(viewer: GoldenViewer): Promise<string[]> {
+  const visible = new Set<string>(R8_FACTS.visibility[viewer].detailProjects)
+  const hidden = GOLDEN_PROJECTS.filter((p) => !visible.has(p))
+  const ids: string[] = []
+  for (const name of hidden) {
+    const pid = await goldenProjectId(name)
+    ids.push(pid)
+    const ts = await db.select({ id: tasksTable.id }).from(tasksTable).where(eq(tasksTable.projectId, pid))
+    ids.push(...ts.map((t) => t.id))
+    if (ts.length > 0) {
+      const as = await db
+        .select({ id: taskAssignments.id })
+        .from(taskAssignments)
+        .where(inArray(taskAssignments.taskId, ts.map((t) => t.id)))
+      ids.push(...as.map((a) => a.id))
+    }
+  }
+  return ids
+}
+
+/** Milestone names (App. A.2) of the projects the viewer may not open (MASK-6, M8-D23). */
+function hiddenMilestoneNames(viewer: GoldenViewer): string[] {
+  const visible = new Set<string>(R8_FACTS.visibility[viewer].detailProjects)
+  return DEMO_MILESTONES.filter((m) => !visible.has(m.project)).map((m) => m.name)
+}
+
+describe('masking — golden person grid (M9, r8 §4.3/§6.4)', () => {
+  it('fixture sanity: 15 masking pairs and 5 invisible pairs; Cindy/Ivy hide the four M8 milestone names', () => {
+    expect(R8_FACTS.masking).toHaveLength(15)
+    expect(R8_FACTS.invisiblePairs).toHaveLength(5)
+    for (const v of ['Cindy', 'Ivy'] as const)
+      expect(hiddenMilestoneNames(v).sort()).toEqual(
+        ['Pipeline พร้อมใช้งาน', 'Design freeze', 'Beta release', 'Dashboard v1 review'].sort(),
+      )
+  })
+
+  it.each(R8_FACTS.masking.map((m) => [`${m.viewer} → ${m.target}`, m] as const))(
+    '%s: masked row = r8 byWeek, no hidden name / id / milestone',
+    async (_label, m) => {
+      await seedGolden(db)
+      await addMilestones(db)
+      const target = await goldenUser(m.target)
+      asUser(await goldenUser(m.viewer))
+      const body = await okJson<GridResponse>(
+        await personGridGet(target.id, `from=${GOLDEN_FROM}&to=${GOLDEN_TO}`),
+      )
+      expect(body.context).toMatchObject({ kind: 'person', id: target.id, canManage: false })
+      const masked = maskedRowsOf(body)
+      expect(masked, 'exactly one masked row').toHaveLength(1)
+      for (const week of GOLDEN_WEEKS)
+        expect(masked[0]!.totals[`W:${week}`]?.total ?? 0, `${m.viewer} → ${m.target} ${week}`).toBe(m.byWeek[week] ?? 0)
+      expect(containsAny(body, m.mustNotContain)).toEqual([])
+      expect(containsAny(body, await hiddenIdsFor(m.viewer)), 'ids of hidden projects / tasks / assignments').toEqual([])
+      expect(containsAny(body, hiddenMilestoneNames(m.viewer)), 'MASK-6 milestones of hidden projects').toEqual([])
+      for (const r of projectRowsOf(body))
+        expect(R8_FACTS.visibility[m.viewer].detailProjects, 'project rows = visible projects').toContain(r.name)
+    },
+  )
+
+  it.each(R8_FACTS.invisiblePairs)(
+    '%s: person grid, header loader, time-off route and cell route all answer 404',
+    async (pair) => {
+      await seedGolden(db)
+      const [viewer, target] = pair.split('→') as [GoldenViewer, GoldenViewer]
+      const t = await goldenUser(target)
+      const v = asUser(await goldenUser(viewer))
+      const grid = await bodyOf(await personGridGet(t.id, `from=${GOLDEN_FROM}&to=${GOLDEN_TO}`))
+      expect(grid.status, 'person grid').toBe(404)
+      expect(containsAny(grid.body, [t.id, t.name])).toEqual([])
+      expect(await outcomeOfCall(() => services.people.getPersonHeader(db, v, t.id)), 'header loader').toBe('404')
+      const leave = await bodyOf(await personTimeOffGet(t.id))
+      expect(leave.status, 'time-off route').toBe(404)
+      expect(containsAny(leave.body, [t.id, t.name])).toEqual([])
+      const cell = await bodyOf(await workloadCellGet(t.id, '2026-10-05'))
+      expect(cell.status, 'cell route').toBe(404)
+      expect(containsAny(cell.body, [t.id, t.name])).toEqual([])
+    },
+  )
 })

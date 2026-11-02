@@ -53,17 +53,33 @@ type ProjectRef = TeamTasksResponse['projects'][number]
 
 const taskHref = (c: TaskCardDTO) => projectTasksHref(c.projectId, c.id)
 
+export interface TeamTasksProps {
+  /** M3-D41: mirror the filters in the URL (/tasks). M9 call sites pass false with `fixedUserId`. */
+  syncUrl?: boolean
+  /** M9-D15 (FR-667 person tab, /my list/board): every request carries `userId`; the person filter is hidden. */
+  fixedUserId?: string
+  /** M9-D15 (/my): overrides `tasks.view` without writing the preference; the view toggle is hidden. */
+  forcedView?: 'LIST' | 'BOARD'
+  /** M9-D15: a note above the list (e.g. th.people.tasks.hiddenHint). */
+  hint?: string
+}
+
 /**
  * งานของทีม `/tasks` (FR-665/666, X75, M3-D33/D41): tasks of every project the viewer can see; filters person /
  * project / position / category / blocked / done live in the URL (when `syncUrl`); list grouped by project or a board
  * of the 4 categories, where a drop picks the first status of that category in the task's project (FR-666).
  * M8 (FR-663, M8-D15): cards / rows show "◆ name" (no lateness on /tasks); the milestone filter is enabled once a
  * project is chosen and sent as `milestoneId`.
+ * M9 (FR-667 person tab, /my ลิสต์/บอร์ด — X77, M9-D15): `fixedUserId`, `forcedView`, `hint`.
  */
-export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
-  const { filters, patch, clear } = useTeamTaskFilters({ syncUrl })
+export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: TeamTasksProps) {
+  const { filters: chosen, patch, clear } = useTeamTaskFilters({ syncUrl })
+  const filters = useMemo(
+    () => (fixedUserId ? { ...chosen, userId: fixedUserId } : chosen),
+    [chosen, fixedUserId],
+  )
   const { prefs } = usePreferences()
-  const view = taskPreference(prefs, 'tasks.view')
+  const view = forcedView ?? taskPreference(prefs, 'tasks.view')
   const people = usePeopleOptions()
   const router = useRouter()
   const status = useSetTaskStatus()
@@ -141,17 +157,19 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
   return (
     <Box sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-        <ViewToggle />
-        <Box sx={{ width: { xs: '100%', sm: 220 } }}>
-          <PersonPicker
-            label={th.teamTasks.filters.person}
-            options={people.data ?? []}
-            value={filters.userId ? (peopleById.get(filters.userId) ?? null) : null}
-            onSelect={(p) => patch({ userId: p.id })}
-            onClear={() => patch({ userId: undefined })}
-            loading={people.isLoading}
-          />
-        </Box>
+        {forcedView ? null : <ViewToggle />}
+        {fixedUserId ? null : (
+          <Box sx={{ width: { xs: '100%', sm: 220 } }}>
+            <PersonPicker
+              label={th.teamTasks.filters.person}
+              options={people.data ?? []}
+              value={filters.userId ? (peopleById.get(filters.userId) ?? null) : null}
+              onSelect={(p) => patch({ userId: p.id })}
+              onClear={() => patch({ userId: undefined })}
+              loading={people.isLoading}
+            />
+          </Box>
+        )}
         <FilterSelect
           label={th.teamTasks.filters.project}
           value={filters.projectId ?? ''}
@@ -168,7 +186,7 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
           )}
           onChange={(v) => patch({ milestoneId: v || undefined })}
         />
-        {positions.length > 0 ? (
+        {positions.length > 0 && !fixedUserId ? (
           <FilterSelect
             label={th.teamTasks.filters.position}
             value={filters.positionId ?? ''}
@@ -217,12 +235,17 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
         </Button>
       </Box>
 
+      {hint ? (
+        <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }} data-testid="team-tasks-hint">
+          {hint}
+        </Typography>
+      ) : null}
       {q.isPending ? (
         <CircularProgress size={24} aria-label={th.common.loading} />
       ) : q.isError ? (
         <Alert severity="error">{errorMessage(q.error)}</Alert>
       ) : cards.length === 0 ? (
-        <EmptyState title={th.teamTasks.empty} />
+        <EmptyState title={fixedUserId ? th.people.tasks.empty : th.teamTasks.empty} />
       ) : view === 'BOARD' ? (
         <TaskBoard<TaskCardDTO>
           columns={buildCategoryColumns(cards, { hideDone: false })}

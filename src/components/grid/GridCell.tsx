@@ -68,6 +68,8 @@ export interface GridCellProps {
   onCollapse?: (rowKey: string, periodKey: string) => void
   /** M7.1 (FR-818): first column of a month (the month boundary line) */
   monthStart?: boolean
+  /** M9 (S3.4): a person-grid project / masked row cell (read-only sums) */
+  rowKind?: 'project' | 'masked'
 }
 
 function CellEditor({
@@ -169,6 +171,7 @@ export const GridCell = memo(function GridCell(p: GridCellProps) {
       data-holiday={p.holiday ? 'true' : undefined}
       data-pending-choice={p.pendingChoice ? 'true' : undefined}
       data-day-level={p.dayLevel}
+      data-row-kind={p.rowKind}
     >
       {editing ? (
         <CellEditor initial={draft === '' ? p.exactValue : draft} label={p.label} onBlur={p.onEditorBlur} />

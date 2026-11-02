@@ -7,8 +7,9 @@ import { th } from '@/i18n/th'
 import { formatLeaveRange } from '@/lib/format'
 import { saveAllocations } from '@/server/actions/allocations'
 import { createTimeOff, deleteTimeOff, restoreTimeOff, updateTimeOff } from '@/server/actions/time-off'
-import { seedGolden } from '../../../scripts/lib/fixtures'
-import { goldenUser } from '../../../tests/authz/_support/golden'
+import { applyFixture, seedGolden } from '../../../scripts/lib/fixtures'
+import { goldenProjectId, goldenUser, type GoldenProject } from '../../../tests/authz/_support/golden'
+import { containsAny } from '../../../tests/helpers/json'
 import { asUser } from '../../../tests/helpers/as-user'
 import {
   allocationRows,
@@ -26,6 +27,7 @@ import * as repo from '../repo'
 import { loadCapacity } from './capacity'
 import { ensureDefaultLeaveTypes } from './leave-types'
 import * as timeOffService from './time-off'
+import { overloadImpact } from './workload'
 
 /** `expect.any(String)` typed as unknown (no-unsafe-assignment inside object literals). */
 const ANY_STRING: unknown = expect.any(String)
@@ -64,6 +66,9 @@ describe('createTimeOff (FR-903…906)', () => {
       userId: s.peter.id,
       userName: 'Peter',
       weeks: [{ weekStart: '2026-10-05', beforeCd: 500, afterCd: 300 }],
+      // M9-D18: this user has no plans → no overload lines and no DAY rows on the leave dates
+      overloads: [],
+      onTimeOffDays: [],
     })
     const [row] = await db.select().from(timeOff).where(eq(timeOff.id, res.id))
     expect(row).toMatchObject({
@@ -119,6 +124,9 @@ describe('createTimeOff (FR-903…906)', () => {
       userId: s.peter.id,
       userName: 'Peter',
       weeks: [{ weekStart: '2026-10-12', beforeCd: 500, afterCd: 300 }],
+      // M9-D18: this user has no plans → no overload lines and no DAY rows on the leave dates
+      overloads: [],
+      onTimeOffDays: [],
     })
     const [row] = await db.select().from(timeOff).where(eq(timeOff.id, res.id))
     expect(row).toMatchObject({ userId: s.peter.id, createdBy: s.manager.id, note: 'ไปต่างจังหวัด' })
@@ -221,6 +229,9 @@ describe('updateTimeOff', () => {
           { weekStart: '2026-10-05', beforeCd: 300, afterCd: 500 },
           { weekStart: '2026-10-12', beforeCd: 500, afterCd: 300 },
         ],
+        // M9-D18: this user has no plans → no overload lines and no DAY rows on the leave dates
+        overloads: [],
+        onTimeOffDays: [],
       },
     })
     const audits = await timeOffAudits()
@@ -501,5 +512,115 @@ describe('time-off actions: authorization (M5-D3)', () => {
     )
     ok(await deleteTimeOff({ id: w.timeOff.coworker.id }))
     ok(await restoreTimeOff({ batch: w.batches.coworkerDeletedTimeOff }))
+  })
+})
+
+// ── M9 S2.9 — FR-906 overload lines + onTimeOffDays (M9-D18, X23, M7-D15; golden F1 unless noted) ──
+
+describe('createTimeOff / updateTimeOff → impact.overloads (FR-906, M9-D18)', () => {
+  const vacation = async () => (await repo.leaveTypes.findIdByName(db, 'ลาพักร้อน'))!
+  const pid = async (name: GoldenProject) => goldenProjectId(name)
+  const checksum = async () =>
+    (await db.execute<{ s: string }>(sql`select coalesce(sum(person_days), 0)::text as s from allocations
+      where week_start >= '2026-01-05' and week_start < '2027-12-27'`))[0]!.s
+
+  it('Peter 2026-10-05..06 → one OVER +200 CAPACITY line (r8 §6b); plans untouched (BR-42)', async () => {
+    await seedGolden(db)
+    const before = await checksum()
+    const peter = await goldenUser('Peter')
+    asUser(peter)
+    const res = ok(await createTimeOff({ leaveTypeId: await vacation(), startDate: '2026-10-05', endDate: '2026-10-06' }))
+    const dw = await pid('Data Warehouse')
+    expect(res.impact.overloads).toEqual([
+      {
+        week: '2026-10-05',
+        before: { level: 'OK', excessCd: 0 },
+        after: { level: 'OVER', excessCd: 200, cause: 'CAPACITY' },
+        load: { total: 500, committed: 500 },
+        capacityCd: 300,
+        standardCd: 500,
+        parts: [{ projectId: dw, name: 'Data Warehouse', load: { total: 500, committed: 500 } }],
+        href: `/people/${peter.id}/plan?week=2026-10-05`,
+      },
+    ])
+    expect(res.impact.onTimeOffDays).toEqual([])
+    expect(await checksum()).toBe(before)
+  })
+
+  it('Cindy 2026-10-12..14 (F4) → one RISK +50 CAPACITY line, part CRM 250/0', async () => {
+    await seedGolden(db)
+    asUser(await goldenUser('Cindy'))
+    const res = ok(await createTimeOff({ leaveTypeId: await vacation(), startDate: '2026-10-12', endDate: '2026-10-14' }))
+    expect(res.impact.overloads).toHaveLength(1)
+    expect(res.impact.overloads[0]).toMatchObject({
+      week: '2026-10-12',
+      after: { level: 'RISK', excessCd: 50, cause: 'CAPACITY' },
+      parts: [{ projectId: await pid('CRM Migration'), name: 'CRM Migration', load: { total: 250, committed: 0 } }],
+    })
+  })
+
+  it('update 10-05..06 → 10-12..13: only week 2026-10-12 (OVER +75, load 375, cap 300)', async () => {
+    await seedGolden(db)
+    asUser(await goldenUser('Peter'))
+    const created = ok(
+      await createTimeOff({ leaveTypeId: await vacation(), startDate: '2026-10-05', endDate: '2026-10-06' }),
+    )
+    const res = ok(
+      await updateTimeOff({ id: created.id, leaveTypeId: await vacation(), startDate: '2026-10-12', endDate: '2026-10-13' }),
+    )
+    expect(res.impact.overloads.map((o) => [o.week, o.after.level, o.after.excessCd, o.load.total, o.capacityCd])).toEqual([
+      ['2026-10-12', 'OVER', 75, 375, 300],
+    ])
+  })
+
+  it('F2 + Jack leave 2026-10-19 → OVER +100 → OVER +200 is listed (excess grew)', async () => {
+    await seedGolden(db)
+    await applyFixture(db, 'F2')
+    asUser(await goldenUser('Jack'))
+    const res = ok(await createTimeOff({ leaveTypeId: await vacation(), startDate: '2026-10-19', endDate: '2026-10-19' }))
+    expect(res.impact.overloads).toHaveLength(1)
+    expect(res.impact.overloads[0]).toMatchObject({
+      week: '2026-10-19',
+      before: { level: 'OVER', excessCd: 100 },
+      after: { level: 'OVER', excessCd: 200, cause: 'CAPACITY' },
+    })
+  })
+
+  it('Ivy 2026-10-05 (125 of 400) → no line; DAY rows on the leave date → onTimeOffDays', async () => {
+    await seedGolden(db)
+    const ivy = await goldenUser('Ivy')
+    asUser(ivy)
+    expect(
+      ok(await createTimeOff({ leaveTypeId: await vacation(), startDate: '2026-10-05', endDate: '2026-10-05' })).impact
+        .overloads,
+    ).toEqual([])
+    const [uat] = await db
+      .select({ id: taskAssignments.id })
+      .from(taskAssignments)
+      .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+      .where(and(eq(tasks.name, 'ทำ UAT + คู่มือหน้าร้าน'), eq(taskAssignments.userId, ivy.id)))
+    await makeDayAllocations({ assignment: uat!, days: { '2026-11-10': 100 } })
+    const res = ok(await createTimeOff({ leaveTypeId: await vacation(), startDate: '2026-11-10', endDate: '2026-11-10' }))
+    expect(res.impact.onTimeOffDays).toEqual([{ date: '2026-11-10', cd: 100 }])
+    expect(res.impact.overloads).toEqual([])
+  })
+
+  it('masking: lead → coworker with cap 0 → P part + one masked part; nothing of Q', async () => {
+    const w = await createWorld({ with: ['allocations'] })
+    const coworker = w.users.coworker!
+    const lines = await overloadImpact(
+      db,
+      asUser(w.lead),
+      coworker.id,
+      ['2026-10-05'],
+      new Map([['2026-10-05', { capacityCd: 500, standardCd: 500 }]]),
+      new Map([['2026-10-05', { capacityCd: 0, standardCd: 500 }]]),
+    )
+    expect(lines).toHaveLength(1)
+    expect(lines[0]!.parts).toEqual([
+      { projectId: w.P.id, name: w.P.name, load: { total: 100, committed: 100 } },
+      { projectId: null, name: th.masking.otherProjects, load: { total: 300, committed: 300 } },
+    ])
+    expect(containsAny(lines, [w.Q.name, w.Q.id, 'งาน Q-ลับ02'])).toEqual([])
   })
 })

@@ -132,8 +132,24 @@ export class LeaveDialog {
   impact(): Locator {
     return this.root().getByTestId('impact-panel')
   }
+  /**
+   * The capacity lines (M5) only — the panel's own top-level list. M9 (plan/m09 S6.3) adds the overload section
+   * below it (`overloadLines()`), so no M5 assertion counts every `<li>` of the panel.
+   */
   impactLines(): Locator {
-    return this.impact().getByRole('listitem')
+    return this.impact().locator(':scope > ul > li')
+  }
+  /** M9 (FR-906 overload part, M9-D18): the new / worsened overload lines (glyph + text + ไปแก้แผน + parts). */
+  overloadLines(): Locator {
+    return this.impact().getByTestId('impact-overloads').getByRole('listitem')
+  }
+  /** The overload line of one week. */
+  overloadLine(week: string): Locator {
+    return this.impact().getByTestId('impact-overloads').locator(`li[data-week="${week}"]`)
+  }
+  /** M9 (M7-D15): "มีงาน X วันวางไว้ในวันที่ลา". */
+  onLeaveLine(): Locator {
+    return this.impact().getByTestId('impact-on-leave')
   }
   /** ปิด on the success body. */
   async close(): Promise<void> {

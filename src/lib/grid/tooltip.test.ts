@@ -4,7 +4,7 @@ import { formatLeaveRange, formatThaiDate } from '@/lib/format'
 import { fxMilestone, gridResponse, type FxTask } from './fixtures.test.data'
 import { mergeChunks } from './merge'
 import { buildViewRows } from './rows'
-import { cellMarks, dayParts, headerTooltipFor, leaveInWeek, milestoneTooltipFor, tooltipFor } from './tooltip'
+import { cellMarks, dayParts, headerRowTooltipFor, headerTooltipFor, leaveInWeek, milestoneTooltipFor, tooltipFor } from './tooltip'
 
 const tasks: FxTask[] = [
   {
@@ -112,5 +112,13 @@ describe('milestoneTooltipFor (M8 S3.3)', () => {
     const lines = milestoneTooltipFor(fxMilestone('m1', '2026-10-02', { name: 'X', status: 'DONE' }))
     expect(lines).toHaveLength(3)
     expect(lines.join(' ')).not.toContain(th.milestones.late)
+  })
+})
+
+describe('headerRowTooltipFor (M9 person grid, S3.4)', () => {
+  it('exact value (2 decimals) of a project / masked cell, nothing for an empty one; never a name', () => {
+    expect(headerRowTooltipFor({ total: 125, committed: 0 })).toEqual([th.grid.cell.exact('1.25')])
+    expect(headerRowTooltipFor(undefined)).toEqual([])
+    expect(headerRowTooltipFor({ total: 0, committed: 0 })).toEqual([])
   })
 })

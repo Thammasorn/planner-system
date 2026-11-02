@@ -16,6 +16,7 @@ import { rows as leaveTypes } from './leave-types'
 import { rows as members } from './members'
 import { rows as milestones } from './milestones'
 import { rows as pages } from './pages'
+import { rows as people } from './people'
 import { rows as planMarkers } from './plan-markers'
 import { rows as positions } from './positions'
 import { rows as preferences } from './preferences'
@@ -27,6 +28,7 @@ import { rows as taskStatuses } from './task-statuses'
 import { rows as tasks } from './tasks'
 import { rows as timeOff } from './time-off'
 import { rows as wiki } from './wiki'
+import { rows as workload } from './workload'
 
 // Rows are generic over their setup context; the matrix treats the context as opaque.
 export const rows: AuthzRow[] = [
@@ -65,4 +67,7 @@ export const rows: AuthzRow[] = [
   ...planMarkers,
   // M8
   ...milestones,
+  // M9
+  ...workload,
+  ...people,
 ]

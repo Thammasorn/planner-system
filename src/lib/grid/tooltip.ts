@@ -3,7 +3,7 @@
 import { countsTowardLoad } from '@/domain/completed'
 import { addDays, compareISO, daysOfWeek, isoWeekday } from '@/domain/dates'
 import { formatCd } from '@/domain/units'
-import type { Cd, CellUnit, ISODate, PeriodKey } from '@/domain/types'
+import type { Cd, CellUnit, ISODate, LoadPair, PeriodKey } from '@/domain/types'
 import type { GridMilestone, GridTimeOff } from '@/lib/contracts/grid'
 import { th } from '@/i18n/th'
 import { formatLeaveRange, formatThaiDate } from '@/lib/format'
@@ -124,6 +124,12 @@ export function tooltipFor(
   for (const h of holidaysInWeek(m, week)) lines.push(th.grid.cell.holiday(h))
   if (marks.noCapacity) lines.push(th.grid.cell.noCapacity)
   return lines
+}
+
+/** M9 person grid: a project / masked row cell = its exact total in 2 decimals (no names — the masked row never tells
+ *  which projects it sums, §3.3). */
+export function headerRowTooltipFor(load: LoadPair | undefined): string[] {
+  return load && load.total > 0 ? [th.grid.cell.exact(days2(load.total))] : []
 }
 
 /** Header tooltip: "วันหยุด: …" when the week has holidays, else null. */

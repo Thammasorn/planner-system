@@ -159,7 +159,7 @@ describe('dropTarget (FR-815, M7.1-D16)', () => {
   })
 })
 
-const ids = (rows: GridRow[]) => rows.map((r) => (r.kind === 'task' ? `t:${r.id}` : `a:${r.taskAssignmentId}`))
+const ids = (rows: GridRow[]) => rows.map((r) => (r.kind === 'task' ? `t:${r.id}` : r.kind === 'assignee' ? `a:${r.taskAssignmentId}` : r.kind))
 const taskOf = (resp: GridResponse, id: string) => resp.rows.find((r): r is GridTaskRow => r.kind === 'task' && r.id === id)!
 
 describe('applyRowMove (M7.1-D18)', () => {
@@ -221,7 +221,7 @@ describe('applyRowMove (M7.1-D18)', () => {
           let current: string | null = null
           for (const row of out.rows) {
             if (row.kind === 'task') current = row.id
-            else expect(row.taskId).toBe(current)
+            else if (row.kind === 'assignee') expect(row.taskId).toBe(current)
           }
         },
       ),

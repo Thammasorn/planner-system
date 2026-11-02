@@ -8,8 +8,9 @@ async function invalidateAll(qc: QueryClient, keys: readonly (readonly unknown[]
   await Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey })))
 }
 
-/** Every view that shows load numbers: grid, workload, home, tasks.my, /tasks (FR-405 certainty changes,
- *  allocations, task completion/assignment — X18). */
+/** Every view that shows load numbers: grid, workload (table, cell, badge, people, project/client load), home,
+ *  tasks.my, /tasks (FR-405 certainty changes, allocations, task completion/assignment — X18) and, from M9, the
+ *  sidebar (its "งานของฉัน N" counts this week's planned tasks, M9-D17). */
 export function invalidateLoad(qc: QueryClient): Promise<void> {
   return invalidateAll(qc, [
     qkPrefix.grid,
@@ -17,6 +18,7 @@ export function invalidateLoad(qc: QueryClient): Promise<void> {
     qkPrefix.home,
     qkPrefix.myTasks,
     qkPrefix.teamTasks,
+    qk.sidebar(),
   ])
 }
 

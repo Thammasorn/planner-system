@@ -325,6 +325,7 @@ function gatePrompt(extra, targeted) {
     return `Targeted re-gate for milestone ${MID} of Team Working OS after review fixes. The repository root is the current working directory. No other agent is editing files now.
 ${extra}
 Run: pnpm db:up; pnpm typecheck; pnpm lint; the Vitest files covering the changed files (git diff --name-only HEAD plus untracked: their *.test.ts / *.int.test.ts, and tests/authz when server actions/routes changed) via pnpm exec vitest run <files>; and only the Playwright specs that exercise the changed screens via pnpm exec playwright test <specs>. Fix failures at the root cause (never delete, skip or weaken tests). The full pnpm check + full e2e suite run later at close-out — do NOT run them here.
+LONG RUNS: the full e2e suite takes >10 min (over the 10-min foreground Bash limit). Start it with run_in_background (output to a log ending in an EXIT line), then WAIT for it — use the Monitor tool / poll the log until the EXIT line appears. NEVER end your turn or return a report while a test run you started is still running: when you return, your background processes are killed and the run is lost.
 Return green=true only if every targeted run passed in your final attempt; list the commands you ran in "check"/"e2e".`
   }
   return `Integration gate for milestone ${MID} of Team Working OS. The repository root is the current working directory. No other agent is editing files now.
@@ -334,6 +335,7 @@ Then:
 2. pnpm db:up && pnpm db:migrate && pnpm check. Fix every failure at its root cause. Never delete, skip or weaken tests; never add eslint-disable/@ts-ignore without a reason comment; never hand-edit generated migrations.
 3. Run the FULL e2e suite (this milestone and all previous ones): pnpm test:e2e. Fix failures at the root cause.
 4. Iterate efficiently (owner 2026-11-02, time): after the first full run, re-run ONLY the failing Vitest files / Playwright specs (pnpm exec vitest run <files>; pnpm exec playwright test <specs>) until they pass, then do ONE final full pnpm check + full pnpm test:e2e. Repeat until both full runs are green, or until a failure clearly needs a product decision (then explain it).
+LONG RUNS: the full e2e suite takes >10 min (over the 10-min foreground Bash limit). Start it with run_in_background (output to a log ending in an EXIT line), then WAIT for it — use the Monitor tool / poll the log until the EXIT line appears. NEVER end your turn or return a report while a test run you started is still running: when you return, your background processes are killed and the run is lost.
 Return green=true only if pnpm check AND the full e2e suite passed in your final run. Summarise the final runs (test counts), list fixes applied and anything remaining with a diagnosis.`
 }
 
@@ -466,7 +468,8 @@ For each finding: fix the root cause, add or adjust a test that would have caugh
 phase('Close')
 const close = await agent(
   `Close-out of milestone ${MID} for Team Working OS. The repository root is the current working directory.
-1. Run pnpm check and the full e2e suite (pnpm test:e2e) one final time. If either fails, do NOT commit: set the PROGRESS.md row to ⛔ with the reason and return committed=false.
+1. Run pnpm check and the full e2e suite (pnpm test:e2e) one final time.
+LONG RUNS: the full e2e suite takes >10 min (over the 10-min foreground Bash limit). Start it with run_in_background (output to a log ending in an EXIT line), then WAIT for it — use the Monitor tool / poll the log until the EXIT line appears. NEVER end your turn or return a report while a test run you started is still running: when you return, your background processes are killed and the run is lost. If either fails, do NOT commit: set the PROGRESS.md row to ⛔ with the reason and return committed=false.
 2. Walk ${kickoff.planFile} section 8 (Definition of done) and SPEC §12 ${MID}; tick every box you can verify, and list anything unverifiable in followUps.
 3. Update PROGRESS.md:
    - row ${MID} → ✅ with a one-line note (date from \`date +%F\`); "Milestone ปัจจุบัน" → ${NEXT !== null ? 'M' + NEXT + ' — ยังไม่เริ่ม' : 'MVP เสร็จ'}.

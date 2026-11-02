@@ -27,6 +27,14 @@ describe('gridChunkUrl (X65, M7-D17)', () => {
       ),
     ).toBe('/api/grid/person/u?from=2026-09-28&to=2026-11-23')
   })
+  it('M9 (S3.1): the person context never sends includeOthers, keeps expand / zoom', () => {
+    expect(
+      gridChunkUrl(
+        { kind: 'person', id: 'u' },
+        { from: '2026-09-28', expand: ['2026-10-05'], zoom: 'DAY', includeOthers: true },
+      ),
+    ).toBe('/api/grid/person/u?from=2026-09-28&to=2026-11-23&expand=2026-10-05&zoom=day')
+  })
 })
 
 describe('fetchGridChunk', () => {

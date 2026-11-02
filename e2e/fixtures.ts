@@ -17,6 +17,7 @@ import {
   addDayExample,
   addMilestones,
   addSyntheticGridProject,
+  addSyntheticWorkload,
   applyFixture,
   seedGolden,
   type FixtureId,
@@ -109,6 +110,11 @@ export type ResetDbOptions = {
   dayExample?: boolean
   /** M8 (M8-D20): the 7 SPEC A.2 milestones (UAT sign-off bound to "ทำ UAT + คู่มือหน้าร้าน"), after dayExample. */
   milestones?: boolean
+  /** M9 (M9-D26, X91): further fixtures applied after `fixture`, each with only its own setup (X11), e.g.
+   *  `resetDb('F2', { alsoFixtures: ['F3'] })` = the §8.5 mock state. */
+  alsoFixtures?: FixtureId[]
+  /** M9 (M9-D23): addSyntheticWorkload 95 people × 20 projects × 12 weeks from 2026-09-28 (100 workers on /workload). */
+  syntheticWorkload?: boolean
 }
 
 /**
@@ -123,9 +129,12 @@ export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): P
       await truncateAll(tx)
       await seedGolden(tx)
       if (fixture !== undefined) await applyFixture(tx, fixture) // M5 (X11): F1 + that fixture's own setup only
+      for (const also of opts.alsoFixtures ?? []) await applyFixture(tx, also) // M9 (M9-D26)
       if (opts.syntheticGrid) await addSyntheticGridProject(tx, { tasks: 200, weeks: 16, from: '2026-09-28' }) // M6
       if (opts.dayExample) await addDayExample(tx) // M7
       if (opts.milestones) await addMilestones(tx) // M8
+      if (opts.syntheticWorkload)
+        await addSyntheticWorkload(tx, { people: 95, projects: 20, weeks: 12, from: '2026-09-28' }) // M9
       await opts.extras?.(tx)
     })
   } finally {
@@ -243,6 +252,13 @@ export async function idOf(kind: IdKind, name: string): Promise<string> {
 /** M6 (plan/m06 S0.13): id of the project with that name in `planner_e2e` (golden names are unique). */
 export function projectIdByName(name: string): Promise<string> {
   return idOf('project', name)
+}
+
+/** M9 (plan/m09 S0.12): id of a golden user by nickname in `planner_e2e` (from the Playwright process). */
+export function userIdByNickname(
+  nick: 'Manager' | 'Cindy' | 'Ivy' | 'Peter' | 'Jack' | 'Mint',
+): Promise<string> {
+  return idOf('user', nick)
 }
 
 /** M8 (plan/m08 S0.11): id of the single live milestone with that name in `planner_e2e` (A.2 names are unique). */

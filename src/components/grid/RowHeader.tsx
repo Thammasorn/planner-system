@@ -13,8 +13,12 @@
 // M8 (FR-706, AC-702, §8.3, plan/m08 S3.7): task / merged / sum rows bound to a live milestone show "→◆<name>" and, when
 // lateForMilestone, a ⚠ "เลย milestone" chip (tooltip: the late hint with the milestone date) — both also in the row's
 // state texts (aria-describedby), the row header carries data-late-for-milestone.
+// M9 (plan/m09 S3.4, M9-D28): in the person grid a merged row also shows the task's parent path (muted breadcrumb) and a
+// second action "เปิดในแผนงานโปรเจค" (onOpenInProject → /projects/<pid>/plan?task=) next to the ↗ task-page link
+// (SPEC v3.2 M6.1-D17 keeps ↗ = /t/<id>); PlanGrid passes no drag, no "+ คน" and no assignee column there.
 import { memo, useCallback, useId, type MouseEvent, type PointerEvent } from 'react'
 import Tooltip from '@mui/material/Tooltip'
+import ViewTimelineOutlined from '@mui/icons-material/ViewTimelineOutlined'
 import Link from '@/components/Link'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { UserName } from '@/components/common/UserName'
@@ -68,6 +72,10 @@ export interface RowHeaderProps {
   dragging?: boolean
   /** M8 (S3.7): the live milestone the task is bound to (task.milestoneId resolved in model.milestones) */
   milestone?: { name: string; date: ISODate } | null
+  /** M9 person grid: parent names root → parent (shown muted after the name) */
+  breadcrumb?: readonly string[]
+  /** M9 person grid: "เปิดในแผนงานโปรเจค" (th.people.grid.openTask) */
+  onOpenInProject?: (taskId: string) => void
 }
 
 /** The row states as text (SPEC §8.9, A11Y-1): the rowheader keeps its short name (task · person) and exposes these
@@ -200,6 +208,11 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
             {task.name}
           </span>
         ) : null}
+        {p.breadcrumb && p.breadcrumb.length > 0 ? (
+          <span className={styles.breadcrumb} data-breadcrumb="">
+            {p.breadcrumb.join(' › ')}
+          </span>
+        ) : null}
         {ms ? (
           <span className={styles.msTaskLink} title={th.milestones.grid.taskLinkLabel(ms.name)} aria-hidden="true" data-ms-link="">
             {th.milestones.grid.taskLink(ms.name)}
@@ -263,6 +276,22 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
             >
               ↗
             </Link>
+            {p.onOpenInProject ? (
+              <button
+                type="button"
+                className={styles.openPage}
+                tabIndex={tab}
+                aria-label={th.people.grid.openTask(task.name)}
+                title={th.people.grid.openTask(task.name)}
+                data-open-in-project=""
+                onClick={(e) => {
+                  stop(e)
+                  p.onOpenInProject?.(task.id)
+                }}
+              >
+                <ViewTimelineOutlined fontSize="inherit" aria-hidden="true" />
+              </button>
+            ) : null}
             {isLeaf && p.canEdit && p.canAddPerson ? (
               <button
                 type="button"

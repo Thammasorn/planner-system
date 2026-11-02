@@ -1,0 +1,12 @@
+/* /people directory (FR-1008, M9-D14): two columns only (name + this week's load — the position is the group header),
+   sized to content instead of stretching across a 1920 px viewport; the load column stays in view at 390 px. */
+.directory {
+  width: fit-content;
+  max-width: 100%;
+}
+
+@media (max-width: 599.95px) {
+  .directory :is(th, td):first-child {
+    min-width: 140px;
+  }
+}

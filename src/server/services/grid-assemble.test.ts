@@ -125,7 +125,7 @@ describe('assembleGrid', () => {
         totals: new Map([['a2', 900]]),
       }),
     )
-    expect(g.rows.map((r) => (r.kind === 'task' ? r.id : r.taskAssignmentId))).toEqual(['r1', 'c1', 'a2', 'a1', 'c2', 'r2'])
+    expect(g.rows.map((r) => (r.kind === 'task' ? r.id : r.kind === 'assignee' ? r.taskAssignmentId : r.kind))).toEqual(['r1', 'c1', 'a2', 'a1', 'c2', 'r2'])
     const c1 = g.rows[1] as GridTaskRow
     expect(c1).toMatchObject({
       certainty: 'TENTATIVE',

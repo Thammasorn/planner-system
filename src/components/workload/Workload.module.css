@@ -1,0 +1,247 @@
+/* Workload ทีม dense surfaces (SPEC §8.5, PLAN §3.9): plain elements + tokens. Colour always comes with text (the
+   number, 🔴/⚠ glyph and a visually hidden status — A11Y-1, §8.9). BR-45 tones per view (M9-D6, X51/X67). */
+
+.scroller {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 100%;
+  font-size: var(--font-sm);
+}
+
+/* base for every cell: specificity (0,1,0) via :where, so the single-class cell rules below (.corner, .personCell,
+   .weekHeader, .groupHeader, .cellTd) win by source order — a plain `.table th` (0,1,1) would silently cancel their
+   padding / text-align */
+.table :where(th, td) {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.corner,
+.personCell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  min-width: 180px;
+  max-width: 240px;
+  padding: var(--space-1) var(--space-2);
+  font-weight: var(--weight-regular);
+}
+
+.corner {
+  z-index: 2;
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.weekHeader {
+  padding: var(--space-1) var(--space-2);
+  min-width: 64px;
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* this week: a bar under the header (the text says it too, visually hidden) */
+.weekHeader[data-today='true'] {
+  box-shadow: inset 0 -3px 0 var(--today);
+  color: var(--mui-palette-text-primary);
+}
+
+.groupHeader {
+  background: var(--surface-muted);
+  padding: var(--space-1) var(--space-2);
+  font-weight: var(--weight-bold);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  position: sticky;
+  left: 0;
+}
+
+.personInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.personLink {
+  color: var(--mui-palette-text-primary);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personLink:hover {
+  text-decoration: underline;
+}
+
+.chip {
+  flex: none;
+  font-size: var(--font-xs);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.cellTd {
+  padding: 0;
+}
+
+/* one cell = one button (roving focus in the table; read-only cells stay focusable for the tooltip) */
+.cell {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 64px;
+  min-height: 32px;
+  padding: var(--space-1);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--mui-palette-text-primary);
+}
+
+.cell[data-readonly='true'] {
+  cursor: default;
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.cell[data-selected='true'] {
+  box-shadow: inset 0 0 0 2px var(--brand-blue);
+}
+
+.cell[data-tone='empty'] {
+  color: var(--faded-fg);
+}
+
+.cell[data-tone='light'] {
+  background: var(--load-light-bg);
+  color: var(--load-light-fg);
+}
+
+.cell[data-tone='full'] {
+  background: var(--load-full-bg);
+  color: var(--load-full-fg);
+}
+
+.cell[data-tone='over'] {
+  background: var(--load-over-bg);
+  color: var(--load-over-fg);
+}
+
+.cell[data-palette='tentative'][data-tone='light'],
+.cell[data-palette='tentative'][data-tone='full'] {
+  background: var(--tentative-bg);
+  color: var(--tentative-fg);
+}
+
+/* capacity 0 → stripes (red ground when load > 0: tone 'over' keeps its background colour under the stripes) */
+.cell[data-no-capacity='true'] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--nonworking) 0,
+    var(--nonworking) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.tooltip {
+  background: var(--surface);
+  color: var(--mui-palette-text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--mui-shadows-4);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sm);
+  max-width: 320px;
+  pointer-events: none;
+}
+
+.tooltip ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tooltipHeader {
+  font-weight: var(--weight-bold);
+  margin-bottom: var(--space-1);
+}
+
+.tooltipStatus {
+  font-weight: var(--weight-medium);
+}
+
+.tooltipPart {
+  color: var(--text-secondary);
+}
+
+.tooltipPart[data-masked='true'] {
+  font-style: italic;
+}
+
+/* sidebar ●N (M9-D11): the dot is decorative, the number is text */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  margin-left: auto;
+  font-size: var(--font-xs);
+  font-weight: var(--weight-bold);
+  color: var(--load-over-fg);
+  background: var(--load-over-bg);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+}
+
+.dot {
+  font-size: var(--font-xs);
+  line-height: 1;
+}
+
+/* FR-1006 list */
+.list {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-sm);
+}
+
+.list th,
+.list td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.list th {
+  color: var(--text-secondary);
+  font-weight: var(--weight-medium);
+}
+
+.levelCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

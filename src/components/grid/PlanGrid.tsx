@@ -15,6 +15,11 @@
 // M8 (plan/m08 S3): the ◆ Milestones header row on top (HEADER_ROWS = 3), its popovers / menu / drag / create
 // (useGridMilestones), dash-dot milestone lines in the marker layer (FR-820), "→◆" + "เลย milestone" on task rows and
 // "+ milestone" in the toolbar.
+// M9 (plan/m09 S3, M9-D12/D13/D28/D29): the person context — project header rows (collapsible, read-only sums), merged
+// task rows of every project of the person, the masked "งานในโปรเจคอื่น" row last; no structure affordances (no quick
+// add, "+ คน", ×, row Delete / move, N shortcut, includeOthers switch, assignee column, chart, markers); the footer is the
+// person's full load "ภาระรวม (ทุกโปรเจค)"; `focusWeek` opens and marks a week (?week=). Week-level footer tones +
+// BR-40 glyphs in both contexts (M9-D13, X06); ◆ read-only with a project-name prefix (M9-D29).
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Menu from '@mui/material/Menu'
@@ -41,8 +46,8 @@ import { addWeeks, isoWeekday, weekStart } from '@/domain/dates'
 import { formatCd } from '@/domain/units'
 import type { Cd, ISODate, LoadPair, PeriodKey } from '@/domain/types'
 import { LoadChartPanel } from '@/components/load-chart/LoadChartPanel'
-import { useProjectTasks } from '@/components/tasks/useProjectTasks'
 import { QuickAdd } from '@/components/tasks/QuickAdd'
+import { useProjectTasks } from '@/components/tasks/useProjectTasks'
 import { useTaskMutations } from '@/components/tasks/useTaskMutations'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -57,7 +62,7 @@ import {
   currentScrollKey,
   takeBoxScroll,
 } from '@/lib/nav/scroll-memory'
-import { footerTotals, rowTotalView, taskRowTotals, taskTotals } from '@/lib/grid/aggregate'
+import { footerTotals, projectTotals, rowTotalView, taskRowTotals, taskTotals } from '@/lib/grid/aggregate'
 import { findDayWeekConflicts, splitByConflicts, type ConflictPair } from '@/lib/grid/br24'
 import { collapseChanges, dayTargetsOf, type CollapseTarget } from '@/lib/grid/collapse'
 import {
@@ -75,14 +80,15 @@ import {
   type GridColumn,
 } from '@/lib/grid/columns'
 import { dayCtxFor } from '@/lib/grid/day'
+import { footerDayCell, personDayStatus, type DayStatus, type FooterDayCell } from '@/lib/grid/day-footer'
 import {
-  footerDayCell,
-  otherDayLoads,
-  personDayLoads,
-  personDayStatus,
-  type DayStatus,
-  type FooterDayCell,
-} from '@/lib/grid/day-footer'
+  footerPeriodCell,
+  periodStatus,
+  personPeriodLoads,
+  type FooterPeriodCell,
+  type PeriodStatus,
+} from '@/lib/grid/load-footer'
+import { causeText, twoDecimals } from '@/lib/workload/format'
 import { frozenWidths } from '@/lib/grid/frozen'
 import {
   INITIAL_HOLD_MAX_MS,
@@ -104,16 +110,27 @@ import { monthStartKeys } from '@/lib/grid/months'
 import type { CellWrite } from '@/lib/grid/queue'
 import { applyRowMove } from '@/lib/grid/row-drop'
 import {
+  buildPersonViewRows,
   buildViewRows,
   cellEditability,
   cellRowOf,
+  isTaskViewRow,
+  projectRowOf,
+  type AnyViewRow,
+  type CellRow,
   type GridViewRow,
+  type PersonViewRow,
   type RowKey,
-  type ViewRow,
 } from '@/lib/grid/rows'
 import { cellsOf } from '@/lib/grid/selection'
 import { targetGrid } from '@/lib/grid/targets'
-import { cellMarks, dayHeaderTooltipFor, headerTooltipFor, tooltipFor } from '@/lib/grid/tooltip'
+import {
+  cellMarks,
+  dayHeaderTooltipFor,
+  headerRowTooltipFor,
+  headerTooltipFor,
+  tooltipFor,
+} from '@/lib/grid/tooltip'
 import { rememberVersion } from '@/lib/grid/versions'
 import type { GridCtx } from '@/lib/query-keys'
 import { qk } from '@/lib/query-keys'
@@ -134,6 +151,7 @@ import { MarkerFlags, MarkerLines, markerName, paddingOf, renderedEdges } from '
 import { MarkerPopover } from './MarkerPopover'
 import { MarkersMenu } from './MarkersMenu'
 import { MonthHeader } from './MonthHeader'
+import { PersonRowHeader } from './PersonRowHeader'
 import { SumModeHint } from './SumModeHint'
 import { usePlanMarkers } from './usePlanMarkers'
 import { useRowDrag } from './useRowDrag'
@@ -168,7 +186,7 @@ export interface PlanGridProps {
   projectName: string
   archived: boolean
   canEdit: boolean
-  onOpenTask(taskId: string, projectId?: string): void
+  onOpenTask: (taskId: string, projectId?: string) => void
   /** M7 (S3.11): the `grid.zoom` preference read by the page on the server; absent → usePreferences */
   initialZoom?: GridZoom
   /** M7.1 (FR-814/816/813): server-read preferences `grid.taskColumnWidth`, `grid.showAssignees`, `grid.chart`;
@@ -178,6 +196,10 @@ export interface PlanGridProps {
   initialChartOpen?: boolean
   /** M7.1 (FR-810): first child of the toolbar row (the plan page's view switch) */
   toolbarStart?: ReactNode
+  /** M9: aria-label override of the grid (th.people.grid.label(name)) */
+  label?: string
+  /** M9 (M9-D28): `?week=` — the grid opens with this week as the first column and marks its header */
+  focusWeek?: ISODate
 }
 
 /** M7.1-D5: the chart's x-weeks follow the rendered columns, debounced. */
@@ -203,15 +225,19 @@ function dayDatesOf(sig: string): Map<string, string[]> {
 }
 
 const EMPTY_TOTALS = new Map<string, Partial<Record<PeriodKey, LoadPair>>>()
+const EMPTY_LOADS = new Map<string, Partial<Record<PeriodKey, LoadPair>>>()
 const EMPTY_ROW_TOTALS = new Map<string, LoadPair>()
 const days1 = (cd: Cd) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
 const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((x, i) => x === b[i])
 
 export function PlanGrid(props: PlanGridProps): JSX.Element {
-  const { context, projectName } = props
+  const { context, projectName, onOpenTask } = props
+  const isPerson = context.kind === 'person'
   const today = useToday()
   const thisWeek = weekStart(today)
+  // M9 (M9-D28): the week the grid opens on (and marks); null = M6's default (this week − 4)
+  const openWeek = props.focusWeek ? weekStart(props.focusWeek) : null
   const { prefs, setPreference } = usePreferences()
   const unit = gridPreference(prefs, 'grid.unit')
   const view = gridPreference(prefs, 'load.view')
@@ -219,15 +245,19 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const [includeOthers, setIncludeOthers] = useState(false)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
   // ── M7.1 view preferences (FR-813/814/816, X53: user_preferences, never localStorage) ──
-  const [showAssignees, setShowAssigneesState] = useState(
+  const [showAssigneesPref, setShowAssigneesState] = useState(
     () => props.initialShowAssignees ?? gridPreference(prefs, 'grid.showAssignees'),
   )
+  // M9 forward note (M7.1): the person grid has no assignee column (every row is that person's) and no toggle
+  const showAssignees = isPerson ? false : showAssigneesPref
   const [taskWidthPref, setTaskWidthPref] = useState(
     () => props.initialTaskColumnWidth ?? gridPreference(prefs, 'grid.taskColumnWidth'),
   )
-  const [chartOpen, setChartOpen] = useState(
+  const [chartPref, setChartOpen] = useState(
     () => props.initialChartOpen ?? gridPreference(prefs, 'grid.chart'),
   )
+  // the กราฟภาระ pane is the project's member chart (M7.1 FR-813) — not part of the person grid (M9 scope)
+  const chartOpen = isPerson ? false : chartPref
   const [rendered, setRendered] = useState<{ first: number; last: number } | null>(null)
   const [gridWidth, setGridWidth] = useState(0)
 
@@ -242,7 +272,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
 
   // ── chunks + columns (FR-801, M6-D15, M7-D24) ──
   const [chunkStarts, setChunkStarts] = useState(() =>
-    chunksForRange(today, addWeeks(thisWeek, -4), addWeeks(thisWeek, 16)),
+    openWeek
+      ? chunksForRange(today, addWeeks(openWeek, -4), addWeeks(openWeek, 16))
+      : chunksForRange(today, addWeeks(thisWeek, -4), addWeeks(thisWeek, 16)),
   )
   const chunks = useGridChunks(context, chunkStarts, includeOthers, exp.state)
   const raw = chunks.model
@@ -258,9 +290,10 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   )
   const dayDates = useMemo(() => dayDatesOf(daySig), [daySig])
   const cols = useMemo(() => buildColumns(weeks, expandedSet, dayDates), [weeks, expandedSet, dayDates])
+  const focusIdx = useMemo(() => (openWeek ? firstColOfWeek(cols, openWeek) : -1), [cols, openWeek])
   const initialIdx = useMemo(
-    () => Math.max(0, firstColOfWeek(cols, addWeeks(thisWeek, -4))),
-    [cols, thisWeek],
+    () => (focusIdx >= 0 ? focusIdx : Math.max(0, firstColOfWeek(cols, addWeeks(thisWeek, -4)))),
+    [cols, thisWeek, focusIdx],
   )
   const todayIdx = useMemo(() => {
     const d = columnIndexOfPeriod(cols, `D:${today}`)
@@ -286,9 +319,14 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     },
     [cols, today],
   )
-  const archived = props.archived || (raw?.context.archived ?? false)
+  const archived = !isPerson && (props.archived || (raw?.context.kind === 'project' && raw.context.archived))
   const model = useMemo<GridModel | null>(() => {
     if (!raw) return null
+    if (raw.context.kind === 'person') {
+      // M9: per-row rights come from the server (assignee.editable, project row canEdit); the page may lock it all
+      const canEdit = raw.context.canEdit && props.canEdit
+      return canEdit === raw.context.canEdit ? raw : { ...raw, context: { ...raw.context, canEdit } }
+    }
     const canEdit = raw.context.canEdit && props.canEdit && !archived
     // M8-D8: archived projects never manage milestones (the server already says so; the page prop may know first)
     const canManage = raw.context.canManage && !archived
@@ -306,12 +344,25 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   // ── derived rows / sums (FR-805/806/809) ──
   // M7.1 (FR-816): hidden assignees → one `sum` row per task; cellRows = the rows whose cells each row shows (a
   // single-assignee sum row = its merged assignment row, BR-101; every other sum row = its task totals, BR-100)
-  const viewRows = useMemo<GridViewRow[]>(
-    () => (model ? buildViewRows(model, { showCompleted, collapsed, showAssignees }) : []),
-    [model, showCompleted, collapsed, showAssignees],
+  // M9: the person context has its own row model (project → merged rows, masked last; M9-D12)
+  const projectViewRows = useMemo<GridViewRow[]>(
+    () => (model && !isPerson ? buildViewRows(model, { showCompleted, collapsed, showAssignees }) : NO_ROWS),
+    [model, isPerson, showCompleted, collapsed, showAssignees],
   )
-  const cellRows = useMemo<ViewRow[]>(() => viewRows.map(cellRowOf), [viewRows])
-  const totals = useMemo(() => (model ? taskTotals(model, cellRows) : EMPTY_TOTALS), [model, cellRows])
+  const personViewRows = useMemo<PersonViewRow[]>(
+    () => (model && isPerson ? buildPersonViewRows(model, { showCompleted, collapsed }) : NO_PERSON_ROWS),
+    [model, isPerson, showCompleted, collapsed],
+  )
+  const viewRows: readonly AnyViewRow[] = isPerson ? personViewRows : projectViewRows
+  const cellRows = useMemo<CellRow[]>(() => viewRows.map((r) => cellRowOf(r)), [viewRows])
+  const totals = useMemo(
+    () => (model ? taskTotals(model, cellRows.filter(isTaskViewRow)) : EMPTY_TOTALS),
+    [model, cellRows],
+  )
+  const projTotals = useMemo(
+    () => (model && isPerson ? projectTotals(model, cellRows) : EMPTY_TOTALS),
+    [model, isPerson, cellRows],
+  )
   const rowTotals = useMemo(() => (model ? taskRowTotals(model) : EMPTY_ROW_TOTALS), [model])
   const footer = useMemo(
     () => (model ? footerTotals(model, { includeOthers }) : { people: [], cells: {} }),
@@ -322,16 +373,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     () => new Set([...(model?.holidays.keys() ?? [])].map((d) => weekStart(d))),
     [model],
   )
-  // ── M7 day-level load (BR-40/45, M7-D13): once per data change, never per cell (S3.13) ──
+  // ── M7 day-level + M9 week-level load (BR-40/41/45, M7-D13, M9-D13): once per data change, never per cell ──
+  // D: keys = M7's personDayLoads (person context: + the masked row, no `extra`); W: keys = Σ cells (+ masked /
+  // otherProjects) — one sum per key (C38)
   const dayLoads = useMemo(
-    () =>
-      model
-        ? personDayLoads(
-            model.rows,
-            model.periods,
-            includeOthers ? { extra: otherDayLoads(model.people) } : {},
-          )
-        : new Map<string, Partial<Record<PeriodKey, LoadPair>>>(),
+    () => (model ? personPeriodLoads(model, model.periods, { includeOthers }) : EMPTY_LOADS),
     [model, includeOthers],
   )
   const footerDays = useMemo(() => {
@@ -349,10 +395,40 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     }
     return out
   }, [model, footer.people, dayLoads, view])
+  const footerWeeks = useMemo(() => {
+    const out = new Map<string, FooterPeriodCell>()
+    if (!model) return out
+    for (const per of model.periods) {
+      if (per.kind !== 'WEEK') continue
+      const statuses = new Map<string, PeriodStatus>()
+      for (const u of footer.people) {
+        const person = model.people[u]
+        if (person) statuses.set(u, periodStatus(dayLoads.get(u)?.[per.key], person, per.key))
+      }
+      out.set(per.key, footerPeriodCell(statuses, view, (u) => model.people[u]?.name ?? ''))
+    }
+    return out
+  }, [model, footer.people, dayLoads, view])
 
   // ── M3 task data: blocker names (M6-D31), picker members, task mutations (M6-D19) ──
-  const tasksQ = useProjectTasks(context.id)
+  // not fetched for the person context (its id is a user id; blocker names stay in the project's own views, X76; no
+  // picker, no reorder)
+  const tasksQ = useProjectTasks(context.id, { enabled: !isPerson })
   const taskMut = useTaskMutations(context.id)
+  // M9: the person grid passes the task's project (→ /projects/<pid>/plan?task=, M9-D28)
+  const projectOfTask = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const r of model?.rows ?? []) if (r.kind === 'task' && r.projectId !== undefined) out.set(r.id, r.projectId)
+    return out
+  }, [model])
+  const openTask = useCallback(
+    (taskId: string) => {
+      const projectId = projectOfTask.get(taskId)
+      if (projectId === undefined) onOpenTask(taskId)
+      else onOpenTask(taskId, projectId)
+    },
+    [onOpenTask, projectOfTask],
+  )
   const blockerNames = useMemo(() => {
     const out = new Map<string, string[]>()
     const d = tasksQ.data
@@ -507,7 +583,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   )
   const drag = useRowDrag({
     scroller: () => gridRef.current?.element() ?? null,
-    viewRows,
+    viewRows: projectViewRows,
     items: canReorder ? treeItems : null,
     onDrop: onRowDrop,
   })
@@ -528,7 +604,20 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     }),
     [],
   )
-  const gm = useGridMilestones({ context, model, cols, scrollEl, today, thisWeek })
+  // M9 (S3.6): ◆ of several projects in the person grid carry their project's name
+  const msProjectLabel = useCallback(
+    (projectId: string) => (model ? (projectRowOf(model, projectId)?.name ?? null) : null),
+    [model],
+  )
+  const gm = useGridMilestones({
+    context,
+    model,
+    cols,
+    scrollEl,
+    today,
+    thisWeek,
+    ...(isPerson ? { projectLabel: msProjectLabel } : {}),
+  })
   const flagEdges = useMemo(() => markerEdges(markerViews, cols), [markerViews, cols])
   const edges = useMemo(
     () => (gm.markerViews.length === 0 ? flagEdges : markerEdges([...markerViews, ...gm.markerViews], cols)),
@@ -593,7 +682,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       const current = r === undefined ? undefined : viewRows[r]
       refocusAfterToggle.current = focusTask
         ? { ...focusTask, assignee: true }
-        : current && s.focus
+        : current && isTaskViewRow(current) && s.focus
           ? { taskId: current.task.id, c: s.focus.c, assignee: false }
           : null
       // M7.1-D7: row keys change between a: and t: — no selection, editor or fill survives the toggle
@@ -636,7 +725,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       store,
       rowCount: viewRows.length,
       colCount: cols.length,
-      target: model ? targetGrid(model, viewRows, cols, totals) : () => null,
+      target: model ? targetGrid(model, viewRows, cols, totals, projTotals) : () => null,
       unit,
       gesture: runGesture,
       scrollTo: (r, c) => gridRef.current?.scrollToCell(r, c),
@@ -687,9 +776,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     if (!f) return
     refocusAfterToggle.current = null
     let r = f.assignee
-      ? viewRows.findIndex((x) => x.task.id === f.taskId && (x.kind === 'assignee' || x.kind === 'merged'))
+      ? viewRows.findIndex((x) => (x.kind === 'assignee' || x.kind === 'merged') && x.task.id === f.taskId)
       : -1
-    if (r < 0) r = viewRows.findIndex((x) => x.task.id === f.taskId)
+    if (r < 0) r = viewRows.findIndex((x) => isTaskViewRow(x) && x.task.id === f.taskId)
     if (r < 0) return
     const p = { r, c: f.c }
     store.set({ active: true, hasSelection: true, rowSelection: null, mode: 'nav', anchor: p, focus: p })
@@ -727,7 +816,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     gridRef.current?.scrollToCell(viewRows.length, -1)
     requestAnimationFrame(() => quickRef.current?.focus())
   }, [viewRows.length])
-  useHotkeys([{ hotkey: { code: 'KeyN' }, handler: focusQuickAdd }], { enabled: canEdit })
+  // M9-D28: no quick-add row (and no N) in the person grid
+  const canAddTask = canEdit && !isPerson
+  useHotkeys([{ hotkey: { code: 'KeyN' }, handler: focusQuickAdd }], { enabled: canAddTask })
 
   // ── expansion focus + horizontal position (M7-D11, S3.11) ──
   const refocus = useRef<{ r: number; week: string; at: 'firstDay' | 'week' } | null>(null)
@@ -821,7 +912,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const onCollapseCell = useCallback(
     (rowKey: string, periodKey: string) => {
       const row = cellRows.find((x) => x.key === rowKey)
-      if (!row || row.kind === 'task') return
+      if (!row || (row.kind !== 'merged' && row.kind !== 'assignee')) return
       collapseToWeek([{ taskAssignmentId: row.assignee.taskAssignmentId, week: periodKey.slice(2) }])
     },
     [cellRows, collapseToWeek],
@@ -837,20 +928,21 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       redo: () => void redo(),
       flush: () => void save.flush(),
       newTask: focusQuickAdd,
+      // M9-D28: the person grid has no row Delete
       rowDeletable: () => {
         const row = selectedRow()
-        return canEdit && row !== undefined && row.kind !== 'assignee'
+        return canAddTask && row !== undefined && isTaskViewRow(row) && row.kind !== 'assignee'
       },
       deleteRow: () => {
         const row = selectedRow()
-        if (!canEdit || !row || row.kind === 'assignee') return
+        if (!canAddTask || !row || !isTaskViewRow(row) || row.kind === 'assignee') return
         // focus leaves the row header for a cell first: the header unmounts with the row (no drop to <body>)
         focusCell(Math.max(0, viewRows.indexOf(row)))
         taskMut.remove([row.task.id])
       },
       openRow: () => {
         const row = selectedRow()
-        if (row) props.onOpenTask(row.task.id)
+        if (row && isTaskViewRow(row)) openTask(row.task.id)
       },
       selectRow: () => {
         const f = store.get().focus
@@ -888,11 +980,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       // M7.1-D17: the same targets as the task list (M3); archived / read-only grids and assignee rows: no-op
       rowMovable: () => {
         const row = selectedRow()
-        return canReorder && row !== undefined && row.kind !== 'assignee'
+        return canReorder && row !== undefined && isTaskViewRow(row) && row.kind !== 'assignee'
       },
       moveRow: (dir) => {
         const row = selectedRow()
-        if (!canReorder || !row || row.kind === 'assignee') return
+        if (!canReorder || !row || !isTaskViewRow(row) || row.kind === 'assignee') return
         moveRowBy(row.task.id, dir)
       },
     }
@@ -950,7 +1042,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     },
     [taskMut, viewRows, focusCell],
   )
-  const openTask = useCallback((taskId: string) => props.onOpenTask(taskId), [props])
 
   // ── "+ คน" (M6-D19, §8.9): one picker keyed by task id, outliving the row re-key that each pick causes ──
   const [addPersonTask, setAddPersonTask] = useState<string | null>(null)
@@ -960,7 +1051,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     rowsRef.current = viewRows
   })
   const taskRowIndex = useCallback(
-    (taskId: string) => rowsRef.current.findIndex((x) => x.kind !== 'assignee' && x.task.id === taskId),
+    (taskId: string) =>
+      rowsRef.current.findIndex((x) => isTaskViewRow(x) && x.kind !== 'assignee' && x.task.id === taskId),
     [],
   )
   const addPersonAnchor = useCallback((): Element | null => {
@@ -1073,7 +1165,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     }
     // a narrow grid (phone) that cannot show the 4 weeks of history still opens with this week in view (SPEC §7)
     const fit = gridRef.current?.fittingColumns() ?? 0
-    const start = fit > 0 && todayIdx >= 0 ? Math.max(initialIdx, todayIdx - fit + 1) : initialIdx
+    // M9-D28: a focus week (?week=) is opened as the first column as it is
+    const start =
+      focusIdx < 0 && fit > 0 && todayIdx >= 0 ? Math.max(initialIdx, todayIdx - fit + 1) : initialIdx
     gridRef.current?.scrollToColumn(start)
     const opened = colsRef.current[start]?.key
     if (!opened) return
@@ -1118,7 +1212,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       release()
       scrolledFor.current = null
     }
-  }, [initialIdx, todayIdx, today, gridWidth])
+  }, [initialIdx, focusIdx, todayIdx, today, gridWidth])
   const hasData = model !== null
   useLayoutEffect(() => {
     const back = restore.current
@@ -1140,9 +1234,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
 
   // ── tooltip content ──
   const msTip = gm.tooltipFor
-  const tipData = useRef({ model, viewRows: cellRows, totals, unit, view, cols, footerDays, msTip })
+  const tipData = useRef({ model, viewRows: cellRows, totals, projTotals, unit, view, cols, footerDays, footerWeeks, msTip })
   useLayoutEffect(() => {
-    tipData.current = { model, viewRows: cellRows, totals, unit, view, cols, footerDays, msTip }
+    tipData.current = { model, viewRows: cellRows, totals, projTotals, unit, view, cols, footerDays, footerWeeks, msTip }
   })
   const contentFor = useCallback((el: HTMLElement): string[] | null => {
     const d = tipData.current
@@ -1157,23 +1251,40 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       return t ? [t] : null
     }
     if (el.dataset.tip === 'footer') {
-      const f = el.dataset.period ? d.footerDays.get(el.dataset.period) : undefined
+      const period = el.dataset.period ?? ''
+      const w = d.footerWeeks.get(period)
+      // M9 (S3.5): the person grid's week footer → excess + cause (ปิดใช้งาน from deactivatedOn, M9-D7)
+      if (w && d.model.context.kind === 'person' && w.single && w.single.status.level !== 'OK') {
+        const s = w.single
+        const off = d.model.context.deactivatedOn
+        const deactivated = off !== null && off <= period.slice(2)
+        return [
+          th.overload.footerStatus(th.overload.level[s.status.level], days1(s.load.total) || '0', days1(s.capCd) || '0'),
+          th.overload.excess(twoDecimals(s.status.excessCd)),
+          causeText(s.status.cause, deactivated),
+        ]
+      }
+      const f = w ?? (period ? d.footerDays.get(period) : undefined)
       const names = f?.overPeople.map((u) => d.model?.people[u]?.name ?? '') ?? []
       return names.length > 0 ? [th.overload.peopleOver(names.join(', '))] : null
     }
     const row = d.viewRows[Number(el.dataset.r)]
     const col = d.cols[Number(el.dataset.c)]
     if (!row || !col) return null
+    if (row.kind === 'project')
+      return headerRowTooltipFor((d.projTotals.get(row.project.id) ?? row.project.totals)[col.key])
+    if (row.kind === 'masked') return headerRowTooltipFor(row.masked.totals[col.key])
     const t = row.kind === 'task' ? d.totals.get(row.task.id)?.[col.key] : undefined
     return tooltipFor(row, col.key, d.model, { unit: d.unit, totalCd: t ? viewLoad(t, d.view) : 0 })
   }, [])
   const rootRef = useRef<HTMLDivElement>(null)
 
   // ── rendering ──
-  const personOf = (row: ViewRow) => (row.kind === 'task' ? undefined : model?.people[row.assignee.userId])
+  const personOf = (row: CellRow) =>
+    row.kind === 'merged' || row.kind === 'assignee' ? model?.people[row.assignee.userId] : undefined
 
   const renderRow = (i: number, vCols: readonly VirtualItem[], top: number, totalWidth: number) => {
-    if (i === viewRows.length) {
+    if (i === viewRows.length && !isPerson) {
       return (
         <div
           key="quick-add"
@@ -1212,6 +1323,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     // the row whose cells this row shows (M7.1: a single-assignee sum row = its merged assignment row)
     const row = cellRows[i]
     if (!vrow || !row || !model) return null
+    if (row.kind === 'project' || row.kind === 'masked') return renderHeaderRow(i, row, vCols, top, totalWidth)
+    if (!isTaskViewRow(vrow)) return null
     const person = personOf(row)
     const personName = person?.name ?? null
     const rowName =
@@ -1241,7 +1354,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           personActive={person?.active ?? true}
           canEdit={canEdit}
           blockerNames={blockerNames.get(row.task.id) ?? EMPTY_NAMES}
-          canAddPerson={picker !== null}
+          canAddPerson={picker !== null && !isPerson}
           addPersonOpen={addPersonTask === row.task.id}
           onAddPerson={setAddPersonTask}
           onSelectRow={onSelectRow}
@@ -1253,6 +1366,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           onDragHandle={drag.onHandlePointerDown}
           dragging={drag.state?.taskId === row.task.id}
           milestone={row.task.milestoneId === null ? null : (gm.byId.get(row.task.milestoneId) ?? null)}
+          {...(isPerson ? { breadcrumb: row.task.breadcrumb ?? EMPTY_NAMES, onOpenInProject: openTask } : {})}
         />
         {vCols.map((v) => {
           const col = cols[v.index]
@@ -1384,16 +1498,107 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     )
   }
 
-  const rowCount = model ? viewRows.length + (canEdit ? 1 : 0) : 0
+  /** M9 (S3.4): a person-grid project / masked row — read-only sums (days, 1 decimal), data-row-kind, no ↗. */
+  const renderHeaderRow = (
+    i: number,
+    row: Extract<CellRow, { kind: 'project' | 'masked' }>,
+    vCols: readonly VirtualItem[],
+    top: number,
+    totalWidth: number,
+  ) => {
+    if (!model) return null
+    const name = row.kind === 'project' ? row.project.name : row.masked.label
+    const loads = row.kind === 'project' ? (projTotals.get(row.project.id) ?? row.project.totals) : row.masked.totals
+    const tentative = row.kind === 'project' && row.project.certainty === 'TENTATIVE'
+    return (
+      <div
+        key={row.key}
+        role="row"
+        aria-rowindex={HEADER_ROWS + i + 1}
+        className={styles.row}
+        style={{ top, height: ROW_H, width: totalWidth }}
+        data-row-key={row.key}
+        data-kind={row.kind}
+        data-tentative={tentative ? 'true' : undefined}
+      >
+        <PersonRowHeader
+          store={store}
+          r={i}
+          row={row}
+          height={ROW_H}
+          onSelectRow={onSelectRow}
+          onToggle={onToggle}
+        />
+        {vCols.map((v) => {
+          const col = cols[v.index]
+          if (!col) return null
+          const load = loads[col.key]
+          const text = load ? days1(viewLoad(load, view)) : ''
+          const parts = [text || th.grid.cell.empty, tentative ? th.grid.glyph.tentative : null].filter(
+            (x): x is string => x !== null,
+          )
+          const label =
+            col.kind === 'D'
+              ? `${name} ${th.grid.day.cellLabel(
+                  th.calendar.weekdaysLong[isoWeekday(col.date) - 1]!,
+                  formatWeekHeader(col.date),
+                  parts.join(' · '),
+                )}`
+              : th.grid.cell.label(name, formatWeekHeader(col.weekStart), parts.join(' · '))
+          return (
+            <GridCell
+              key={v.key}
+              store={store}
+              r={i}
+              c={v.index}
+              left={v.start}
+              width={v.size}
+              rowKey={row.key}
+              periodKey={col.key}
+              text={text}
+              label={label}
+              editability="readOnlyRow"
+              resolution={undefined}
+              tentative={tentative}
+              leave={false}
+              noCapacity={false}
+              notCounted={false}
+              today={col.kind === 'D' ? col.date === today : col.weekStart === thisWeek}
+              exactValue=""
+              onEditorBlur={onEditorBlur}
+              colKind={col.kind}
+              holiday={col.kind === 'D' && model.holidays.has(col.date)}
+              monthStart={monthStarts.has(col.key)}
+              rowKind={row.kind}
+            />
+          )
+        })}
+        <div
+          role="gridcell"
+          aria-colindex={totalColIndex(cols.length)}
+          aria-readonly="true"
+          className={styles.totalCell}
+          style={{ width: TOTAL_COL_W, height: ROW_H }}
+          data-testid={`cell-${row.key}-total`}
+        />
+        {/* empty: the server sends no timeline rowTotal for these rows, and a Σ of the loaded chunks would change
+            while scrolling */}
+      </div>
+    )
+  }
+
+  const rowCount = model ? viewRows.length + (canAddTask ? 1 : 0) : 0
   const rowKeyAt = useCallback((i: number) => viewRows[i]?.key ?? 'quick-add', [viewRows])
   const message = chunks.isError
     ? null
     : !model
       ? th.grid.loading
       : viewRows.length === 0
-        ? canEdit
-          ? th.grid.empty
-          : th.grid.emptyReadOnly
+        ? isPerson
+          ? th.people.grid.empty
+          : canEdit
+            ? th.grid.empty
+            : th.grid.emptyReadOnly
         : null
 
   // ── M7.1 chart pane (FR-813, M7.1-D3/D5): computed from the loaded chunks, x = the rendered weeks (4–26) ──
@@ -1466,7 +1671,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onUnit={(u) => setPreference('grid.unit', u)}
         onShowCompleted={(on) => setPreference('tasks.showCompleted', on)}
         showAssignees={showAssignees}
-        onShowAssignees={(on) => setShowAssignees(on)}
+        {...(isPerson ? {} : { onShowAssignees: (on: boolean) => setShowAssignees(on) })}
         markers={
           markersEnabled ? (
             <MarkersMenu
@@ -1483,7 +1688,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           ) : null
         }
         chartOpen={chartOpen}
-        onChart={onChart}
+        {...(isPerson ? {} : { onChart })}
         {...(gm.canManage ? { onAddMilestone: (anchor: HTMLElement) => gm.openCreate(anchor) } : {})}
       />
       {archived ? (
@@ -1506,7 +1711,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       ) : null}
       <VirtualGrid
         ref={gridRef}
-        label={th.grid.gridLabel(projectName)}
+        label={props.label ?? th.grid.gridLabel(projectName)}
         saveState={save.state}
         cols={cols}
         rowCount={rowCount}
@@ -1550,6 +1755,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
                 onHideAssignees={() => setShowAssignees(false)}
                 resizeHandle={resizeHandle}
                 monthStarts={monthStarts}
+                {...(openWeek ? { focusWeek: openWeek } : {})}
               />
               <MarkerLines piece="header" edges={shown} pad={paddingOf(cols, vCols)} />
             </div>
@@ -1586,6 +1792,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             includeOthers={includeOthers}
             onIncludeOthers={setIncludeOthers}
             dayCells={footerDays}
+            weekCells={footerWeeks}
+            {...(isPerson ? { loadLabel: th.people.grid.footerLoad, showOthersSwitch: false } : {})}
             monthStarts={monthStarts}
             overlay={
               <MarkerLines piece="footer" edges={renderedEdges(edges, vCols)} pad={paddingOf(cols, vCols)} />
@@ -1621,7 +1829,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         </div>
       ) : null}
       <AddPersonPopover
-        taskId={canEdit ? addPersonTask : null}
+        taskId={canEdit && !isPerson ? addPersonTask : null}
         picker={picker}
         assignedUserIds={(addPersonTask && assignedByTask.get(addPersonTask)) || EMPTY_SET}
         anchor={addPersonAnchor}
@@ -1677,7 +1885,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           const row = sumHint ? viewRows[sumHint.r] : undefined
           const c = sumHint?.c ?? 0
           setSumHint(null)
-          setShowAssignees(true, row ? { taskId: row.task.id, c } : undefined)
+          setShowAssignees(true, row && isTaskViewRow(row) ? { taskId: row.task.id, c } : undefined)
         }}
       />
       {gm.overlays}
@@ -1693,3 +1901,5 @@ const EMPTY_SET: ReadonlySet<string> = new Set()
 const EMPTY_HOLIDAYS: ReadonlyMap<string, string> = new Map()
 const EMPTY_TARGETS: CollapseTarget[] = []
 const EMPTY_NAMES: readonly string[] = []
+const NO_ROWS: GridViewRow[] = []
+const NO_PERSON_ROWS: PersonViewRow[] = []

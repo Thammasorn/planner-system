@@ -4,6 +4,9 @@
 // Rendered by VirtualGrid as the in-flow sticky sibling after the sized body (r4 §13).
 // M7.1: the label cells span both frozen columns (aria-colspan 2, FR-816); month boundaries (FR-818) and the marker
 // lines' footer piece (`overlay`, FR-820) are drawn here too.
+// M9 (S3.5, M9-D13, X06): week cells of the ภาระรวม row carry the BR-45 tone of the selected view AND the number AND the
+// BR-40 glyph + hidden status text (never colour alone); the person grid relabels the row "ภาระรวม (ทุกโปรเจค)" and has
+// no includeOthers switch (its masked row already carries every other project).
 import Switch from '@mui/material/Switch'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import type { ReactNode } from 'react'
@@ -12,6 +15,7 @@ import type { LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import { footerValue, type FooterCell as FooterCellData } from '@/lib/grid/aggregate'
 import type { FooterDayCell } from '@/lib/grid/day-footer'
+import type { FooterPeriodCell } from '@/lib/grid/load-footer'
 import {
   FOOTER_ROWS,
   FROZEN_COL_W,
@@ -41,6 +45,12 @@ export interface FooterProps {
   monthStarts?: ReadonlySet<string>
   /** M7.1 (FR-820): the footer piece of the marker lines */
   overlay?: ReactNode
+  /** M9 (S3.5): week-level tone / glyph of the ภาระรวม row per W: key */
+  weekCells?: ReadonlyMap<string, FooterPeriodCell>
+  /** M9 person grid: the ภาระรวม row label (th.people.grid.footerLoad) instead of the names */
+  loadLabel?: string
+  /** M9: false hides the "รวมงานโปรเจคอื่น" switch (person grid); default true */
+  showOthersSwitch?: boolean
 }
 
 const days1 = (cd: number) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
@@ -49,7 +59,8 @@ export function Footer(p: FooterProps) {
   const rows = [
     {
       kind: 'load' as const,
-      label: p.names.length > 0 ? th.grid.footer.load(p.names.join(', ')) : th.grid.footer.loadEmpty,
+      label:
+        p.loadLabel ?? (p.names.length > 0 ? th.grid.footer.load(p.names.join(', ')) : th.grid.footer.loadEmpty),
       text: (c: FooterCellData) => days1(footerValue(c, p.view).loadCd),
     },
     {
@@ -85,7 +96,7 @@ export function Footer(p: FooterProps) {
             style={{ width: FROZEN_COL_W, height: ROW_H }}
           >
             <span className={styles.name}>{row.label}</span>
-            {row.kind === 'util' ? (
+            {row.kind === 'util' && (p.showOthersSwitch ?? true) ? (
               // its own slot at the right of the frozen label cell (M7.1 review §8.12): regular weight, a 32 px hit
               // row, the text after the switch; the compact grid keeps only the switch (its aria-label names it)
               <label className={styles.footerSwitch} data-footer-switch="">
@@ -104,6 +115,7 @@ export function Footer(p: FooterProps) {
             if (!col) return null
             const cell = p.cells[col.key]
             const day = row.kind === 'load' && col.kind === 'D' ? p.dayCells?.get(col.key) : undefined
+            const week = row.kind === 'load' && col.kind === 'W' ? p.weekCells?.get(col.key) : undefined
             const text = cell ? row.text(cell) : ''
             return (
               <FooterCell
@@ -126,6 +138,19 @@ export function Footer(p: FooterProps) {
                         days1(day.capCd) || '0',
                       ),
                       tip: day.overPeople.length > 0,
+                    }
+                  : {})}
+                {...(week
+                  ? {
+                      tone: week.tone,
+                      palette: week.palette,
+                      glyph: week.glyph,
+                      glyphLabel: th.overload.footerStatus(
+                        th.overload.level[week.glyph],
+                        days1(week.loadCd) || '0',
+                        days1(week.capCd) || '0',
+                      ),
+                      tip: week.overPeople.length > 0,
                     }
                   : {})}
               />

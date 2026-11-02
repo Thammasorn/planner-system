@@ -289,7 +289,7 @@ describe('buildChunk — world', () => {
     expect(parent.totals['W:2026-10-12']).toEqual({ total: 100, committed: 100 })
     // depth-first: parent, child A + its assignee, child B (the deleted assignment is gone)
     const i = g.rows.findIndex((r) => r.kind === 'task' && r.id === w.tasks.pParent.id)
-    expect(g.rows.slice(i, i + 4).map((r) => (r.kind === 'task' ? r.id : r.taskAssignmentId))).toEqual([
+    expect(g.rows.slice(i, i + 4).map((r) => (r.kind === 'task' ? r.id : r.kind === 'assignee' ? r.taskAssignmentId : r.kind))).toEqual([
       w.tasks.pParent.id,
       w.tasks.pChildA.id,
       w.assignments.pChildAMember.id,

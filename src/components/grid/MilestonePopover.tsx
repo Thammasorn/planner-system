@@ -16,7 +16,7 @@ import type { ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { GridMilestone } from '@/lib/contracts/grid'
 import { formatThaiDate } from '@/lib/format'
-import { milestoneLabel } from './MilestoneRow'
+import { milestoneDisplayName, milestoneLabel } from './MilestoneRow'
 import styles from './grid.module.css'
 
 /** Only the fields that differ from the milestone (null when nothing changed). */
@@ -41,6 +41,8 @@ export interface MilestonePopoverProps {
   onToggleComplete(m: GridMilestone): void
   onDelete(m: GridMilestone): void
   onClose(): void
+  /** M9 (S3.6): the project-name prefix of the heading / accessible name in the person grid */
+  projectLabel?: string | null
 }
 
 export function MilestonePopover(p: MilestonePopoverProps): JSX.Element {
@@ -55,7 +57,7 @@ export function MilestonePopover(p: MilestonePopoverProps): JSX.Element {
       slotProps={{
         paper: {
           role: 'dialog',
-          'aria-label': m ? milestoneLabel(m) : th.milestones.label,
+          'aria-label': m ? milestoneLabel(m, p.projectLabel ?? undefined) : th.milestones.label,
           'data-testid': 'ms-popover',
         } as Record<string, unknown>,
       }}
@@ -73,7 +75,7 @@ function Details(p: MilestonePopoverProps & { milestone: GridMilestone }): JSX.E
         <span aria-hidden="true" className={styles.msGlyph}>
           {th.milestones.diamond}
         </span>{' '}
-        {m.name}
+        {milestoneDisplayName(m, p.projectLabel ?? undefined)}
       </h2>
       <div>{th.milestones.dateLine(formatThaiDate(m.date, 'medium'), th.milestones.status[m.status])}</div>
       <div className={styles.muted}>{th.milestones.progress(m.progress.done, m.progress.total)}</div>

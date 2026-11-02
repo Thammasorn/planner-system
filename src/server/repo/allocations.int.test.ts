@@ -1,6 +1,6 @@
 // M6 S2.1 — repo/allocations (BR-02 numeric ↔ cd, §6.5 builder parity X03, BR-44, BR-50, M6-D24).
 import { randomUUID } from 'node:crypto'
-import { and, eq, gte, isNull, lt } from 'drizzle-orm'
+import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { effectiveCertainty, splitLoad, type CertaintyNode } from '@/domain/certainty'
 import { countsTowardLoad } from '@/domain/completed'
@@ -11,7 +11,7 @@ import { seedGolden } from '../../../scripts/lib/fixtures'
 import { makeAllocation, makeAssignment, makeTask } from '../../../tests/helpers/factories'
 import { createWorld } from '../../../tests/helpers/world'
 import { db } from '../db/client'
-import { allocations, projects, taskAssignments, tasks } from '../db/schema'
+import { allocations, projects, taskAssignments, tasks, user } from '../db/schema'
 import * as repoAllocations from './allocations'
 
 const RANGE = { from: '2026-08-31', to: '2027-01-04' } as const
@@ -236,5 +236,95 @@ describe('repo.allocations — dayLoadsForProjects (M7 S2.1, C39, M7-D27)', () =
       }
       expect(got).toEqual(expected)
     }
+  })
+})
+
+// ── M9 S2.1 — loadByUserProjectWeek / sumDayRowsByDate (§6.5, BR-43/44/50, FR-628/BR-87, M9-D27) ──
+
+describe('repo.allocations.loadByUserProjectWeek (golden F1)', () => {
+  const nick = async (n: string) => (await db.select().from(user).where(eq(user.nickname, n)))[0]!.id
+  const pid = async (n: string) => (await db.select().from(projects).where(eq(projects.name, n)))[0]!.id
+  const allUsers = async () => (await db.select({ id: user.id }).from(user)).map((u) => u.id)
+
+  it('per user × project × week with committed by effective certainty; Σ = 19 500 / 11 625', async () => {
+    await seedGolden(db)
+    const [mint, cindy] = [await nick('Mint'), await nick('Cindy')]
+    const [mobile, pos, crm] = [await pid('Mobile App Revamp'), await pid('POS Upgrade'), await pid('CRM Migration')]
+    const loads = await repoAllocations.loadByUserProjectWeek(db, { userIds: await allUsers(), range: RANGE })
+    const at = (u: string, w: ISODate) =>
+      Object.fromEntries([...(loads.get(u) ?? new Map<string, Record<ISODate, LoadPair>>())].flatMap(([p, ws]) => (ws[w] ? [[p, ws[w]]] : [])))
+    expect(at(mint, '2026-10-05')).toEqual({ [mobile]: { total: 500, committed: 500 } })
+    expect(at(mint, '2026-12-14')).toEqual({ [pos]: { total: 500, committed: 0 } }) // Rollout TENTATIVE
+    expect(at(cindy, '2026-10-05')).toEqual({ [crm]: { total: 250, committed: 0 } })
+    let total = 0
+    let committed = 0
+    for (const byProject of loads.values())
+      for (const ws of byProject.values())
+        for (const v of Object.values(ws)) {
+          total += v.total
+          committed += v.committed
+          expect(Number.isInteger(v.total) && Number.isInteger(v.committed)).toBe(true)
+        }
+    expect([total, committed]).toEqual([19500, 11625])
+    // projectIds narrows
+    const only = await repoAllocations.loadByUserProjectWeek(db, { userIds: [mint], range: RANGE, projectIds: [pos] })
+    expect([...only.get(mint)!.keys()]).toEqual([pos])
+    expect(await repoAllocations.loadByUserProjectWeek(db, { userIds: [mint], range: RANGE, projectIds: [] })).toEqual(new Map())
+    expect(await repoAllocations.loadByUserProjectWeek(db, { userIds: [], range: RANGE })).toEqual(new Map())
+  })
+
+  it('BR-44 archive drops CRM; BR-50 completion drops later weeks; WAITING keeps load; BR-43 unassigned adds nothing', async () => {
+    await seedGolden(db)
+    const [cindy, ivy] = [await nick('Cindy'), await nick('Ivy')]
+    const crm = await pid('CRM Migration')
+    const pos = await pid('POS Upgrade')
+    // FR-628 / BR-87: a non-DONE status change keeps the load
+    const [auto] = await db.select().from(tasks).where(eq(tasks.name, 'ตั้งค่า automation'))
+    await db.execute(sql`update tasks set status_id = (select id from task_statuses s where s.project_id = ${crm}
+      and s.category <> 'DONE' and s.id <> ${auto!.statusId} and s.deleted_at is null limit 1) where id = ${auto!.id}`)
+    let loads = await repoAllocations.loadByUserProjectWeek(db, { userIds: [ivy], range: RANGE })
+    expect(loads.get(ivy)!.get(crm)!['2026-10-12']).toEqual({ total: 250, committed: 0 })
+    // BR-43: a task without assignees contributes nothing
+    const [mgr] = await db.select().from(user).where(eq(user.role, 'manager'))
+    await makeTask({ project: { id: pos }, name: 'ไม่มีผู้รับผิดชอบ', createdBy: mgr! })
+    // BR-50: complete on 2026-09-30 → weeks after 2026-09-28 disappear
+    await db.execute(sql`update tasks set completed_on = '2026-09-30',
+      status_id = (select id from task_statuses s where s.project_id = tasks.project_id and s.category = 'DONE' limit 1)
+      where id = ${auto!.id}`)
+    loads = await repoAllocations.loadByUserProjectWeek(db, { userIds: [ivy], range: RANGE })
+    expect(loads.get(ivy)!.has(crm)).toBe(false)
+    expect(loads.get(ivy)!.get(pos)!['2026-09-28']).toEqual({ total: 250, committed: 250 })
+    // BR-44
+    await db.update(projects).set({ archivedAt: new Date() }).where(eq(projects.id, crm))
+    loads = await repoAllocations.loadByUserProjectWeek(db, { userIds: [cindy], range: RANGE })
+    expect(loads.get(cindy)!.has(crm)).toBe(false)
+    expect(loads.get(cindy)!.has(pos)).toBe(true)
+  })
+
+  it('sumDayRowsByDate: Σ DAY rows per date of one user inside the range only', async () => {
+    const w = await createWorld({ with: ['tasks'] })
+    const a = w.assignments.pLeafLead
+    await db.insert(allocations).values([
+      { taskAssignmentId: a.id, granularity: 'DAY', periodStart: '2026-10-13', weekStart: '2026-10-12', personDays: '1.00' },
+      { taskAssignmentId: a.id, granularity: 'DAY', periodStart: '2026-10-15', weekStart: '2026-10-12', personDays: '0.50' },
+    ])
+    expect(await repoAllocations.sumDayRowsByDate(db, w.lead.id, '2026-10-13', '2026-10-14')).toEqual([
+      { date: '2026-10-13', cd: 100 },
+    ])
+    expect(await repoAllocations.sumDayRowsByDate(db, w.lead.id, '2026-10-12', '2026-10-18')).toEqual([
+      { date: '2026-10-13', cd: 100 },
+      { date: '2026-10-15', cd: 50 },
+    ])
+    expect(await repoAllocations.sumDayRowsByDate(db, w.member.id, '2026-10-12', '2026-10-18')).toEqual([])
+  })
+
+  it('firstPlannedWeekByAssignment: earliest week with cd > 0 in range', async () => {
+    const w = await createWorld({ with: ['tasks'] })
+    const a = w.assignments.pLeafLead
+    await makeAllocation({ assignment: a, period: '2026-09-14', cd: 100 })
+    await makeAllocation({ assignment: a, period: '2026-10-12', cd: 250 })
+    await makeAllocation({ assignment: a, period: '2026-11-02', cd: 100 })
+    const out = await repoAllocations.firstPlannedWeekByAssignment(db, [a.id], { from: '2026-09-28', to: '2029-10-01' })
+    expect(out.get(a.id)).toEqual({ week: '2026-10-12', cd: 250 })
   })
 })

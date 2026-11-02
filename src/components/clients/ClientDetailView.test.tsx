@@ -11,6 +11,8 @@ vi.mock('./useClientArchive', () => ({
   useClientArchive: () => ({ archive: mocks.archive, unarchive: mocks.unarchive }),
 }))
 vi.mock('./ClientFormDialog', () => ({ ClientFormDialog: () => null }))
+// M9 load section (GET /api/clients/[id]/load) stays pending here; ClientLoad.test.tsx covers it
+vi.mock('@/lib/api', () => ({ getJson: vi.fn(() => new Promise(() => {})) }))
 
 const detail = (archived: boolean): ClientDetail => ({
   client: { id: 'c1', name: 'Coral', code: null, color: null, archived, note: null },

@@ -27,8 +27,7 @@ export function useSetTaskStatus() {
   const qc = useQueryClient()
   const undo = useUndo()
   const settle = async (projectId: string) => {
-    await invalidateTasks(qc, projectId)
-    await invalidateLoad(qc)
+    await Promise.all([invalidateTasks(qc, projectId), invalidateLoad(qc)])
   }
   const patchCards = (id: string, fn: (c: TaskCard) => TaskCard) =>
     qc.setQueriesData<InfiniteData<TeamTasksResponse>>({ queryKey: qk.teamTasksAll() }, (d) =>

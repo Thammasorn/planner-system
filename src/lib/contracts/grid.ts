@@ -85,8 +85,12 @@ export interface GridTaskRow {
   /** FR-643, BR-86 (X76). */
   blockers: { open: number; total: number }
   assigneeCount: number
-  /** Counted load (BR-50); leaves summed for parents. */
+  /** Counted load (BR-50); leaves summed for parents. Person context (M9-D12): this person's counted cells only. */
   totals: Partial<Record<PeriodKey, LoadPair>>
+  /** Person context only (M9-D12); absent in the project context. */
+  projectId?: string
+  /** Person context only: parent names root → parent (M9-D12). */
+  breadcrumb?: string[]
 }
 
 export interface GridAssigneeRow {
@@ -102,15 +106,49 @@ export interface GridAssigneeRow {
   cells: Partial<Record<PeriodKey, AssigneeCell>>
 }
 
-/** M9 adds 'masked' | 'project'. */
-export type GridRow = GridTaskRow | GridAssigneeRow
+/** Person context only (M9-D12): one header row per visible, non-archived project of the person. */
+export interface GridProjectRow {
+  kind: 'project'
+  id: string
+  name: string
+  color: string
+  certainty: Certainty
+  canEdit: boolean
+  /** This person's counted load in the project. */
+  totals: Partial<Record<PeriodKey, LoadPair>>
+}
+
+/** Person context only (SPEC §7.4): Σ of every project the viewer may not see — no ids, names or counts. */
+export interface GridMaskedRow {
+  kind: 'masked'
+  userId: string
+  /** th.masking.otherProjects (set on the server). */
+  label: string
+  /** W: keys and, for expanded weeks, D: keys. */
+  totals: Partial<Record<PeriodKey, LoadPair>>
+}
+
+export type GridRow = GridTaskRow | GridAssigneeRow | GridProjectRow | GridMaskedRow
+
+/** X85: the grid's context. Project = M6 shape + M8-D8 canManage; person (M9-D12) — ◆ read-only (M9-D29). */
+export type GridContextInfo =
+  | { kind: 'project'; id: string; name: string; archived: boolean; canEdit: boolean; canManage: boolean }
+  | {
+      kind: 'person'
+      id: string
+      name: string
+      active: boolean
+      deactivatedOn: ISODate | null
+      canEdit: boolean
+      canManage: false
+    }
 
 /** M8-D8 (C19): all live milestones of the project (not windowed), date then id. */
 export type GridMilestone = MilestoneDTO
 
 export interface GridResponse {
-  /** canManage (M8-D8) = M/L and not archived; M9 widens it to GridContextInfo ('project' | 'person', X85). */
-  context: { kind: 'project'; id: string; name: string; archived: boolean; canEdit: boolean; canManage: boolean }
+  /** canManage (M8-D8) = M/L and not archived (project); always false in the person context (M9-D29). */
+  context: GridContextInfo
   /** expand [] / zoom 'week' in M6. */
   window: { from: ISODate; to: ISODate; expand: ISODate[]; zoom: 'week' | 'day'; includeOthers: boolean }
   today: ISODate

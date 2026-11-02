@@ -152,8 +152,7 @@ export function useTaskMutations(projectId: string): TaskMutations {
     qc.setQueryData<ProjectTasksResponse>(key, (d) => (d ? fn(d) : d))
   const setTasks = (fn: (t: TaskDTO[]) => TaskDTO[]) => setData((d) => ({ ...d, tasks: fn(d.tasks) }))
   const settle = async (load: boolean) => {
-    await invalidateTasks(qc, projectId)
-    if (load) await invalidateLoad(qc)
+    await Promise.all([invalidateTasks(qc, projectId), ...(load ? [invalidateLoad(qc)] : [])])
   }
   const nameOf = (snap: ProjectTasksResponse | undefined, id: string) =>
     snap?.tasks.find((t) => t.id === id)?.name ?? ''

@@ -9,8 +9,8 @@ import * as repo from '../repo'
 import { countMyOpenTasks } from './my-tasks'
 import type { SessionUser } from '../session'
 
-/** `today` (X90) comes from the route (the server clock); unused until M9's count needs it (M9-D17). */
-export async function getSidebar(tx: DbOrTx, user: SessionUser, _today: ISODate): Promise<SidebarResponse> {
+/** `today` (X90) comes from the route (the server clock); the my-task count is "this week" (M9-D17). */
+export async function getSidebar(tx: DbOrTx, user: SessionUser, today: ISODate): Promise<SidebarResponse> {
   const visible = await authz.visibleProjectIds(tx, user)
   const [rows, hasArchived] = await Promise.all([
     repo.projects.listProjects(tx, { ids: visible, archived: false }),
@@ -20,6 +20,6 @@ export async function getSidebar(tx: DbOrTx, user: SessionUser, _today: ISODate)
     rows.map((p) => ({ id: p.id, name: p.name, color: p.color, certainty: p.certainty })),
     (p) => p.name,
   )
-  const myTaskCount = await countMyOpenTasks(tx, user.id) // X22: the number of tasks on /my
+  const myTaskCount = await countMyOpenTasks(tx, user.id, today) // X22/M9-D17: my open tasks in สัปดาห์นี้
   return { projects, hasArchived, canCreateProject: authz.isManager(user), myTaskCount }
 }

@@ -138,6 +138,29 @@ export class SidebarPage {
     return this.shell.navLink(th.nav.calendar)
   }
 
+  /**
+   * M9 (X84, M9-D11): "Workload ทีม" → /workload, after งานของทีม. Its accessible name gains
+   * th.workload.badge.label(n) while the badge shows, so the link is found by its stable `data-nav-id`.
+   */
+  workloadLink(): Locator {
+    return this.nav().locator('a[data-nav-id="workload"]')
+  }
+  /** The ●N badge of Workload ทีม (`role=img` named th.workload.badge.label(n); absent at 0). */
+  workloadBadge(): Locator {
+    return this.workloadLink().getByTestId('workload-badge')
+  }
+  /** M9 (X33, M4-D27): "ทีมงาน" → /people, directly before ลูกค้า. */
+  peopleLink(): Locator {
+    return this.shell.navLink(th.nav.people)
+  }
+  /** The `data-nav-id`s of the primary + bottom nav rows in DOM order (the projects section header excluded). */
+  async navIds(): Promise<string[]> {
+    const ids = await this.nav()
+      .locator('a[data-nav-id]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-nav-id') ?? ''))
+    return ids.filter((id) => id !== 'projects')
+  }
+
   newProjectButton(): Locator {
     return this.nav().getByRole('button', { name: th.sidebar.newProject, exact: true })
   }

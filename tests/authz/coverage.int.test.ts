@@ -7,6 +7,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as services from '@/server/services'
 import { rows } from './rows'
+import { M9_ROUTES, PERSON_HEADER_LOADER } from './rows/_m9'
 
 const API_DIR = path.resolve(process.cwd(), 'src/app/api')
 const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const
@@ -87,6 +88,18 @@ describe('AZ-2 route coverage', () => {
     // §7.10: no new route for the chart or the calendar (they read the grid chunk / project tasks / calendar)
     const m71 = routes.filter((r) => /plan-markers|chart|plan-calendar/.test(r))
     expect(m71).toEqual(['GET /api/projects/[id]/plan-markers'])
+  })
+
+  it('M9 (plan/m09 S5.1): the 8 workload / people / load routes are exported and have rows; the header loader has rows', async () => {
+    const routes = await exportedRoutes()
+    const covered = new Set(rows.map((r) => r.action))
+    for (const name of M9_ROUTES) {
+      expect(routes, `${name} is exported`).toContain(name)
+      expect(covered.has(name), `${name} has no authz row`).toBe(true)
+    }
+    expect(covered.has(PERSON_HEADER_LOADER), `${PERSON_HEADER_LOADER} has no authz row`).toBe(true)
+    // X09: the picker directory stays a separate route next to the new GET /api/people
+    expect(routes).toContain('GET /api/people/options')
   })
 
   it('every exported route handler method has an authz row', async () => {

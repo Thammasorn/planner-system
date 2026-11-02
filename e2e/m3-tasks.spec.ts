@@ -9,7 +9,8 @@
  * selectors live in page objects; waits are on server-action responses or UI state — never on time.
  *
  * Later milestones change some lines on purpose (§7.3): E9's completion toasts gain BR-52 numbers (M6); E13's count
- * and /my layout change in M9; E1/E15 tab lists gain แผนงาน (M6) and เอกสาร (M4, done in plan/m04 S4.10).
+ * and /my layout changed in M9 (week buckets, plan/m09 S6.3); E1/E15 tab lists gain แผนงาน (M6) and เอกสาร (M4, done
+ * in plan/m04 S4.10).
  */
 import { randomUUID } from 'node:crypto'
 import type { Page } from '@playwright/test'
@@ -26,6 +27,7 @@ import {
   type GoldenLogin,
 } from './fixtures'
 import { ProjectFormDialog, ProjectPage } from './pages/project'
+import { MyTasksPage } from './pages/my-tasks'
 import { EmployeesPage } from './pages/settings'
 import { SidebarPage } from './pages/sidebar'
 import { TaskListPage } from './pages/tasks'
@@ -552,35 +554,33 @@ test.describe('E12 (X07) shortcut help', () => {
   })
 })
 
-test.describe('E13 ⟲ (FR-1009 basic, sidebar count, NFR-07b) งานของฉัน as Ivy', () => {
+test.describe('E13 ⟲ (FR-1009, sidebar count, NFR-07b) งานของฉัน as Ivy', () => {
   test.beforeAll(async () => {
     await resetDb()
   })
 
-  test('two tasks in two project groups; tick + undo moves the count; phone width; click opens the task', async ({
+  // M9 (plan/m09 S6.3, X22/X95): /my is grouped by week buckets; the sidebar count = open tasks in สัปดาห์นี้.
+  test('UAT in สัปดาห์นี้, automation in หลังจากนั้น; tick + undo keeps the count; phone width; click opens the task', async ({
     page,
   }) => {
     const pos = await idOf('project', POS)
     await loginAs(page, 'ivy')
     const sidebar = new SidebarPage(page)
-    await sidebar.shell.goto('/my')
+    const my = new MyTasksPage(page)
+    await my.goto()
     const main = sidebar.shell.main()
-    await expect(sidebar.myTaskCount()).toHaveText('2') // M9 changes this count (FR-1009 buckets, X95)
-    await expect(main.getByRole('region')).toHaveCount(2)
-    await expect(main.getByRole('region').first()).toHaveAccessibleName(CRM) // M3-D8: by project name (Thai collation)
-    await expect(main.getByRole('region').last()).toHaveAccessibleName(POS)
-    // M6.1 (FR-685): each item also has the ↗ page link (`data-open-page`); the task-name links are the others
-    const nameLinks = (project: string) =>
-      main.getByRole('region', { name: project }).locator('a[href]:not([data-open-page])')
-    await expect(nameLinks(CRM)).toHaveText(['ตั้งค่า automation'])
-    await expect(nameLinks(POS)).toHaveText([R2])
+    await expect(sidebar.myTaskCount()).toHaveText('1') // only UAT is planned in สัปดาห์นี้ (M9-D17)
+    await expect(my.bucketTaskLinks('THIS_WEEK')).toHaveText([R2])
+    await expect(my.bucketTaskLinks('LATER')).toHaveText(['ตั้งค่า automation'])
 
     const answered = waitForServerAction(page)
-    await main.getByRole('checkbox', { name: th.tasks.completeCheckbox('ตั้งค่า automation') }).click()
+    await my.checkbox('ตั้งค่า automation').click()
     await answered
+    await expect(my.bucketTaskLinks('LATER')).toHaveCount(0)
     await expect(sidebar.myTaskCount()).toHaveText('1')
     await undoByToast(page, th.tasks.toast.released('10.0', 4)) // BR-52: 4 future weeks × 2.5 days
-    await expect(sidebar.myTaskCount()).toHaveText('2')
+    await expect(my.bucketTaskLinks('LATER')).toHaveText(['ตั้งค่า automation'])
+    await expect(sidebar.myTaskCount()).toHaveText('1')
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(main.getByRole('link', { name: R2, exact: true })).toBeVisible()

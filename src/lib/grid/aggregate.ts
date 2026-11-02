@@ -4,7 +4,7 @@ import { countsTowardLoad } from '@/domain/completed'
 import type { Cd, ISODate, LoadPair, LoadView, PeriodKey } from '@/domain/types'
 import type { GridAssigneeRow, GridTaskRow } from '@/lib/contracts/grid'
 import type { GridModel } from './merge'
-import type { ViewRow } from './rows'
+import type { CellRow, ViewRow } from './rows'
 import { weekOfPeriodKey } from './totals'
 
 const collator = new Intl.Collator('th')
@@ -19,7 +19,7 @@ function indexTasks(m: GridModel): { tasks: Map<string, GridTaskRow>; assignees:
   const assignees: GridAssigneeRow[] = []
   for (const r of m.rows) {
     if (r.kind === 'task') tasks.set(r.id, r)
-    else assignees.push(r)
+    else if (r.kind === 'assignee') assignees.push(r) // M9 project / masked rows hold sums, never cells
   }
   return { tasks, assignees }
 }
@@ -73,6 +73,29 @@ export function taskTotals(
   return out
 }
 
+/**
+ * M9 (S3.3): client recompute of the person grid's project-row totals after optimistic writes = Σ the counted cells
+ * (BR-50, effective certainty) of every assignee row whose task belongs to the project. Computed from the model (a
+ * collapsed project keeps its totals); only projects with a row in `rows` are returned.
+ */
+export function projectTotals(
+  m: GridModel,
+  rows: readonly CellRow[],
+): Map<string, Partial<Record<PeriodKey, LoadPair>>> {
+  const wanted = new Set<string>()
+  for (const r of rows) if (r.kind === 'project') wanted.add(r.project.id)
+  const out = new Map<string, Partial<Record<PeriodKey, LoadPair>>>()
+  for (const id of wanted) out.set(id, {})
+  const { tasks, assignees } = indexTasks(m)
+  for (const a of assignees) {
+    const task = tasks.get(a.taskId)
+    const rec = task?.projectId === undefined ? undefined : out.get(task.projectId)
+    if (!task || !rec) continue
+    for (const [k, p] of countedCells(m, a, task)) addInto(rec, k, p)
+  }
+  return out
+}
+
 /** Task "รวม" (M6-D7): Σ of its leaves' rowTotal; leaves = Σ of their assignees' rowTotal. */
 export function taskRowTotals(m: GridModel): Map<string, LoadPair> {
   const { tasks, assignees } = indexTasks(m)
@@ -105,6 +128,8 @@ function pctOf(loadCd: Cd, capCd: Cd): number | null {
 /**
  * Footer per period (M6-D8): people = every `people` key (assignees on live tasks of this project), sorted by name;
  * ภาระรวม = Σ counted assignee cells (+ otherProjects when the switch is on); Capacity = Σ people capacity.
+ * M9 person context (M9-D13): people = the person; ภาระรวม = Σ counted assignee cells + the masked row's totals
+ * (every project, visible or not); `includeOthers` is ignored.
  */
 export function footerTotals(
   m: GridModel,
@@ -116,6 +141,12 @@ export function footerTotals(
     const task = tasks.get(a.taskId)
     if (task) for (const [k, p] of countedCells(m, a, task)) addInto(loads, k, p)
   }
+  const person = m.context.kind === 'person'
+  if (person)
+    for (const r of m.rows)
+      if (r.kind === 'masked')
+        for (const [k, p] of Object.entries(r.totals) as [PeriodKey, LoadPair | undefined][]) if (p) addInto(loads, k, p)
+  const withOthers = o.includeOthers && !person
   const people = Object.keys(m.people).sort(
     (a, b) => collator.compare(m.people[a]!.name, m.people[b]!.name) || (a < b ? -1 : a > b ? 1 : 0),
   )
@@ -127,7 +158,7 @@ export function footerTotals(
     for (const u of people) {
       const person = m.people[u]!
       capacityCd += person.capacity[key] ?? 0
-      if (o.includeOthers) load = addLoad(load, person.otherProjects?.[key] ?? ZERO_LOAD)
+      if (withOthers) load = addLoad(load, person.otherProjects?.[key] ?? ZERO_LOAD)
     }
     cells[key] = { load, capacityCd, utilizationPct: pctOf(load.total, capacityCd) }
   }
