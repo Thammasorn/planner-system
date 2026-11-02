@@ -18,8 +18,9 @@ import type {
   TreePlacement,
 } from '@/lib/contracts/tasks'
 import { displayName } from '@/lib/display-name'
-import { invalidateLoad, invalidateTasks } from '@/lib/invalidate'
+import { invalidateLoad, invalidateMilestones, invalidateTasks } from '@/lib/invalidate'
 import { statusToastMessage } from './statusToast'
+import { errorMessage, idMap, resolveId } from './task-ids'
 import { qk } from '@/lib/query-keys'
 import type { TaskPatch } from '@/lib/schemas/tasks'
 import {
@@ -64,15 +65,8 @@ import {
   updateTask,
 } from '@/server/actions/tasks'
 
-/** temp id → server id, filled by create's onSuccess; shared by every hook instance (R9). Scoped mutations
- *  guarantee the create has resolved before a later mutation's mutationFn reads it. */
-const idMap = new Map<string, string>()
-export const resolveId = (id: string): string => idMap.get(id) ?? id
+export { errorMessage, resolveId }
 const resolveNullable = (id: string | null): string | null => (id === null ? null : resolveId(id))
-
-export function errorMessage(err: unknown): string {
-  return err instanceof Error && err.message !== '' ? err.message : th.tasks.toast.saveFailed
-}
 
 /** Undo/redo of a restore: a CONFLICT reason reads "กู้คืนไม่ได้ เพราะ<reason>" (UndoProvider shows the message). */
 async function asRestore<T>(p: Promise<T>): Promise<T> {
@@ -231,6 +225,8 @@ export function useTaskMutations(projectId: string): TaskMutations {
           statusId: status.id,
           blockers: { open: 0, total: 0 },
           hasBody: false, // quick add never creates a body (FR-681, AC-627)
+          milestoneId: null,
+          lateForMilestone: false,
         }
         return { ...d, tasks: patchCreate(d.tasks, row) }
       },
@@ -293,6 +289,11 @@ export function useTaskMutations(projectId: string): TaskMutations {
         return { ...d, tasks: patchUpdate(d.tasks, v.taskId, p) }
       },
       load: (v) => v.patch.certaintyOverride !== undefined,
+      // M8-D12/D22: a due date is a BR-71 fact — a task bound to a live milestone refreshes every ◆ view
+      onSuccess: (_r, v, ctx) => {
+        const t = ctx.snapshot?.tasks.find((x) => x.id === v.taskId)
+        if (v.patch.dueDate !== undefined && t?.milestoneId) void invalidateMilestones(qc, projectId)
+      },
     }),
   )
 

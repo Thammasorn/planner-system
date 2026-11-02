@@ -35,6 +35,7 @@ export function invalidateTasks(qc: QueryClient, projectId: string): Promise<voi
     qk.sidebar(),
     qk.teamTasksAll(),
     qk.gridAll({ kind: 'project', id: projectId }),
+    qk.projectMilestones(projectId), // M8-D22: progress / lateness
   ])
 }
 
@@ -105,4 +106,20 @@ export function invalidateTaskViews(qc: QueryClient, projectId: string): Promise
 /** After any plan-marker create / update / delete / restore: that project's markers only (grid, calendar, chart). */
 export function invalidatePlanMarkers(qc: QueryClient, projectId: string): Promise<void> {
   return invalidateAll(qc, [qk.planMarkers(projectId)])
+}
+
+// ── M8 (plan/m08 S0.6, M8-D22, X82) ─────────────────────────────────────────────────────────────────────────────────
+
+/** After any milestone change (create / update / move / complete / delete / restore) and any task-binding, due-date or
+ *  completion change that affects lateness or progress: the project's milestones, its grid, every person grid (M9 shows
+ *  ◆ too), the project's task list, every /tasks page and every calendar range. */
+export async function invalidateMilestones(qc: QueryClient, projectId: string): Promise<void> {
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: qk.projectMilestones(projectId) }),
+    qc.invalidateQueries({ queryKey: qk.gridAll({ kind: 'project', id: projectId }) }),
+    qc.invalidateQueries({ queryKey: ['grid', 'person'] }), // prefix of qk.gridAll({ kind: 'person', id })
+    qc.invalidateQueries({ queryKey: qk.projectTasks(projectId) }),
+    qc.invalidateQueries({ queryKey: qk.teamTasksAll() }),
+    qc.invalidateQueries({ queryKey: qkPrefix.calendar }),
+  ])
 }

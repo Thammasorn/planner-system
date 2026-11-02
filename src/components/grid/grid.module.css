@@ -1287,7 +1287,7 @@
 }
 
 .root[data-chart-open='true'] > .scroller {
-  min-height: min(354px, var(--grid-content-h, 354px));
+  min-height: min(382px, var(--grid-content-h, 382px));
 }
 
 .chartPane {
@@ -1299,4 +1299,196 @@
   background: var(--surface);
   overflow: auto;
   max-height: 320px;
+}
+
+/* ── M8 ◆ Milestones row (FR-705, §8.3: ◆ → month → week / day; §8.9 glyph + hidden text, never colour alone) ── */
+.msRow {
+  position: relative;
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-xs);
+}
+
+.msHeader {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  box-sizing: border-box;
+  font-weight: var(--weight-bold);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.msCell {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+  padding: 0 calc(var(--space-1) / 2);
+  box-sizing: border-box;
+  border-right: 1px solid var(--border-subtle);
+  outline: none;
+}
+
+/* the --today line runs through the ◆ row as through the body (holiday / leave styles do not apply here) */
+.msCell[data-today='true'] {
+  box-shadow: inset 2px 0 0 var(--today);
+}
+
+/* managers: an empty cell is a create target (members see nothing on hover) */
+.msRow[data-manage='true'] .msCell:hover {
+  background: var(--hover-bg);
+  cursor: copy;
+}
+
+.msCell:focus-visible,
+.msDiamond:focus-visible,
+.msMore:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.msCell[data-drop='true'] {
+  background: var(--brand-light);
+}
+
+.msDiamond,
+.msMore {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+  height: 20px;
+  padding: 0 calc(var(--space-1) / 2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+
+.msDiamond {
+  flex: 1 1 auto;
+  touch-action: none;
+}
+
+.msDiamond:hover {
+  border-color: var(--milestone);
+}
+
+.msDiamond[data-status='DONE'] .msName {
+  text-decoration: line-through;
+}
+
+.msDiamond[data-dragging='true'] {
+  opacity: 0.5;
+}
+
+.msGlyph,
+.msGhost {
+  flex: none;
+  color: var(--milestone);
+  font-size: var(--font-sm);
+  line-height: 1;
+}
+
+.msGhost {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.msStatus,
+.msLate {
+  flex: none;
+  line-height: 1;
+}
+
+.msName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.msMore {
+  flex: none;
+  border-color: var(--border-subtle);
+  font-weight: var(--weight-medium);
+}
+
+.msTotal {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  flex: none;
+  margin-left: auto;
+  box-sizing: border-box;
+  background: var(--surface-muted);
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* M8 (FR-706, AC-702, §8.3 "→◆UAT"): the task's milestone and the "เลย milestone" chip in the task column */
+.msTaskLink {
+  flex: none;
+  max-width: 96px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.msLateChip {
+  flex: none;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--load-over-fg);
+  border-radius: var(--radius-sm);
+  background: var(--load-over-bg);
+  color: var(--load-over-fg);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.msPopover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  width: 320px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  box-sizing: border-box;
+}
+
+.msPopoverTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: var(--weight-bold);
+}
+
+.msPopoverActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.msStackList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin: 0;
+  list-style: none;
 }

@@ -4,14 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GET as getGrid } from '@/app/api/grid/project/[projectId]/route'
 import type { ISODate } from '@/domain/types'
 import type { GridAssigneeRow, GridResponse, GridTaskRow } from '@/lib/contracts/grid'
-import { applyFixture, seedGolden } from '../../../scripts/lib/fixtures'
+import { addMilestones, applyFixture, seedGolden } from '../../../scripts/lib/fixtures'
 import { callRoute } from '../../../tests/authz/_support/http'
 import { goldenProjectId, goldenUser, type GoldenProject, type GoldenViewer } from '../../../tests/authz/_support/golden'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import { makeTask } from '../../../tests/helpers/factories'
 import { createWorld } from '../../../tests/helpers/world'
 import { db } from '../db/client'
-import { tasks as tasksTable } from '../db/schema'
+import { milestones as milestonesTable, tasks as tasksTable } from '../db/schema'
 import type { SessionUser } from '../session'
 import * as repo from '../repo'
 import { buildChunk, type ChunkParams } from './grid'
@@ -306,5 +306,59 @@ describe('buildChunk — world', () => {
     await expect(
       buildChunk(db, toSessionUser(w.outsider), { kind: 'project', id: w.P.id }, chunk('2026-10-12', '2026-10-19'), TODAY),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+})
+
+describe('buildChunk — milestones (X28, M8-D8, BR-71/72)', () => {
+  it('world P as member: 3 live milestones with status/late; task rows live milestoneId + lateForMilestone; canManage', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    const g = await buildChunk(db, toSessionUser(w.member), { kind: 'project', id: w.P.id }, chunk('2026-10-12', '2026-10-19'), TODAY)
+    expect(g.milestones.map((m) => m.id)).toEqual([w.milestones.pDone.id, w.milestones.pLate.id, w.milestones.p.id])
+    expect(g.milestones.find((m) => m.id === w.milestones.pLate.id)).toMatchObject({ status: 'DUE_SOON', late: true })
+    expect(g.milestones.find((m) => m.id === w.milestones.p.id)).toMatchObject({ late: false })
+    const row = (id: string) => taskRows(g).find((t) => t.id === id)!
+    expect(row(w.tasks.pLeaf.id)).toMatchObject({ milestoneId: w.milestones.pLate.id, lateForMilestone: true })
+    expect(row(w.tasks.pChildB.id)).toMatchObject({ milestoneId: w.milestones.p.id, lateForMilestone: false })
+    expect(row(w.tasks.pParent.id)).toMatchObject({ milestoneId: null, lateForMilestone: false }) // deleted milestone
+    expect(JSON.stringify(g)).not.toContain('Q-ลับ05')
+    expect(g.context.canManage).toBe(false)
+    const lead = await buildChunk(db, toSessionUser(w.lead), { kind: 'project', id: w.P.id }, chunk('2026-10-12', '2026-10-19'), TODAY)
+    expect(lead.context.canManage).toBe(true)
+    const a = await buildChunk(db, toSessionUser(w.lead), { kind: 'project', id: w.A.id }, chunk('2026-10-12', '2026-10-19'), TODAY)
+    expect(a.context.canManage).toBe(false)
+    expect(a.milestones.map((m) => m.id)).toEqual([w.milestones.a.id])
+  })
+
+  it('BR-72: binding every task to a milestone changes no capacity, totals or row totals', async () => {
+    await seedGolden(db)
+    const manager = await golden('Manager')
+    const projects = ['POS Upgrade', 'Data Warehouse', 'Mobile App Revamp', 'CRM Migration', 'Store Analytics Dashboard'] as const
+    const strip = (g: GridResponse) => ({
+      people: Object.fromEntries(Object.entries(g.people).map(([id, p]) => [id, p.capacity])),
+      totals: taskRows(g).map((t) => [t.id, t.totals]),
+      rowTotals: assigneeRows(g).map((r) => [r.taskAssignmentId, r.rowTotal, r.cells]),
+    })
+    const before = await Promise.all(projects.map(async (p) => strip(await grid(manager, p))))
+    const { ids } = await addMilestones(db)
+    for (const p of projects) {
+      const pid = await goldenProjectId(p)
+      const [m] = await db.select({ id: milestonesTable.id }).from(milestonesTable).where(eq(milestonesTable.projectId, pid))
+      await db.update(tasksTable).set({ milestoneId: m!.id }).where(eq(tasksTable.projectId, pid))
+    }
+    expect(Object.keys(ids)).toHaveLength(7)
+    const after = await Promise.all(projects.map(async (p) => strip(await grid(manager, p))))
+    expect(after).toEqual(before)
+  })
+
+  it('A.2 (golden + addMilestones), POS as Cindy: UAT sign-off DUE_SOON + late; Go-live UPCOMING; task row late', async () => {
+    await seedGolden(db)
+    await addMilestones(db)
+    const g = await grid(await golden('Cindy'), 'POS Upgrade')
+    expect(g.milestones.map((m) => [m.name, m.status, m.late, m.lateTaskCount, m.progress])).toEqual([
+      ['UAT sign-off', 'DUE_SOON', true, 1, { done: 0, total: 1 }],
+      ['Go-live สาขาแรก', 'UPCOMING', false, 0, { done: 0, total: 0 }],
+    ])
+    expect(taskNamed(g, 'ทำ UAT + คู่มือหน้าร้าน')).toMatchObject({ milestoneId: g.milestones[0]!.id, lateForMilestone: true })
+    expect(taskNamed(g, 'Rollout สาขา')).toMatchObject({ milestoneId: null, lateForMilestone: false })
   })
 })

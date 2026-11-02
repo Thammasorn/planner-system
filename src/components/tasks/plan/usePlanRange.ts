@@ -10,10 +10,18 @@ import type { Cd, ISODate } from '@/domain/types'
 import { formatCd } from '@/domain/units'
 import { th } from '@/i18n/th'
 import { ActionFailure, unwrap } from '@/lib/action-result'
-import type { PlanAssignmentRangeOk, PlanRangePreview, SaveValidationIssue } from '@/lib/contracts/grid'
+import type { MilestoneLateness } from '@/lib/contracts/milestones'
+import type {
+  GridResponse,
+  PlanAssignmentRangeOk,
+  PlanRangePreview,
+  SaveValidationIssue,
+} from '@/lib/contracts/grid'
+import { applyLateness } from '@/lib/grid/milestones'
 import { snapshotFromState, snapshotToChanges, type WeekSnapshot } from '@/lib/grid/undo'
 import { knownVersion, rememberVersion } from '@/lib/grid/versions'
 import { invalidateLoad, invalidateTasks } from '@/lib/invalidate'
+import { qk } from '@/lib/query-keys'
 import { planAssignmentRange, saveAllocations } from '@/server/actions/allocations'
 
 export const PREVIEW_DEBOUNCE_MS = 300
@@ -107,6 +115,11 @@ export function usePlanRange(o: {
   }, [taskAssignmentId, totalCd, start, end, key])
 
   const refreshViews = () => Promise.all([invalidateLoad(qc), invalidateTasks(qc, projectId)]).then(() => {})
+  /** M8-D12: the save's lateness patches the project's grid ◆ / task rows at once (the refetch then confirms). */
+  const patchLateness = (l: MilestoneLateness | null) =>
+    qc.setQueriesData<GridResponse>({ queryKey: qk.gridAll({ kind: 'project', id: projectId }) }, (g) =>
+      g ? applyLateness(g, l) : g,
+    )
 
   /** Writes week snapshots back exactly (DAY weeks as 7 DAY changes, COLLAPSE), on the latest known version. */
   const writeSnapshots = async (snaps: readonly WeekSnapshot[]) => {
@@ -124,6 +137,7 @@ export function usePlanRange(o: {
       }),
     )
     for (const r of ok.results) rememberVersion(r.taskAssignmentId, r.version)
+    patchLateness(ok.lateness)
     await refreshViews()
   }
 
@@ -146,6 +160,7 @@ export function usePlanRange(o: {
         }),
       )
       if (r.applied) rememberVersion(taskAssignmentId, r.applied.version)
+      patchLateness(r.lateness)
       const before = r.preview.weeks.map((w) => snapshotFromState(w.before, taskAssignmentId, w.week))
       const after = r.preview.weeks.map((w) => snapshotFromState(w.after, taskAssignmentId, w.week))
       undo.push(

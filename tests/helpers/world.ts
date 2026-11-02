@@ -12,6 +12,7 @@ import type {
   FileRow,
   HolidayRow,
   LeaveTypeRow,
+  MilestoneDbRow,
   PageRow,
   PlanMarkerDbRow,
   ProjectRow,
@@ -26,6 +27,7 @@ import type { TaskBlockerRow } from '@/server/repo/task-blockers'
 import type { TaskStatusRow } from '@/server/repo/task-statuses'
 import { pdfBytes } from './files'
 import {
+  bindTask,
   makeAllocation,
   makeAssignment,
   makeDayAllocations,
@@ -35,6 +37,7 @@ import {
   makeHoliday,
   makeLeaveType,
   makeMembership,
+  makeMilestone,
   makePage,
   makePlanMarker,
   makeProject,
@@ -82,6 +85,7 @@ export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>
   allocations: ['tasks', 'timeOff'], // M6: plans on the M3 assignments + the M5 coworker (plan/m06 S0.11)
   taskBodies: ['tasks', 'pages'], // M6.1: bodies of M3 tasks; tree tests compare with the M4 pages
   dayAllocations: ['allocations'], // M7: day plans on M6's assignments (plan/m07 S0.9, G17 — no new users/tasks)
+  milestones: ['tasks', 'allocations'], // M8: bound M3 tasks; lateness reads M6's plans (plan/m08 S0.10, X91)
 }
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
@@ -287,6 +291,32 @@ export interface WorldPlanMarkers {
   }
 }
 
+/** Part 'milestones' (M8, plan/m08 S0.10, M8-D23). Live milestones (P/A by the lead, Q by the manager) bound to M3
+ *  tasks with bindTask; `w.tasks.*` rows carry the new `milestoneId`. Soft-deleted ones are in `deletedMilestones`
+ *  and their batches in `w.batches`. */
+export interface WorldMilestones {
+  milestones: {
+    /** P 'Milestone P-ลับ06' · 2026-10-23 · bound pChildB (no plans → not late). */
+    p: MilestoneDbRow
+    /** P 'ส่งมอบรอบแรก P' · 2026-10-02 · bound pLeaf (WEEK 10-05 = 500 > date → late, lateTaskCount 1). */
+    pLate: MilestoneDbRow
+    /** P 'Kickoff P' · 2026-09-15 · completedOn 2026-09-16 · bound pDone. */
+    pDone: MilestoneDbRow
+    /** Q 'Milestone Q-ลับ05' · 2026-10-20 · bound qTask. */
+    q: MilestoneDbRow
+    /** A (archived) 'Milestone A' · 2026-10-30 · bound aTask. */
+    a: MilestoneDbRow
+  }
+  deletedMilestones: {
+    /** P 'Milestone ที่ลบแล้ว P' · 2026-10-16 · soft-deleted 1 day ago; pParent.milestone_id still points at it. */
+    pDeleted: MilestoneDbRow
+    /** P 'Milestone เก่า P' · 2026-09-21 · soft-deleted 31 days ago (restore → 400 restoreExpired). */
+    pExpired: MilestoneDbRow
+    /** A 'Milestone ที่ลบแล้ว A' · 2026-10-09 · soft-deleted 1 day ago (restore → 403 archived). */
+    aDeleted: MilestoneDbRow
+  }
+}
+
 /** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
 export type WorldBatches = WorldTasks['batches'] & {
   /** P root 'ลบแล้ว P', deleted 1 day ago. */
@@ -299,6 +329,12 @@ export type WorldBatches = WorldTasks['batches'] & {
   pOldDeletedPage: string
   /** coworker · sick · 2026-11-23, soft-deleted 1 day ago (restoreTimeOff input). */
   coworkerDeletedTimeOff: string
+  /** M8: batch of deletedMilestones.pDeleted (1 day ago). */
+  pDeletedMilestone: string
+  /** M8: batch of deletedMilestones.pExpired (31 days ago). */
+  pExpiredMilestone: string
+  /** M8: batch of deletedMilestones.aDeleted (archived A, 1 day ago). */
+  aDeletedMilestone: string
 }
 
 export interface World
@@ -310,7 +346,8 @@ export interface World
     WorldTimeOff,
     WorldAllocations,
     WorldDayAllocations,
-    WorldPlanMarkers {
+    WorldPlanMarkers,
+    WorldMilestones {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
@@ -378,6 +415,9 @@ const BATCH_PART: Record<keyof WorldBatches, WorldPart> = {
   wikiDeletedPage: 'pages',
   pOldDeletedPage: 'pages',
   coworkerDeletedTimeOff: 'timeOff',
+  pDeletedMilestone: 'milestones',
+  pExpiredMilestone: 'milestones',
+  aDeletedMilestone: 'milestones',
 }
 
 /** w.batches: builders Object.assign their keys; reading a key of an unbuilt part throws like notBuilt. */
@@ -775,6 +815,59 @@ async function buildPlanMarkers(w: World): Promise<void> {
   }
 }
 
+/** M8 'milestones' part (plan/m08 S0.10): milestones + bindings on M3 tasks only (X70: no task inserted). */
+async function buildMilestones(w: World): Promise<void> {
+  const t = w.tasks
+  const bind = async (task: TaskRow, m: MilestoneDbRow) => {
+    await bindTask(task, m)
+    Object.assign(task, { milestoneId: m.id })
+  }
+  const p = await makeMilestone({ project: w.P, name: 'Milestone P-ลับ06', date: '2026-10-23', createdBy: w.lead })
+  const pLate = await makeMilestone({ project: w.P, name: 'ส่งมอบรอบแรก P', date: '2026-10-02', createdBy: w.lead })
+  const pDone = await makeMilestone({
+    project: w.P,
+    name: 'Kickoff P',
+    date: '2026-09-15',
+    completedOn: '2026-09-16',
+    createdBy: w.lead,
+  })
+  const q = await makeMilestone({ project: w.Q, name: 'Milestone Q-ลับ05', date: '2026-10-20', createdBy: w.manager })
+  const a = await makeMilestone({ project: w.A, name: 'Milestone A', date: '2026-10-30', createdBy: w.lead })
+  await bind(t.pChildB, p)
+  await bind(t.pLeaf, pLate)
+  await bind(t.pDone, pDone)
+  await bind(t.qTask, q)
+  await bind(t.aTask, a)
+
+  const batches = { pDeletedMilestone: randomUUID(), pExpiredMilestone: randomUUID(), aDeletedMilestone: randomUUID() }
+  const pDeleted = await makeMilestone({
+    project: w.P,
+    name: 'Milestone ที่ลบแล้ว P',
+    date: '2026-10-16',
+    createdBy: w.lead,
+    deleted: { batch: batches.pDeletedMilestone, ...DAY_AGO },
+  })
+  const pExpired = await makeMilestone({
+    project: w.P,
+    name: 'Milestone เก่า P',
+    date: '2026-09-21',
+    createdBy: w.lead,
+    deleted: { batch: batches.pExpiredMilestone, daysAgo: 31 },
+  })
+  const aDeleted = await makeMilestone({
+    project: w.A,
+    name: 'Milestone ที่ลบแล้ว A',
+    date: '2026-10-09',
+    createdBy: w.lead,
+    deleted: { batch: batches.aDeletedMilestone, ...DAY_AGO },
+  })
+  await bind(t.pParent, pDeleted) // reads as unbound until restored (M8-D5)
+
+  w.milestones = { p, pLate, pDone, q, a }
+  w.deletedMilestones = { pDeleted, pExpired, aDeleted }
+  Object.assign(w.batches, batches)
+}
+
 /** Builders by part; each milestone adds its own. */
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
@@ -785,6 +878,7 @@ const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   allocations: buildAllocations,
   dayAllocations: buildDayAllocations,
   planMarkers: buildPlanMarkers,
+  milestones: buildMilestones,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -849,6 +943,8 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     allocations: notBuilt('allocations', 'allocations'),
     dayWeeks: notBuilt('dayAllocations', 'dayWeeks'),
     planMarkers: notBuilt('planMarkers', 'planMarkers'),
+    milestones: notBuilt('milestones', 'milestones'),
+    deletedMilestones: notBuilt('milestones', 'deletedMilestones'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   return w

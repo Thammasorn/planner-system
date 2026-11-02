@@ -4,9 +4,9 @@ import { countsTowardLoad } from '@/domain/completed'
 import { addDays, compareISO, daysOfWeek, isoWeekday } from '@/domain/dates'
 import { formatCd } from '@/domain/units'
 import type { Cd, CellUnit, ISODate, PeriodKey } from '@/domain/types'
-import type { GridTimeOff } from '@/lib/contracts/grid'
+import type { GridMilestone, GridTimeOff } from '@/lib/contracts/grid'
 import { th } from '@/i18n/th'
-import { formatLeaveRange } from '@/lib/format'
+import { formatLeaveRange, formatThaiDate } from '@/lib/format'
 import type { GridModel } from './merge'
 import type { ViewRow } from './rows'
 import { weekOfPeriodKey } from './totals'
@@ -168,4 +168,23 @@ function dayTooltipFor(row: ViewRow, key: PeriodKey, m: GridModel, o: { unit: Ce
 export function dayHeaderTooltipFor(m: Pick<GridModel, 'holidays'>, date: ISODate): string | null {
   const name = m.holidays.get(date)
   return name !== undefined ? th.grid.header.holiday(name) : null
+}
+
+/** Description excerpt length in the ◆ tooltip (plan/m08 S3.3). */
+export const MILESTONE_TIP_DESCRIPTION_MAX = 200
+
+/** Tooltip lines of a ◆ (M8 S3.3): name, date · status, progress, "เลย milestone N งาน" when late, description excerpt. */
+export function milestoneTooltipFor(m: GridMilestone): string[] {
+  const lines = [
+    m.name,
+    th.milestones.dateLine(formatThaiDate(m.date, 'medium'), th.milestones.status[m.status]),
+    th.milestones.progress(m.progress.done, m.progress.total),
+  ]
+  if (m.late) lines.push(th.milestones.lateTasks(m.lateTaskCount))
+  const d = m.description?.trim()
+  if (d)
+    lines.push(
+      d.length > MILESTONE_TIP_DESCRIPTION_MAX ? `${d.slice(0, MILESTONE_TIP_DESCRIPTION_MAX)}…` : d,
+    )
+  return lines
 }

@@ -34,6 +34,12 @@ function columnNameOf(label: string): string {
   return m?.[1] ?? label
 }
 
+/** th.milestones.tasks.groupHeader(name, <any date>) — group headers, panel options and bulk menu items. */
+export function milestoneHeaderPattern(name: string): RegExp {
+  const [prefix] = th.milestones.tasks.groupHeader(name, '\u0000').split('\u0000')
+  return new RegExp(`^${escapeRegExp(prefix!)}`)
+}
+
 /** Pointer drag with intermediate moves (dnd-kit PointerSensor, 4 px activation distance — R15). */
 async function dragFromTo(page: Page, from: Locator, to: { x: number; y: number }): Promise<void> {
   await from.hover({ trial: true }) // waits until the handle stops moving (a previous drop may still be animating)
@@ -332,8 +338,12 @@ export class TaskListPage {
     await this.page.getByRole('listbox').getByRole('option', { name: option, exact: true }).click()
     await saved
   }
-  async groupBy(key: 'none' | 'status' | 'assignee' | 'certainty'): Promise<void> {
+  async groupBy(key: 'none' | 'status' | 'assignee' | 'certainty' | 'milestone'): Promise<void> {
     await this.choose(th.tasks.groupBy.label, th.tasks.groupBy[key])
+  }
+  /** M8 (plan/m08 S6.1): the name the plan uses for the milestone grouping. */
+  async setGroupBy(by: 'milestone' | 'none'): Promise<void> {
+    await this.groupBy(by)
   }
   async sortBy(key: 'manual' | 'due'): Promise<void> {
     await this.choose(th.tasks.sort.label, th.tasks.sort[key])
@@ -423,6 +433,91 @@ export class TaskListPage {
   }
   blockerBadge(name: string, text: string): Locator {
     return this.row(name).getByText(text, { exact: true })
+  }
+
+  // ── M8 milestones (plan/m08 S6.1; FR-601/613/614/661/663/706) ───────────────────────────────────────────────
+  // DOM contract (S4): rows / cards show "◆ name" (`[data-milestone-tag]`) + the "เลย milestone" badge (`data-late`);
+  // milestone group headers read th.milestones.tasks.groupHeader(name, date medium) + status chip + progress, the
+  // unbound group th.tasks.groups.noMilestone; the panel field is a select (combobox th.milestones.tasks.field) whose
+  // options read groupHeader(name, date) or th.milestones.none; the bulk bar's th.milestones.tasks.bulkLink opens a
+  // menu with the same labels; the board filter is the combobox th.milestones.tasks.filter.
+
+  /** "◆ name" on a list row. */
+  milestoneTag(name: string): Locator {
+    return this.row(name).locator('[data-milestone-tag]')
+  }
+  /** "เลย milestone" badge on a list row. */
+  lateBadge(name: string): Locator {
+    return this.row(name).getByText(th.milestones.late, { exact: true })
+  }
+  /** The rowgroup of milestone `milestone` in the milestone grouping (header "◆ <name> · <date> …"). */
+  milestoneGroup(milestone: string): Locator {
+    return this.list()
+      .getByRole('rowgroup')
+      .filter({ has: this.page.getByRole('columnheader', { name: milestoneHeaderPattern(milestone) }) })
+  }
+  /** The "ไม่ผูก milestone" group. */
+  noMilestoneGroup(): Locator {
+    return this.group(th.tasks.groups.noMilestone)
+  }
+  /** Panel "Milestone" select. */
+  panelMilestone(): Locator {
+    return this.panel().getByRole('combobox', { name: th.milestones.tasks.field, exact: true })
+  }
+  /** The panel's late alert (FR-706). */
+  panelLateAlert(text: string): Locator {
+    return this.panel().getByText(text, { exact: true })
+  }
+  /**
+   * Opens the panel of `taskName` (unless it is already open), picks `label` (a milestone name, or null = ไม่ผูก) in
+   * the Milestone field and waits for the link action (one undo entry, no toast — M8-D14).
+   */
+  async setTaskMilestone(taskName: string, label: string | null): Promise<void> {
+    if (!(await this.panelTitle(taskName).isVisible())) await this.openPanel(taskName)
+    await this.panelMilestone().click()
+    const option =
+      label === null
+        ? this.page.getByRole('listbox').getByRole('option', { name: th.milestones.none, exact: true })
+        : this.page.getByRole('listbox').getByRole('option', { name: milestoneHeaderPattern(label) })
+    const linked = waitForServerAction(this.page)
+    await option.click()
+    await linked
+    await expect(this.page.getByRole('listbox')).toHaveCount(0)
+  }
+  /**
+   * Selects `taskNames` (first plain click, the rest Mod+click), bulk bar "ผูก milestone" → `label` (null = ไม่ผูก);
+   * waits for the one link action.
+   */
+  async bulkLink(taskNames: readonly string[], label: string | null): Promise<void> {
+    const [first, ...rest] = taskNames
+    if (first === undefined) throw new Error('bulkLink: no tasks')
+    await this.select(first)
+    for (const n of rest) await this.select(n, ['ControlOrMeta'])
+    const n = taskNames.length
+    await expect(this.bulkBar(n)).toBeVisible()
+    await this.bulkButton(n, th.milestones.tasks.bulkLink).click()
+    const menu = this.page.getByRole('menu', { name: th.milestones.tasks.bulkLink, exact: true })
+    await expect(menu).toBeVisible()
+    const item =
+      label === null
+        ? menu.getByRole('menuitem', { name: th.milestones.none, exact: true })
+        : menu.getByRole('menuitem', { name: milestoneHeaderPattern(label) })
+    const linked = waitForServerAction(this.page)
+    await item.click()
+    await linked
+  }
+  /** Board toolbar "milestone" filter (in memory, M8-D15): picks the option labelled `label`. */
+  boardMilestoneSelect(): Locator {
+    return this.page.getByRole('combobox', { name: th.milestones.tasks.filter, exact: true })
+  }
+  async boardMilestoneFilter(label: string): Promise<void> {
+    await this.boardMilestoneSelect().click()
+    await this.page.getByRole('listbox').getByRole('option', { name: label, exact: true }).click()
+    await expect(this.boardMilestoneSelect()).toHaveText(label)
+  }
+  /** "◆ name" on a board card. */
+  cardMilestoneTag(name: string): Locator {
+    return this.card(name).locator('[data-milestone-tag]')
   }
 
   // ── board (FR-660–664) ────────────────────────────────────────────────────────────────────────────────────

@@ -1,8 +1,9 @@
 // src/lib/contracts/tasks.ts — isomorphic, type-only task DTOs (plan/m03 S0.5, SPEC §7.8). The API speaks these; no
 // DB row types cross the wire. Forward compatibility (M3-D42): later milestones extend these types additively
 // (M6 `SetTaskStatusResult.released`, M8 `TaskDTO.milestoneId`/`lateForMilestone`, `ProjectTasksResponse.milestones`,
-// `TaskCard.milestoneId`, `TeamTasksResponse.milestonesByProject`). Keep every result an object.
+// `TaskCard.milestoneId`, `TeamTasksResponse.milestonesByProject` — added in M8 S0.3). Keep every result an object.
 import type { Cd, Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
+import type { MilestoneRef } from './milestones'
 
 export type TaskDepth = 0 | 1 | 2
 
@@ -30,6 +31,10 @@ export interface TaskDTO {
   blockers: { open: number; total: number }
   /** FR-691 (M6.1-D11): the task has a live, non-blank body (text, image or file) — 📄 marker. */
   hasBody: boolean
+  /** M8 (M8-D13): the LIVE milestone (a deleted milestone reads as null, M8-D5). */
+  milestoneId: string | null
+  /** BR-71 (M8-D6). */
+  lateForMilestone: boolean
 }
 
 export interface TaskStatusDTO {
@@ -62,6 +67,8 @@ export interface ProjectTasksResponse {
   statuses: TaskStatusDTO[]
   /** Live edges between live tasks of this project (same project only, D12). */
   blockerEdges: BlockerEdgeDTO[]
+  /** M8 (M8-D13): live milestones of the project, date then id. */
+  milestones: MilestoneRef[]
 }
 
 export interface AssignmentTransfer {
@@ -240,6 +247,8 @@ export interface TaskCard {
   blockers: { open: number; total: number }
   /** FR-691 (M6.1-D11): the task has a TASK body page. */
   hasBody: boolean
+  /** SPEC §7.8 (M8-D15): live milestone id; name via `TeamTasksResponse.milestonesByProject`. */
+  milestoneId: string | null
 }
 
 /** GET /api/tasks (X75, M3-D33). */
@@ -249,5 +258,7 @@ export interface TeamTasksResponse {
   projects: { id: string; name: string; color: string }[]
   /** Same projects only (status menus, FR-666). */
   statusesByProject: Record<string, TaskStatusDTO[]>
+  /** M8 (M8-D15): live milestones of the same projects only (date then id). */
+  milestonesByProject: Record<string, MilestoneRef[]>
   nextCursor: string | null
 }

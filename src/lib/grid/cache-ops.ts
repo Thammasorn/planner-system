@@ -18,6 +18,7 @@ import type {
 import { dayCtxFor, weekPlanFromCell, weekPlanFromState, wKey } from './day'
 import { patchWeekCells } from './day-overlay'
 import type { CellWrite } from './queue'
+import { applyLateness } from './milestones'
 import { counted, recomputeTotals } from './totals'
 
 const weekOfWrite = (w: CellWrite): ISODate => (w.granularity === 'WEEK' ? w.period : weekStart(w.period))
@@ -176,9 +177,13 @@ export function applyWritesOptimistically(
   return { ...resp, rows }
 }
 
-/** Takes the whole SaveAllocationsOk so M8 applies `ok.lateness` here without a signature change (M8 S3.2):
- *  ok.results → cells of this chunk's periods, version and rowTotal in every chunk, task totals recomputed. */
+/** Takes the whole SaveAllocationsOk (M8 S3.2): ok.results → cells of this chunk's periods, version and rowTotal in
+ *  every chunk, task totals recomputed; then ok.lateness (M8-D12) → task rows' lateForMilestone and ◆ late flags. */
 export function applyServerResults(resp: GridResponse, ok: SaveAllocationsOk): GridResponse {
+  return applyLateness(applyResults(resp, ok), ok.lateness)
+}
+
+function applyResults(resp: GridResponse, ok: SaveAllocationsOk): GridResponse {
   if (ok.results.length === 0) return resp
   const byId = new Map(ok.results.map((r) => [r.taskAssignmentId, r]))
   const periods = new Set(resp.periods.map((p) => p.key))
@@ -207,7 +212,7 @@ export function applyServerResults(resp: GridResponse, ok: SaveAllocationsOk): G
 
 /** VERSION_CONFLICT: the server's current states replace the cached ones. */
 export function applyConflicts(resp: GridResponse, current: readonly SaveItemResult[]): GridResponse {
-  return applyServerResults(resp, { results: [...current], warnings: [] })
+  return applyServerResults(resp, { results: [...current], warnings: [], lateness: null })
 }
 
 /** The cached cell of (assignment, week) in whichever chunk holds that week. */

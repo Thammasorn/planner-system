@@ -29,6 +29,7 @@ const card: TaskCard = {
   completed: false,
   blockers: { open: 0, total: 0 },
   hasBody: false,
+  milestoneId: null,
 }
 const prev = { statusId: S.todo, completedOn: null }
 

@@ -15,12 +15,13 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
 import {
   addDayExample,
+  addMilestones,
   addSyntheticGridProject,
   applyFixture,
   seedGolden,
   type FixtureId,
 } from '../scripts/lib/fixtures'
-import { clients, pages, projects, user } from '../src/server/db/schema'
+import { clients, milestones, pages, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
 
@@ -106,6 +107,8 @@ export type ResetDbOptions = {
   syntheticGrid?: boolean
   /** M7 (M7-D16): SPEC A.2 "Kickoff workshop" — Jack + Mint 0.5 DAY on 2026-09-07 in Mobile App Revamp. */
   dayExample?: boolean
+  /** M8 (M8-D20): the 7 SPEC A.2 milestones (UAT sign-off bound to "ทำ UAT + คู่มือหน้าร้าน"), after dayExample. */
+  milestones?: boolean
 }
 
 /**
@@ -122,6 +125,7 @@ export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): P
       if (fixture !== undefined) await applyFixture(tx, fixture) // M5 (X11): F1 + that fixture's own setup only
       if (opts.syntheticGrid) await addSyntheticGridProject(tx, { tasks: 200, weeks: 16, from: '2026-09-28' }) // M6
       if (opts.dayExample) await addDayExample(tx) // M7
+      if (opts.milestones) await addMilestones(tx) // M8
       await opts.extras?.(tx)
     })
   } finally {
@@ -239,6 +243,21 @@ export async function idOf(kind: IdKind, name: string): Promise<string> {
 /** M6 (plan/m06 S0.13): id of the project with that name in `planner_e2e` (golden names are unique). */
 export function projectIdByName(name: string): Promise<string> {
   return idOf('project', name)
+}
+
+/** M8 (plan/m08 S0.11): id of the single live milestone with that name in `planner_e2e` (A.2 names are unique). */
+export async function milestoneIdByName(name: string): Promise<string> {
+  const { db, close } = createScriptDb(E2E.databaseUrl)
+  try {
+    const rows = await db
+      .select({ id: milestones.id })
+      .from(milestones)
+      .where(and(eq(milestones.name, name), isNull(milestones.deletedAt)))
+    if (rows.length !== 1) throw new Error(`milestoneIdByName(${name}): ${rows.length} rows in ${E2E.dbName}`)
+    return rows[0]!.id
+  } finally {
+    await close()
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------

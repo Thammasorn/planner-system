@@ -333,6 +333,9 @@ test.describe('E5 ⟲ F4 (MASK-5, PERM-21, FR-906) manager records for Peter; ot
     expect(body.includes(VACATION), 'leave type name in the payload').toBe(false)
     expect(body.includes(peterId), "Peter's id in the payload").toBe(false)
     expect(body.includes('Peter'), "Peter's name in the payload").toBe(false)
+    // M8 (plan/m08 S6.3): without `resetDb(…, { milestones: true })` the calendar carries no ◆ at all
+    expect((JSON.parse(body) as { milestones?: unknown[] }).milestones, 'milestones in the payload').toEqual([])
+    await expect(cal.milestoneChips()).toHaveCount(0)
 
     const cindy = chipLabel('Cindy', MASKED)
     await expect(cal.chip('2026-10-12', cindy)).toBeVisible()

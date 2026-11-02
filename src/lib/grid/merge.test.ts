@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gridResponse, posChunks, POS_PEOPLE, POS_TASKS } from './fixtures.test.data'
+import { fxMilestone, gridResponse, posChunks, POS_PEOPLE, POS_TASKS } from './fixtures.test.data'
 import { mergeChunks } from './merge'
 
 describe('mergeChunks (PLAN §3.10, C87)', () => {
@@ -54,5 +54,28 @@ describe('mergeChunks (PLAN §3.10, C87)', () => {
       holidays: [{ date: '2026-10-13', name: 'วันนวมินทรมหาราช' }],
     })
     expect(mergeChunks([a])!.holidays.get('2026-10-13')).toBe('วันนวมินทรมหาราช')
+  })
+
+  it('M8 (S3.2, M8-D8): milestones come from the latest chunk (every chunk carries the full list); canManage from its context', () => {
+    const a = gridResponse({
+      from: '2026-08-31',
+      tasks: POS_TASKS,
+      people: POS_PEOPLE,
+      milestones: [fxMilestone('m1', '2026-10-02')],
+    })
+    const b = gridResponse({
+      from: '2026-10-26',
+      tasks: POS_TASKS,
+      people: POS_PEOPLE,
+      canManage: true,
+      milestones: [fxMilestone('m1', '2026-10-09'), fxMilestone('m2', '2026-11-20')],
+    })
+    const m = mergeChunks([a, b])!
+    expect(m.milestones.map((x) => [x.id, x.date])).toEqual([
+      ['m1', '2026-10-09'],
+      ['m2', '2026-11-20'],
+    ])
+    expect(m.context.canManage).toBe(true)
+    expect(mergeChunks([b, a])!.milestones.map((x) => x.id)).toEqual(['m1'])
   })
 })

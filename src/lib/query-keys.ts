@@ -50,6 +50,10 @@ export const qk = {
   gridChunk: (ctx: GridCtx, c: GridChunk) => ['grid', ctx.kind, ctx.id, c] as const,
   /** GET /api/projects/[id]/plan-markers — every live marker of a project, shared by grid, calendar and chart (M7.1-D15). */
   planMarkers: (projectId: string) => ['planMarkers', projectId] as const,
+  /** GET /api/projects/[id]/milestones — live milestones with status, lateness and progress (M8-D17, X82). */
+  projectMilestones: (projectId: string) => ['projects', projectId, 'milestones'] as const,
+  /** GET /api/milestones/targets — projects where the viewer may create a milestone (palette, M8-D18). */
+  milestoneTargets: () => ['milestones', 'targets'] as const,
 }
 
 /** Prefixes for load views (M6 grid = qk.gridAll(…) under ['grid'], M9 workload, M10 home). Invalidating an unused prefix is a no-op,

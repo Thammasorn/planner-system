@@ -1,5 +1,5 @@
 'use client'
-// src/components/grid/MonthHeader.tsx — header row 1: month + year above the week / day row (SPEC FR-818, AC-811,
+// src/components/grid/MonthHeader.tsx — header row 2 (M8: the ◆ row is row 1): month + year above the week / day row (SPEC FR-818, AC-811,
 // M7.1-D10). One columnheader per month span intersecting the rendered columns (aria-colspan = its columns); the label
 // ("ตุลาคม 2569", narrow spans "ต.ค. 69" with the long name as the accessible name and title) sticks to the right edge
 // of the frozen columns while its month is in view. Marker flags (MarkerFlags) are drawn inside the span of the column

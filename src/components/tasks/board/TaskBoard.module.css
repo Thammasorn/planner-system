@@ -1,9 +1,14 @@
 /* Board layout (§8.10): columns scroll horizontally inside the board, never the page (NFR-07b). Token scale only
-   (SPEC §8.12, FR-1605): columns on `--surface-muted`, cards `--radius-lg` + `--border-subtle`, no shadow. */
+   (SPEC §8.12, FR-1605): columns on `--surface-muted`, cards `--radius-lg` + `--border-subtle`, no shadow.
+   `position: relative` makes the board the containing block of absolutely positioned descendants (the
+   VisuallyHidden labels of StatusChip): without it they escape the overflow clip at their static position in the
+   off-screen columns and widen the document (M8 review: +510 px at 390, +140 px at 768). */
 .board {
+  position: relative;
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+  min-width: 0;
   max-width: 100%;
   padding-bottom: var(--space-2);
   overflow-x: auto;

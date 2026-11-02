@@ -10,6 +10,7 @@ import {
   HEADER_H,
   HEADER_ROWS,
   HEADER_TOTAL_H,
+  MS_ROW_H,
   initialScrollIndex,
   MONTH_H,
   periodColIndex,
@@ -31,9 +32,10 @@ const today = '2026-09-30'
 const cols = buildColumns(timelineWeeks(today), new Set(), new Map())
 
 describe('header / frozen bookkeeping (M7.1-D8, M7.1-D10, X85)', () => {
-  it('two header rows (month + period); the header block is MONTH_H + HEADER_H tall', () => {
-    expect(HEADER_ROWS).toBe(2)
-    expect(HEADER_TOTAL_H).toBe(MONTH_H + HEADER_H)
+  it('M8 (M8-D26 via the M7.1 forward note): three header rows (◆ + month + period); the block is MS_ROW_H + MONTH_H + HEADER_H tall', () => {
+    expect(HEADER_ROWS).toBe(3)
+    expect(MS_ROW_H).toBe(28)
+    expect(HEADER_TOTAL_H).toBe(MS_ROW_H + MONTH_H + HEADER_H)
     expect(FOOTER_ROWS).toBe(3)
   })
   it('period columns start after the two frozen columns; รวม is last', () => {

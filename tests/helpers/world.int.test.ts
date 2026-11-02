@@ -8,6 +8,7 @@ import {
   files,
   holidays,
   leaveTypes,
+  milestones,
   pages,
   planMarkers,
   projectMembers,
@@ -21,7 +22,7 @@ import { visibleUserIds } from '@/server/authz'
 import { allocationRows, assignmentVersion } from './factories'
 import { assertCompletionInvariant } from './invariants'
 import { toSessionUser } from './as-user'
-import { createWorld, expandParts } from './world'
+import { createWorld, expandParts, WORLD_PART_ORDER } from './world'
 
 describe('world fixture (X91)', () => {
   it('expandParts([]) is empty; createWorld() gives 4 users with the roles of PLAN §4.3', async () => {
@@ -57,9 +58,8 @@ describe('world fixture (X91)', () => {
   })
 
   it('parts without a builder throw; part fields of an unbuilt part throw on access', async () => {
-    await expect(createWorld({ with: ['milestones'] })).rejects.toThrow(
-      'world part milestones has no builder yet',
-    )
+    // M8 built the last pinned part: every part of WORLD_PART_ORDER has a builder now
+    expect(WORLD_PART_ORDER).toContain('milestones')
     const w = await createWorld()
     expect(() => w.tasks.pLeaf).toThrow("needs createWorld({ with: ['tasks'] })")
     expect(() => w.batches.pDeletedTask).toThrow("needs createWorld({ with: ['tasks'] })")
@@ -73,6 +73,9 @@ describe('world fixture (X91)', () => {
     expect(() => w.allocations.pLeafLead).toThrow("needs createWorld({ with: ['allocations'] })")
     expect(() => w.taskBodies.pLeafBody).toThrow("needs createWorld({ with: ['taskBodies'] })")
     expect(() => w.planMarkers.pRed).toThrow("needs createWorld({ with: ['planMarkers'] })")
+    expect(() => w.milestones.p).toThrow("needs createWorld({ with: ['milestones'] })")
+    expect(() => w.deletedMilestones.pDeleted).toThrow("needs createWorld({ with: ['milestones'] })")
+    expect(() => w.batches.pDeletedMilestone).toThrow("needs createWorld({ with: ['milestones'] })")
   })
 
   it("M6: keys the allocations part adds to the tasks part's objects trap until it ran", async () => {
@@ -446,5 +449,55 @@ describe('world fixture (X91)', () => {
     const rows = await db.select().from(planMarkers).orderBy(asc(planMarkers.date))
     expect(rows).toHaveLength(4)
     expect(rows.every((r) => r.deletedAt === null && r.deletedBatch === null)).toBe(true)
+  })
+
+  it('M8 with milestones: implies tasks + allocations; live/deleted milestones, bindings, batches (plan/m08 S0.10)', async () => {
+    expect([...expandParts(['milestones'])].sort()).toEqual(['allocations', 'milestones', 'tasks', 'timeOff'])
+    const w = await createWorld({ with: ['milestones'] })
+    const m = w.milestones
+    const d = w.deletedMilestones
+    expect(m.p).toMatchObject({ projectId: w.P.id, name: 'Milestone P-ลับ06', date: '2026-10-23', completedOn: null })
+    expect(m.pLate).toMatchObject({ projectId: w.P.id, name: 'ส่งมอบรอบแรก P', date: '2026-10-02' })
+    expect(m.pDone).toMatchObject({ projectId: w.P.id, name: 'Kickoff P', date: '2026-09-15', completedOn: '2026-09-16' })
+    expect(m.q).toMatchObject({ projectId: w.Q.id, name: 'Milestone Q-ลับ05', date: '2026-10-20', createdBy: w.manager.id })
+    expect(m.a).toMatchObject({ projectId: w.A.id, name: 'Milestone A', date: '2026-10-30' })
+    for (const x of Object.values(m)) expect(x.deletedAt).toBeNull()
+
+    // soft-deleted ones: batches, ages
+    expect(d.pDeleted).toMatchObject({ projectId: w.P.id, deletedBatch: w.batches.pDeletedMilestone })
+    expect(d.pExpired).toMatchObject({ projectId: w.P.id, deletedBatch: w.batches.pExpiredMilestone })
+    expect(d.aDeleted).toMatchObject({ projectId: w.A.id, deletedBatch: w.batches.aDeletedMilestone })
+    const age = (row: { deletedAt: Date | null }) => Math.round((Date.now() - row.deletedAt!.getTime()) / 86_400_000)
+    expect([age(d.pDeleted), age(d.pExpired), age(d.aDeleted)]).toEqual([1, 31, 1])
+
+    // bindings (raw column; pParent points at the deleted milestone and reads as unbound, M8-D5)
+    const bound = await db
+      .select({ id: tasks.id, milestoneId: tasks.milestoneId })
+      .from(tasks)
+      .where(isNull(tasks.deletedAt))
+    const byTask = new Map(bound.map((r) => [r.id, r.milestoneId]))
+    expect(byTask.get(w.tasks.pChildB.id)).toBe(m.p.id)
+    expect(byTask.get(w.tasks.pLeaf.id)).toBe(m.pLate.id)
+    expect(byTask.get(w.tasks.pDone.id)).toBe(m.pDone.id)
+    expect(byTask.get(w.tasks.qTask.id)).toBe(m.q.id)
+    expect(byTask.get(w.tasks.aTask.id)).toBe(m.a.id)
+    expect(byTask.get(w.tasks.pParent.id)).toBe(d.pDeleted.id)
+    expect(w.tasks.pParent.milestoneId).toBe(d.pDeleted.id)
+    expect(bound.filter((r) => r.milestoneId !== null)).toHaveLength(6)
+
+    // pLate is late through M6's plan (WEEK 2026-10-05 = 500 > 2026-10-02)
+    expect(await allocationRows(w.assignments.pLeafLead.id, '2026-10-05')).toEqual([
+      { granularity: 'WEEK', periodStart: '2026-10-05', cd: 500 },
+    ])
+    const [n] = await db.select({ n: count() }).from(milestones)
+    expect(n?.n).toBe(8)
+
+    // X70: every world task keeps a status of its own project; completion invariant holds
+    const statusProjects = await db
+      .select({ taskProject: tasks.projectId, statusProject: taskStatuses.projectId })
+      .from(tasks)
+      .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
+    expect(statusProjects.every((r) => r.taskProject === r.statusProject)).toBe(true)
+    await assertCompletionInvariant()
   })
 })

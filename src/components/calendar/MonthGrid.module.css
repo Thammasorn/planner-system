@@ -217,3 +217,49 @@ button.chip:focus-visible,
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* M8 (FR-907, M8-D16): ◆ milestone chip — a link; plain background, 3 px start border in the project colour */
+.milestoneChip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-1);
+  border-inline-start: 3px solid var(--milestone);
+  border-radius: var(--radius-sm);
+  color: var(--mui-palette-text-primary);
+  font-size: var(--font-xs);
+  line-height: 1.35;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.milestoneChip:hover .milestoneText {
+  text-decoration: underline;
+}
+
+.milestoneChip:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.milestoneText {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* the leading ◆ carries --milestone; the name and project stay in the text colour */
+.milestoneText::first-letter {
+  color: var(--milestone);
+}
+
+.milestoneStatus {
+  display: inline-flex;
+  flex: none;
+  color: var(--mui-palette-text-secondary);
+  font-size: var(--font-sm);
+}

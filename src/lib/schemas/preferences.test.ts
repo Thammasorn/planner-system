@@ -43,7 +43,7 @@ describe('preferences (X05, M1-D17)', () => {
 
   it('M3 task keys (S0.13): one valid and one invalid value each; absent or bad stored values → defaults', () => {
     const cases: Array<[string, unknown, unknown]> = [
-      ['tasks.groupBy', 'status', 'milestone'],
+      ['tasks.groupBy', 'status', 'project'],
       ['tasks.sort', 'due', 'name'],
       ['tasks.showCompleted', false, 'no'],
       ['tasks.view', 'BOARD', 'board'],

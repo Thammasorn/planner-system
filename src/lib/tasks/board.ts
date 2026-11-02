@@ -24,19 +24,31 @@ const refOf = (s: TaskStatusDTO): StatusRef => ({
   category: s.category,
 })
 
+/** Board milestone filter (FR-663, M8-D15): every card, the unbound cards, or the cards bound to one milestone id. */
+export type BoardMilestoneFilter = 'ALL' | 'NONE' | (string & {})
+
+function matchesMilestone(milestoneId: string | null, f: BoardMilestoneFilter): boolean {
+  if (f === 'ALL') return true
+  if (f === 'NONE') return milestoneId === null
+  return milestoneId === f
+}
+
 /**
  * Project board: one column per live status in position order (empty columns kept); cards in DFS order; `hideDone`
- * drops DONE columns; `leafOnly` drops parents; `assigneeId` keeps the leaves assigned to that user (parents dropped).
+ * drops DONE columns; `leafOnly` drops parents; `assigneeId` keeps the leaves assigned to that user (parents dropped);
+ * `milestone` (default 'ALL', M8-D15) keeps the cards bound to that milestone (parents too) or the unbound ones.
  */
 export function buildStatusColumns(
   rows: readonly TaskRowModel[],
   statuses: readonly TaskStatusDTO[],
-  o: { leafOnly: boolean; hideDone: boolean; assigneeId: string | null },
+  o: { leafOnly: boolean; hideDone: boolean; assigneeId: string | null; milestone?: BoardMilestoneFilter },
 ): BoardColumn<TaskRowModel>[] {
+  const milestone = o.milestone ?? 'ALL'
   const cards = rows.filter(
     (r) =>
       (!o.leafOnly || r.isLeaf) &&
-      (o.assigneeId === null || (r.isLeaf && r.assignees.some((a) => a.userId === o.assigneeId))),
+      (o.assigneeId === null || (r.isLeaf && r.assignees.some((a) => a.userId === o.assigneeId))) &&
+      matchesMilestone(r.milestoneId, milestone),
   )
   return sortStatuses(statuses)
     .filter((s) => !(o.hideDone && s.category === 'DONE'))
@@ -95,5 +107,6 @@ export function toCardModel(
     completed: row.completedOn !== null,
     blockers: row.blockers,
     hasBody: row.hasBody,
+    milestoneId: row.milestoneId,
   }
 }

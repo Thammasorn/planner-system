@@ -4,6 +4,7 @@ import {
   invalidateCalendar,
   invalidateLeaveTypes,
   invalidateLoad,
+  invalidateMilestones,
   invalidatePlanMarkers,
   invalidateProjects,
   invalidateStatuses,
@@ -163,6 +164,8 @@ describe('task bodies (M6.1 S0.8)', () => {
     statusId: 's',
     blockers: { open: 0, total: 0 },
     hasBody,
+    milestoneId: null,
+    lateForMilestone: false,
   })
   const list = (): ProjectTasksResponse => ({
     project: { id: 'p1', name: 'P', certainty: 'CONFIRMED', archived: false },
@@ -171,6 +174,7 @@ describe('task bodies (M6.1 S0.8)', () => {
     tasks: [task('a', false), task('b', true)],
     statuses: [],
     blockerEdges: [],
+    milestones: [],
   })
 
   it('qk.taskBody is ["tasks", "body", id] and task writes do not invalidate it', async () => {
@@ -232,5 +236,47 @@ describe('plan markers (M7.1 S0.5, X82)', () => {
     await invalidateTasks(qc, 'p1')
     await invalidateLoad(qc)
     expect(invalidated(qc, qk.planMarkers('p1'))).toBe(false)
+  })
+})
+
+describe('milestones (M8 S0.6, M8-D22)', () => {
+  const chunk: GridChunk = { from: '2026-09-28', expand: [], zoom: 'WEEK', includeOthers: false }
+
+  it('qk.projectMilestones / qk.milestoneTargets keys', () => {
+    expect(qk.projectMilestones('p')).toEqual(['projects', 'p', 'milestones'])
+    expect(qk.milestoneTargets()).toEqual(['milestones', 'targets'])
+  })
+
+  it('invalidateMilestones: the project milestones, project + person grids, project tasks, /tasks and the calendar only', async () => {
+    const qc = new QueryClient()
+    const keys = {
+      milestonesP: qk.projectMilestones('p'),
+      milestonesQ: qk.projectMilestones('q'),
+      gridP: qk.gridChunk({ kind: 'project', id: 'p' }, chunk),
+      gridQ: qk.gridChunk({ kind: 'project', id: 'q' }, chunk),
+      gridPerson: qk.gridChunk({ kind: 'person', id: 'u1' }, chunk),
+      calendar: qk.calendar('2026-09-28', '2026-11-09'),
+      tasksP: qk.projectTasks('p'),
+      tasksQ: qk.projectTasks('q'),
+      team: qk.teamTasks(TEAM_FILTER),
+      targets: qk.milestoneTargets(),
+      statusesP: qk.projectStatuses('p'),
+      sidebar: qk.sidebar(),
+    }
+    for (const key of Object.values(keys)) qc.setQueryData(key, 1)
+    await invalidateMilestones(qc, 'p')
+    for (const k of ['milestonesP', 'gridP', 'gridPerson', 'calendar', 'tasksP', 'team'] as const)
+      expect(invalidated(qc, keys[k]), k).toBe(true)
+    for (const k of ['milestonesQ', 'gridQ', 'tasksQ', 'targets', 'statusesP', 'sidebar'] as const)
+      expect(invalidated(qc, keys[k]), k).toBe(false)
+  })
+
+  it('invalidateTasks(qc, p) also invalidates qk.projectMilestones(p) (progress), not q', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(qk.projectMilestones('p'), 1)
+    qc.setQueryData(qk.projectMilestones('q'), 1)
+    await invalidateTasks(qc, 'p')
+    expect(invalidated(qc, qk.projectMilestones('p'))).toBe(true)
+    expect(invalidated(qc, qk.projectMilestones('q'))).toBe(false)
   })
 })

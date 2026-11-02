@@ -2,12 +2,14 @@
 import type { ActionResult } from '@/lib/action-result'
 import type { AuditEntity } from '@/server/audit'
 import type { ALLOCATION_AUDIT_ENTITY } from '@/server/services/allocations'
+import type { MILESTONE_AUDIT_ENTITY } from '@/server/services/milestones'
 import type { TestUser } from '../helpers/factories'
 import type { World, WorldPart } from '../helpers/world'
 
 /** Audit entities the matrix may expect. M6 rows expect `ALLOCATION_AUDIT_ENTITY` ('allocation', M6-D29/X93), which
- *  M6 S2 adds to `AuditEntity` itself; the explicit union keeps the rows typed against the canonical constant. */
-export type MatrixAuditEntity = AuditEntity | typeof ALLOCATION_AUDIT_ENTITY
+ *  M6 S2 adds to `AuditEntity` itself; the explicit union keeps the rows typed against the canonical constant. M8 rows
+ *  expect `MILESTONE_AUDIT_ENTITY` ('milestone', M8-D21) the same way (M8 S2 adds it to `AuditEntity`). */
+export type MatrixAuditEntity = AuditEntity | typeof ALLOCATION_AUDIT_ENTITY | typeof MILESTONE_AUDIT_ENTITY
 
 /** M manager · L lead · Me member · W outsider (in M1 L/Me/W are three plain workers). */
 export type Role = 'M' | 'L' | 'Me' | 'W'

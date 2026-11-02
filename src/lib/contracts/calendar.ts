@@ -1,6 +1,7 @@
 // src/lib/contracts/calendar.ts — GET /api/calendar (FR-907, §3.3, M5-D7/D8; plan/m05 S0.5). Type-only, isomorphic.
-// ◆ milestones arrive in M8 (X24) — no placeholder field here.
+// ◆ milestones since M8 (X24, M8-D16).
 import type { HalfDay, ISODate } from '@/domain/types'
+import type { CalendarMilestone } from './milestones'
 
 export interface CalendarPerson {
   id: string
@@ -51,5 +52,7 @@ export interface CalendarResponse {
   holidays: CalendarHoliday[]
   people: Record<string, CalendarPerson>
   timeOff: CalendarTimeOff[]
+  /** M8-D16: ◆ of visible, non-archived projects with date ∈ [from, to), date then project name. */
+  milestones: CalendarMilestone[]
   viewer: { userId: string; canEditOthers: boolean }
 }

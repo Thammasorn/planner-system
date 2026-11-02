@@ -21,6 +21,8 @@ vi.mock('@/server/actions/members', () => ({
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('@/components/undo/useUndo', () => ({ useUndo: () => ({ push: vi.fn() }) }))
 vi.mock('@/lib/api', () => ({ getJson: () => Promise.resolve({ people: [] }) }))
+// M8 S4.2: the milestones section has its own test (ProjectMilestones.test.tsx)
+vi.mock('./ProjectMilestones', () => ({ ProjectMilestones: () => null }))
 
 const PID = '6f1c2b8e-3d4a-4b5c-9d6e-7f8a9b0c1d2e'
 

@@ -21,6 +21,8 @@ export function projectTasksResponse(): ProjectTasksResponse {
     assignees: [],
     statusId: 's-todo',
     blockers: { open: 0, total: 0 },
+    milestoneId: null,
+    lateForMilestone: false,
   })
   return {
     project: { id: PID, name: 'POS Upgrade', certainty: 'CONFIRMED', archived: false },
@@ -37,6 +39,7 @@ export function projectTasksResponse(): ProjectTasksResponse {
     ],
     statuses: [],
     blockerEdges: [{ id: 'e1', taskId: 't-rollout', blockerTaskId: 't-uat' }],
+    milestones: [],
   }
 }
 

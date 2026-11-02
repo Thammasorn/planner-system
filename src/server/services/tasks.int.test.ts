@@ -596,6 +596,8 @@ describe('listProjectTasks', () => {
         'dueDate',
         'id',
         'hasBody',
+        'lateForMilestone',
+        'milestoneId',
         'name',
         'parentId',
         'position',
@@ -604,6 +606,7 @@ describe('listProjectTasks', () => {
         'statusId',
       ].sort(),
     )
+    expect(r.milestones).toEqual([]) // M8-D13 (no 'milestones' part in this world)
     expect(r.tasks.map((t) => t.id)).not.toContain(w.deletedTasks.pDeleted.id)
     const byId = new Map(r.tasks.map((t) => [t.id, t]))
     expect(byId.get(w.tasks.pChildA.id)?.assignees).toEqual([
@@ -737,5 +740,33 @@ describe('plans follow tasks (M6)', () => {
     const [backRow] = await db.select().from(taskAssignments).where(eq(taskAssignments.id, asg!.id))
     expect(backRow).toMatchObject({ taskId: uat!.id, version: asg!.version + 2 })
     expect(await rowsOf()).toEqual(before)
+  })
+})
+
+describe('listProjectTasks — milestones (M8-D13, BR-71, X21)', () => {
+  it('live milestoneId + lateForMilestone per task; deleted milestone reads unbound; refs in date order', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    const r = await inTx((tx) => listProjectTasks(tx, S(w.member), w.P.id))
+    const byId = new Map(r.tasks.map((t) => [t.id, t]))
+    expect(byId.get(w.tasks.pLeaf.id)).toMatchObject({ milestoneId: w.milestones.pLate.id, lateForMilestone: true })
+    expect(byId.get(w.tasks.pChildB.id)).toMatchObject({ milestoneId: w.milestones.p.id, lateForMilestone: false })
+    expect(byId.get(w.tasks.pParent.id)).toMatchObject({ milestoneId: null, lateForMilestone: false })
+    expect(r.milestones).toEqual([
+      { id: w.milestones.pDone.id, name: 'Kickoff P', date: '2026-09-15', completedOn: '2026-09-16' },
+      { id: w.milestones.pLate.id, name: 'ส่งมอบรอบแรก P', date: '2026-10-02', completedOn: null },
+      { id: w.milestones.p.id, name: 'Milestone P-ลับ06', date: '2026-10-23', completedOn: null },
+    ])
+    expect(JSON.stringify(r)).not.toContain('Q-ลับ05')
+  })
+
+  it('single-task results (loadTaskDTO via updateTask) carry the live milestone and lateness', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    asUser(w.lead)
+    const res = await updateAction({ taskId: w.tasks.pLeaf.id, patch: { name: 'pLeaf ใหม่' } })
+    if (!res.ok) throw new Error(res.message)
+    expect(res.task).toMatchObject({ milestoneId: w.milestones.pLate.id, lateForMilestone: true })
+    const parent = await updateAction({ taskId: w.tasks.pParent.id, patch: { name: 'แม่ใหม่' } })
+    if (!parent.ok) throw new Error(parent.message)
+    expect(parent.task).toMatchObject({ milestoneId: null, lateForMilestone: false })
   })
 })

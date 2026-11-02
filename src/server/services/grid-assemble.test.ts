@@ -26,14 +26,17 @@ function task(id: string, o: Partial<TaskListRow> = {}): TaskListRow {
     completedWeek: null,
     blockersOpen: 0,
     blockersTotal: 0,
+    milestoneId: null,
     ...o,
   }
 }
 
 function input(o: Partial<AssembleInput> = {}): AssembleInput {
   return {
-    project: { id: P, name: 'P', certainty: 'CONFIRMED', archived: false },
+    project: { id: P, name: 'P', certainty: 'CONFIRMED', archived: false, canManage: false },
     tasks: [],
+    milestones: [],
+    lateForMilestone: new Map(),
     assignments: [],
     rows: [],
     totals: new Map(),
@@ -138,15 +141,44 @@ describe('assembleGrid', () => {
     expect(g.periods.map((p) => p.key)).toEqual(['W:2026-09-28', 'W:2026-10-05'])
   })
 
+  it('M8 (X28, M8-D8): milestones passed through; task rows carry the live milestoneId + lateForMilestone; canManage', () => {
+    const m = {
+      id: 'm1',
+      projectId: P,
+      name: 'M1',
+      date: '2026-10-02',
+      description: null,
+      completedOn: null,
+      status: 'DUE_SOON' as const,
+      late: true,
+      lateTaskCount: 1,
+      progress: { done: 0, total: 1 },
+    }
+    const g = assembleGrid(
+      input({
+        project: { id: P, name: 'P', certainty: 'CONFIRMED', archived: false, canManage: true },
+        tasks: [task('t', { milestoneId: 'm1' }), task('u', { position: 'a1' })],
+        milestones: [m],
+        lateForMilestone: new Map([['t', true]]),
+      }),
+    )
+    expect(g.milestones).toEqual([m])
+    expect(g.context.canManage).toBe(true)
+    expect(g.rows.map((r) => (r.kind === 'task' ? [r.id, r.milestoneId, r.lateForMilestone] : null))).toEqual([
+      ['t', 'm1', true],
+      ['u', null, false],
+    ])
+  })
+
   it('archived → canEdit false; parent assignee rows never editable', () => {
     const g = assembleGrid(
       input({
-        project: { id: P, name: 'P', certainty: 'CONFIRMED', archived: true },
+        project: { id: P, name: 'P', certainty: 'CONFIRMED', archived: true, canManage: false },
         tasks: [task('t')],
         assignments: [{ id: 'a', taskId: 't', userId: 'u', version: 1 }],
       }),
     )
-    expect(g.context).toEqual({ kind: 'project', id: P, name: 'P', archived: true, canEdit: false })
+    expect(g.context).toEqual({ kind: 'project', id: P, name: 'P', archived: true, canEdit: false, canManage: false })
     expect((g.rows[1] as GridAssigneeRow).editable).toBe(false)
     const parent = assembleGrid(
       input({

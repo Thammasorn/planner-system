@@ -12,6 +12,9 @@
 // (FR-818, HEADER_ROWS = 2), plan markers (FR-819/820: usePlanMarkers, MarkerLayer, MarkerPopover, MarkersMenu, header
 // context menu), row reorder by drag / Alt+arrows through M3's moveTask with an optimistic grid patch (FR-815,
 // applyRowMove), and the กราฟภาระ pane under the grid sharing the footer's includeOthers (FR-813).
+// M8 (plan/m08 S3): the ◆ Milestones header row on top (HEADER_ROWS = 3), its popovers / menu / drag / create
+// (useGridMilestones), dash-dot milestone lines in the marker layer (FR-820), "→◆" + "เลย milestone" on task rows and
+// "+ milestone" in the toolbar.
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Menu from '@mui/material/Menu'
@@ -31,6 +34,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { viewLoad } from '@/domain/certainty'
 import { addWeeks, isoWeekday, weekStart } from '@/domain/dates'
@@ -150,6 +154,7 @@ import { useGridEditing, type GridAccess } from './useGridEditing'
 import { useGridKeyboard, type GridKeyHandlers } from './useGridKeyboard'
 import { useDayWeekChoice } from './useDayWeekChoice'
 import { useExpansion } from './useExpansion'
+import { useGridMilestones } from './useGridMilestones'
 import { useGridUndo } from './useGridUndo'
 import { useSaveAllocations } from './useSaveAllocations'
 import { VirtualGrid, type VirtualGridHandle } from './VirtualGrid'
@@ -285,9 +290,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const model = useMemo<GridModel | null>(() => {
     if (!raw) return null
     const canEdit = raw.context.canEdit && props.canEdit && !archived
-    return canEdit === raw.context.canEdit && archived === raw.context.archived
+    // M8-D8: archived projects never manage milestones (the server already says so; the page prop may know first)
+    const canManage = raw.context.canManage && !archived
+    return canEdit === raw.context.canEdit && archived === raw.context.archived && canManage === raw.context.canManage
       ? raw
-      : { ...raw, context: { ...raw.context, canEdit, archived } }
+      : { ...raw, context: { ...raw.context, canEdit, archived, canManage } }
   }, [raw, props.canEdit, archived])
   const canEdit = model ? model.context.canEdit : props.canEdit && !archived
 
@@ -512,7 +519,21 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     () => toMarkerViews(planMarkers.markers, canEdit),
     [planMarkers.markers, canEdit],
   )
-  const edges = useMemo(() => markerEdges(markerViews, cols), [markerViews, cols])
+  // ── M8 ◆ row (FR-705/707, M8-D8–D11) + milestone lines in the same layer (FR-820, D24: lines only, no flags) ──
+  const scrollEl = useMemo<RefObject<HTMLElement | null>>(
+    () => ({
+      get current() {
+        return gridRef.current?.element() ?? null
+      },
+    }),
+    [],
+  )
+  const gm = useGridMilestones({ context, model, cols, scrollEl, today, thisWeek })
+  const flagEdges = useMemo(() => markerEdges(markerViews, cols), [markerViews, cols])
+  const edges = useMemo(
+    () => (gm.markerViews.length === 0 ? flagEdges : markerEdges([...markerViews, ...gm.markerViews], cols)),
+    [flagEdges, markerViews, gm.markerViews, cols],
+  )
   const monthStarts = useMemo(() => monthStartKeys(cols), [cols])
   const [markerOpen, setMarkerOpen] = useState<{ id: string; anchor: Element } | null>(null)
   const [markerStack, setMarkerStack] = useState<{ edge: MarkerEdge; anchor: Element } | null>(null)
@@ -1118,13 +1139,15 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   }, [hasData])
 
   // ── tooltip content ──
-  const tipData = useRef({ model, viewRows: cellRows, totals, unit, view, cols, footerDays })
+  const msTip = gm.tooltipFor
+  const tipData = useRef({ model, viewRows: cellRows, totals, unit, view, cols, footerDays, msTip })
   useLayoutEffect(() => {
-    tipData.current = { model, viewRows: cellRows, totals, unit, view, cols, footerDays }
+    tipData.current = { model, viewRows: cellRows, totals, unit, view, cols, footerDays, msTip }
   })
   const contentFor = useCallback((el: HTMLElement): string[] | null => {
     const d = tipData.current
     if (!d.model) return null
+    if (el.dataset.tip === 'milestone') return d.msTip(el)
     if (el.dataset.tip === 'header') {
       const t = el.dataset.date
         ? dayHeaderTooltipFor(d.model, el.dataset.date)
@@ -1229,6 +1252,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           draggable={canReorder && treeItems !== null}
           onDragHandle={drag.onHandlePointerDown}
           dragging={drag.state?.taskId === row.task.id}
+          milestone={row.task.milestoneId === null ? null : (gm.byId.get(row.task.milestoneId) ?? null)}
         />
         {vCols.map((v) => {
           const col = cols[v.index]
@@ -1460,6 +1484,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         }
         chartOpen={chartOpen}
         onChart={onChart}
+        {...(gm.canManage ? { onAddMilestone: (anchor: HTMLElement) => gm.openCreate(anchor) } : {})}
       />
       {archived ? (
         <Alert severity="info" sx={{ mb: 1 }}>
@@ -1492,8 +1517,10 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onWidthChange={setGridWidth}
         renderHeader={(vCols, totalWidth, view) => {
           const shown = renderedEdges(edges, vCols)
+          const flags = renderedEdges(flagEdges, vCols)
           return (
             <div className={styles.headerGroup} style={{ width: totalWidth }} role="rowgroup">
+              {gm.row(vCols, totalWidth)}
               <MonthHeader
                 cols={cols}
                 vCols={vCols}
@@ -1501,9 +1528,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
                 viewFrom={view?.from}
                 viewTo={view?.to}
                 renderFlags={
-                  shown.length > 0
+                  flags.length > 0
                     ? (span) => (
-                        <MarkerFlags span={span} edges={shown} onOpen={openMarker} onOpenStack={openStack} />
+                        <MarkerFlags span={span} edges={flags} onOpen={openMarker} onOpenStack={openStack} />
                       )
                     : undefined
                 }
@@ -1653,6 +1680,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           setShowAssignees(true, row ? { taskId: row.task.id, c } : undefined)
         }}
       />
+      {gm.overlays}
       <GridLegend />
       <CellTooltip rootRef={rootRef} contentFor={contentFor} />
     </div>

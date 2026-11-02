@@ -6,7 +6,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { makeUser } from '../../../tests/helpers/factories'
 import { db } from './client'
-import { clients, planMarkers, projectMembers, projects, taskStatuses, tasks } from './schema'
+import { clients, milestones, planMarkers, projectMembers, projects, taskStatuses, tasks } from './schema'
 
 describe('database harness and migrations', () => {
   let sql: postgres.Sql
@@ -1096,5 +1096,134 @@ describe('M7.1 schema (SPEC §6.2 plan_marker_color, plan_markers)', () => {
       { n: number }[]
     >`select count(*)::int as n from plan_markers where project_id = ${projectId}`
     expect(r?.n).toBe(0)
+  })
+})
+
+describe('M8 schema (SPEC §6.2 milestones, tasks.milestone_id; plan/m08 S0.2, M8-D2)', () => {
+  let sql: postgres.Sql
+
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string }
+      return { code: err.code, constraint: err.constraint_name }
+    }
+  }
+
+  async function seedProject(): Promise<{ projectId: string; userId: string; statusId: string }> {
+    const u = await makeUser({ role: 'manager' })
+    const [p] = await sql<{ id: string }[]>`
+      insert into projects (name, created_by) values ('P', ${u.id}) returning id`
+    const [s] = await sql<{ id: string }[]>`
+      insert into task_statuses (project_id, name, category, position)
+      values (${p!.id}, 'ยังไม่เริ่ม', 'TODO', 'a0') returning id`
+    return { projectId: p!.id, userId: u.id, statusId: s!.id }
+  }
+
+  async function seedTask(
+    o: { projectId: string; userId: string; statusId: string },
+    milestoneId: string | null,
+  ): Promise<string> {
+    const [t] = await sql<{ id: string }[]>`
+      insert into tasks (project_id, name, status_id, position, created_by, milestone_id)
+      values (${o.projectId}, 'งาน', ${o.statusId}, 'a0', ${o.userId}, ${milestoneId}) returning id`
+    return t!.id
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  it("insert/select round-trip through Drizzle: date as the string '2026-10-23', nullable fields null", async () => {
+    const { projectId, userId } = await seedProject()
+    const [row] = await db
+      .insert(milestones)
+      .values({ projectId, name: 'UAT sign-off', date: '2026-10-23', createdBy: userId })
+      .returning()
+    expect(row).toMatchObject({
+      projectId,
+      name: 'UAT sign-off',
+      date: '2026-10-23',
+      description: null,
+      completedOn: null,
+      deletedAt: null,
+      deletedBatch: null,
+    })
+    const [again] = await db.select().from(milestones).where(eq(milestones.id, row!.id))
+    expect(again?.date).toBe('2026-10-23')
+    expect(typeof again?.date).toBe('string')
+  })
+
+  it("name '  ' violates milestones_name_check (23514)", async () => {
+    const { projectId, userId } = await seedProject()
+    expect(
+      await pgError(
+        () => sql`insert into milestones (project_id, name, date, created_by)
+                  values (${projectId}, '  ', '2026-10-23', ${userId})`,
+      ),
+    ).toMatchObject({ code: '23514', constraint: 'milestones_name_check' })
+  })
+
+  it('a task with an unknown milestone_id violates the FK (23503)', async () => {
+    const o = await seedProject()
+    const err = await pgError(() => seedTask(o, '00000000-0000-4000-8000-000000000001'))
+    expect(err).toMatchObject({ code: '23503' })
+  })
+
+  it('DELETE FROM milestones sets the bound task milestone_id to null; the task survives', async () => {
+    const o = await seedProject()
+    const [m] = await db
+      .insert(milestones)
+      .values({ projectId: o.projectId, name: 'M', date: '2026-10-23', createdBy: o.userId })
+      .returning()
+    const taskId = await seedTask(o, m!.id)
+    await sql`delete from milestones where id = ${m!.id}`
+    const [t] = await db.select({ milestoneId: tasks.milestoneId }).from(tasks).where(eq(tasks.id, taskId))
+    expect(t).toEqual({ milestoneId: null })
+  })
+
+  it('DELETE FROM projects removes its milestone and the bound task in one statement (cascade)', async () => {
+    const o = await seedProject()
+    const [m] = await db
+      .insert(milestones)
+      .values({ projectId: o.projectId, name: 'M', date: '2026-10-23', createdBy: o.userId })
+      .returning()
+    const taskId = await seedTask(o, m!.id)
+    await sql`delete from projects where id = ${o.projectId}`
+    const [r] = await sql<{ m: number; t: number }[]>`
+      select (select count(*)::int from milestones where id = ${m!.id}) as m,
+             (select count(*)::int from tasks where id = ${taskId}) as t`
+    expect(r).toEqual({ m: 0, t: 0 })
+  })
+
+  it('named partial indexes exist', async () => {
+    const rows = await sql<{ name: string; def: string }[]>`
+      select indexname as name, indexdef as def from pg_indexes
+      where indexname in ('milestones_project_id_date_idx', 'milestones_deleted_batch_idx', 'tasks_milestone_id_idx')
+      order by indexname`
+    expect(rows.map((r) => r.name)).toEqual([
+      'milestones_deleted_batch_idx',
+      'milestones_project_id_date_idx',
+      'tasks_milestone_id_idx',
+    ])
+    const def = Object.fromEntries(rows.map((r) => [r.name, r.def]))
+    expect(def.milestones_project_id_date_idx).toMatch(/\(project_id, date\) WHERE \(deleted_at IS NULL\)/)
+    expect(def.milestones_deleted_batch_idx).toMatch(/\(deleted_batch\) WHERE \(deleted_batch IS NOT NULL\)/)
+    expect(def.tasks_milestone_id_idx).toMatch(/\(milestone_id\) WHERE \(deleted_at IS NULL\)/)
+  })
+
+  it('tasks.milestone_id is a nullable uuid', async () => {
+    const [c] = await sql<{ data_type: string; is_nullable: string }[]>`
+      select data_type, is_nullable from information_schema.columns
+      where table_name = 'tasks' and column_name = 'milestone_id'`
+    expect(c).toEqual({ data_type: 'uuid', is_nullable: 'YES' })
   })
 })

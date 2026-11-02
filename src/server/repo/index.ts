@@ -27,3 +27,5 @@ export * as timeOff from './time-off'
 export * as allocations from './allocations'
 // M7.1 (plan/m07.1 S0.6)
 export * as planMarkers from './plan-markers'
+// M8 (X87, plan/m08 S0.5)
+export * as milestones from './milestones'

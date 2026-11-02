@@ -2,19 +2,24 @@
 // src/components/tasks/TaskProperties.tsx — the property rows of a task, shared by the task panel and the task page
 // (FR-683/684, M6.1-D16, plan/m06.1 S3.1): สถานะ · เสร็จ · วันที่ · ความแน่นอน (+ source, BR-36) · ผู้รับผิดชอบ (+ วางแผน
 // per assignee, FR-612) · ถูกขวางโดย / กำลังขวาง (FR-640–641) · งานย่อย (☐ / status / people / ↗ / + เพิ่มงานย่อย).
-// Light form rows (FR-1604); every write goes through useTaskMutations (optimistic + undo, M3). No milestone (M8).
+// Light form rows (FR-1604); every write goes through useTaskMutations (optimistic + undo, M3). M8: Milestone row under
+// สถานะ (FR-601/706, M8-D14) — binding goes through useMilestoneMutations().link (one undo entry, no toast).
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import CheckOutlined from '@mui/icons-material/CheckOutlined'
+import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import { DateField } from '@/components/common/DateField'
 import { UserName } from '@/components/common/UserName'
 import { PropertyList, PropertyRow } from '@/components/layout/PropertyList'
+import { useMilestoneMutations } from '@/components/milestones/useMilestoneMutations'
 import { addDays, compareISO } from '@/domain/dates'
 import type { Certainty } from '@/domain/types'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
@@ -136,6 +141,8 @@ export function TaskProperties({ projectId, task, data, variant }: TaskPropertie
           />
         ) : null}
       </PropertyRow>
+
+      <MilestoneProperty projectId={projectId} task={task} data={data} />
 
       <PropertyRow label={th.taskPage.properties.done}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
@@ -413,5 +420,50 @@ export function TaskProperties({ projectId, task, data, variant }: TaskPropertie
         onClose={() => setStatusMenu(null)}
       />
     </PropertyList>
+  )
+}
+
+/** M8 (FR-601/706, AC-702, M8-D14): ไม่ผูก + the project's live milestones; "เลย milestone" alert when late. */
+function MilestoneProperty({
+  projectId,
+  task,
+  data,
+}: {
+  projectId: string
+  task: TaskRowModel
+  data: ProjectTasksResponse
+}) {
+  const ms = useMilestoneMutations()
+  const current = task.milestoneId ? data.milestones.find((x) => x.id === task.milestoneId) : undefined
+  return (
+    <PropertyRow label={th.milestones.tasks.field}>
+      <Box sx={{ display: 'grid', gap: 1 }}>
+        <TextField
+          select
+          size="small"
+          label={th.milestones.tasks.field}
+          value={current?.id ?? ''}
+          disabled={!data.viewer.canEdit}
+          onChange={(e) => {
+            const next = data.milestones.find((x) => x.id === e.target.value) ?? null
+            if ((next?.id ?? null) !== (current?.id ?? null))
+              void ms.link(projectId, [task.id], next, { toast: false })
+          }}
+          slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+        >
+          <MenuItem value="">{th.milestones.none}</MenuItem>
+          {data.milestones.map((x) => (
+            <MenuItem key={x.id} value={x.id}>
+              {th.milestones.tasks.groupHeader(x.name, formatThaiDate(x.date))}
+            </MenuItem>
+          ))}
+        </TextField>
+        {current && task.lateForMilestone ? (
+          <Alert severity="warning" icon={<WarningAmberOutlined fontSize="inherit" />}>
+            {th.milestones.tasks.lateAlert(current.name, formatThaiDate(current.date))}
+          </Alert>
+        ) : null}
+      </Box>
+    </PropertyRow>
   )
 }

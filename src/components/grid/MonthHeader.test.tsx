@@ -5,7 +5,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
-import { FOOTER_ROWS, HEADER_ROWS } from '@/lib/grid/columns'
+import { FOOTER_ROWS, HEADER_ROWS, MS_ROW_INDEX } from '@/lib/grid/columns'
 import { MONTH_LABEL_LONG_MIN_W } from '@/lib/grid/months'
 import { gridResponse, POS_PEOPLE, POS_TASKS } from '@/lib/grid/fixtures.test.data'
 import { resetVersions } from '@/lib/grid/versions'
@@ -19,6 +19,15 @@ const m = vi.hoisted(() => ({ fetchGridChunk: vi.fn(), getJson: vi.fn() }))
 vi.mock('@/lib/grid/fetch', () => ({ fetchGridChunk: m.fetchGridChunk, gridChunkUrl: vi.fn() }))
 vi.mock('@/server/actions/allocations', () => ({ saveAllocations: vi.fn(), planAssignmentRange: vi.fn() }))
 vi.mock('@/lib/api', () => ({ getJson: m.getJson }))
+// M8: PlanGrid's ◆ code imports useMilestoneMutations (S4), which calls these actions
+vi.mock('@/server/actions/milestones', () => ({
+  createMilestone: vi.fn(),
+  updateMilestone: vi.fn(),
+  deleteMilestone: vi.fn(),
+  restoreMilestoneBatch: vi.fn(),
+  linkTasksToMilestone: vi.fn(),
+  revertTaskMilestones: vi.fn(),
+}))
 vi.mock('@/server/actions/tasks', () => ({
   createTask: vi.fn(),
   updateTask: vi.fn(),
@@ -64,13 +73,15 @@ const monthHeader = (label: string) =>
 const starts = (sel: string) => document.querySelector<HTMLElement>(sel)?.hasAttribute('data-month-start') ?? false
 
 describe('MonthHeader (FR-818, AC-811)', () => {
-  it('two header rows from HEADER_ROWS: month row 1, period row 2; aria-rowcount includes both', async () => {
+  it('M8: three header rows from HEADER_ROWS: ◆ row 1, month row 2, period row 3; aria-rowcount includes all', async () => {
     renderPos()
     const grid = screen.getByRole('grid')
     await waitFor(() => expect(grid.querySelectorAll('[data-row-header]')).toHaveLength(3))
     const rows = screen.getAllByRole('row')
-    expect(rows[0]).toHaveAttribute('aria-rowindex', String(MONTH_ROW_INDEX))
-    expect(rows[1]).toHaveAttribute('aria-rowindex', String(HEADER_ROWS))
+    expect(rows[0]).toHaveAttribute('aria-rowindex', String(MS_ROW_INDEX))
+    expect(rows[1]).toHaveAttribute('aria-rowindex', String(MONTH_ROW_INDEX))
+    expect(MONTH_ROW_INDEX).toBe(HEADER_ROWS - 1)
+    expect(rows[2]).toHaveAttribute('aria-rowindex', String(HEADER_ROWS))
     expect(grid).toHaveAttribute('aria-rowcount', String(HEADER_ROWS + 3 + 1 + FOOTER_ROWS))
   })
 

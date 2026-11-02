@@ -18,6 +18,8 @@ const task = (id: string, parentId: string | null, position: string, x: Partial<
   assignees: [],
   statusId: 'todo',
   blockers: { open: 0, total: 0 },
+  milestoneId: null,
+  lateForMilestone: false,
   ...x,
 })
 const st = (
@@ -77,6 +79,37 @@ describe('FR-661/663 buildStatusColumns', () => {
   it("assigneeId keeps only that user's leaves (parents dropped)", () => {
     const cols = buildStatusColumns(rows, statuses, { ...noFilter, assigneeId: 'ivy' })
     expect(cols.flatMap((c) => ids(c.cards))).toEqual(['L1', 'L3'])
+  })
+})
+
+describe('FR-663 / M8-D15 buildStatusColumns › milestone', () => {
+  const bound = buildTaskRows([
+    task('P', null, 'a0', { statusId: 'doing', milestoneId: 'm1' }),
+    task('L1', 'P', 'a0', { statusId: 'doing' }),
+    task('L2', null, 'a1', { milestoneId: 'm1' }),
+    task('L3', null, 'a2', { milestoneId: 'm2', statusId: 'wait' }),
+    task('L4', null, 'a3'),
+  ])
+  const all = (o: Partial<Parameters<typeof buildStatusColumns>[2]>) =>
+    buildStatusColumns(bound, statuses, { ...noFilter, ...o }).flatMap((c) => ids(c.cards))
+
+  it('milestone id keeps only the cards bound to it (parents included when bound)', () => {
+    expect(all({ milestone: 'm1' })).toEqual(['L2', 'P'])
+  })
+
+  it("'NONE' keeps the unbound cards", () => {
+    expect(all({ milestone: 'NONE' })).toEqual(['L4', 'L1'])
+  })
+
+  it("'ALL' (and the default) = M3 behaviour", () => {
+    expect(all({ milestone: 'ALL' })).toEqual(all({}))
+    expect(all({})).toEqual(['L2', 'L4', 'P', 'L1', 'L3'])
+  })
+
+  it('combines with leafOnly and the column counts follow the filter', () => {
+    expect(all({ milestone: 'm1', leafOnly: true })).toEqual(['L2'])
+    const cols = buildStatusColumns(bound, statuses, { ...noFilter, milestone: 'm2' })
+    expect(cols.map((c) => c.cards.length)).toEqual([0, 0, 1, 0, 0, 0])
   })
 })
 
@@ -158,6 +191,7 @@ describe('FR-661 toCardModel', () => {
       completed: true,
       blockers: { open: 1, total: 2 },
       hasBody: false,
+      milestoneId: null,
     }
     expect(card).toEqual(expected)
   })
@@ -176,6 +210,7 @@ describe('FR-661 toCardModel', () => {
         'dueDate',
         'hasBody',
         'id',
+        'milestoneId',
         'name',
         'parentPath',
         'projectId',

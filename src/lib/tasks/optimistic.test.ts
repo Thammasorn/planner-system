@@ -5,6 +5,7 @@ import {
   patchAssign,
   patchBlockers,
   patchCreate,
+  patchMilestone,
   patchMove,
   patchRemoveTree,
   patchRevertStatus,
@@ -30,6 +31,8 @@ const task = (id: string, parentId: string | null, depth: number, x: Partial<Tas
   assignees: [],
   statusId: 'todo',
   blockers: { open: 0, total: 0 },
+  milestoneId: null,
+  lateForMilestone: false,
   ...x,
 })
 const st = (id: string, category: TaskStatusCategory): TaskStatusDTO => ({
@@ -226,5 +229,24 @@ describe('FR-605 / M3-D13 patchAssign / patchUnassign', () => {
     expect(byId(out, 'L1')?.assignees).toEqual([])
     expect(byId(out, 'L2')?.assignees).toEqual([])
     expect(byId(out, 'L3')?.assignees).toEqual([as('a-L3', 'ivy')])
+  })
+})
+
+describe('FR-601/614 / M8-D13 patchMilestone', () => {
+  it("changes only the given tasks' milestoneId; lateForMilestone untouched; others keep identity", () => {
+    const a = task('a', null, 0, { lateForMilestone: true })
+    const b = task('b', null, 0)
+    const out = patchMilestone([a, b], ['a'], 'm1')
+    expect(out[0]).toEqual({ ...a, milestoneId: 'm1' })
+    expect(out[1]).toBe(b)
+  })
+
+  it('null unbinds; a task already on the target keeps its identity', () => {
+    const a = task('a', null, 0, { milestoneId: 'm1' })
+    const b = task('b', null, 0, { milestoneId: 'm2' })
+    const out = patchMilestone([a, b], ['a', 'b'], 'm1')
+    expect(out[0]).toBe(a)
+    expect(out[1]?.milestoneId).toBe('m1')
+    expect(patchMilestone([a], ['a'], null)[0]?.milestoneId).toBeNull()
   })
 })

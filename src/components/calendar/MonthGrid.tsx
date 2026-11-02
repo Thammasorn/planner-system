@@ -17,10 +17,17 @@ import {
   yearMonthOf,
   type YearMonth,
 } from '@/lib/calendar/month-grid'
-import type { CalendarResponse, CalendarTimeOff, CalendarTimeOffFull } from '@/lib/contracts/calendar'
+import type {
+  CalendarPerson,
+  CalendarResponse,
+  CalendarTimeOff,
+  CalendarTimeOffFull,
+} from '@/lib/contracts/calendar'
+import type { CalendarMilestone } from '@/lib/contracts/milestones'
 import { formatThaiDate } from '@/lib/format'
 import { matchesHotkey, type Hotkey } from '@/lib/keys'
 import { LeaveChip, chipText } from './LeaveChip'
+import { MilestoneChip, milestoneChipLabel } from './MilestoneChip'
 import styles from './MonthGrid.module.css'
 
 export interface DayRange {
@@ -66,10 +73,46 @@ function chipKey(e: CalendarTimeOff, i: number): string {
   return e.kind === 'full' ? e.id : `m:${e.userId}:${e.startDate}:${i}`
 }
 
+/** One chip of a day: ◆ milestones first (M8-D16), then leave entries; both count toward the "+N" limit. */
+type DayItem = { kind: 'milestone'; m: CalendarMilestone } | { kind: 'leave'; entry: CalendarTimeOff }
+
+const itemKey = (item: DayItem, i: number): string =>
+  item.kind === 'milestone' ? `ms:${item.m.id}` : chipKey(item.entry, i)
+
+function DayChip({
+  item,
+  person,
+  onOpen,
+  tabIndex,
+}: {
+  item: DayItem
+  person: (userId: string) => CalendarPerson | undefined
+  onOpen: (e: CalendarTimeOffFull) => void
+  tabIndex?: number
+}) {
+  if (item.kind === 'milestone')
+    return <MilestoneChip m={item.m} {...(tabIndex !== undefined ? { tabIndex } : {})} />
+  return (
+    <LeaveChip
+      entry={item.entry}
+      person={person(item.entry.userId)}
+      onOpen={onOpen}
+      {...(tabIndex !== undefined ? { tabIndex } : {})}
+    />
+  )
+}
+
+function dayItems(data: CalendarResponse, iso: ISODate): DayItem[] {
+  return [
+    ...data.milestones.filter((m) => m.date === iso).map((m): DayItem => ({ kind: 'milestone', m })),
+    ...entriesOnDay(data.timeOff, iso).map((entry): DayItem => ({ kind: 'leave', entry })),
+  ]
+}
+
 /**
  * Team calendar month view (FR-907/908, M5-D13, A11Y-1): a custom CSS grid of 6 Monday-first weeks (`role="grid"`).
- * Days carry holidays (grey + 🎌 + name), weekends (`--nonworking`), leave chips (≤ 3, then "+N" → popover) and
- * "วันนี้". Select a range by pointer (down on a day → move → up) or keyboard (roving focus: arrows ±1/±7 days,
+ * Days carry holidays (grey + 🎌 + name), weekends (`--nonworking`), ◆ milestone chips then leave chips (≤ 3 in all,
+ * then "+N" → popover; M8-D16) and "วันนี้". Select a range by pointer (down on a day → move → up) or keyboard (roving focus: arrows ±1/±7 days,
  * Shift+arrows extend, Enter/Space open, Escape clears); either calls `onSelectRange`.
  */
 export function MonthGrid({ month, data, today, onSelectRange, onOpenEntry, onMonthChange }: MonthGridProps) {
@@ -161,7 +204,7 @@ export function MonthGrid({ month, data, today, onSelectRange, onOpenEntry, onMo
     setMore(null)
     onOpenEntry(entry, date === undefined ? () => undefined : cellOf(date))
   }
-  const moreEntries = more ? entriesOnDay(data.timeOff, more.date) : []
+  const moreItems = more ? dayItems(data, more.date) : []
 
   return (
     <>
@@ -192,7 +235,8 @@ export function MonthGrid({ month, data, today, onSelectRange, onOpenEntry, onMo
           <div key={week[0]} role="row" className={styles.row}>
             {week.map((iso) => {
               const entries = entriesOnDay(data.timeOff, iso)
-              const { shown, more: hidden } = splitVisible(entries)
+              const items = dayItems(data, iso)
+              const { shown, more: hidden } = splitVisible(items)
               const holiday = holidays.get(iso)
               const holidayText = holiday === undefined ? null : `${th.calendar.holidayPrefix} ${holiday}`
               const isFocused = iso === focused
@@ -215,7 +259,11 @@ export function MonthGrid({ month, data, today, onSelectRange, onOpenEntry, onMo
                   aria-current={iso === today ? 'date' : undefined}
                   aria-label={th.calendar.dayLabel(
                     holidayText ? `${date} ${holidayText}` : date,
-                    ...entries.map((e) => chipText(e, person(e.userId))),
+                    ...items.map((it) =>
+                      it.kind === 'milestone'
+                        ? milestoneChipLabel(it.m)
+                        : chipText(it.entry, person(it.entry.userId)),
+                    ),
                   )}
                   aria-describedby={entries.some((e) => e.kind === 'masked') ? maskedHintId : undefined}
                   tabIndex={isFocused ? 0 : -1}
@@ -234,11 +282,11 @@ export function MonthGrid({ month, data, today, onSelectRange, onOpenEntry, onMo
                   </div>
                   {holidayText ? <div className={styles.holiday}>{holidayText}</div> : null}
                   <div className={styles.chips}>
-                    {shown.map((entry, i) => (
-                      <LeaveChip
-                        key={chipKey(entry, i)}
-                        entry={entry}
-                        person={person(entry.userId)}
+                    {shown.map((item, i) => (
+                      <DayChip
+                        key={itemKey(item, i)}
+                        item={item}
+                        person={person}
                         onOpen={(e) => onOpenEntry(e, cellOf(iso))}
                         tabIndex={isFocused ? 0 : -1}
                       />
@@ -281,9 +329,9 @@ export function MonthGrid({ month, data, today, onSelectRange, onOpenEntry, onMo
               {th.calendar.dayEntries(formatThaiDate(more.date))}
             </Typography>
             <ul className={styles.popoverList}>
-              {moreEntries.map((entry, i) => (
-                <li key={chipKey(entry, i)}>
-                  <LeaveChip entry={entry} person={person(entry.userId)} onOpen={openFromPopover} />
+              {moreItems.map((item, i) => (
+                <li key={itemKey(item, i)}>
+                  <DayChip item={item} person={person} onOpen={openFromPopover} />
                 </li>
               ))}
             </ul>

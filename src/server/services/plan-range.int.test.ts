@@ -242,3 +242,18 @@ describe('planAssignmentRange — world', () => {
     ).toMatchObject({ ok: false, code: 'NOT_FOUND' })
   })
 })
+
+describe('planAssignmentRange — milestone lateness (M8-D12)', () => {
+  it('apply on a task bound to a milestone returns lateness; dryRun returns null', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    asUser(w.lead)
+    const a = await makeAssignment({ task: w.tasks.pChildB, user: w.lead })
+    const dry = ok(await plan(a.id, 200, '2026-10-26', '2026-10-30', { dryRun: true, baseVersion: 1 }))
+    expect(dry.lateness).toBeNull()
+    const applied = ok(await plan(a.id, 200, '2026-10-26', '2026-10-30', { baseVersion: 1 }))
+    expect(applied.lateness).toEqual({
+      tasks: [{ taskId: w.tasks.pChildB.id, lateForMilestone: true }],
+      milestones: [{ id: w.milestones.p.id, late: true, lateTaskCount: 1 }],
+    })
+  })
+})

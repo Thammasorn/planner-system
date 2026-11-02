@@ -2,16 +2,20 @@
 // two 8-week chunks through buildChunk as Cindy, each < 1 000 ms. Full budgets are M11's. Skipped with CI_SKIP_PERF=1.
 // M6.1 §7.4 / R16: listLiveWithBlockerCounts with the `hasBody` subquery on the same project stays < 2× its M6 shape
 // (the identical select without `hasBody`, timed in the same run as the baseline); logged. Full budget in M12.
-import { and, asc, eq, isNull, sql } from 'drizzle-orm'
+// M8 §7.4 / R2 / R14: 50 milestones on "Perf grid", each bound to 4 leaves → buildChunk (8 weeks) stays < 1 000 ms;
+// the BR-71 lateness query (computeLateness, once per chunk) and latenessForTouchedTasks are timed and logged.
+import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { addSyntheticGridProject, seedGolden } from '../../../scripts/lib/fixtures'
 import { goldenUser } from '../../../tests/authz/_support/golden'
 import { toSessionUser } from '../../../tests/helpers/as-user'
-import { makeTaskBody } from '../../../tests/helpers/factories'
+import { addDays } from '../../domain/dates'
+import { bindTask, makeMilestone, makeTaskBody } from '../../../tests/helpers/factories'
 import { db } from '../db/client'
 import { tasks, taskStatuses } from '../db/schema'
 import { blockerCountSql, listLiveWithBlockerCounts } from '../repo/tasks'
 import { buildChunk } from './grid'
+import { computeLateness, latenessForTouchedTasks } from './milestones'
 
 /** Median of `n` timed runs after one warm-up run (ms). */
 async function medianMs(n: number, run: () => Promise<unknown>): Promise<number> {
@@ -115,5 +119,62 @@ describe.skipIf(process.env.CI_SKIP_PERF === '1')('grid perf smoke (M6-D22)', ()
       withHasBody: Math.round(m61 * 10) / 10,
     })
     expect(m61, 'hasBody list vs M6 list').toBeLessThan(2 * m6 + NOISE_MS)
+  })
+
+  it('M8 §7.4: 50 milestones × 4 bound tasks — 8-week buildChunk < 1 s; lateness query timed (logged)', async () => {
+    await seedGolden(db)
+    const { projectId } = await addSyntheticGridProject(db, { tasks: 200, weeks: 16, from: '2026-09-28' })
+    const cindy = toSessionUser(await goldenUser('Cindy'))
+    const leaves = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), isNotNull(tasks.parentId), isNull(tasks.deletedAt)))
+      .orderBy(asc(tasks.id))
+    expect(leaves.length).toBeGreaterThanOrEqual(200)
+    const milestoneIds: string[] = []
+    for (let i = 0; i < 50; i++) {
+      // dates spread over the 16 weeks so some bound tasks end after their milestone (BR-71 late branch)
+      const m = await makeMilestone({
+        project: { id: projectId },
+        name: `M${i}`,
+        date: addDays('2026-09-28', i * 2),
+        createdBy: cindy,
+      })
+      milestoneIds.push(m.id)
+      for (const t of leaves.slice(i * 4, i * 4 + 4)) await bindTask(t, m)
+    }
+    // Planner statistics as autovacuum would leave them — the smoke measures the steady-state plan. lateFacts is
+    // shaped to stay fast without them too (no second reference to the materialized `bound` CTE; verified by running
+    // this case with the line removed: ~1 s total instead of > 18 s before the rewrite).
+    await db.execute(sql`analyze tasks, milestones, task_assignments, allocations`)
+
+    const t0 = performance.now()
+    const g = await db.transaction(
+      (tx) =>
+        buildChunk(
+          tx,
+          cindy,
+          { kind: 'project', id: projectId },
+          { from: '2026-09-28', to: '2026-11-23', expand: [], zoom: 'week', includeOthers: false },
+          '2026-09-30',
+        ),
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    )
+    const chunkMs = performance.now() - t0
+    expect(g.milestones).toHaveLength(50)
+    const taskRows = g.rows.filter((r) => r.kind === 'task')
+    expect(taskRows.filter((r) => r.milestoneId !== null)).toHaveLength(200)
+    expect(g.periods).toHaveLength(8)
+
+    const lateMs = await medianMs(9, () => computeLateness(db, { projectId }))
+    const touchedMs = await medianMs(9, () => latenessForTouchedTasks(db, [leaves[0]!.id]))
+    const lat = await computeLateness(db, { projectId })
+    expect(lat.byTask.size).toBe(200)
+    console.info('[perf] milestones grid', {
+      buildChunk: Math.round(chunkMs),
+      latenessQueryMedian: Math.round(lateMs * 10) / 10,
+      latenessForTouchedTasksMedian: Math.round(touchedMs * 10) / 10,
+    })
+    expect(chunkMs, 'buildChunk with 50 milestones').toBeLessThan(BUDGET_MS)
   })
 })

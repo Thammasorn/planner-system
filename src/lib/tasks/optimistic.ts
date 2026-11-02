@@ -164,3 +164,16 @@ export function patchUnassign(tasks: readonly TaskDTO[], assignmentIds: readonly
       : t,
   )
 }
+
+/**
+ * Optimistic binding (FR-601/614, M8-D13): `milestoneId` of the given tasks (null = unbind). `lateForMilestone` is left
+ * as is — the server's refetch (invalidateMilestones) replaces it. Tasks already on the target keep their identity.
+ */
+export function patchMilestone(
+  tasks: readonly TaskDTO[],
+  ids: readonly string[],
+  milestoneId: string | null,
+): TaskDTO[] {
+  const target = new Set(ids)
+  return tasks.map((t) => (target.has(t.id) && t.milestoneId !== milestoneId ? { ...t, milestoneId } : t))
+}

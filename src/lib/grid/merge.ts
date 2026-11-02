@@ -4,6 +4,7 @@ import type { ISODate, PeriodKey } from '@/domain/types'
 import type {
   AssigneeCell,
   GridAssigneeRow,
+  GridMilestone,
   GridPeriod,
   GridPerson,
   GridResponse,
@@ -12,6 +13,7 @@ import type {
 } from '@/lib/contracts/grid'
 
 export interface GridModel {
+  /** M8-D8: carries canManage (the ◆ code reads only this flag, never `kind`). */
   context: GridResponse['context']
   today: ISODate
   /** Depth-first rows (union of every chunk; row fields from the latest chunk, assignee version = max). */
@@ -23,6 +25,8 @@ export interface GridModel {
   people: Record<string, GridPerson>
   holidays: Map<ISODate, string>
   loadedWeeks: Set<ISODate>
+  /** M8-D8: every live milestone of the project from the latest chunk (each chunk carries the full list), date then id. */
+  milestones: GridMilestone[]
 }
 
 const identity = (r: GridRow): string => (r.kind === 'task' ? `t:${r.id}` : `a:${r.taskAssignmentId}`)
@@ -120,5 +124,6 @@ export function mergeChunks(chunks: readonly (GridResponse | undefined)[]): Grid
     people,
     holidays,
     loadedWeeks: new Set(sortedPeriods.filter((p) => p.kind === 'WEEK').map((p) => p.weekStart)),
+    milestones: latest.milestones,
   }
 }

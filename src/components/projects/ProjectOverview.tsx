@@ -18,11 +18,12 @@ import { CertaintyToggle } from './CertaintyToggle'
 import { DeleteProjectButton } from './DeleteProjectButton'
 import { MembersPanel } from './MembersPanel'
 import { ProjectFormDialog } from './ProjectFormDialog'
+import { ProjectMilestones } from './ProjectMilestones'
 import { StatusSettings } from './StatusSettings'
 
 const EMPTY = '—'
 
-/** Section 1 — ข้อมูลโปรเจค (FR-409 part). No load / progress / milestones in M2 (X15). */
+/** Section 1 — ข้อมูลโปรเจค (FR-409 part). */
 function ProjectInfoSection({ project }: { project: ProjectHeader }) {
   const [editing, setEditing] = useState(false)
   const headingId = useId()
@@ -137,6 +138,8 @@ export function ProjectOverview({
           {th.tasks.progress(progress.done, progress.total)}
         </Typography>
       ) : null}
+      {/* M8 FR-409 milestones (M8-D17): after the info card, before the status settings */}
+      <ProjectMilestones projectId={project.id} />
       <MembersPanel projectId={project.id} members={members} canManage={project.can.manage} />
       {progress ? <StatusSettings projectId={project.id} /> : null}
       <ProjectActions project={project} />

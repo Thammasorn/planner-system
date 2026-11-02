@@ -1,6 +1,7 @@
 'use client'
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { CertaintyBadge } from '@/components/common/CertaintyBadge'
+import { MilestoneTaskTag } from '@/components/milestones/MilestoneTaskTag'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { UserName } from '@/components/common/UserName'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
@@ -32,13 +33,14 @@ export interface TaskCardProps {
   onToggleDone: (taskId: string) => void
   /** /tasks: cards show their project (§8.10). */
   projectName?: string | undefined
-  // M8 adds `milestone?: { name: string; late: boolean } | null` (S4.7) — absent renders exactly as M3
+  /** M8 (FR-661, M8-D15): "◆ name" on its own line (+ "เลย milestone" when late); absent renders exactly as M3. */
+  milestone?: { name: string; late: boolean } | null | undefined
 }
 
 /**
  * Board card (FR-661, M3-D35): name (struck through when done), parent breadcrumb, status chip, assignees or
  * "รอมอบหมาย", due date, ⛔/✓, ◐. Focusable (roving tabIndex from TaskBoard): Enter/Space open, `S` status menu,
- * Mod+Enter done. No milestone in M3 (X21).
+ * Mod+Enter done. M8: the bound milestone on its own line (`milestone`).
  */
 export function TaskCard({
   card,
@@ -49,6 +51,7 @@ export function TaskCard({
   onPickStatus,
   onToggleDone,
   projectName,
+  milestone,
 }: TaskCardProps) {
   const slot = useCardSlot(card.id)
   const people = usePeopleOptions()
@@ -143,6 +146,11 @@ export function TaskCard({
         )}
         {card.dueDate ? <span>{formatThaiDate(card.dueDate)}</span> : null}
       </span>
+      {milestone ? (
+        <span className={styles.cardMeta}>
+          <MilestoneTaskTag name={milestone.name} late={milestone.late} />
+        </span>
+      ) : null}
       <StatusMenu
         statuses={statuses}
         currentId={card.status.id}

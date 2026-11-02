@@ -21,6 +21,7 @@ import {
   files,
   holidays,
   leaveTypes,
+  milestones,
   pages,
   planMarkers,
   positions,
@@ -38,6 +39,7 @@ import {
   type FileRow,
   type HolidayRow,
   type LeaveTypeRow,
+  type MilestoneDbRow,
   type PageRow,
   type PlanMarkerDbRow,
   type ProjectRow,
@@ -871,4 +873,41 @@ export async function makePlanMarker(o: {
     })
     .returning()
   return row!
+}
+
+// ── M8 (plan/m08 S0.10, X59/X70) ────────────────────────────────────────────────────────────────────────────────────
+
+/** A milestone (plain Drizzle). `deleted` soft-deletes it `daysAgo` days before now() with that batch. Never inserts
+ *  tasks (X70): bind existing ones with bindTask. */
+export async function makeMilestone(o: {
+  project: { id: string }
+  name?: string
+  date: ISODate
+  createdBy: { id: string }
+  completedOn?: ISODate | null
+  description?: string | null
+  deleted?: { batch: string; daysAgo: number }
+}): Promise<MilestoneDbRow> {
+  const [row] = await db
+    .insert(milestones)
+    .values({
+      projectId: o.project.id,
+      name: o.name ?? 'Milestone',
+      date: o.date,
+      description: o.description ?? null,
+      completedOn: o.completedOn ?? null,
+      createdBy: o.createdBy.id,
+      deletedAt: o.deleted ? sql`now() - make_interval(days => ${o.deleted.daysAgo})` : null,
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+/** UPDATE tasks SET milestone_id (raw column; null unbinds). Same-project is not checked here (the service does). */
+export async function bindTask(task: { id: string }, milestone: { id: string } | null): Promise<void> {
+  await db
+    .update(tasks)
+    .set({ milestoneId: milestone?.id ?? null })
+    .where(eq(tasks.id, task.id))
 }

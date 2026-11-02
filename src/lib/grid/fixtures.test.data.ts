@@ -7,6 +7,7 @@ import type { Certainty, ISODate, LoadPair, PeriodKey } from '@/domain/types'
 import type {
   AssigneeCell,
   GridAssigneeRow,
+  GridMilestone,
   GridPeriod,
   GridPerson,
   GridResponse,
@@ -32,6 +33,9 @@ export interface FxTask {
   certaintySourceName?: string | null
   completedWeek?: ISODate | null
   blockers?: { open: number; total: number }
+  /** M8: live milestone binding + BR-71 flag */
+  milestoneId?: string | null
+  lateForMilestone?: boolean
   assignees: FxAssignee[]
 }
 export interface FxPerson {
@@ -69,6 +73,9 @@ export function gridResponse(o: {
   holidays?: { date: ISODate; name: string }[]
   /** M7: expanded weeks (D: periods + D: cells + the รวม W: period with expanded: true) */
   expand?: ISODate[]
+  /** M8 (M8-D8): every chunk carries the full list; context.canManage */
+  milestones?: GridMilestone[]
+  canManage?: boolean
 }): GridResponse {
   const weeks = o.weeks ?? 8
   const to = addWeeks(o.from, weeks)
@@ -147,8 +154,8 @@ export function gridResponse(o: {
       certaintySourceName: t.certaintySourceName ?? null,
       completed: (t.completedWeek ?? null) !== null,
       completedWeek: t.completedWeek ?? null,
-      milestoneId: null,
-      lateForMilestone: false,
+      milestoneId: t.milestoneId ?? null,
+      lateForMilestone: t.lateForMilestone ?? false,
       blockers: t.blockers ?? { open: 0, total: 0 },
       assigneeCount: t.assignees.length,
       totals,
@@ -186,6 +193,7 @@ export function gridResponse(o: {
       name: o.projectName ?? 'POS Upgrade',
       archived: o.archived ?? false,
       canEdit: o.canEdit ?? !(o.archived ?? false),
+      canManage: o.canManage ?? false,
     },
     window: { from: o.from, to, expand: o.expand ?? [], zoom: 'week', includeOthers: o.includeOthers ?? false },
     today: '2026-09-30',
@@ -207,9 +215,26 @@ export function gridResponse(o: {
       ]
     }),
     rows,
-    milestones: [],
+    milestones: o.milestones ?? [],
     people,
     holidays: (o.holidays ?? []).filter((h) => inRange(h.date, o.from, to)),
+  }
+}
+
+/** M8: a GridMilestone (= MilestoneDTO) with neutral defaults. */
+export function fxMilestone(id: string, date: ISODate, o: Partial<GridMilestone> = {}): GridMilestone {
+  return {
+    id,
+    projectId: 'p-pos',
+    name: id,
+    date,
+    description: null,
+    completedOn: null,
+    status: 'UPCOMING',
+    late: false,
+    lateTaskCount: 0,
+    progress: { done: 0, total: 0 },
+    ...o,
   }
 }
 

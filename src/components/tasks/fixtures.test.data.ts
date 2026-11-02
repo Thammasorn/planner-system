@@ -47,6 +47,8 @@ export function task(over: Partial<TaskDTO> & Pick<TaskDTO, 'id' | 'name' | 'pos
     assignees: [],
     statusId: S.todo,
     blockers: { open: 0, total: 0 },
+    milestoneId: null,
+    lateForMilestone: false,
     ...over,
   }
 }
@@ -73,6 +75,7 @@ export function response(over: Partial<ProjectTasksResponse> = {}): ProjectTasks
     ],
     statuses: STATUSES,
     blockerEdges: [],
+    milestones: [],
     ...over,
   }
 }

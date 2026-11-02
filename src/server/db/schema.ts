@@ -296,7 +296,7 @@ export const taskStatuses = pgTable(
   ],
 )
 
-/** FR-601: depth 0..2 (BR-30); status of the same project (BR-83 composite FK); no milestone_id until M8 (X21). */
+/** FR-601: depth 0..2 (BR-30); status of the same project (BR-83 composite FK); milestone_id since M8 (X10, M8-D2). */
 export const tasks = pgTable(
   'tasks',
   {
@@ -311,7 +311,7 @@ export const tasks = pgTable(
     startDate: date('start_date', { mode: 'string' }),
     dueDate: date('due_date', { mode: 'string' }),
     certaintyOverride: certainty('certainty_override'),
-    // milestone_id: added by M8 (X10/X21) — do not add here
+    milestoneId: uuid('milestone_id').references((): AnyPgColumn => milestones.id, { onDelete: 'set null' }), // M8 (X10); read only via repo.milestones.LIVE_MILESTONE_* (X87)
     statusId: uuid('status_id').notNull(), // composite FK tasks_status_fk below (BR-83, X70)
     completedOn: date('completed_on', { mode: 'string' }), // set/cleared with the status category (BR-80)
     completedWeek: date('completed_week', { mode: 'string' }).generatedAlwaysAs(
@@ -340,6 +340,9 @@ export const tasks = pgTable(
     index('tasks_name_trgm').using('gin', t.name.op('gin_trgm_ops')),
     index('tasks_status_id_idx')
       .on(t.statusId)
+      .where(sql`${t.deletedAt} is null`),
+    index('tasks_milestone_id_idx')
+      .on(t.milestoneId)
       .where(sql`${t.deletedAt} is null`),
     unique('tasks_project_id_id_key').on(t.projectId, t.id), // target of the task_blockers composite FKs
     // No ON DELETE action: statuses are only soft-deleted; a project delete removes both tables in one statement.
@@ -646,6 +649,46 @@ export const planMarkers = pgTable(
 
 export type PlanMarkerDbRow = typeof planMarkers.$inferSelect
 export type NewPlanMarker = typeof planMarkers.$inferInsert
+
+// ---------------------------------------------------------------------------------------------------------------
+// M8 — milestones (SPEC §6.2, §4.7, §5.9; plan/m08 S0.2, M8-D2/D5). Soft delete + batch (X04); `tasks.milestone_id`
+// is never touched on delete — every read joins the live milestone (repo.milestones.LIVE_MILESTONE_JOIN/ON, X87).
+// Same-project binding is checked in the service (X66), no composite FK.
+// ---------------------------------------------------------------------------------------------------------------
+
+export const milestones = pgTable(
+  'milestones',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    description: text('description'),
+    completedOn: date('completed_on', { mode: 'string' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('milestones_name_check', sql`length(trim(${t.name})) > 0`),
+    index('milestones_project_id_date_idx')
+      .on(t.projectId, t.date)
+      .where(sql`${t.deletedAt} is null`),
+    index('milestones_deleted_batch_idx')
+      .on(t.deletedBatch)
+      .where(sql`${t.deletedBatch} is not null`),
+  ],
+)
+
+/** "Db" suffix: the name `MilestoneRow` belongs to the grid component (S3.3, C81). */
+export type MilestoneDbRow = typeof milestones.$inferSelect
+export type NewMilestone = typeof milestones.$inferInsert
 
 export type HolidayRow = typeof holidays.$inferSelect
 export type NewHoliday = typeof holidays.$inferInsert

@@ -22,6 +22,7 @@ const card = (over: Partial<TaskCardDTO> = {}): TaskCardDTO => ({
   completed: false,
   blockers: { open: 0, total: 0 },
   hasBody: false,
+  milestoneId: null,
   ...over,
 })
 

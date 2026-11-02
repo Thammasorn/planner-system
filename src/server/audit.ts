@@ -23,6 +23,7 @@ export type AuditEntity =
   | 'time_off'
   | 'allocation'
   | 'plan_marker'
+  | 'milestone'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
 export interface AuditInput {

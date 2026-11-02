@@ -10,6 +10,7 @@ import type { PageKind, PageSpace } from '@/lib/contracts/pages'
 import {
   clients,
   type FileRow,
+  type MilestoneDbRow,
   type PageRow,
   projectMembers,
   projects,
@@ -21,6 +22,7 @@ import {
 import type { DbOrTx } from './db/types'
 import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors'
 import * as filesRepo from './repo/files'
+import * as milestonesRepo from './repo/milestones'
 import * as pagesRepo from './repo/pages'
 import type { TaskRow } from './repo/tasks'
 import type { AssignmentRow } from './repo/task-assignments'
@@ -212,6 +214,26 @@ async function requireOneProject(
   const projectId = distinct[0]!
   const access = await requireProject(tx, user, projectId, need)
   return { projectId, ...access }
+}
+
+/** M8 (X87, M8-D4/D5). Live milestone (or a batch-deleted one when `includeDeleted`) → its project →
+ *  requireProject(need). Missing, deleted (without includeDeleted), malformed id or invisible → NotFoundError.
+ *  PERM-15 callers pass 'manage' (Me → 403, archived → 403); task binding checks the milestone with 'view'. */
+export async function requireMilestone(
+  tx: DbOrTx,
+  user: SessionUser,
+  milestoneId: string,
+  need: Need,
+  o?: { includeDeleted?: boolean },
+): Promise<{ milestone: MilestoneDbRow } & ProjectAccessInfo> {
+  requireUser(user)
+  if (!isUuid(milestoneId)) throw new NotFoundError()
+  const milestone = o?.includeDeleted
+    ? await milestonesRepo.getAnyById(tx, milestoneId)
+    : await milestonesRepo.getLive(tx, milestoneId)
+  if (!milestone) throw new NotFoundError()
+  const access = await requireProject(tx, user, milestone.projectId, need)
+  return { milestone, ...access }
 }
 
 /** Live task → its project → requireProject(need). Missing/deleted task or invisible project → NotFoundError. */

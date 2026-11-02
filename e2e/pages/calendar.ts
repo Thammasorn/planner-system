@@ -79,6 +79,20 @@ export class CalendarPage {
   chip(iso: string, text: string): Locator {
     return this.day(iso).getByText(text, { exact: true })
   }
+  /**
+   * M8 (plan/m08 S6.1, FR-907, M8-D16): the ◆ chip of milestone `name` in `project` on a grid day — a link to the
+   * project overview whose visible text is th.milestones.calendar.chip(name, project) (`data-chip="milestone"`,
+   * `data-status`, `data-late`); the status is hidden text, "เลย milestone" visible text when late.
+   */
+  milestoneChip(iso: string, name: string, project: string): Locator {
+    return this.day(iso)
+      .locator('a[data-chip="milestone"]')
+      .filter({ hasText: th.milestones.calendar.chip(name, project) })
+  }
+  /** Every ◆ chip on the page (grid and agenda). */
+  milestoneChips(): Locator {
+    return this.page.locator('[data-chip="milestone"]')
+  }
   /** A chip on an agenda day (phone layout). */
   agendaChip(iso: string, text: string): Locator {
     return this.agendaDay(iso).getByText(text, { exact: true })

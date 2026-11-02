@@ -8,7 +8,7 @@ export type Theme = (typeof THEMES)[number]
 const SIDEBAR_EXPANDED = z.array(z.string().max(80)).max(500)
 
 /** M3 task-list keys (plan/m03 S0.13, X74, M3-D6). */
-export const TASK_GROUP_BY = ['none', 'status', 'assignee', 'certainty'] as const
+export const TASK_GROUP_BY = ['none', 'status', 'assignee', 'certainty', 'milestone'] as const // 'milestone': M8 (M8-D13)
 export const TASK_SORT = ['manual', 'due'] as const
 export const TASK_VIEWS = ['LIST', 'BOARD'] as const
 

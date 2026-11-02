@@ -16,13 +16,19 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UserName } from '@/components/common/UserName'
+import { MilestoneStatusChip } from '@/components/milestones/MilestoneStatusChip'
+import { useMilestoneMutations } from '@/components/milestones/useMilestoneMutations'
 import { SortableTree, type TreeRowState } from '@/components/tree/SortableTree'
+import { milestoneStatus } from '@/domain/milestone'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
 import { usePreferences } from '@/hooks/usePreferences'
+import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
+import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { ProjectTasksResponse } from '@/lib/contracts/tasks'
+import { formatThaiDate } from '@/lib/format'
 import { HOTKEYS, matchesHotkey } from '@/lib/keys'
 import { rememberScroll } from '@/lib/nav/scroll-memory'
 import { taskPageHref } from '@/lib/nav/task-href'
@@ -92,6 +98,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
   const sort = taskPreference(prefs, 'tasks.sort')
   const showCompleted = taskPreference(prefs, 'tasks.showCompleted')
   const m = useTaskMutations(projectId)
+  const ms = useMilestoneMutations()
   const router = useRouter()
   useScrollRestore(true) // FR-686: back from /t lands where ↗ / Shift+Space left the list
   const people = usePeopleOptions()
@@ -129,6 +136,10 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
   const allRows = useMemo(() => buildTaskRows(data.tasks), [data.tasks])
   const byId = useMemo(() => new Map(allRows.map((r) => [r.id, r])), [allRows])
   const statusById = useMemo(() => new Map(data.statuses.map((s) => [s.id, s])), [data.statuses])
+  const milestoneById = useMemo(
+    () => new Map<string, MilestoneRef>(data.milestones.map((x) => [x.id, x])),
+    [data.milestones],
+  )
   const visible = useMemo(
     () => visibleRows(allRows, { collapsed, showCompleted }),
     [allRows, collapsed, showCompleted],
@@ -141,9 +152,10 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
             projectCertainty: data.project.certainty,
             displayName: (id) => personOf(peopleById, id).nickname ?? personOf(peopleById, id).name,
             statuses: data.statuses,
+            milestones: data.milestones,
           })
     return raw.map((g) => ({ ...g, rows: sortRows(g.rows, sort) }))
-  }, [groupBy, visible, data.project.certainty, data.statuses, peopleById, sort])
+  }, [groupBy, visible, data.project.certainty, data.statuses, data.milestones, peopleById, sort])
   const order = useMemo<OrderItem[]>(
     () => groups.flatMap((g) => g.rows.map((row) => ({ key: `${g.key}|${row.id}`, row }))),
     [groups],
@@ -445,6 +457,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
         handleRef={s?.handleRef}
         handleProps={s?.handleProps}
         invalid={s?.invalid}
+        milestone={row.milestoneId === null ? null : (milestoneById.get(row.milestoneId) ?? null)}
         actions={actions}
       />
       {quickAfterId === row.id && quick ? (
@@ -479,7 +492,9 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
       >
         {groups.map((g) => (
           <div key={g.key} role="rowgroup">
-            {g.kind !== 'all' ? <GroupHeader group={g} data={data} people={peopleById} /> : null}
+            {g.kind !== 'all' ? (
+              <GroupHeader group={g} data={data} people={peopleById} allRows={allRows} />
+            ) : null}
             {g.kind === 'all' && sort === 'manual' ? (
               <SortableTree
                 items={g.rows}
@@ -512,6 +527,8 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
           }}
           onSetStatus={(statusId) => m.setStatus(selectedIds, statusId)}
           onAssign={(userId) => m.assign(leafSelected, userId)}
+          milestones={data.milestones}
+          onLinkMilestone={(ref) => void ms.link(projectId, selectedIds, ref, { toast: true })}
           onDelete={() => {
             // the bar unmounts with its focused button: keep the keyboard user's place in the list
             const next = survivorAfter(selectedIds)
@@ -539,11 +556,15 @@ function GroupHeader({
   group,
   data,
   people,
+  allRows,
 }: {
   group: TaskGroup
   data: ProjectTasksResponse
   people: ReadonlyMap<string, PersonOption>
+  /** Every live row (FR-703 progress counts all bound tasks, not only the visible ones). */
+  allRows: readonly TaskRowModel[]
 }) {
+  const today = useToday()
   const count = <span className={styles.muted}>{th.my.countLabel(group.rows.length)}</span>
   let title: ReactNode = null
   if (group.kind === 'status') {
@@ -555,6 +576,21 @@ function GroupHeader({
     title = th.tasks.groups.unassigned
   } else if (group.kind === 'certainty') {
     title = group.certainty === 'TENTATIVE' ? th.tasks.groups.tentative : th.tasks.groups.confirmed
+  } else if (group.kind === 'milestone') {
+    const ref = data.milestones.find((x) => x.id === group.milestoneId)
+    if (ref) {
+      const bound = allRows.filter((r) => r.milestoneId === ref.id)
+      const done = bound.filter((r) => r.completedOn !== null).length
+      title = (
+        <span className={styles.groupTitle}>
+          <span>{th.milestones.tasks.groupHeader(ref.name, formatThaiDate(ref.date, 'medium'))}</span>
+          <MilestoneStatusChip status={milestoneStatus(ref, today)} />
+          <span className={styles.muted}>{th.milestones.progress(done, bound.length)}</span>
+        </span>
+      )
+    }
+  } else if (group.kind === 'noMilestone') {
+    title = th.tasks.groups.noMilestone
   }
   return (
     <div role="row" className={styles.groupHeader} data-group={group.key}>

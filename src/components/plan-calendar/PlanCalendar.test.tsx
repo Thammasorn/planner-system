@@ -76,6 +76,7 @@ function seed(o: { holidays?: CalendarResponse['holidays']; markers?: PlanMarker
       holidays: o.holidays ?? [],
       people: {},
       timeOff: [],
+      milestones: [],
       viewer: { userId: 'cindy', canEditOthers: false },
     })
     qc.setQueryData<PlanMarkersResponse>(qk.planMarkers(PID), { markers: o.markers ?? [] })

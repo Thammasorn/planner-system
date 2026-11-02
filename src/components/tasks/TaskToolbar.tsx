@@ -13,11 +13,17 @@ import ViewKanbanOutlined from '@mui/icons-material/ViewKanbanOutlined'
 import ViewListOutlined from '@mui/icons-material/ViewListOutlined'
 import { usePreferences } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
+import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { PersonOption } from '@/lib/contracts/people'
 import { displayName } from '@/lib/display-name'
 import { TASK_GROUP_BY, TASK_SORT, taskPreference } from '@/lib/schemas/preferences'
+import type { BoardMilestoneFilter } from '@/lib/tasks/board'
 
 type View = 'LIST' | 'BOARD'
+
+/** Non-empty sentinel for "ทุกคน": an empty value with `displayEmpty` leaves the outlined label un-notched, drawn
+ *  over the placeholder (M8 review). Member ids are UUIDs, so it never collides. */
+const ALL_ASSIGNEES = 'ALL'
 
 /** ลิสต์ · บอร์ด toggle (FR-660, `tasks.view`), shared by the project tasks tab and /tasks. */
 export function ViewToggle() {
@@ -68,24 +74,32 @@ function PrefSwitch({
 }
 
 /**
- * Tasks tab toolbar (FR-613, FR-660): list view → group by (none/status/assignee/certainty — no milestone, X21), sort
- * and "แสดงงานที่เสร็จแล้ว"; board view → assignee filter, "เฉพาะงานย่อยสุด", "ซ่อนคอลัมน์หมวดเสร็จ". All saved
- * through user_preferences except the board's assignee filter.
+ * Tasks tab toolbar (FR-613, FR-660): list view → group by (none/status/assignee/certainty/milestone), sort and
+ * "แสดงงานที่เสร็จแล้ว"; board view → assignee filter, milestone filter (M8-D15), "เฉพาะงานย่อยสุด",
+ * "ซ่อนคอลัมน์หมวดเสร็จ". All saved through user_preferences except the board's assignee and milestone filters.
  */
 export function TaskToolbar({
   members,
   assigneeId,
   onAssignee,
+  milestones = [],
+  milestone = 'ALL',
+  onMilestone,
 }: {
   members: readonly PersonOption[]
   assigneeId: string | null
   onAssignee: (id: string | null) => void
+  /** M8: the project's live milestones (date order) for the board filter; omitted → no filter. */
+  milestones?: readonly MilestoneRef[]
+  milestone?: BoardMilestoneFilter
+  onMilestone?: (v: BoardMilestoneFilter) => void
 }) {
   const { prefs, setPreference } = usePreferences()
   const view = taskPreference(prefs, 'tasks.view')
   const groupId = useId()
   const sortId = useId()
   const assigneeLabelId = useId()
+  const milestoneLabelId = useId()
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mb: 2 }}>
       <ViewToggle />
@@ -136,11 +150,10 @@ export function TaskToolbar({
             <Select
               labelId={assigneeLabelId}
               label={th.tasks.board.assignee}
-              value={assigneeId ?? ''}
-              displayEmpty
-              onChange={(e) => onAssignee(e.target.value === '' ? null : e.target.value)}
+              value={assigneeId ?? ALL_ASSIGNEES}
+              onChange={(e) => onAssignee(e.target.value === ALL_ASSIGNEES ? null : e.target.value)}
             >
-              <MenuItem value="">{th.tasks.board.allAssignees}</MenuItem>
+              <MenuItem value={ALL_ASSIGNEES}>{th.tasks.board.allAssignees}</MenuItem>
               {members.map((p) => (
                 <MenuItem key={p.id} value={p.id}>
                   {displayName(p)}
@@ -148,6 +161,25 @@ export function TaskToolbar({
               ))}
             </Select>
           </FormControl>
+          {onMilestone ? (
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel id={milestoneLabelId}>{th.milestones.tasks.filter}</InputLabel>
+              <Select
+                labelId={milestoneLabelId}
+                label={th.milestones.tasks.filter}
+                value={milestone}
+                onChange={(e) => onMilestone(e.target.value)}
+              >
+                <MenuItem value="ALL">{th.milestones.tasks.allMilestones}</MenuItem>
+                <MenuItem value="NONE">{th.milestones.none}</MenuItem>
+                {milestones.map((x) => (
+                  <MenuItem key={x.id} value={x.id}>
+                    {th.milestones.tasks.cardLabel(x.name)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : null}
           <PrefSwitch pref="tasks.board.leafOnly" label={th.tasks.board.leafOnly} />
           <PrefSwitch pref="tasks.board.hideDone" label={th.tasks.board.hideDone} />
         </>

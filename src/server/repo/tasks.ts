@@ -3,8 +3,9 @@
 // Small typed queries; services compose them inside the caller's transaction (PLAN §3.4.5).
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import type { Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
-import { taskStatuses, tasks } from '../db/schema'
+import { milestones, taskStatuses, tasks } from '../db/schema'
 import type { DbOrTx } from '../db/types'
+import { LIVE_MILESTONE_ON } from './milestones'
 
 export type TaskRow = typeof tasks.$inferSelect
 
@@ -90,6 +91,8 @@ export interface TaskListRow {
   /** FR-691 (M6.1-D11): live, non-blank TASK body (text, image or file). Always set by `listColumns`; optional so
    *  hand-built rows (grid fixtures) may omit it (→ false). */
   hasBody?: boolean
+  /** M8 (M8-D5, X87): the LIVE milestone id (LIVE_MILESTONE_ON) — null when unbound or the milestone is deleted. */
+  milestoneId: string | null
 }
 
 /** BR-86 (X73): live edges whose blocker task is live / and whose blocker is not DONE — counted in SQL. */
@@ -128,6 +131,7 @@ const listColumns = {
   blockersOpen: blockersOpenSql,
   blockersTotal: blockersTotalSql,
   hasBody: hasBodySql,
+  milestoneId: milestones.id, // live only (leftJoin(milestones, LIVE_MILESTONE_ON))
 }
 
 /** Live tasks of the project with blocker counts, no assignees (M3-D39). Parents before children. */
@@ -136,6 +140,7 @@ export async function listLiveWithBlockerCounts(tx: DbOrTx, projectId: string): 
     .select(listColumns)
     .from(tasks)
     .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
+    .leftJoin(milestones, LIVE_MILESTONE_ON)
     .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)))
     .orderBy(asc(tasks.depth), sql`${tasks.parentId} asc nulls first`, asc(tasks.position), asc(tasks.id))
 }
@@ -146,6 +151,7 @@ export async function getLiveWithBlockerCounts(tx: DbOrTx, id: string): Promise<
     .select(listColumns)
     .from(tasks)
     .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
+    .leftJoin(milestones, LIVE_MILESTONE_ON)
     .where(and(eq(tasks.id, id), isNull(tasks.deletedAt)))
   return row ?? null
 }

@@ -44,6 +44,7 @@ import { ConflictError, NeedsChoiceError, NotFoundError, ValidationError } from 
 import * as repo from '../repo'
 import type { SessionUser } from '../session'
 import { loadDayCtx } from './day-context'
+import * as milestonesSvc from './milestones'
 import { timelineBound, TIMELINE_WEEKS_AHEAD } from './timeline'
 
 /** Audit entity of every plan write (M6-D29, X93). */
@@ -372,7 +373,9 @@ export async function save(
     }
   })
   const warnings = planned.flatMap((p) => toSaveWarnings(p.assignmentId, p.week, p.warnings))
-  return { results, warnings }
+  // M8-D12: lateness of the milestones bound to the touched tasks or their ancestors, same tx (null when none)
+  const lateness = await milestonesSvc.latenessForTouchedTasks(tx, locked.taskIds)
+  return { results, warnings, lateness }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -422,7 +425,7 @@ export async function planRange(
     overCapacityCd: r.overCapacityCd,
     warnings: r.weeks.flatMap((w) => toSaveWarnings(id, w.week, w.warnings)),
   }
-  if (input.dryRun) return { preview, applied: null }
+  if (input.dryRun) return { preview, applied: null, lateness: null }
 
   for (const w of r.weeks) {
     if (!w.changed) continue
@@ -453,6 +456,7 @@ export async function planRange(
     },
   })
   const totals = await rowTotals(tx, locked, [id], today)
+  const lateness = await milestonesSvc.latenessForTouchedTasks(tx, locked.taskIds) // M8-D12 (apply only)
   return {
     preview,
     applied: {
@@ -461,6 +465,7 @@ export async function planRange(
       weeks: Object.fromEntries(preview.weeks.map((w) => [w.week, w.after])),
       rowTotal: totals.get(id)!,
     },
+    lateness,
   }
 }
 

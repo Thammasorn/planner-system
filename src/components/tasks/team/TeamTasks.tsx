@@ -20,6 +20,8 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { ColorSquare } from '@/components/common/ProjectChip'
 import { PersonPicker } from '@/components/common/PersonPicker'
 import { UserName } from '@/components/common/UserName'
+import { MilestoneTaskTag } from '@/components/milestones/MilestoneTaskTag'
+import { useProjectMilestones } from '@/components/milestones/useProjectMilestones'
 import type { TaskStatusCategory } from '@/domain/types'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -55,6 +57,8 @@ const taskHref = (c: TaskCardDTO) => projectTasksHref(c.projectId, c.id)
  * งานของทีม `/tasks` (FR-665/666, X75, M3-D33/D41): tasks of every project the viewer can see; filters person /
  * project / position / category / blocked / done live in the URL (when `syncUrl`); list grouped by project or a board
  * of the 4 categories, where a drop picks the first status of that category in the task's project (FR-666).
+ * M8 (FR-663, M8-D15): cards / rows show "◆ name" (no lateness on /tasks); the milestone filter is enabled once a
+ * project is chosen and sent as `milestoneId`.
  */
 export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
   const { filters, patch, clear } = useTeamTaskFilters({ syncUrl })
@@ -85,6 +89,21 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
       Object.assign({}, ...pages.map((p) => p.statusesByProject)) as TeamTasksResponse['statusesByProject'],
     [pages],
   )
+  const milestonesByProject = useMemo(
+    () =>
+      Object.assign(
+        {},
+        ...pages.map((p) => p.milestonesByProject),
+      ) as TeamTasksResponse['milestonesByProject'],
+    [pages],
+  )
+  const milestoneOf = (c: TaskCardDTO) => {
+    const ref = c.milestoneId
+      ? milestonesByProject[c.projectId]?.find((x) => x.id === c.milestoneId)
+      : undefined
+    return ref ? { name: ref.name, late: false } : null
+  }
+  const projectMilestones = useProjectMilestones(filters.projectId ?? null)
   const projectOf = (id: string): ProjectRef => seen.get(id) ?? { id, name: '', color: '' }
   const projectName = (id: string) => projectOf(id).name
   const peopleById = useMemo(
@@ -138,6 +157,16 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
           value={filters.projectId ?? ''}
           options={projects.map((p) => [p.id, p.name] as const)}
           onChange={(v) => patch({ projectId: v || undefined })}
+        />
+        <FilterSelect
+          label={th.milestones.tasks.filter}
+          value={filters.projectId ? (filters.milestoneId ?? '') : ''}
+          disabled={!filters.projectId}
+          allLabel={th.milestones.tasks.allMilestones}
+          options={(filters.projectId ? (projectMilestones.data?.milestones ?? []) : []).map(
+            (x) => [x.id, th.milestones.tasks.cardLabel(x.name)] as const,
+          )}
+          onChange={(v) => patch({ milestoneId: v || undefined })}
         />
         {positions.length > 0 ? (
           <FilterSelect
@@ -206,6 +235,7 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
               statuses={statusesByProject[card.projectId] ?? []}
               canEdit
               projectName={projectName(card.projectId)}
+              milestone={milestoneOf(card)}
               onOpen={() => router.push(taskHref(card))}
               onPickStatus={(_id, statusId) => pickStatus(card, statusId)}
               onToggleDone={() => status.toggleDone(card)}
@@ -218,6 +248,7 @@ export function TeamTasks({ syncUrl = true }: { syncUrl?: boolean }) {
           projectOf={projectOf}
           statusesByProject={statusesByProject}
           people={peopleById}
+          milestoneOf={milestoneOf}
           onPickStatus={pickStatus}
           onToggleDone={status.toggleDone}
         />
@@ -243,18 +274,22 @@ function FilterSelect({
   value,
   options,
   onChange,
+  disabled = false,
+  allLabel = th.common.all,
 }: {
   label: string
   value: string
   options: readonly (readonly [string, string])[]
   onChange: (v: string) => void
+  disabled?: boolean
+  allLabel?: string
 }) {
   const id = `team-filter-${label}`
   return (
-    <FormControl size="small" sx={FILTER_SX}>
+    <FormControl size="small" sx={FILTER_SX} disabled={disabled}>
       <InputLabel id={id}>{label}</InputLabel>
       <Select labelId={id} label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-        <MenuItem value="">{th.common.all}</MenuItem>
+        <MenuItem value="">{allLabel}</MenuItem>
         {options.map(([v, text]) => (
           <MenuItem key={v} value={v}>
             {text}
@@ -270,6 +305,7 @@ function TeamList({
   projectOf,
   statusesByProject,
   people,
+  milestoneOf,
   onPickStatus,
   onToggleDone,
 }: {
@@ -277,6 +313,7 @@ function TeamList({
   projectOf: (id: string) => ProjectRef
   statusesByProject: TeamTasksResponse['statusesByProject']
   people: ReadonlyMap<string, PersonOption>
+  milestoneOf: (c: TaskCardDTO) => { name: string; late: boolean } | null
   onPickStatus: (card: TaskCardDTO, statusId: string) => void
   onToggleDone: (card: TaskCardDTO) => void
 }) {
@@ -392,6 +429,10 @@ function TeamList({
                         {formatThaiDate(c.dueDate)}
                       </Typography>
                     ) : null}
+                    {(() => {
+                      const ms = milestoneOf(c)
+                      return ms ? <MilestoneTaskTag name={ms.name} late={false} /> : null
+                    })()}
                   </Box>
                 </Box>
               </Box>

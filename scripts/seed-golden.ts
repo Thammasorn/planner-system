@@ -1,6 +1,6 @@
 // pnpm seed:golden [--fixture=F2|F3|F4] — truncate every app table, then insert the golden data (F1) and, when
 // given, one §11.3 fixture's own setup (dev/test only; SPEC §11.3, X11). One transaction; CommonJS under tsx (X56).
-import { count } from 'drizzle-orm'
+import { count, sql } from 'drizzle-orm'
 import {
   clients,
   holidays,
@@ -25,6 +25,9 @@ async function main(): Promise<void> {
       await seedGolden(tx)
       if (fixture) await applyFixture(tx, fixture)
     })
+    // Fresh planner statistics after the bulk insert, once the rows are committed: stale ~1-row estimates otherwise
+    // pick nested-loop plans for the grid/lateness queries until autovacuum catches up.
+    await db.execute(sql`analyze`)
     const [[p], [u], [s], [c], [pr], [m], [lt], [h], [to]] = await Promise.all([
       db.select({ n: count() }).from(positions),
       db.select({ n: count() }).from(user),

@@ -18,6 +18,8 @@ const task = (id: string, parentId: string | null, position: string): TaskDTO =>
   assignees: [],
   statusId: 'todo',
   blockers: { open: 0, total: 0 },
+  milestoneId: null,
+  lateForMilestone: false,
 })
 
 describe('FR-614 selection', () => {

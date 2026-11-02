@@ -5,7 +5,12 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
 import type { ProjectTasksResponse, TaskCard as TaskCardDTO } from '@/lib/contracts/tasks'
 import { taskPreference } from '@/lib/schemas/preferences'
-import { buildStatusColumns, toCardModel, type BoardColumn } from '@/lib/tasks/board'
+import {
+  buildStatusColumns,
+  toCardModel,
+  type BoardColumn,
+  type BoardMilestoneFilter,
+} from '@/lib/tasks/board'
 import { taskCertainty } from '@/lib/tasks/certainty'
 import { buildTaskRows } from '@/lib/tasks/tree'
 import { useScrollRestore } from '@/lib/nav/useScrollRestore'
@@ -18,16 +23,18 @@ import { TaskCard } from './TaskCard'
 /**
  * Project board (FR-660–664): one column per status in position order, every depth, filters assignee /
  * "เฉพาะงานย่อยสุด" / "ซ่อนคอลัมน์หมวดเสร็จ"; a drop = setStatus (FR-608 prompt for DONE parents), column quick add
- * creates in that status (FR-664). Archived → read-only.
+ * creates in that status (FR-664). Archived → read-only. M8: milestone filter (in memory, M8-D15) and "◆ name" cards.
  */
 export function ProjectBoard({
   projectId,
   data,
   assigneeId,
+  milestone = 'ALL',
 }: {
   projectId: string
   data: ProjectTasksResponse
   assigneeId: string | null
+  milestone?: BoardMilestoneFilter
 }) {
   const { prefs } = usePreferences()
   const leafOnly = taskPreference(prefs, 'tasks.board.leafOnly')
@@ -39,14 +46,19 @@ export function ProjectBoard({
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows])
   const columns = useMemo<BoardColumn<TaskCardDTO>[]>(
     () =>
-      buildStatusColumns(rows, data.statuses, { leafOnly, hideDone, assigneeId }).map((c) => ({
+      buildStatusColumns(rows, data.statuses, { leafOnly, hideDone, assigneeId, milestone }).map((c) => ({
         ...c,
         cards: c.cards.map((r) =>
           toCardModel(r, data.statuses, taskCertainty(byId, r.id, data.project.certainty).value),
         ),
       })),
-    [rows, data.statuses, data.project.certainty, leafOnly, hideDone, assigneeId, byId],
+    [rows, data.statuses, data.project.certainty, leafOnly, hideDone, assigneeId, milestone, byId],
   )
+  const milestoneOf = (taskId: string) => {
+    const r = byId.get(taskId)
+    const ref = r?.milestoneId ? data.milestones.find((x) => x.id === r.milestoneId) : undefined
+    return ref && r ? { name: ref.name, late: r.lateForMilestone } : null
+  }
   const blockerNames = (taskId: string) =>
     data.blockerEdges
       .filter((e) => e.taskId === taskId)
@@ -77,6 +89,7 @@ export function ProjectBoard({
           onOpen={openTaskPanel}
           onPickStatus={(id, statusId) => m.setStatus([id], statusId)}
           onToggleDone={toggleDone}
+          milestone={milestoneOf(card.id)}
         />
       )}
       footer={(col) => (

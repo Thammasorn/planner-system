@@ -285,3 +285,60 @@ describe('MonthGrid selection (FR-908)', () => {
     expect(onOpenEntry.mock.calls[0]![1]()).toBe(day('2026-10-14'))
   })
 })
+
+describe('M8 ◆ on the calendar (FR-907, X24, M8-D16)', () => {
+  const POS = '6f1c2b8e-3d4a-4b5c-9d6e-7f8a9b0c1d2e'
+  const uat = {
+    id: '00000000-0000-4000-8000-000000000702',
+    projectId: POS,
+    projectName: 'POS Upgrade',
+    projectColor: '#2F5597',
+    name: 'UAT sign-off',
+    date: '2026-10-02',
+    status: 'DUE_SOON' as const,
+    late: false,
+  }
+  const withMilestones = (timeOff: CalendarResponse['timeOff'] = [], late = false) => ({
+    ...calendarData(OCT_FROM, OCT_TO, timeOff),
+    milestones: [{ ...uat, late }],
+  })
+
+  it('day-2026-10-02 shows "◆ UAT sign-off · POS Upgrade" as a link to the POS overview + hidden status text', () => {
+    setup({ data: withMilestones() })
+    const cell = within(day('2026-10-02'))
+    expect(cell.getByText('◆ UAT sign-off · POS Upgrade')).toBeInTheDocument()
+    const link = cell.getByRole('link', {
+      name: th.milestones.calendar.chipLabel('UAT sign-off', 'POS Upgrade', th.milestones.status.DUE_SOON),
+    })
+    expect(link).toHaveAttribute('href', `/projects/${POS}/overview`)
+    expect(cell.getByText(th.milestones.status.DUE_SOON)).toBeInTheDocument()
+    expect(day('2026-10-02').getAttribute('aria-label')).toContain('UAT sign-off')
+  })
+
+  it('late → the ⚠ text เลย milestone', () => {
+    setup({ data: withMilestones([], true) })
+    expect(within(day('2026-10-02')).getByText(th.milestones.late)).toBeInTheDocument()
+  })
+
+  it('1 milestone + 3 leave entries → 3 chips + "+1"; the popover lists the milestone too', async () => {
+    const user = userEvent.setup()
+    const leave = [IDS.ivy, IDS.cindy, IDS.jack].map((u) => masked(u, '2026-10-02'))
+    setup({ data: withMilestones(leave) })
+    const cell = day('2026-10-02')
+    expect(cell.querySelectorAll('[data-chip]')).toHaveLength(3)
+    expect(cell.querySelector('[data-chip]')).toHaveAttribute('data-chip', 'milestone')
+    await user.click(within(cell).getByRole('button', { name: th.calendar.moreLabel(1) }))
+    const pop = screen.getByRole('dialog')
+    expect(within(pop).getByText('◆ UAT sign-off · POS Upgrade')).toBeInTheDocument()
+    expect(within(pop).getAllByText(/· ลา$/)).toHaveLength(3)
+  })
+
+  it('pointer-down on a milestone chip never starts a selection', () => {
+    const { onSelectRange } = setup({ data: withMilestones() })
+    const chip = within(day('2026-10-02')).getByRole('link')
+    fireEvent.pointerDown(chip, { button: 0 })
+    fireEvent.pointerEnter(day('2026-10-03'))
+    fireEvent.pointerUp(day('2026-10-03'))
+    expect(onSelectRange).not.toHaveBeenCalled()
+  })
+})

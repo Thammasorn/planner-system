@@ -2,17 +2,22 @@
 import { useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
 import { PersonPicker } from '@/components/common/PersonPicker'
+import { compareMilestones } from '@/domain/milestone'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
 import { th } from '@/i18n/th'
+import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { TaskStatusDTO } from '@/lib/contracts/tasks'
+import { formatThaiDate } from '@/lib/format'
 import { StatusMenu } from './status/StatusMenu'
 
 /**
- * Multi-select actions (FR-614, M3-D23): ติ๊กเสร็จ · เปลี่ยนสถานะ · มอบหมาย · ลบ · ยกเลิกการเลือก. No milestone action
- * (X21). Visible from 2 selected rows.
+ * Multi-select actions (FR-614, M3-D23): ติ๊กเสร็จ · เปลี่ยนสถานะ · มอบหมาย · ผูก milestone (M8-D14: milestones in date
+ * order + ไม่ผูก, shown when `onLinkMilestone` is given) · ลบ · ยกเลิกการเลือก. Visible from 2 selected rows.
  */
 export function BulkBar({
   count,
@@ -25,6 +30,8 @@ export function BulkBar({
   onAssign,
   onDelete,
   onClear,
+  milestones = [],
+  onLinkMilestone,
 }: {
   count: number
   statuses: readonly TaskStatusDTO[]
@@ -36,7 +43,13 @@ export function BulkBar({
   onAssign: (userId: string) => void
   onDelete: () => void
   onClear: () => void
+  /** M8: the project's live milestones. */
+  milestones?: readonly MilestoneRef[]
+  /** M8 (FR-614): bind every selected task (any depth) to the milestone, or unbind with null. */
+  onLinkMilestone?: (m: MilestoneRef | null) => void
 }) {
+  const [milestoneAnchor, setMilestoneAnchor] = useState<HTMLElement | null>(null)
+  const sortedMilestones = useMemo(() => [...milestones].sort(compareMilestones), [milestones])
   const [statusAnchor, setStatusAnchor] = useState<HTMLElement | null>(null)
   const [assignAnchor, setAssignAnchor] = useState<HTMLElement | null>(null)
   const people = usePeopleOptions({ enabled: canEdit })
@@ -79,6 +92,11 @@ export function BulkBar({
           <Button size="small" aria-haspopup="dialog" onClick={(e) => setAssignAnchor(e.currentTarget)}>
             {th.tasks.bulk.assign}
           </Button>
+          {onLinkMilestone ? (
+            <Button size="small" aria-haspopup="menu" onClick={(e) => setMilestoneAnchor(e.currentTarget)}>
+              {th.milestones.tasks.bulkLink}
+            </Button>
+          ) : null}
           <Button size="small" color="error" onClick={onDelete}>
             {th.tasks.bulk.delete}
           </Button>
@@ -87,6 +105,32 @@ export function BulkBar({
       <Button size="small" onClick={onClear}>
         {th.tasks.bulk.clear}
       </Button>
+      <Menu
+        anchorEl={milestoneAnchor}
+        open={milestoneAnchor !== null}
+        onClose={() => setMilestoneAnchor(null)}
+        slotProps={{ list: { 'aria-label': th.milestones.tasks.bulkLink } }}
+      >
+        {sortedMilestones.map((x) => (
+          <MenuItem
+            key={x.id}
+            onClick={() => {
+              setMilestoneAnchor(null)
+              onLinkMilestone?.(x)
+            }}
+          >
+            {th.milestones.tasks.groupHeader(x.name, formatThaiDate(x.date))}
+          </MenuItem>
+        ))}
+        <MenuItem
+          onClick={() => {
+            setMilestoneAnchor(null)
+            onLinkMilestone?.(null)
+          }}
+        >
+          {th.milestones.none}
+        </MenuItem>
+      </Menu>
       <StatusMenu
         statuses={statuses}
         currentId={null}

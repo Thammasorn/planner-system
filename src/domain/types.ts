@@ -38,3 +38,7 @@ export interface LoadPair {
 export type LoadView = 'ALL' | 'COMMITTED' | 'AT_RISK'
 /** Cell unit (FR-804), preference `grid.unit`. */
 export type CellUnit = 'DAYS' | 'FRACTION'
+/** BR-70 milestone status (FR-704, M8). */
+export type MilestoneStatus = 'DONE' | 'OVERDUE' | 'DUE_SOON' | 'UPCOMING'
+/** BR-71: why a bound task is late for its milestone (M8-D6). */
+export type LateReason = 'WEEK_PLAN' | 'DAY_PLAN' | 'DUE_DATE'

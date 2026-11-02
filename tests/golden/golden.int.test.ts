@@ -213,6 +213,7 @@ describe('F1 via grid (M6, SPEC §11.3, r8 §2–§4.5/§6.3)', () => {
       })
       expect(g.window).toMatchObject({ from: FROM, to: TO, includeOthers: false })
       expect(g.periods.map((p) => p.key)).toEqual(WEEKS.map(wk))
+      // M8: still [] — the golden seed has no milestones (A.2's come only from addMilestones; see milestones.int.test.ts)
       expect(g.milestones).toEqual([])
 
       // row totals (r8 §4.5) and cell shape

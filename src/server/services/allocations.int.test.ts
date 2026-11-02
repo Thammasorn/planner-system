@@ -355,3 +355,29 @@ describe('saveAllocations — world', () => {
     expect(row).toMatchObject({ entity: 'allocation', actorId: w.lead.id, projectId: w.P.id })
   })
 })
+
+describe('saveAllocations — milestone lateness (M8-D12, BR-71)', () => {
+  it('pChildB bound to p (10-23): WEEK 10-26 → late; cleared → not late; unbound / deleted-milestone tasks → null', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    asUser(w.lead)
+    const a = await makeAssignment({ task: w.tasks.pChildB, user: w.lead })
+    const late = ok(await saveAllocations({ items: [week(a.id, '2026-10-26', 100)], clientOpId: 'ms-late' }))
+    expect(late.lateness).toEqual({
+      tasks: [{ taskId: w.tasks.pChildB.id, lateForMilestone: true }],
+      milestones: [{ id: w.milestones.p.id, late: true, lateTaskCount: 1 }],
+    })
+    const cleared = ok(await saveAllocations({ items: [week(a.id, '2026-10-26', null, 2)], clientOpId: 'ms-clear' }))
+    expect(cleared.lateness).toEqual({
+      tasks: [{ taskId: w.tasks.pChildB.id, lateForMilestone: false }],
+      milestones: [{ id: w.milestones.p.id, late: false, lateTaskCount: 0 }],
+    })
+    const unbound = ok(
+      await saveAllocations({ items: [week(w.assignments.pCoworker.id, '2026-11-02', 100)], clientOpId: 'ms-none' }),
+    )
+    expect(unbound.lateness).toBeNull()
+    const underDeleted = ok(
+      await saveAllocations({ items: [week(w.assignments.pChildAMember.id, '2026-11-02', 100)], clientOpId: 'ms-del' }),
+    )
+    expect(underDeleted.lateness).toBeNull()
+  })
+})

@@ -90,6 +90,7 @@ export function calendarData(
     holidays,
     people: PEOPLE,
     timeOff,
+    milestones: [],
     viewer: { userId: IDS.peter, canEditOthers: false },
   }
 }

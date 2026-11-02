@@ -85,4 +85,19 @@ export class TeamTasksPage {
     await this.page.getByRole('listbox').getByRole('option', { name, exact: true }).click()
     await expect(this.projectFilter()).toHaveText(name)
   }
+
+  // ── M8 (plan/m08 S6.1, FR-663, M8-D15): milestone filter, enabled once a project is chosen; "◆ name" on items ──
+  milestoneFilter(): Locator {
+    return this.shell.main().getByRole('combobox', { name: th.milestones.tasks.filter, exact: true })
+  }
+  /** Picks the option labelled `label` (th.milestones.tasks.cardLabel(name) | allMilestones). */
+  async filterMilestone(label: string): Promise<void> {
+    await this.milestoneFilter().click()
+    await this.page.getByRole('listbox').getByRole('option', { name: label, exact: true }).click()
+    await expect(this.milestoneFilter()).toHaveText(label)
+  }
+  /** "◆ name" on a list item. */
+  milestoneTag(taskName: string): Locator {
+    return this.item(taskName).locator('[data-milestone-tag]')
+  }
 }

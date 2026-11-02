@@ -1,6 +1,7 @@
 // src/lib/contracts/grid.ts — isomorphic, type-only planning-grid DTOs (SPEC §7.4 + X65/X85, plan/m06 S0.4, M6-D2/D3).
 // Names are fixed for M7–M9 (they extend these types additively). Loads are integer cd; dates are ISODate strings.
 import type { Cd, Certainty, ISODate, LoadPair, PeriodKey } from '@/domain/types'
+import type { MilestoneDTO, MilestoneLateness } from './milestones'
 
 export type { LoadPair, PeriodKey }
 
@@ -78,7 +79,7 @@ export interface GridTaskRow {
   completed: boolean
   /** BR-50 (M7 uses it at day level). */
   completedWeek: ISODate | null
-  /** null / false until M8 (X28). */
+  /** Live milestone (M8, X28/X85 via LIVE_MILESTONE_ON). */
   milestoneId: string | null
   lateForMilestone: boolean
   /** FR-643, BR-86 (X76). */
@@ -104,17 +105,12 @@ export interface GridAssigneeRow {
 /** M9 adds 'masked' | 'project'. */
 export type GridRow = GridTaskRow | GridAssigneeRow
 
-/** [] in M6; M8 replaces it with `= MilestoneDTO` (adds status, late, lateTaskCount, progress — M8-D8, C19). */
-export interface GridMilestone {
-  id: string
-  name: string
-  date: ISODate
-  projectId: string
-}
+/** M8-D8 (C19): all live milestones of the project (not windowed), date then id. */
+export type GridMilestone = MilestoneDTO
 
 export interface GridResponse {
-  /** M8 adds canManage; M9 widens it to GridContextInfo ('project' | 'person', X85). */
-  context: { kind: 'project'; id: string; name: string; archived: boolean; canEdit: boolean }
+  /** canManage (M8-D8) = M/L and not archived; M9 widens it to GridContextInfo ('project' | 'person', X85). */
+  context: { kind: 'project'; id: string; name: string; archived: boolean; canEdit: boolean; canManage: boolean }
   /** expand [] / zoom 'week' in M6. */
   window: { from: ISODate; to: ISODate; expand: ISODate[]; zoom: 'week' | 'day'; includeOthers: boolean }
   today: ISODate
@@ -163,10 +159,11 @@ export interface SaveWarning {
   week: ISODate
   date?: ISODate
 }
-/** M8 adds lateness (M8-D12, X85). */
+/** lateness (M8-D12, X85): milestones bound to the touched tasks or their ancestors; null when none. */
 export interface SaveAllocationsOk {
   results: SaveItemResult[]
   warnings: SaveWarning[]
+  lateness: MilestoneLateness | null
 }
 /** ActionError extra on VERSION_CONFLICT (read through `ActionFailure.extra`, M6-D25). */
 export interface VersionConflictPayload {
@@ -214,10 +211,11 @@ export interface PlanRangePreview {
   overCapacityCd: Cd
   warnings: SaveWarning[]
 }
-/** applied = null when dryRun; M8 adds lateness. */
+/** applied = null when dryRun; lateness null when dryRun or nothing bound (M8-D12). */
 export interface PlanAssignmentRangeOk {
   preview: PlanRangePreview
   applied: SaveItemResult | null
+  lateness: MilestoneLateness | null
 }
 
 // ── M7 day loads (M7-D27) ──

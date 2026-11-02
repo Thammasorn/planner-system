@@ -1,11 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import type { ISODate, LoadView, PeriodKey } from '../../src/domain/types'
-import { diffDays } from '../../src/domain/dates'
+import { diffDays, weekStart } from '../../src/domain/dates'
 import { th } from '../../src/i18n/th'
 import { formatWeekHeader } from '../../src/lib/format'
 import { DAY_W, timelineStart, WEEK_TOTAL_W, WEEK_W } from '../../src/lib/grid/columns'
 import { E2E } from '../env'
 import { waitForServerAction, waitForServerActionWith } from '../fixtures'
+import { fillDate } from './date-field'
 import { ShellPage } from './shell'
 import { SidebarPage } from './sidebar'
 import { toastWith } from './toast'
@@ -17,6 +18,11 @@ export function escapeRe(s: string): string {
 /** `s` inside a double-quoted CSS attribute value. */
 function cssString(s: string): string {
   return s.replace(/["\\]/g, '\\$&')
+}
+/** Accessible-name prefix of the ◆ of milestone `name` (th.milestones.grid.diamondLabel before the date). */
+function diamondName(name: string): RegExp {
+  const [prefix] = th.milestones.grid.diamondLabel(name, '\u0000', '').split('\u0000')
+  return new RegExp(`^${escapeRe(prefix!)}`)
 }
 
 /**
@@ -714,6 +720,150 @@ export class GridPage {
   /** The non-modal hint on a read-only summed cell (FR-817). */
   sumHint(): Locator {
     return this.page.getByTestId('sum-mode-hint')
+  }
+
+  // ── M8 ◆ milestone row (plan/m08 S6.1, S3.3–S3.7; SPEC FR-702/705/706/707) ──────────────────────────────────
+  // DOM contract (S3): header row 1 is role=row named th.milestones.grid.rowLabel (test id ms-row, `data-manage` for
+  // M/L). One gridcell per rendered column `ms-cell-<periodKey>` (`data-drop="true"` while a drag targets it); the first
+  // ◆ of a column is a button named th.milestones.grid.diamondLabel(name, date medium, status) [+ lateTasks(n)] with
+  // `data-status`, `data-late`, `data-ms-id`; "+N" is `ms-more-<periodKey>`. Popovers: details `ms-popover` (managers:
+  // MilestoneForm + ms-toggle-complete + ms-delete; others `ms-read-only`), create `ms-create-popover`. Task row headers
+  // carry "→◆name" `[data-ms-link]`, the ⚠ chip `[data-ms-late]` and `data-late-for-milestone="true"`.
+  // Never by aria-rowindex (the ◆ row is header row 1, M8-D26).
+
+  milestoneRow(): Locator {
+    return this.root().getByRole('row', { name: th.milestones.grid.rowLabel, exact: true })
+  }
+  milestoneCell(key: PeriodKey): Locator {
+    return this.page.getByTestId(`ms-cell-${key}`)
+  }
+  /** The ◆ cell, scrolled into the column virtualiser's window (W:<Monday> or D:<date>). */
+  async revealMilestoneCell(key: PeriodKey): Promise<Locator> {
+    const cell = this.milestoneCell(key)
+    if ((await cell.count()) === 0) {
+      const date: ISODate = key.slice(2)
+      await this.scrollToWeek(key.startsWith('D:') ? weekStart(date) : date)
+    }
+    await expect(cell).toBeAttached()
+    return cell
+  }
+  /** The ◆ button of milestone `name` anywhere in the row (its accessible name starts "milestone <name> "). */
+  diamond(name: string): Locator {
+    return this.milestoneRow().getByRole('button', { name: diamondName(name) })
+  }
+  /** The ◆ button of milestone `name` inside the column `key`. */
+  diamondIn(key: PeriodKey, name: string): Locator {
+    return this.milestoneCell(key).getByRole('button', { name: diamondName(name) })
+  }
+  /** Toolbar "+ milestone" (managers only). */
+  toolbarAddMilestone(): Locator {
+    return this.toolbar().getByRole('button', { name: th.milestones.grid.toolbarAdd, exact: true })
+  }
+  /** The ◆ details popover (role=dialog). */
+  milestonePopover(): Locator {
+    return this.page.getByTestId('ms-popover')
+  }
+  /** The create popover (role=dialog named th.milestones.form.createTitle). */
+  milestoneCreatePopover(): Locator {
+    return this.page.getByTestId('ms-create-popover')
+  }
+  /** The name textbox of a MilestoneForm inside `scope`. */
+  milestoneNameInput(scope: Locator): Locator {
+    return scope.getByRole('textbox', { name: th.milestones.fields.name })
+  }
+
+  /** Click on the empty part of a ◆-row cell (M/L: opens the create popover pre-filled with the column date). */
+  async clickEmptyMilestoneCell(key: PeriodKey): Promise<void> {
+    const cell = await this.revealMilestoneCell(key)
+    await cell.scrollIntoViewIfNeeded()
+    await expect(cell.getByRole('button')).toHaveCount(0)
+    await cell.click()
+  }
+  /** Clicks the empty cell and waits for the create popover. */
+  async openCreateAt(key: PeriodKey): Promise<Locator> {
+    await this.clickEmptyMilestoneCell(key)
+    const pop = this.milestoneCreatePopover()
+    await expect(pop).toBeVisible()
+    await expect(this.milestoneNameInput(pop)).toBeFocused()
+    return pop
+  }
+  /** In the open create popover: name (+ date), Enter in the name → waits for the create action; the popover closes. */
+  async submitCreate(name: string, date?: ISODate): Promise<void> {
+    const pop = this.milestoneCreatePopover()
+    await this.milestoneNameInput(pop).fill(name)
+    if (date) await fillDate(pop, th.milestones.fields.date, date)
+    const created = waitForServerAction(this.page)
+    await this.milestoneNameInput(pop).press('Enter')
+    await created
+    await expect(pop).toHaveCount(0)
+  }
+  /** Click an empty ◆-row cell → name (+ date via the DateField) → Enter. */
+  async createMilestoneAt(key: PeriodKey, name: string, date?: ISODate): Promise<void> {
+    await this.openCreateAt(key)
+    await this.submitCreate(name, date)
+  }
+  /** Focus the ◆ + Enter (keyboard path, §8.9) → the details popover. */
+  async openDiamond(name: string): Promise<Locator> {
+    const d = this.diamond(name)
+    await d.scrollIntoViewIfNeeded()
+    await d.focus()
+    await expect(d).toBeFocused()
+    await this.page.keyboard.press('Enter')
+    const pop = this.milestonePopover()
+    await expect(pop).toBeVisible()
+    return pop
+  }
+  async closePopover(): Promise<void> {
+    await this.page.keyboard.press('Escape')
+    await expect(this.milestonePopover()).toHaveCount(0)
+  }
+  /**
+   * Pointer drag of ◆ `name` onto the column `toKey`: down on the ◆ centre → 8-step move to the target cell centre → up.
+   * `expectMove` (default): waits for the drop target highlight before releasing and for the move action after it.
+   * `expectMove: false` (members): no waits — callers assert that nothing moved and no action was sent.
+   */
+  async dragDiamond(name: string, toKey: PeriodKey, o: { expectMove?: boolean } = {}): Promise<void> {
+    const expectMove = o.expectMove ?? true
+    const d = this.diamond(name)
+    const target = await this.revealMilestoneCell(toKey)
+    // Raw mouse events have no actionability check: scrollIntoViewIfNeeded can leave the ◆ under the sticky
+    // frozen/รวม columns (day zoom), so centre it in the scroller (the target is a few columns away) before measuring.
+    await d.evaluate(async (el) => {
+      el.scrollIntoView({ block: 'nearest', inline: 'center' })
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+    })
+    await expect(target).toBeAttached()
+    const a = await d.boundingBox()
+    const b = await target.boundingBox()
+    if (!a || !b) throw new Error(`dragDiamond(${name}, ${toKey}): no box`)
+    const from = { x: a.x + a.width / 2, y: a.y + a.height / 2 }
+    const to = { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+    await this.page.mouse.move(from.x, from.y)
+    await this.page.mouse.down()
+    await this.page.mouse.move(to.x, to.y, { steps: 8 })
+    if (!expectMove) {
+      await expect(this.milestoneRow().getByTestId('ms-ghost')).toHaveCount(0)
+      await this.page.mouse.up()
+      return
+    }
+    await expect(target).toHaveAttribute('data-drop', 'true')
+    const moved = waitForServerAction(this.page)
+    await this.page.mouse.up()
+    await moved
+    await expect(this.milestoneRow().getByTestId('ms-ghost')).toHaveCount(0)
+  }
+
+  /** The row header of `rowKey` ('t:…' | 'a:…'). */
+  rowHeaderByKey(rowKey: string): Locator {
+    return this.root().locator(`[role="rowheader"][data-row-key="${cssString(rowKey)}"]`)
+  }
+  /** "→◆<name>" in the task column of a task / merged / sum row. */
+  taskMilestoneLink(rowKey: string): Locator {
+    return this.rowHeaderByKey(rowKey).locator('[data-ms-link]')
+  }
+  /** The ⚠ "เลย milestone" chip of a row (its text is th.milestones.late). */
+  taskLate(rowKey: string): Locator {
+    return this.rowHeaderByKey(rowKey).locator('[data-ms-late]')
   }
 
   // ── save state ────────────────────────────────────────────────────────────────────────────────────────────

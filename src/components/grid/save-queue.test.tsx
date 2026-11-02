@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import { ActionFailure } from '@/lib/action-result'
-import type { GridAssigneeRow, GridResponse, SaveAllocationsInput } from '@/lib/contracts/grid'
+import type { GridAssigneeRow, GridResponse, GridTaskRow, SaveAllocationsInput } from '@/lib/contracts/grid'
 import { posChunks } from '@/lib/grid/fixtures.test.data'
 import type { CellWrite } from '@/lib/grid/queue'
 import { conflictEpoch, knownVersion, resetVersions } from '@/lib/grid/versions'
@@ -354,5 +354,30 @@ describe('useSaveAllocations (§7.4, S3.6)', () => {
     expect(
       new ActionFailure({ ok: false, code: 'VERSION_CONFLICT', message: 'x', current: [] }).extra,
     ).toEqual({ current: [] })
+  })
+
+  it('M8 (S3.8, M8-D12): a save result with lateness flips the task row in the cache without a refetch', async () => {
+    m.saveAllocations.mockImplementation((input: SaveAllocationsInput) =>
+      Promise.resolve({
+        ...okFor(input),
+        lateness: {
+          tasks: [{ taskId: 't-pos', lateForMilestone: true }],
+          milestones: [],
+        },
+      }),
+    )
+    const { qc, hook } = setup()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    act(() => void hook.result.current.enqueue([w('2026-10-05', 300)]))
+    await act(async () => {
+      await hook.result.current.flush()
+    })
+    const keyA = qk.gridChunk(ctx, { from: '2026-08-31', expand: [], zoom: 'WEEK', includeOthers: false })
+    const row = qc
+      .getQueryData<GridResponse>(keyA)!
+      .rows.find((r): r is GridTaskRow => r.kind === 'task' && r.id === 't-pos')!
+    expect(row.lateForMilestone).toBe(true)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(qc.getQueryState(keyA)?.isInvalidated).toBe(false)
   })
 })

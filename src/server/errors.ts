@@ -150,6 +150,8 @@ export function pgErrorInfo(e: unknown): { code?: string; constraint?: string } 
  * must never fire), checked before the generic OVERLAP.
  * M6.1 (S1.13): 23514 on the TASK-page shape checks → INTERNAL (task bodies are only built by ensureTaskBody and the
  * data migration, and the page APIs refuse TASK pages first — so it must never fire).
+ * M8 (S2.3): 23503 on tasks_milestone_id_milestones_id_fk → NOT_FOUND · 23514 on milestones_name_check → VALIDATION
+ * (name) — backstops only.
  */
 const INTERNAL_CHECKS: ReadonlySet<string> = new Set(['pages_kind_task', 'pages_kind_shape', 'pages_task_space'])
 
@@ -157,6 +159,7 @@ const NOT_FOUND_FKS: ReadonlySet<string> = new Set([
   'tasks_status_fk',
   'task_blockers_task_fk',
   'task_blockers_blocker_fk',
+  'tasks_milestone_id_milestones_id_fk', // M8: the bound milestone row is gone (backstop; actions check first)
 ])
 
 export function mapDbError(e: unknown): AppError | null {
@@ -176,6 +179,10 @@ export function mapDbError(e: unknown): AppError | null {
       return new ConflictError('OVERLAP')
     case '23514':
       if (constraint !== undefined && INTERNAL_CHECKS.has(constraint)) return new AppError('INTERNAL')
+      if (constraint === 'milestones_name_check') {
+        const msg = th.milestones.errors.nameRequired // M8 backstop: zod trims + min(1) first
+        return new ValidationError({ name: [msg] }, msg)
+      }
       return new ValidationError({})
     case 'P0001':
       return new AppError('INTERNAL')

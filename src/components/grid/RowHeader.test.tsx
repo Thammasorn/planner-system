@@ -148,3 +148,36 @@ describe('RowHeader indentation (token scale)', () => {
     expect(taskCell.style.paddingLeft).toBe('calc(var(--space-2) + 2 * var(--space-4))')
   })
 })
+
+describe('RowHeader milestone label + late marker (M8 S3.7, FR-706, AC-702)', () => {
+  const uat = { name: 'UAT', date: '2026-10-02' }
+
+  it('a late bound merged row shows "→◆UAT" and the visible "เลย milestone" chip; states carry both', () => {
+    const late: ViewRow = {
+      ...merged,
+      task: task({ milestoneId: 'm-uat', lateForMilestone: true }),
+    }
+    const { header } = renderRow(late, { milestone: uat })
+    expect(header).toHaveAttribute('data-late-for-milestone', 'true')
+    expect(within(header).getByText(th.milestones.grid.taskLink('UAT'))).toBeInTheDocument()
+    expect(within(header).getByText(th.milestones.late)).toBeInTheDocument()
+    expect(header).toHaveAccessibleDescription(
+      expect.stringContaining(th.milestones.grid.taskLinkLabel('UAT')),
+    )
+    expect(header).toHaveAccessibleDescription(expect.stringContaining(th.milestones.late))
+  })
+
+  it('bound but not late: the label only', () => {
+    const bound: ViewRow = { ...merged, task: task({ milestoneId: 'm-uat' }) }
+    const { header } = renderRow(bound, { milestone: uat })
+    expect(within(header).getByText(th.milestones.grid.taskLink('UAT'))).toBeInTheDocument()
+    expect(within(header).queryByText(th.milestones.late)).toBeNull()
+    expect(header).not.toHaveAttribute('data-late-for-milestone')
+  })
+
+  it('an unbound row shows neither label', () => {
+    const { header } = renderRow(merged, { milestone: null })
+    expect(header.querySelector('[data-ms-link]')).toBeNull()
+    expect(header.querySelector('[data-ms-late]')).toBeNull()
+  })
+})

@@ -1,12 +1,13 @@
 // M5 S2.6 — month calendar (FR-907, §3.3 MASK-5, X43, M5-D7/D8): only visibleUserIds(viewer) are selected; other
 // people's leave is masked ("ลา", no id / type / colour / note); holidays in range; GET /api/calendar validates the
 // query (Mondays, ≤ 42 days) and runs in a read-only transaction.
+import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 import { GET } from '@/app/api/calendar/route'
 import { th } from '@/i18n/th'
 import type { CalendarResponse, CalendarTimeOffFull } from '@/lib/contracts/calendar'
-import { applyFixture, seedGolden, type FixtureId } from '../../../scripts/lib/fixtures'
+import { addMilestones, applyFixture, seedGolden, type FixtureId } from '../../../scripts/lib/fixtures'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import {
   makeLeaveType,
@@ -16,7 +17,7 @@ import {
   type TestUser,
 } from '../../../tests/helpers/factories'
 import { db } from '../db/client'
-import { user } from '../db/schema'
+import { milestones, projects, user } from '../db/schema'
 import type { SessionUser } from '../session'
 import { getCalendar } from './calendar'
 
@@ -223,5 +224,39 @@ describe('GET /api/calendar', () => {
     ])
     const text = JSON.stringify(body)
     for (const leak of [coEntry.id, lt.id, 'ลาลับ', stranger.id]) expect(text).not.toContain(leak)
+  })
+})
+
+describe('getCalendar — milestones (FR-907, M8-D16, §3.3)', () => {
+  it('visible, non-archived projects in [from, to); status + late; archived / deleted drop out', async () => {
+    const who = await golden(null)
+    const { ids } = await addMilestones(db)
+    const names = async (nick: string) => (await cal(await who(nick))).milestones.map((m) => m.name)
+    expect(await names('Cindy')).toEqual(['UAT sign-off', 'Data migration complete'])
+    expect(await names('Peter')).toEqual(['Pipeline พร้อมใช้งาน'])
+    expect(await names('Manager')).toEqual([
+      'UAT sign-off',
+      'Design freeze',
+      'Pipeline พร้อมใช้งาน',
+      'Data migration complete',
+    ])
+    const uat = (await cal(await who('Cindy'))).milestones[0]!
+    expect(uat).toEqual({
+      id: ids['UAT sign-off'],
+      projectId: uat.projectId,
+      projectName: 'POS Upgrade',
+      projectColor: uat.projectColor,
+      name: 'UAT sign-off',
+      date: '2026-10-02',
+      status: 'DUE_SOON',
+      late: true,
+    })
+    await db.update(projects).set({ archivedAt: new Date() }).where(eq(projects.name, 'CRM Migration'))
+    expect(await names('Cindy')).toEqual(['UAT sign-off'])
+    await db
+      .update(milestones)
+      .set({ deletedAt: new Date(), deletedBatch: randomUUID() })
+      .where(eq(milestones.name, 'Design freeze'))
+    expect(await names('Manager')).toEqual(['UAT sign-off', 'Pipeline พร้อมใช้งาน'])
   })
 })

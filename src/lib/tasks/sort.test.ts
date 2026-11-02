@@ -23,6 +23,8 @@ const task = (
   assignees: [],
   statusId: 'todo',
   blockers: { open: 0, total: 0 },
+  milestoneId: null,
+  lateForMilestone: false,
 })
 const ids = (xs: readonly { id: string }[]) => xs.map((x) => x.id)
 

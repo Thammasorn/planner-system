@@ -14,6 +14,7 @@ import type {
   AssigneeCell,
   DayLoadRow,
   GridAssigneeRow,
+  GridMilestone,
   GridPeriod,
   GridPerson,
   GridResponse,
@@ -34,6 +35,7 @@ import * as capacity from './capacity'
 import { dayKeysFor } from './day-context'
 import * as holidaysSvc from './holidays'
 import { maskTimeOff } from './masking'
+import * as milestonesSvc from './milestones'
 import { timelineBound } from './timeline'
 
 /** M7 (M7-D10/D17): `expand` = Mondays shown as days; `zoom: 'day'` expands every week (and ignores `expand`). */
@@ -92,7 +94,10 @@ export async function buildChunk(
   const access = await authz.requireProject(tx, user, ctx.id, 'view') // 404 invisible; archived allowed (X42)
   const project = await repo.projects.getProject(tx, ctx.id)
   if (!project) throw new NotFoundError() // unreachable after requireProject; keeps the type non-null
-  const tasks = await repo.tasks.listLiveWithBlockerCounts(tx, ctx.id)
+  const tasks = await repo.tasks.listLiveWithBlockerCounts(tx, ctx.id) // milestoneId = live (LIVE_MILESTONE_ON)
+  // X28 / M8-D8: all live milestones of the project (not windowed) + BR-71 per task row
+  const lateness = await milestonesSvc.computeLateness(tx, { projectId: ctx.id })
+  const milestones = await milestonesSvc.toDTOs(tx, await repo.milestones.listLive(tx, ctx.id), today, lateness)
   const assignments = await repo.assignments.listActiveForProject(tx, ctx.id)
   const range = { from: p.from, to: p.to }
   const rows = await repo.allocations.listForProject(tx, ctx.id, range)
@@ -117,8 +122,16 @@ export async function buildChunk(
       ? await repo.allocations.dayLoadsForProjects(tx, { userIds, weeks: expanded, excludeProjectId: ctx.id })
       : null
   return assembleGrid({
-    project: { id: project.id, name: project.name, certainty: project.certainty, archived: access.archived },
+    project: {
+      id: project.id,
+      name: project.name,
+      certainty: project.certainty,
+      archived: access.archived,
+      canManage: (access.role === 'MANAGER' || access.role === 'LEAD') && !access.archived,
+    },
     tasks,
+    milestones,
+    lateForMilestone: lateness.byTask,
     assignments,
     rows,
     totals,
@@ -144,8 +157,13 @@ export async function buildChunk(
 // ---------------------------------------------------------------------------------------------------------------
 
 export interface AssembleInput {
-  project: { id: string; name: string; certainty: Certainty; archived: boolean }
+  /** canManage = M/L and not archived (M8-D8). */
+  project: { id: string; name: string; certainty: Certainty; archived: boolean; canManage: boolean }
   tasks: readonly TaskListRow[]
+  /** M8 (X28, M8-D8): every live milestone of the project, sorted by date then id. */
+  milestones: readonly GridMilestone[]
+  /** M8 (BR-71): task id → late for its live milestone; absent = false. */
+  lateForMilestone: ReadonlyMap<string, boolean>
   assignments: readonly { id: string; taskId: string; userId: string; version: number }[]
   rows: readonly AllocRow[]
   /** Counted cd per assignment over the timeline bound (M6-D7). */
@@ -389,8 +407,8 @@ export function assembleGrid(i: AssembleInput): GridResponse {
       certaintySourceName: c.sourceTaskName,
       completed: t.completedOn !== null,
       completedWeek: t.completedWeek,
-      milestoneId: null, // X28 (M8)
-      lateForMilestone: false,
+      milestoneId: t.milestoneId, // live (LIVE_MILESTONE_ON, X28)
+      lateForMilestone: i.lateForMilestone.get(t.id) ?? false,
       blockers: { open: t.blockersOpen, total: t.blockersTotal }, // X76
       assigneeCount: own.length,
       totals: totals.get(t.id) ?? {},
@@ -419,12 +437,19 @@ export function assembleGrid(i: AssembleInput): GridResponse {
   )
 
   return {
-    context: { kind: 'project', id: i.project.id, name: i.project.name, archived: i.project.archived, canEdit },
+    context: {
+      kind: 'project',
+      id: i.project.id,
+      name: i.project.name,
+      archived: i.project.archived,
+      canEdit,
+      canManage: i.project.canManage, // M8-D8
+    },
     window: { from: p.from, to: p.to, expand: [...p.expand], zoom: p.zoom, includeOthers: p.includeOthers },
     today: i.today,
     periods: buildPeriods(weeks, expanded, { scheduledWeekdays: scheduledWeekdays(i), dayRowDates }),
     rows: out,
-    milestones: [], // X28 (M8)
+    milestones: [...i.milestones], // X28 (M8-D8)
     people,
     holidays: i.holidays.map((h) => ({ date: h.date, name: h.name })),
   }

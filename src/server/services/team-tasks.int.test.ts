@@ -1,7 +1,7 @@
 // M3 S2.16 — /tasks reads (SPEC v3.1 FR-665, §7.8, X75, M3-D33/D34, AC-616) on the golden seed and the world.
 import { eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
-import { seedGolden } from '../../../scripts/lib/fixtures'
+import { addMilestones, seedGolden } from '../../../scripts/lib/fixtures'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import { makeStatuses, makeTask } from '../../../tests/helpers/factories'
 import { createWorld } from '../../../tests/helpers/world'
@@ -33,6 +33,7 @@ const list = (u: SessionUser, q: Parameters<typeof listTeamTasks>[2] = Q0) =>
 describe('listTeamTasks (golden)', () => {
   it('AC-616: Peter sees exactly DW + Store tasks and nothing of POS / Mobile / CRM', async () => {
     await seedGolden(db)
+    const { ids: milestoneIds } = await addMilestones(db) // M8: no POS milestone name / id may leak either
     const r = await list(await golden('Peter'))
     expect(r.cards.map((c) => c.name).sort()).toEqual(
       ['ย้าย pipeline ขึ้น BigQuery', 'ทำ dashboard ผู้บริหาร', 'เก็บ requirement + สรุป'].sort(),
@@ -43,6 +44,11 @@ describe('listTeamTasks (golden)', () => {
     }
     expect(r.projects.map((p) => p.name).sort()).toEqual(['Data Warehouse', 'Store Analytics Dashboard'])
     expect(Object.keys(r.statusesByProject).sort()).toEqual(r.projects.map((p) => p.id).sort())
+    for (const hidden of ['UAT sign-off', 'Go-live สาขาแรก', 'Design freeze', 'Data migration complete']) {
+      expect(body).not.toContain(hidden)
+      expect(body).not.toContain(milestoneIds[hidden]!)
+    }
+    expect(Object.keys(r.milestonesByProject).every((id) => r.projects.some((p) => p.id === id))).toBe(true)
     expect(r.nextCursor).toBeNull()
   })
 
@@ -87,8 +93,8 @@ describe('listTeamTasks (world)', () => {
       completed: false,
     })
     expect(Object.keys(all.cards[0]!).sort()).toEqual(
-      // M6.1 adds hasBody (FR-691, M6.1-D11)
-      ['assigneeIds', 'blockers', 'certainty', 'completed', 'dueDate', 'hasBody', 'id', 'name', 'parentPath', 'projectId', 'status'].sort(),
+      // M6.1 adds hasBody (FR-691, M6.1-D11); M8 adds milestoneId (SPEC §7.8, M8-D15)
+      ['assigneeIds', 'blockers', 'certainty', 'completed', 'dueDate', 'hasBody', 'id', 'milestoneId', 'name', 'parentPath', 'projectId', 'status'].sort(),
     )
     // outsider: Q only
     const out = await list(toSessionUser(w.outsider), { ...Q0, includeDone: true })
@@ -135,5 +141,36 @@ describe('listTeamTasks (world)', () => {
     await db.update(projects).set({ archivedAt: null }).where(eq(projects.id, w.A.id))
     const withA = (await (await call('includeDone=1')).json()) as { cards: { projectId: string }[] }
     expect(withA.cards.some((c) => c.projectId === w.A.id)).toBe(true)
+  })
+})
+
+describe('listTeamTasks — milestones (M8-D15, §7.8, §3.3)', () => {
+  it('cards carry the live milestoneId; ?milestoneId filters; invisible / deleted milestone → 404', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    const member = toSessionUser(w.member)
+    const all = await list(member)
+    const card = (id: string) => all.cards.find((c) => c.id === id)
+    expect(card(w.tasks.pLeaf.id)?.milestoneId).toBe(w.milestones.pLate.id)
+    expect(card(w.tasks.pChildB.id)?.milestoneId).toBe(w.milestones.p.id)
+    expect(card(w.tasks.pParent.id)?.milestoneId).toBeNull()
+    const projectIds = new Set(all.cards.map((c) => c.projectId))
+    expect(Object.keys(all.milestonesByProject).every((id) => projectIds.has(id))).toBe(true)
+    expect(Object.keys(all.milestonesByProject)).not.toContain(w.Q.id)
+    expect(all.milestonesByProject[w.P.id]!.map((m) => m.id)).toEqual([
+      w.milestones.pDone.id,
+      w.milestones.pLate.id,
+      w.milestones.p.id,
+    ])
+    expect(JSON.stringify(all)).not.toContain('Q-ลับ05')
+
+    const late = await list(member, { ...Q0, milestoneId: w.milestones.pLate.id })
+    expect(late.cards.map((c) => c.id)).toEqual([w.tasks.pLeaf.id])
+    await expect(list(member, { ...Q0, milestoneId: w.milestones.q.id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(list(member, { ...Q0, milestoneId: w.deletedMilestones.pDeleted.id })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+    const outsider = await list(toSessionUser(w.outsider), { ...Q0, milestoneId: w.milestones.q.id })
+    expect(outsider.cards.map((c) => c.id)).toEqual([w.tasks.qTask.id])
+    expect(outsider.cards[0]!.milestoneId).toBe(w.milestones.q.id)
   })
 })

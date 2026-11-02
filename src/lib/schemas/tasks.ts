@@ -150,6 +150,8 @@ export const teamTasksQuerySchema = z.object({
   category: z.array(zStatusCategory).optional(),
   blocked: z.stringbool().default(false),
   includeDone: z.stringbool().default(false),
+  /** M8 (M8-D15): live milestone of a visible project, else 404 (service). */
+  milestoneId: z.uuid().optional(),
   cursor: z.string().max(400).optional(),
 })
 export type TeamTasksQuery = z.output<typeof teamTasksQuerySchema>
@@ -178,6 +180,7 @@ export function teamTasksSearchParams(q: TeamTasksQueryInput): URLSearchParams {
   if (q.includeDone !== undefined && q.includeDone !== 'false' && q.includeDone !== '0') {
     sp.set('includeDone', q.includeDone)
   }
+  if (q.milestoneId) sp.set('milestoneId', q.milestoneId)
   if (q.cursor) sp.set('cursor', q.cursor)
   return sp
 }

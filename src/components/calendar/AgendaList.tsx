@@ -8,6 +8,7 @@ import { entriesOnDay, inMonth, monthGrid, monthTitle, type YearMonth } from '@/
 import type { CalendarResponse, CalendarTimeOff, CalendarTimeOffFull } from '@/lib/contracts/calendar'
 import { formatThaiDate } from '@/lib/format'
 import { LeaveChip } from './LeaveChip'
+import { MilestoneChip } from './MilestoneChip'
 import styles from './MonthGrid.module.css'
 
 function chipKey(e: CalendarTimeOff, i: number): string {
@@ -15,8 +16,8 @@ function chipKey(e: CalendarTimeOff, i: number): string {
 }
 
 /**
- * Phone layout of the team calendar (< 600 px, NFR-07b, M5-D13): the month's days that have a holiday or leave, in
- * order, each with its date + weekday heading and the same chips as the grid.
+ * Phone layout of the team calendar (< 600 px, NFR-07b, M5-D13): the month's days that have a holiday, a ◆ milestone
+ * (M8-D16) or leave, in order, each with its date + weekday heading and the same chips as the grid (◆ first).
  *
  * Focus (SPEC §8.9): opening a chip hands `returnFocus` (the chip's day `<li>`, tabIndex -1) to the caller, the same
  * contract as MonthGrid. A deleted entry can take its whole day with it (the refetch drops days without leave or a
@@ -56,8 +57,13 @@ export function AgendaList({
     return monthGrid(month)
       .weeks.flat()
       .filter((d) => inMonth(d, month))
-      .map((date) => ({ date, holiday: holidays.get(date), entries: entriesOnDay(data.timeOff, date) }))
-      .filter((d) => d.holiday !== undefined || d.entries.length > 0)
+      .map((date) => ({
+        date,
+        holiday: holidays.get(date),
+        milestones: data.milestones.filter((m) => m.date === date),
+        entries: entriesOnDay(data.timeOff, date),
+      }))
+      .filter((d) => d.holiday !== undefined || d.milestones.length > 0 || d.entries.length > 0)
   }, [month, data])
 
   useLayoutEffect(() => {
@@ -87,7 +93,7 @@ export function AgendaList({
       aria-label={th.calendar.gridLabel(monthTitle(month))}
       data-testid="calendar-agenda"
     >
-      {days.map(({ date, holiday, entries }) => (
+      {days.map(({ date, holiday, milestones, entries }) => (
         <li
           key={date}
           ref={itemRef(date)}
@@ -104,8 +110,11 @@ export function AgendaList({
           {holiday !== undefined ? (
             <div className={styles.holiday}>{`${th.calendar.holidayPrefix} ${holiday}`}</div>
           ) : null}
-          {entries.length > 0 ? (
+          {milestones.length > 0 || entries.length > 0 ? (
             <div className={styles.chips}>
+              {milestones.map((m) => (
+                <MilestoneChip key={`ms:${m.id}`} m={m} />
+              ))}
               {entries.map((entry, i) => (
                 <LeaveChip
                   key={chipKey(entry, i)}

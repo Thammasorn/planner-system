@@ -7,6 +7,8 @@
 // M7.1 review (§8.12 / §4.16, SPEC §9 phone): three wrapping groups — view (switch, zoom, ‹ วันนี้ › kept on one line),
 // filters (ภาระ, หน่วย, switches) and overlays (เส้นกำกับ, กราฟภาระ) — so a narrow toolbar wraps between groups, never
 // strands a chevron on its own line.
+// M8 (FR-702, M8-D11): "+ milestone" in the overlays group when `onAddMilestone` is given (managers only) — the keyboard
+// path to create a milestone; PlanGrid opens the create popover at this button, pre-filled with today.
 import Button from '@mui/material/Button'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
@@ -49,6 +51,8 @@ export interface GridToolbarProps {
   onChart?: (open: boolean) => void
   /** M7.1 (FR-810): rendered first — the plan page's [แผนงาน | ปฏิทิน] switch sits leftmost in the toolbar */
   start?: ReactNode
+  /** M8 (FR-702): "+ milestone" (only when the viewer may manage milestones) */
+  onAddMilestone?: (anchor: HTMLElement) => void
 }
 
 export function GridToolbar(p: GridToolbarProps) {
@@ -135,8 +139,20 @@ export function GridToolbar(p: GridToolbarProps) {
           />
         ) : null}
       </div>
-      {p.markers || p.onChart ? (
+      {p.markers || p.onChart || p.onAddMilestone ? (
         <div className={styles.toolbarGroup} data-toolbar-group="overlays">
+          {p.onAddMilestone ? (
+            <Button
+              size="small"
+              variant="outlined"
+              className={styles.toolbarToggle}
+              aria-haspopup="dialog"
+              data-testid="milestone-add"
+              onClick={(e) => p.onAddMilestone?.(e.currentTarget)}
+            >
+              {th.milestones.grid.toolbarAdd}
+            </Button>
+          ) : null}
           {p.markers}
           {p.onChart ? (
             <Button

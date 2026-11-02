@@ -3,18 +3,25 @@ import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import type { SearchResponse } from '@/lib/contracts/search'
+import { renderTasks } from '@/components/tasks/render.test.helper'
 import { renderWithProviders } from '../../../tests/helpers/render'
 import { CommandPalette } from './CommandPalette'
 import { installCmdkShims } from './jsdom.test.helper'
 import { PaletteProvider } from './PaletteProvider'
 
-const nav = vi.hoisted(() => ({ push: vi.fn() }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push }) }))
-const api = vi.hoisted(() => ({ getJson: vi.fn() }))
+const nav = vi.hoisted(() => ({ push: vi.fn(), pathname: '/home' }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push }), usePathname: () => nav.pathname }))
+// `api.getJson` is the search; the M8 milestone targets (palette command visibility) answer from `targets`.
+const api = vi.hoisted(() => ({
+  getJson: vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>(),
+  targets: { projects: [] as { id: string; name: string; color: string }[] },
+}))
 vi.mock('@/lib/api', async (orig) => ({
   ...(await orig<typeof import('@/lib/api')>()),
-  getJson: api.getJson,
+  getJson: (url: string, init?: RequestInit): Promise<unknown> =>
+    url === '/api/milestones/targets' ? Promise.resolve(api.targets) : api.getJson(url, init),
 }))
+vi.mock('@/server/actions/milestones', () => ({ createMilestone: vi.fn() }))
 
 const A = '00000000-0000-4000-8000-000000000041'
 const B = '00000000-0000-4000-8000-000000000042'
@@ -85,6 +92,8 @@ beforeAll(installCmdkShims)
 
 beforeEach(() => {
   nav.push.mockReset()
+  nav.pathname = '/home'
+  api.targets = { projects: [] }
   api.getJson.mockReset()
   api.getJson.mockResolvedValue(hits)
 })
@@ -236,5 +245,55 @@ describe('CommandPalette (FR-1102, X08, X49)', () => {
     input.focus()
     fireEvent.keyDown(input, { code: 'KeyK', key: 'k', ctrlKey: true })
     expect(await screen.findByRole('dialog', { name: th.palette.dialogLabel })).toBeInTheDocument()
+  })
+})
+
+describe('M8 palette command "สร้าง milestone" (FR-702, M8-D18)', () => {
+  const POS = '6f1c2b8e-3d4a-4b5c-9d6e-7f8a9b0c1d2e'
+  // full app providers: the milestone dialog needs today, undo and the date adapter
+  const renderFull = () =>
+    renderTasks(
+      <PaletteProvider>
+        <CommandPalette />
+      </PaletteProvider>,
+    )
+
+  it('with targets [POS] on /projects/POS/plan: "milestone" shows the command in คำสั่ง; Enter opens the dialog with POS', async () => {
+    api.targets = { projects: [{ id: POS, name: 'POS Upgrade', color: '#2F5597' }] }
+    api.getJson.mockResolvedValue({ pages: [], tasks: [] } satisfies SearchResponse)
+    nav.pathname = `/projects/${POS}/plan`
+    const user = userEvent.setup()
+    renderFull()
+    openWithKeys()
+    await user.type(await within(await screen.findByRole('dialog')).findByRole('combobox'), 'milestone')
+    const group = await within(dialog()).findByRole('group', { name: th.milestones.palette.group })
+    expect(within(group).getByRole('option', { name: th.milestones.palette.create })).toBeInTheDocument()
+    await user.keyboard('{Enter}')
+    const ms = await screen.findByRole('dialog', { name: th.milestones.form.createTitle })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: th.palette.dialogLabel })).toBeNull())
+    expect(within(ms).getByRole('combobox', { name: th.milestones.fields.project })).toHaveTextContent(
+      'POS Upgrade',
+    )
+  })
+
+  it('on an empty query the command shows together with the hint', async () => {
+    api.targets = { projects: [{ id: POS, name: 'POS Upgrade', color: '#2F5597' }] }
+    renderFull()
+    openWithKeys()
+    await screen.findByRole('dialog')
+    expect(
+      await within(dialog()).findByRole('option', { name: th.milestones.palette.create }),
+    ).toBeInTheDocument()
+    expect(within(dialog()).getByText(th.palette.hint)).toBeInTheDocument()
+  })
+
+  it('with targets [] there is no "สร้าง milestone" option', async () => {
+    api.getJson.mockResolvedValue({ pages: [], tasks: [] } satisfies SearchResponse)
+    const user = userEvent.setup()
+    renderFull()
+    openWithKeys()
+    await user.type(await within(await screen.findByRole('dialog')).findByRole('combobox'), 'milestone')
+    await within(dialog()).findByText(th.palette.empty)
+    expect(within(dialog()).queryByRole('option', { name: th.milestones.palette.create })).toBeNull()
   })
 })

@@ -26,6 +26,7 @@ import * as repo from '../repo'
 import type { TaskFieldPatch, TaskListRow, TaskRow } from '../repo/tasks'
 import type { SessionUser } from '../session'
 import { applyTransfer, fitsDepth, keyAt, lockSiblingScope, placeTask, subtree } from './task-tree'
+import { computeLateness, toRef } from './milestones'
 import { ensureProjectStatuses, toStatusDTO } from './taskStatuses'
 
 const validation = (field: string, message: string): ValidationError =>
@@ -39,7 +40,11 @@ export const restoreRefused = (reason: RestoreReason): ConflictError =>
 const toDepth = (d: number): TaskDepth => (d <= 0 ? 0 : d >= 2 ? 2 : 1)
 
 /** Wire shape of a task (drops statusCategory / completedWeek, folds the counts into `blockers`). */
-export function toTaskDTO(row: TaskListRow, assignees: readonly TaskAssigneeDTO[]): TaskDTO {
+export function toTaskDTO(
+  row: TaskListRow,
+  assignees: readonly TaskAssigneeDTO[],
+  lateForMilestone = false,
+): TaskDTO {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -55,6 +60,8 @@ export function toTaskDTO(row: TaskListRow, assignees: readonly TaskAssigneeDTO[
     statusId: row.statusId,
     blockers: { open: row.blockersOpen, total: row.blockersTotal },
     hasBody: row.hasBody ?? false, // M6.1-D11: listColumns always sets it; hand-built rows may omit it
+    milestoneId: row.milestoneId, // live (LIVE_MILESTONE_ON, M8-D5/D13)
+    lateForMilestone, // BR-71 (services.milestones.computeLateness)
   }
 }
 
@@ -66,7 +73,10 @@ export async function loadTaskDTO(tx: DbOrTx, taskId: string): Promise<TaskDTO> 
     assignmentId: a.id,
     userId: a.userId,
   }))
-  return toTaskDTO(row, assignees)
+  const late = row.milestoneId
+    ? ((await computeLateness(tx, { boundTaskIds: [taskId] })).byTask.get(taskId) ?? false)
+    : false
+  return toTaskDTO(row, assignees, late)
 }
 
 /** Parent for a new child / a cross-project probe: invisible project → 404, other project → VALIDATION (BR-33). */
@@ -340,6 +350,8 @@ export async function listProjectTasks(
   const members = await repo.members.listMembers(tx, projectId)
   const statuses = await repo.statuses.listLiveStatuses(tx, projectId)
   const blockerEdges = await repo.blockers.listLiveEdges(tx, projectId)
+  const lateness = await computeLateness(tx, { projectId }) // BR-71 (M8-D13)
+  const milestones = await repo.milestones.listLive(tx, projectId)
   const byTask = new Map<string, TaskAssigneeDTO[]>()
   for (const a of assignments) {
     byTask.set(a.taskId, [...(byTask.get(a.taskId) ?? []), { assignmentId: a.id, userId: a.userId }])
@@ -353,8 +365,9 @@ export async function listProjectTasks(
       canManage: (access.role === 'MANAGER' || access.role === 'LEAD') && !archived,
     },
     members: members.map((m) => ({ userId: m.userId, role: m.role })),
-    tasks: rows.map((r) => toTaskDTO(r, byTask.get(r.id) ?? [])),
+    tasks: rows.map((r) => toTaskDTO(r, byTask.get(r.id) ?? [], lateness.byTask.get(r.id) ?? false)),
     statuses: statuses.map(toStatusDTO),
     blockerEdges,
+    milestones: milestones.map(toRef), // live, date then id (M8-D13)
   }
 }

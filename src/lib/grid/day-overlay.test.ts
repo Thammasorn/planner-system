@@ -91,6 +91,7 @@ describe('applyServerResults — D cells of expanded weeks', () => {
         },
       ],
       warnings: [],
+      lateness: null,
     })
     expect(dayCds(r).map((c) => c?.cd)).toEqual([100, 100, 100, undefined, undefined])
     expect(row(r).version).toBe(2)

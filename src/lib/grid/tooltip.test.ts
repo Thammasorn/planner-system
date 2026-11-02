@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import { formatLeaveRange } from '@/lib/format'
-import { gridResponse, type FxTask } from './fixtures.test.data'
+import { formatLeaveRange, formatThaiDate } from '@/lib/format'
+import { fxMilestone, gridResponse, type FxTask } from './fixtures.test.data'
 import { mergeChunks } from './merge'
 import { buildViewRows } from './rows'
-import { cellMarks, dayParts, headerTooltipFor, leaveInWeek, tooltipFor } from './tooltip'
+import { cellMarks, dayParts, headerTooltipFor, leaveInWeek, milestoneTooltipFor, tooltipFor } from './tooltip'
 
 const tasks: FxTask[] = [
   {
@@ -87,5 +87,30 @@ describe('tooltip + marks (FR-804/807, BR-20a, BR-50)', () => {
     expect(lines).toContain(th.grid.cell.holiday('วันนวมินทรมหาราช'))
     expect(headerTooltipFor(m, '2026-10-12')).toBe(th.grid.header.holiday('วันนวมินทรมหาราช'))
     expect(headerTooltipFor(m, '2026-10-05')).toBeNull()
+  })
+})
+
+describe('milestoneTooltipFor (M8 S3.3)', () => {
+  it('name, date, status, progress, late count and the first 200 characters of the description', () => {
+    const m = fxMilestone('m1', '2026-10-02', {
+      name: 'UAT sign-off',
+      status: 'DUE_SOON',
+      late: true,
+      lateTaskCount: 1,
+      progress: { done: 1, total: 3 },
+      description: 'ก'.repeat(250),
+    })
+    expect(milestoneTooltipFor(m)).toEqual([
+      'UAT sign-off',
+      th.milestones.dateLine(formatThaiDate('2026-10-02', 'medium'), th.milestones.status.DUE_SOON),
+      th.milestones.progress(1, 3),
+      th.milestones.lateTasks(1),
+      'ก'.repeat(200) + '…',
+    ])
+  })
+  it('not late, no description → no late / description lines', () => {
+    const lines = milestoneTooltipFor(fxMilestone('m1', '2026-10-02', { name: 'X', status: 'DONE' }))
+    expect(lines).toHaveLength(3)
+    expect(lines.join(' ')).not.toContain(th.milestones.late)
   })
 })

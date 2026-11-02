@@ -36,6 +36,7 @@ const okPreview = (applied: boolean): { ok: true } & PlanAssignmentRangeOk => ({
   applied: applied
     ? { taskAssignmentId: TA, version: 4, weeks: {}, rowTotal: { total: 1000, committed: 1000 } }
     : null,
+  lateness: null,
 })
 
 /** Closes like TaskPanel does, so the page (and its toasts) leave the modal's aria-hidden state. */

@@ -202,6 +202,45 @@ describe('authz matrix', () => {
       expect(rows.find((r) => r.id === id)?.action, `${id} (M3 moveTask row)`).toBe('moveTask')
   })
 
+  it('M8 meta (plan/m08 §7.2, S5.1): every MS-* and TT-MS* row exists, PERM-06/11/15 are cited, rows run on the milestones world; PERM-15 writes give Me 403', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...['LIST', 'LIST-ARCH', 'TARGETS'].map((k) => `MS-${k}`),
+      ...['CREATE', 'CREATE-ARCH', 'RENAME', 'MOVE', 'COMPLETE', 'UPDATE-ARCH', 'DELETE', 'DELETE-ARCH'].map((k) => `MS-${k}`),
+      ...['RESTORE', 'RESTORE-EXPIRED', 'RESTORE-ARCH', 'Q', 'MISSING', 'BAD'].map((k) => `MS-${k}`),
+      ...['LINK', 'UNLINK', 'LINK-CROSS', 'LINK-ARCH', 'REVERT'].map((k) => `MS-${k}`),
+      'TT-MS',
+      'TT-MS-Q',
+      'TT-MS-DELETED',
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M8 rows').toEqual([])
+    const m8 = rows.filter((r) => /^(MS|TT-MS)(-|$)/.test(r.id))
+    for (const perm of ['PERM-06', 'PERM-11', 'PERM-15'])
+      expect(m8.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M8 row`).toBe(true)
+    for (const r of m8) expect(r.with ?? [], `${r.id} needs the milestones world`).toContain('milestones')
+    // X44 / M8-D21: milestone writes audit `milestone`, bindings audit `task`
+    const MILESTONE_WRITES = ['createMilestone', 'updateMilestone', 'deleteMilestone', 'restoreMilestoneBatch']
+    for (const r of m8.filter((x) => x.mutates))
+      expect(r.audit, r.id).toMatchObject({ entity: MILESTONE_WRITES.includes(r.action) ? 'milestone' : 'task' })
+    // SPEC §3.2 "สร้าง/แก้/ลบ milestone": Me ดูได้ → every allowed-for-L milestone write on P is 403 for Me
+    for (const r of m8.filter((x) => MILESTONE_WRITES.includes(x.action) && x.expect.L === 'allow' && x.id !== 'MS-Q'))
+      expect(r.expect, r.id).toEqual({ M: 'allow', L: 'allow', Me: '403', W: '404' })
+    // M8-D4: binding = PERM-11, so Me may bind on P
+    for (const id of ['MS-LINK', 'MS-UNLINK', 'MS-REVERT'])
+      expect(rows.find((r) => r.id === id)?.expect, id).toEqual({ M: 'allow', L: 'allow', Me: 'allow', W: '404' })
+    // M8-D3: exactly the six actions + the two new routes + the M3 team-tasks route (milestoneId filter)
+    expect(new Set(m8.map((r) => r.action))).toEqual(
+      new Set([
+        'GET /api/projects/[id]/milestones',
+        'GET /api/milestones/targets',
+        'GET /api/tasks',
+        ...MILESTONE_WRITES,
+        'linkTasksToMilestone',
+        'revertTaskMilestones',
+      ]),
+    )
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })

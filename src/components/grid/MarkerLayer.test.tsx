@@ -28,6 +28,15 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/grid/fetch', () => ({ fetchGridChunk: m.fetchGridChunk, gridChunkUrl: vi.fn() }))
 vi.mock('@/server/actions/allocations', () => ({ saveAllocations: vi.fn(), planAssignmentRange: vi.fn() }))
 vi.mock('@/lib/api', () => ({ getJson: m.getJson }))
+// M8: PlanGrid's ◆ code imports useMilestoneMutations (S4), which calls these actions
+vi.mock('@/server/actions/milestones', () => ({
+  createMilestone: vi.fn(),
+  updateMilestone: vi.fn(),
+  deleteMilestone: vi.fn(),
+  restoreMilestoneBatch: vi.fn(),
+  linkTasksToMilestone: vi.fn(),
+  revertTaskMilestones: vi.fn(),
+}))
 vi.mock('@/server/actions/tasks', () => ({
   createTask: vi.fn(),
   updateTask: vi.fn(),

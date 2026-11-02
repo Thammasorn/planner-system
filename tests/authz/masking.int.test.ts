@@ -8,6 +8,8 @@
 // M6 (plan/m06 S5.2): project grid (leave labels, otherProjects numbers only) and plan-save error bodies.
 // M7.1 (plan/m07.1 S5.2): the load chart (computed from the same grid chunk, M7.1-D3 — numbers only for other projects)
 // and the plan-markers route (markers are per project, §3.3).
+// M8 (plan/m08 S5.2, §3.3 "Milestone ของโปรเจคที่ไม่มีสิทธิ์ → ไม่แสดง", M8-D23): the milestones route, the calendar ◆,
+// /api/tasks milestonesByProject + milestoneId filter, the grid ◆ row, a cross-project link error body, golden Cindy/Ivy/Peter.
 // M6.1 (plan/m06.1 S6.3): task bodies — task search group, page trees/titles without TASK pages, body/page/lease/file
 // 404 bodies, hasBody without body text, /my statusesByProject of the viewer's projects only.
 import { readFileSync } from 'node:fs'
@@ -27,6 +29,7 @@ import type {
   CalendarTimeOffMasked,
 } from '@/lib/contracts/calendar'
 import type { GridPerson, GridResponse, SaveItemResult } from '@/lib/contracts/grid'
+import type { MilestoneTargetsResponse } from '@/lib/contracts/milestones'
 import type { PlanMarkersResponse } from '@/lib/contracts/plan-markers'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
@@ -43,7 +46,14 @@ import {
   type TimeOffRow,
 } from '@/server/db/schema'
 import * as services from '@/server/services'
-import { addDayExample, applyFixture, DAY_EXAMPLE, GOLDEN_PATH, seedGolden } from '../../scripts/lib/fixtures'
+import {
+  addDayExample,
+  addMilestones,
+  applyFixture,
+  DAY_EXAMPLE,
+  GOLDEN_PATH,
+  seedGolden,
+} from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
 import { allocationRows, makeBlocker, makePage, makePlanMarker, type TestUser } from '../helpers/factories'
 import { outcomeOf } from '../helpers/outcome'
@@ -53,9 +63,17 @@ import { callRoute, okJson } from './_support/http'
 import { assertContains, assertNoLeak } from './_support/leak'
 import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './rows/_m4'
 import { calendarGet } from './rows/_m5'
-import { gridGet, save, weekItem } from './rows/_m6'
+import { GRID_RANGE, gridGet, save, weekItem } from './rows/_m6'
 import { bodyGet } from './rows/_m6_1'
 import { markersGet } from './rows/_m7_1'
+import {
+  milestonesGet,
+  ms,
+  pAndAMilestoneSecrets,
+  qMilestoneSecrets,
+  targetsGet,
+  teamTasksGet,
+} from './rows/_m8'
 
 async function sidebarAs(u: TestUser): Promise<unknown> {
   asUser(u)
@@ -689,6 +707,7 @@ describe('masking — calendar (M5, plan/m05 S4.3)', () => {
   function common(body: CalendarResponse, viewer: TestUser, canEditOthers: boolean): void {
     expect(body).toMatchObject({ from: FROM, to: TO, viewer: { userId: viewer.id, canEditOthers } })
     expect(body.holidays).toEqual([{ date: '2026-11-20', name: 'วันหยุดโลก' }])
+    expect(body.milestones, 'M8: the timeOff world has no milestones').toEqual([])
     expect(body.timeOff.filter((e) => e.startDate === '2026-11-23'), 'soft-deleted leave').toEqual([])
     expect(Object.keys(body.people).sort()).toEqual([...new Set(body.timeOff.map((e) => e.userId))].sort())
     expect(
@@ -778,7 +797,9 @@ describe('masking — calendar golden (M5, plan/m05 S4.3, r8 §4.3)', () => {
 
   async function goldenCalendar(nickname: Parameters<typeof goldenUser>[0]): Promise<CalendarResponse> {
     asUser(await goldenUser(nickname))
-    return okJson<CalendarResponse>(await calendarGet(FROM, TO))
+    const body = await okJson<CalendarResponse>(await calendarGet(FROM, TO))
+    expect(body.milestones, 'M8: seedGolden has no milestones (A.2 is addMilestones)').toEqual([])
+    return body
   }
 
   async function entryIdsOf(userId: string): Promise<string[]> {
@@ -1319,5 +1340,132 @@ describe('masking — M7.1 chart + plan markers (plan/m07.1 S5.2; §3.3, X29, AC
     const p = await bodyOf(await markersGet(w.P.id))
     expect(p.status).toBe(404)
     assertNoLeak(p.body, [pRed.id, pRed.label!, pGreen.id, w.P.name])
+  })
+})
+
+// ── M8 milestones (plan/m08 S5.2; §3.3 "Milestone ของโปรเจคที่ไม่มีสิทธิ์ → ไม่แสดง", M8-D16/D23, X30) ───────────────
+// World createWorld({ with: ['milestones'] }): P's 'Milestone P-ลับ06' (+ 'ส่งมอบรอบแรก P', 'Kickoff P', deleted ones),
+// Q's 'Milestone Q-ลับ05', archived A's 'Milestone A'. The outsider is MEMBER of Q only; lead / member are in P and A.
+
+const MS_WORLD = ['milestones'] as const
+/** The October 2026 month view (6 Monday weeks, within M5's 42-day cap). */
+const MS_FROM = '2026-09-28'
+const MS_TO = '2026-11-09'
+
+async function calendarOk(u: TestUser, from = MS_FROM, to = MS_TO): Promise<CalendarResponse> {
+  asUser(u)
+  return okJson<CalendarResponse>(await calendarGet(from, to))
+}
+
+describe('masking — milestones (M8, plan/m08 S5.2)', () => {
+  it('fixture sanity: the secret milestone names are the distinctive ones M8-D23 promised', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    expect(w.milestones.p.name).toBe('Milestone P-ลับ06')
+    expect(w.milestones.q.name).toBe('Milestone Q-ลับ05')
+  })
+
+  it('outsider: GET /api/projects/{P}/milestones → 404 without any P milestone name or id', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    asUser(w.outsider)
+    const { status, body } = await bodyOf(await milestonesGet(w.P.id))
+    expect(status).toBe(404)
+    assertNoLeak(body, [...pAndAMilestoneSecrets(w), w.P.name])
+  })
+
+  it('outsider: the calendar carries Q’s ◆ only — nothing of P or archived A', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    const body = await calendarOk(w.outsider)
+    expect(body.milestones).toStrictEqual([
+      {
+        id: w.milestones.q.id,
+        projectId: w.Q.id,
+        projectName: w.Q.name,
+        projectColor: w.Q.color,
+        name: 'Milestone Q-ลับ05',
+        date: '2026-10-20',
+        status: 'UPCOMING', // 10-20 − 09-30 = 20 > 7 (BR-70)
+        late: false,
+      },
+    ])
+    assertNoLeak(body, [...pAndAMilestoneSecrets(w), w.P.name, w.P.id, w.A.name, w.A.id])
+  })
+
+  it('outsider: GET /api/tasks milestonesByProject has only Q; GET /api/milestones/targets is empty', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    asUser(w.outsider)
+    const tasksBody = await okJson<TeamTasksResponse>(await teamTasksGet())
+    expect(Object.keys(tasksBody.milestonesByProject)).toEqual([w.Q.id])
+    expect(tasksBody.milestonesByProject[w.Q.id]!.map((m) => m.id)).toEqual([w.milestones.q.id])
+    expect(tasksBody.cards.find((c) => c.id === w.tasks.qTask.id)?.milestoneId).toBe(w.milestones.q.id)
+    assertNoLeak(tasksBody, pAndAMilestoneSecrets(w))
+    const targets = await okJson<MilestoneTargetsResponse>(await targetsGet())
+    expect(targets).toStrictEqual({ projects: [] })
+  })
+
+  it('member: the P grid’s ◆ row carries P’s live milestones only — nothing of Q, A or the deleted ones', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    const body = await gridOk(w.member, w.P.id, GRID_RANGE)
+    const m = w.milestones
+    // M8-D8: all live milestones of the project (not windowed), date then id
+    expect(body.milestones.map((x) => x.id)).toEqual([m.pDone.id, m.pLate.id, m.p.id])
+    for (const x of body.milestones) expect(x.projectId).toBe(w.P.id)
+    const d = w.deletedMilestones
+    assertNoLeak(body, [
+      ...qMilestoneSecrets(w),
+      m.a.name,
+      m.a.id,
+      ...[d.pDeleted, d.pExpired, d.aDeleted].flatMap((x) => [x.name, x.id]),
+    ])
+  })
+
+  it('member: the calendar has P’s ◆ but neither Q’s nor archived A’s (M8-D16)', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    const body = await calendarOk(w.member)
+    // in [09-28, 11-09): pLate 10-02 and p 10-23 (pDone 09-15 is outside)
+    expect(body.milestones.map((x) => x.id)).toEqual([w.milestones.pLate.id, w.milestones.p.id])
+    expect(body.milestones[0]).toMatchObject({ projectName: w.P.name, status: 'DUE_SOON', late: true })
+    assertNoLeak(body, [...qMilestoneSecrets(w), w.milestones.a.name, w.milestones.a.id])
+  })
+
+  it('member: GET /api/tasks?milestoneId={q} → 404 and the error body names nothing of Q', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    asUser(w.member)
+    const { status, body } = await bodyOf(await teamTasksGet(`milestoneId=${w.milestones.q.id}`))
+    expect(status).toBe(404)
+    // the id is the caller's own input
+    assertNoLeak(body, [w.milestones.q.name, w.Q.name, w.Q.id, w.tasks.qTask.name, w.tasks.qTask.id])
+  })
+
+  it('lead: linkTasksToMilestone(pLeaf → q) → 404 without Q names', async () => {
+    const w = await createWorld({ with: MS_WORLD })
+    asUser(w.lead)
+    const res = await ms.link({ taskIds: [w.tasks.pLeaf.id], milestoneId: w.milestones.q.id })
+    expect(outcomeOf(res)).toBe('404')
+    assertNoLeak(res, [w.milestones.q.name, w.Q.name, w.Q.id, w.tasks.qTask.name])
+  })
+
+  it('golden (r8 §4.3): Cindy and Ivy never receive DW / Mobile / Store milestones; Peter gets DW + Store, not POS', async () => {
+    await seedGolden(db)
+    await addMilestones(db)
+    // 09-28 → 01-04 in three requests within M5's 42-day cap
+    const RANGES = [
+      ['2026-09-28', '2026-11-09'],
+      ['2026-11-09', '2026-12-21'],
+      ['2026-12-21', '2027-01-04'],
+    ] as const
+    const hiddenFromCindyIvy = ['Pipeline พร้อมใช้งาน', 'Design freeze', 'Beta release', 'Dashboard v1 review']
+    for (const nick of ['Cindy', 'Ivy'] as const) {
+      const u = await goldenUser(nick)
+      const bodies: CalendarResponse[] = []
+      for (const [from, to] of RANGES) bodies.push(await calendarOk(u, from, to))
+      for (const b of bodies) assertNoLeak(b, hiddenFromCindyIvy)
+      // not vacuous: their own projects' ◆ do arrive (POS, CRM)
+      assertContains(bodies, ['UAT sign-off', 'Data migration complete', 'Go-live สาขาแรก'])
+    }
+    const peter = await goldenUser('Peter')
+    const bodies: CalendarResponse[] = []
+    for (const [from, to] of RANGES) bodies.push(await calendarOk(peter, from, to))
+    assertContains(bodies, ['Pipeline พร้อมใช้งาน', 'Dashboard v1 review'])
+    for (const b of bodies) assertNoLeak(b, ['UAT sign-off', 'Go-live สาขาแรก', 'Data migration complete', 'Design freeze'])
   })
 })

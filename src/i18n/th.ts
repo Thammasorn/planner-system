@@ -665,6 +665,7 @@ export const th = {
       status: 'สถานะ',
       assignee: 'ผู้รับผิดชอบ',
       certainty: 'ความแน่นอน',
+      milestone: 'milestone', // M8 (M8-D13)
     },
     sort: { label: 'เรียงตาม', manual: 'ลำดับเอง', due: 'วันครบกำหนด' },
     view: { label: 'มุมมอง', list: 'ลิสต์', board: 'บอร์ด' },
@@ -673,6 +674,7 @@ export const th = {
       confirmed: 'แน่นอน',
       tentative: 'อาจไม่ทำ',
       parentPath: (path: string) => `ใน ${path}`,
+      noMilestone: 'ไม่ผูก milestone', // M8 (M8-D13)
     },
     treeOpsDisabled: 'ย่อ/ดึงออก/ลากย้าย ใช้ได้เฉพาะมุมมอง "ไม่จัดกลุ่ม" และ "ลำดับเอง"',
     dragHandle: 'ลากเพื่อย้ายงาน',
@@ -992,6 +994,8 @@ export const th = {
       gridMoveRow: 'เลื่อนแถวงานขึ้น/ลง',
       gridIndentRow: 'ย่อเป็นงานย่อย/ดึงออก',
       gridAddMarker: 'เพิ่มเส้นกำกับ (บนหัวคอลัมน์)',
+      // M8 (FR-707, M8-D10)
+      gridMilestoneOpen: 'เปิด milestone ที่เลือก (เปลี่ยนวันที่ได้)',
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
@@ -1714,6 +1718,116 @@ export const th = {
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
+  // M8 — milestones (plan/m08 S0.8). Build-time owners: S2 → errors; S3 → grid; S4 → overview, tasks, calendar,
+  // palette, form, toast.
+  // ---------------------------------------------------------------------------------------------------------------
+  milestones: {
+    label: 'Milestone',
+    heading: 'Milestones',
+    diamond: '◆',
+    status: { DONE: 'เสร็จแล้ว', OVERDUE: 'เลยกำหนด', DUE_SOON: 'ใกล้ถึง', UPCOMING: 'กำลังจะถึง' },
+    late: 'เลย milestone',
+    lateTasks: (n: number) => `เลย milestone ${n} งาน`,
+    lateHint: (date: string) => `มีแผนหรือวันครบกำหนดหลังวันที่ ${date}`,
+    progress: (done: number, total: number) => `เสร็จ ${done}/${total} งาน`,
+    dateLine: (date: string, status: string) => `${date} · ${status}`,
+    none: 'ไม่ผูก milestone',
+    fields: { project: 'โปรเจค', name: 'ชื่อ milestone', date: 'วันที่', description: 'คำอธิบาย', completed: 'เสร็จแล้ว' },
+    form: {
+      createTitle: 'สร้าง milestone',
+      editTitle: 'แก้ไข milestone',
+      create: 'สร้าง',
+      save: 'บันทึก',
+      cancel: 'ยกเลิก',
+      delete: 'ลบ milestone',
+      complete: 'ทำเครื่องหมายเสร็จ',
+      reopen: 'ยกเลิกเสร็จ',
+      openOverview: 'ดูในภาพรวม',
+      projectRequired: 'กรุณาเลือกโปรเจค', // S4 (MilestoneForm project picker)
+      targetsError: 'โหลดรายชื่อโปรเจคไม่สำเร็จ', // MilestoneDialog (Cmd+K)
+      noTargets: 'ยังไม่มีโปรเจคที่คุณสร้าง milestone ได้ — ต้องเป็น LEAD ของโปรเจคหรือ Manager',
+    },
+    errors: {
+      nameRequired: 'กรุณาใส่ชื่อ milestone',
+      nameTooLong: 'ชื่อ milestone ยาวได้ไม่เกิน 200 ตัวอักษร',
+      dateRequired: 'กรุณาเลือกวันที่',
+      descriptionTooLong: 'คำอธิบายยาวได้ไม่เกิน 2,000 ตัวอักษร',
+      emptyPatch: 'ไม่มีอะไรเปลี่ยน',
+      duplicateTask: 'มีงานซ้ำในรายการ',
+      sameProjectOnly: 'ผูกได้เฉพาะ milestone ในโปรเจคเดียวกับงาน',
+      restoreExpired: 'กู้คืนได้ภายใน 30 วันหลังลบ',
+      notFound: 'ไม่พบ milestone',
+      completedInFuture: 'วันที่เสร็จต้องไม่เกินวันนี้',
+      completedConflict: 'เลือกอย่างใดอย่างหนึ่ง: ติ๊กเสร็จ หรือระบุวันที่เสร็จ',
+    },
+    toast: {
+      created: (name: string) => `สร้าง milestone '${name}' แล้ว`,
+      updated: (name: string) => `บันทึก '${name}' แล้ว`,
+      moved: (name: string, date: string) => `เลื่อน '${name}' เป็น ${date} แล้ว`,
+      completed: (name: string) => `'${name}' เสร็จแล้ว`,
+      reopened: (name: string) => `ยกเลิกเสร็จ '${name}' แล้ว`,
+      deleted: (name: string) => `ลบ milestone '${name}' แล้ว`,
+      deletedUnlinked: (name: string, n: number) => `ลบ milestone '${name}' แล้ว — ${n} งานหลุดการผูก`,
+      linked: (n: number, name: string) => `ผูก ${n} งานกับ '${name}' แล้ว`,
+      unlinked: (n: number) => `ยกเลิกการผูก milestone ${n} งานแล้ว`,
+      restoreFailed: (reason: string) => `กู้คืนไม่ได้ เพราะ${reason}`,
+    },
+    undoLabel: {
+      create: 'สร้าง milestone',
+      update: 'แก้ milestone',
+      move: 'เลื่อน milestone',
+      complete: 'ติ๊กเสร็จ milestone',
+      delete: 'ลบ milestone',
+      link: 'ผูก milestone',
+    },
+    grid: {
+      rowHeader: '◆ Milestones',
+      rowLabel: 'แถว milestone',
+      addAt: (date: string) => `สร้าง milestone วันที่ ${date}`,
+      diamondLabel: (name: string, date: string, status: string) => `milestone ${name} ${date} ${status}`,
+      more: (n: number) => `+${n}`,
+      moreLabel: (n: number, date: string) => `อีก ${n} milestone ในช่วง ${date}`,
+      readOnly: 'เฉพาะ LEAD และ Manager แก้ milestone ได้',
+      dragLabel: (name: string) => `ลากเพื่อเลื่อน ${name}`,
+      dropHint: (date: string) => `ปล่อยเพื่อเลื่อนไป ${date}`,
+      toolbarAdd: '+ milestone',
+      taskLink: (name: string) => `→◆${name}`,
+      taskLinkLabel: (name: string) => `ผูกกับ milestone ${name}`,
+      menu: {
+        open: 'เปิดรายละเอียด',
+        complete: 'ทำเครื่องหมายเสร็จ',
+        reopen: 'ยกเลิกเสร็จ',
+        delete: 'ลบ milestone',
+        create: 'สร้าง milestone ที่นี่',
+      },
+    },
+    overview: {
+      add: 'เพิ่ม milestone',
+      empty: 'ยังไม่มี milestone — เพิ่มวันที่สำคัญของโปรเจคได้ที่นี่',
+      readOnly: 'เฉพาะ LEAD และ Manager แก้ milestone ได้',
+      listLabel: 'รายการ milestone',
+      loadError: 'โหลดรายการ milestone ไม่สำเร็จ',
+      edit: (name: string) => `แก้ไข ${name}`,
+      remove: (name: string) => `ลบ ${name}`,
+      completeToggle: (name: string) => `ติ๊กเสร็จ: ${name}`,
+    },
+    tasks: {
+      field: 'Milestone',
+      fieldHint: 'งานละ 1 milestone',
+      bulkLink: 'ผูก milestone',
+      filter: 'milestone',
+      allMilestones: 'ทุก milestone',
+      groupHeader: (name: string, date: string) => `◆ ${name} · ${date}`,
+      cardLabel: (name: string) => `◆ ${name}`,
+      lateAlert: (name: string, date: string) => `เลย milestone '${name}' — มีแผนหรือวันครบกำหนดหลัง ${date}`,
+    },
+    calendar: {
+      chip: (name: string, project: string) => `◆ ${name} · ${project}`,
+      chipLabel: (name: string, project: string, status: string) => `milestone ${name} โปรเจค ${project} ${status}`,
+    },
+    palette: { group: 'คำสั่ง', create: 'สร้าง milestone', keywords: 'milestone มายล์สโตน หมุด กำหนดส่ง' },
+  },
+  // ---------------------------------------------------------------------------------------------------------------
   // M6.1 — task page + UI (plan/m06.1 S0.9). Build-time owners: S3 → taskPage; S4 → layout.
   // ---------------------------------------------------------------------------------------------------------------
   layout: {
@@ -1850,6 +1964,17 @@ export const th = {
       `ลบเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
     planMarkerRestored: (date: string, label: string | null) =>
       `กู้คืนเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
+    // M8 (FR-1201, M8-D21) — entity 'milestone'; bindings are entity 'task'
+    milestoneCreated: (name: string) => `สร้าง milestone ${name}`,
+    milestoneUpdated: (name: string) => `แก้ milestone ${name}`,
+    milestoneMoved: (name: string, from: string, to: string) => `เลื่อน milestone ${name} จาก ${from} เป็น ${to}`,
+    milestoneCompleted: (name: string) => `ติ๊กเสร็จ milestone ${name}`,
+    milestoneReopened: (name: string) => `ยกเลิกเสร็จ milestone ${name}`,
+    milestoneDeleted: (name: string, n: number) => `ลบ milestone ${name} (หลุดการผูก ${n} งาน)`,
+    milestoneRestored: (name: string) => `กู้คืน milestone ${name}`,
+    milestoneSeeded: (name: string) => `นำเข้า milestone ตั้งต้น ${name}`,
+    taskMilestoneLinked: (task: string, milestone: string) => `ผูก ${task} กับ milestone ${milestone}`,
+    taskMilestoneUnlinked: (task: string) => `ยกเลิกการผูก milestone ของ ${task}`,
   },
 } as const
 

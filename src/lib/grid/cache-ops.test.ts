@@ -8,7 +8,7 @@ import {
   nextCell,
   rowTotalDeltas,
 } from './cache-ops'
-import { gridResponse, posChunks, POS_PEOPLE, type FxTask } from './fixtures.test.data'
+import { fxMilestone, gridResponse, posChunks, POS_PEOPLE, POS_TASKS, type FxTask } from './fixtures.test.data'
 import type { CellWrite } from './queue'
 
 const assignee = (r: GridResponse, id: string) =>
@@ -117,6 +117,7 @@ describe('applyServerResults / applyConflicts', () => {
       },
     ],
     warnings: [],
+    lateness: null,
   }
 
   it('replaces cells, version and rowTotal; totals recomputed', () => {
@@ -148,5 +149,51 @@ describe('applyServerResults / applyConflicts', () => {
     expect(assignee(r, 'a-ivy-uat').cells['W:2026-09-14']?.cd).toBe(100)
     expect(assignee(r, 'a-ivy-uat').version).toBe(2)
     expect(cachedCell([undefined, r], 'a-ivy-uat', '2026-09-14')?.cd).toBe(100)
+  })
+})
+
+describe('applyServerResults + lateness (M8 S3.2, M8-D12)', () => {
+  const bound = () =>
+    gridResponse({
+      from: '2026-09-28',
+      tasks: POS_TASKS.map((t) => (t.id === 't-uat' ? { ...t, milestoneId: 'm1' } : t)),
+      people: POS_PEOPLE,
+      milestones: [fxMilestone('m1', '2026-10-02')],
+    })
+  const result = {
+    taskAssignmentId: 'a-ivy-uat',
+    version: 2,
+    weeks: { '2026-10-05': { cd: 250, resolution: 'WEEK' as const } },
+    rowTotal: { total: 1125, committed: 1125 },
+  }
+
+  it('lateness flips the task row and the ◆ flag', () => {
+    const r = applyServerResults(bound(), {
+      results: [result],
+      warnings: [],
+      lateness: {
+        tasks: [{ taskId: 't-uat', lateForMilestone: true }],
+        milestones: [{ id: 'm1', late: true, lateTaskCount: 1 }],
+      },
+    })
+    expect(task(r, 't-uat').lateForMilestone).toBe(true)
+    expect(r.milestones[0]).toMatchObject({ late: true, lateTaskCount: 1 })
+    expect(assignee(r, 'a-ivy-uat').version).toBe(2)
+  })
+
+  it('lateness applies even when no result touches this chunk', () => {
+    const r = applyServerResults(bound(), {
+      results: [],
+      warnings: [],
+      lateness: { tasks: [{ taskId: 't-uat', lateForMilestone: true }], milestones: [] },
+    })
+    expect(task(r, 't-uat').lateForMilestone).toBe(true)
+  })
+
+  it('lateness null → no milestone or row flag changes', () => {
+    const before = bound()
+    const r = applyServerResults(before, { results: [result], warnings: [], lateness: null })
+    expect(task(r, 't-uat').lateForMilestone).toBe(false)
+    expect(r.milestones).toBe(before.milestones)
   })
 })

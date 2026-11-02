@@ -10,6 +10,7 @@ import {
   clients,
   holidays,
   leaveTypes,
+  milestones,
   pages,
   projectMembers,
   projects,
@@ -21,9 +22,11 @@ import {
 } from '@/server/db/schema'
 import {
   addDayExample,
+  addMilestones,
   addSyntheticGridProject,
   applyFixture,
   DAY_EXAMPLE,
+  DEMO_MILESTONES,
   loadGolden,
   parseFixtureArg,
   seedGolden,
@@ -442,5 +445,74 @@ describe('M7 — addDayExample (SPEC A.2, M7-D16; plan/m07 S0.7)', () => {
       .from(tasks)
       .where(eq(tasks.name, DAY_EXAMPLE.task))
     expect(n).toBe(1)
+  })
+})
+
+describe('M8 — addMilestones (SPEC App. A.2, M8-D20, X70, BR-72; plan/m08 S0.9)', () => {
+  const win = and(gte(allocations.weekStart, '2026-08-31'), lt(allocations.weekStart, '2027-01-04'))
+
+  async function allocationTotals() {
+    const [r] = await db
+      .select({ n: count(), total: sql<string>`coalesce(sum(${allocations.personDays}), 0)::text` })
+      .from(allocations)
+      .where(win)
+    return { n: r?.n ?? 0, total: r?.total ?? '0' }
+  }
+
+  it('7 A.2 milestones by the Manager, UAT sign-off bound to "ทำ UAT + คู่มือหน้าร้าน", 7 actor-null audit rows', async () => {
+    await seedGolden(db)
+    const [tasksBefore] = await db.select({ n: count() }).from(tasks)
+    const allocBefore = await allocationTotals()
+    const [auditBefore] = await db.select({ n: count() }).from(auditLog).where(eq(auditLog.entity, 'milestone'))
+
+    const { ids } = await addMilestones(db)
+
+    const rows = await db
+      .select({
+        id: milestones.id,
+        project: projects.name,
+        name: milestones.name,
+        date: milestones.date,
+        creator: user.nickname,
+        completedOn: milestones.completedOn,
+        deletedAt: milestones.deletedAt,
+      })
+      .from(milestones)
+      .innerJoin(projects, eq(projects.id, milestones.projectId))
+      .innerJoin(user, eq(user.id, milestones.createdBy))
+      .orderBy(asc(milestones.date))
+    expect(rows).toHaveLength(7)
+    expect(rows.map((r) => [r.project, r.name, r.date])).toEqual(
+      [...DEMO_MILESTONES]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((m) => [m.project, m.name, m.date]),
+    )
+    expect(new Set(rows.map((r) => r.creator))).toEqual(new Set(['Manager']))
+    expect(rows.every((r) => r.completedOn === null && r.deletedAt === null)).toBe(true)
+    expect(Object.keys(ids).sort()).toEqual(DEMO_MILESTONES.map((m) => m.name).sort())
+    for (const r of rows) expect(ids[r.name]).toBe(r.id)
+
+    const bound = await db
+      .select({ name: tasks.name, milestoneId: tasks.milestoneId })
+      .from(tasks)
+      .where(sql`${tasks.milestoneId} is not null`)
+    expect(bound).toEqual([{ name: 'ทำ UAT + คู่มือหน้าร้าน', milestoneId: ids['UAT sign-off'] }])
+
+    const audits = await db
+      .select({ actorId: auditLog.actorId, action: auditLog.action, entityId: auditLog.entityId, summary: auditLog.summary })
+      .from(auditLog)
+      .where(eq(auditLog.entity, 'milestone'))
+    expect(audits.length - (auditBefore?.n ?? 0)).toBe(7)
+    expect(audits.every((a) => a.actorId === null && a.action === 'create')).toBe(true)
+    expect(audits.map((a) => a.summary).sort()).toEqual(
+      DEMO_MILESTONES.map((m) => th.audit.milestoneSeeded(m.name)).sort(),
+    )
+    expect(new Set(audits.map((a) => a.entityId))).toEqual(new Set(Object.values(ids)))
+
+    // BR-72: milestones carry no load; X70: no task inserted
+    const [tasksAfter] = await db.select({ n: count() }).from(tasks)
+    expect(tasksAfter?.n).toBe(tasksBefore?.n)
+    expect(await allocationTotals()).toEqual(allocBefore)
+    expect(allocBefore).toEqual({ n: 57, total: '195.00' })
   })
 })

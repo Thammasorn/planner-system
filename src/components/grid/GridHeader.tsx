@@ -5,7 +5,7 @@
 // expanded weeks render DayGroupHeader cells + the รวม header; in day zoom headers are not toggles. Shift+click
 // selects that column over the editable rows (M6, unchanged). The toggles are buttons out of the Tab order (the grid
 // keeps one Tab stop, §8.9); their keyboard path is Mod+↓ / Mod+↑ on a cell (M7-D11).
-// M7.1: this is header row 2 (aria-rowindex HEADER_ROWS; the month row is above it, MonthHeader) and it is no longer
+// M7.1: this is the period row (aria-rowindex HEADER_ROWS = 3 since M8; ◆ row and month row above it) and it is no longer
 // sticky itself (the header group is). Two frozen header cells — "งาน" (+ ⇔ ColumnResizeHandle, FR-814) and
 // "ผู้รับผิดชอบ" (+ the icon-only "ซ่อน" button, FR-816; absent when hidden: "งาน" spans both ARIA columns) — each sticky at its own left
 // offset; the first column of every month carries data-month-start (FR-818).

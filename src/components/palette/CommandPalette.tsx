@@ -12,6 +12,7 @@ import { th } from '@/i18n/th'
 import { getJson } from '@/lib/api'
 import type { SearchResponse } from '@/lib/contracts/search'
 import { qk } from '@/lib/query-keys'
+import { CommandsGroup } from './CommandsGroup'
 import { PALETTE_GROUPS, type PaletteItem } from './groups'
 import { PaletteItemRow } from './PaletteItemRow'
 import { usePalette } from './PaletteProvider'
@@ -92,6 +93,8 @@ export function CommandPalette() {
               </Command.Item>
             </>
           ) : null}
+          {/* M8-D18: quick commands first, also on an empty query (with the hint) */}
+          <CommandsGroup q={deferred} />
           {groups.map(({ g, items }) =>
             items.length > 0 ? (
               <Command.Group key={g.key} heading={g.heading}>

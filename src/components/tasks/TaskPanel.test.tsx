@@ -98,8 +98,11 @@ describe('TaskPanel (FR-601, FR-611, BR-36)', () => {
   it('a due date before the start date shows the error and saves nothing', () => {
     const data = response()
     data.tasks = data.tasks.map((t) => (t.id === T.c ? { ...t, startDate: '2026-10-10' } : t))
-    const { container } = open(T.c, data)
-    const inputs = container.querySelectorAll<HTMLInputElement>('aside input[aria-hidden="true"]')
+    open(T.c, data)
+    // scoped to the dates block: the M8 milestone Select has a hidden input of its own
+    const inputs = within(panel())
+      .getByTestId('task-dates')
+      .querySelectorAll<HTMLInputElement>('input[aria-hidden="true"]')
     const due = inputs[1]
     expect(due).toBeDefined()
     fireEvent.change(due!, { target: { value: '01/10/2569' } })

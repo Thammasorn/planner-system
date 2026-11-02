@@ -17,6 +17,8 @@ const task = (id: string, parentId: string | null, x: Partial<TaskDTO> = {}): Ta
   assignees: [],
   statusId: 'todo',
   blockers: { open: 0, total: 0 },
+  milestoneId: null,
+  lateForMilestone: false,
   ...x,
 })
 const mapOf = (ts: TaskDTO[]) => new Map(ts.map((t) => [t.id, t]))

@@ -10,6 +10,9 @@
 // - AssigneeCell (--grid-assignee-w, absent when the column is hidden): the person via M1 UserName ("(ปิดใช้งาน)")
 //   and × to unassign; empty on task rows.
 // Keeping one rowheader keeps the roving tab stop, the row selection and the accessible name ("task · person").
+// M8 (FR-706, AC-702, §8.3, plan/m08 S3.7): task / merged / sum rows bound to a live milestone show "→◆<name>" and, when
+// lateForMilestone, a ⚠ "เลย milestone" chip (tooltip: the late hint with the milestone date) — both also in the row's
+// state texts (aria-describedby), the row header carries data-late-for-milestone.
 import { memo, useCallback, useId, type MouseEvent, type PointerEvent } from 'react'
 import Tooltip from '@mui/material/Tooltip'
 import Link from '@/components/Link'
@@ -17,8 +20,10 @@ import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { UserName } from '@/components/common/UserName'
 import { BlockerBadge } from '@/components/tasks/blockers/BlockerBadge'
 import { blockerBadge } from '@/domain/blockers'
+import type { ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
 import { ASSIGNEE_COL_W, FROZEN_COL_W, FROZEN_COLS, TASK_COL_W } from '@/lib/grid/columns'
+import { formatThaiDate } from '@/lib/format'
 import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick } from '@/lib/nav/task-href'
 import { sumPeopleCount, type GridViewRow } from '@/lib/grid/rows'
@@ -61,15 +66,25 @@ export interface RowHeaderProps {
   onDragHandle?: (e: PointerEvent<HTMLElement>, taskId: string) => void
   /** this row's task is being dragged (dimmed, data-dragging) */
   dragging?: boolean
+  /** M8 (S3.7): the live milestone the task is bound to (task.milestoneId resolved in model.milestones) */
+  milestone?: { name: string; date: ISODate } | null
 }
 
 /** The row states as text (SPEC §8.9, A11Y-1): the rowheader keeps its short name (task · person) and exposes these
  *  through aria-describedby, since its aria-label replaces the hidden glyph texts inside it. */
-export function rowStateTexts(row: GridViewRow, personActive: boolean): string[] {
+export function rowStateTexts(
+  row: GridViewRow,
+  personActive: boolean,
+  milestone?: { name: string } | null,
+): string[] {
   const task = row.task
   const out: string[] = []
   if ((row.kind === 'merged' || row.kind === 'assignee') && !personActive) out.push(th.users.deactivatedSuffix)
   if (row.kind === 'assignee') return out
+  if (milestone) {
+    out.push(th.milestones.grid.taskLinkLabel(milestone.name))
+    if (task.lateForMilestone) out.push(th.milestones.late)
+  }
   if (task.certainty === 'TENTATIVE') {
     out.push(th.grid.glyph.tentative)
     if (task.certaintySource === 'task') out.push(th.grid.row.sourceTask)
@@ -116,7 +131,9 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       if (el.contains(document.activeElement)) grid?.focus({ preventScroll: true })
     }
   }, [])
-  const states = rowStateTexts(row, p.personActive)
+  const ms = row.kind !== 'assignee' && p.milestone ? p.milestone : null
+  const late = ms !== null && task.lateForMilestone
+  const states = rowStateTexts(row, p.personActive, ms)
   const ownsTask = row.kind !== 'assignee'
 
   return (
@@ -135,6 +152,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       data-row-key={row.key}
       data-r={p.r}
       data-dragging={p.dragging ? 'true' : undefined}
+      data-late-for-milestone={late ? 'true' : undefined}
       onClick={() => p.onSelectRow(p.r)}
       onDoubleClick={() => p.onOpenTask(task.id)}
     >
@@ -181,6 +199,19 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
           <span className={styles.name} title={task.name}>
             {task.name}
           </span>
+        ) : null}
+        {ms ? (
+          <span className={styles.msTaskLink} title={th.milestones.grid.taskLinkLabel(ms.name)} aria-hidden="true" data-ms-link="">
+            {th.milestones.grid.taskLink(ms.name)}
+          </span>
+        ) : null}
+        {late && ms ? (
+          <Tooltip title={th.milestones.lateHint(formatThaiDate(ms.date, 'medium'))} describeChild>
+            <span className={styles.msLateChip} data-ms-late="">
+              <span aria-hidden="true">⚠ </span>
+              {th.milestones.late}
+            </span>
+          </Tooltip>
         ) : null}
         {people !== null ? (
           <span className={styles.muted} aria-hidden="true" data-sum-people={people}>

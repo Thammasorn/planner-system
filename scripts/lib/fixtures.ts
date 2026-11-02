@@ -14,6 +14,7 @@ import { th } from '@/i18n/th'
 import {
   allocations,
   auditLog,
+  milestones,
   type NewAllocation,
   projects,
   taskAssignments,
@@ -517,6 +518,70 @@ export async function applyFixture(db: DbOrTx, id: FixtureId): Promise<void> {
         note: null,
       })
     }
+  })
+}
+
+/** SPEC App. A.2 milestones (the golden JSON has none — M7-D16 exception, M8-D20). `bindTask` = a live task of the same
+ *  project bound to the milestone. */
+export const DEMO_MILESTONES = [
+  { project: 'POS Upgrade', name: 'UAT sign-off', date: '2026-10-02', bindTask: 'ทำ UAT + คู่มือหน้าร้าน' },
+  { project: 'POS Upgrade', name: 'Go-live สาขาแรก', date: '2026-12-21' },
+  { project: 'Data Warehouse', name: 'Pipeline พร้อมใช้งาน', date: '2026-10-23' },
+  { project: 'Mobile App Revamp', name: 'Design freeze', date: '2026-10-09' },
+  { project: 'Mobile App Revamp', name: 'Beta release', date: '2026-11-13' },
+  { project: 'CRM Migration', name: 'Data migration complete', date: '2026-11-06' },
+  { project: 'Store Analytics Dashboard', name: 'Dashboard v1 review', date: '2026-12-11' },
+] as const satisfies readonly { project: string; name: string; date: ISODate; bindTask?: string }[]
+
+/**
+ * M8 builder (M8-D20, X11/X59/X70): inserts the 7 A.2 milestones (created_by = the golden "Manager"), binds
+ * "UAT sign-off" to its task, one actor-null `milestone` audit row each. Plain Drizzle, fixed dates, no `today`;
+ * never inserts tasks; not part of seedGolden (M12 `seed:demo` composes it after addDayExample). Runs in one
+ * transaction (a savepoint inside the caller's). Not idempotent: call it on a freshly seeded database.
+ */
+export async function addMilestones(db: DbOrTx): Promise<{ ids: Record<string, string> }> {
+  return db.transaction(async (tx) => {
+    const [manager] = await tx.select({ id: user.id }).from(user).where(eq(user.nickname, 'Manager'))
+    if (!manager) throw new Error('golden user Manager not found (seedGolden first)')
+    const names = [...new Set(DEMO_MILESTONES.map((m) => m.project))]
+    const projectRows = await tx
+      .select({ id: projects.id, name: projects.name })
+      .from(projects)
+      .where(and(inArray(projects.name, names), isNull(projects.deletedAt)))
+    const projectIdOf = (name: string): string => {
+      const hit = projectRows.find((p) => p.name === name)
+      if (!hit) throw new Error(`golden project ${name} not found (seedGolden first)`)
+      return hit.id
+    }
+
+    const ids: Record<string, string> = {}
+    for (const m of DEMO_MILESTONES) {
+      const projectId = projectIdOf(m.project)
+      const [row] = await tx
+        .insert(milestones)
+        .values({ projectId, name: m.name, date: m.date, createdBy: manager.id })
+        .returning({ id: milestones.id })
+      ids[m.name] = row!.id
+      if ('bindTask' in m) {
+        const bound = await tx
+          .update(tasks)
+          .set({ milestoneId: row!.id })
+          .where(and(eq(tasks.projectId, projectId), eq(tasks.name, m.bindTask), isNull(tasks.deletedAt)))
+          .returning({ id: tasks.id })
+        if (bound.length !== 1) throw new Error(`${m.project} › ${m.bindTask}: expected one live task`)
+      }
+      await tx.insert(auditLog).values({
+        actorId: null,
+        entity: 'milestone',
+        entityId: row!.id,
+        action: 'create',
+        projectId,
+        summary: th.audit.milestoneSeeded(m.name),
+        before: null,
+        after: { name: m.name, date: m.date, ...('bindTask' in m ? { boundTask: m.bindTask } : {}) },
+      })
+    }
+    return { ids }
   })
 }
 

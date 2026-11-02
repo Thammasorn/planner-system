@@ -13,13 +13,14 @@ import type { SessionUser } from '../session'
 import type { DateRange } from './capacity'
 import { listHolidaysInRange } from './holidays'
 import { maskTimeOff } from './masking'
+import { listVisibleMilestones } from './milestones'
 
-/** `today` (X90) comes from the route (serverToday()); unused in M5, M8 needs it for milestone status on ◆. */
+/** `today` (X90) comes from the route (serverToday()); it drives milestone status on ◆ (M8-D16). */
 export async function getCalendar(
   tx: DbOrTx,
   viewer: SessionUser,
   range: DateRange,
-  _today: ISODate,
+  today: ISODate,
 ): Promise<CalendarResponse> {
   const visible = await authz.visibleUserIds(tx, viewer) // before selecting any leave
   const rows = await repo.timeOff.listForCalendar(
@@ -58,6 +59,7 @@ export async function getCalendar(
     holidays,
     people,
     timeOff,
+    milestones: await listVisibleMilestones(tx, viewer, range, today), // visible, non-archived projects (M8-D16)
     viewer: { userId: viewer.id, canEditOthers: authz.isManager(viewer) },
   }
 }

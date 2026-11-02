@@ -52,10 +52,12 @@ const page: TeamTasksResponse = {
       completed: false,
       blockers: { open: 0, total: 0 },
       hasBody: true,
+      milestoneId: null,
     },
   ],
   projects: [{ id: PID, name: 'POS Upgrade', color: '#B45309' }],
   statusesByProject: { [PID]: noWaiting },
+  milestonesByProject: {},
   nextCursor: null,
 }
 
@@ -138,5 +140,103 @@ describe('TeamTasks (FR-665/666, M3-D33/D41)', () => {
     await user.click(await screen.findByRole('button', { name: 'drop' }))
     await waitFor(() => expect(m.setTaskStatus).toHaveBeenCalled())
     expect(await screen.findByText(th.tasks.toast.released('15.0', 5))).toBeInTheDocument()
+  })
+})
+
+describe('M8 (FR-663, M8-D15): milestone filter + ◆ on /tasks', () => {
+  const CRM = '7a1c2b8e-3d4a-4b5c-9d6e-7f8a9b0c1d2e'
+  const GOLIVE = '00000000-0000-4000-8000-000000000711'
+  const withMilestones: TeamTasksResponse = {
+    ...page,
+    cards: [{ ...page.cards[0]!, milestoneId: GOLIVE, projectId: CRM }],
+    projects: [
+      { id: PID, name: 'POS Upgrade', color: '#B45309' },
+      { id: CRM, name: 'CRM', color: '#2F5597' },
+    ],
+    statusesByProject: { [CRM]: noWaiting },
+    milestonesByProject: { [CRM]: [{ id: GOLIVE, name: 'Go-live', date: '2026-10-30', completedOn: null }] },
+  }
+  const filter = () => screen.getByRole('combobox', { name: th.milestones.tasks.filter })
+
+  beforeEach(() => {
+    m.getJson.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === `/api/projects/${CRM}/milestones`
+          ? {
+              projectId: CRM,
+              today: '2026-09-30',
+              canManage: false,
+              milestones: [
+                {
+                  id: GOLIVE,
+                  projectId: CRM,
+                  name: 'Go-live',
+                  date: '2026-10-30',
+                  description: null,
+                  completedOn: null,
+                  status: 'UPCOMING',
+                  late: false,
+                  lateTaskCount: 0,
+                  progress: { done: 0, total: 1 },
+                },
+              ],
+            }
+          : withMilestones,
+      ),
+    )
+  })
+
+  it('cards show "◆ name" (no lateness on /tasks)', async () => {
+    renderTasks(<TeamTasks />)
+    const li = (await screen.findByRole('link', { name: 'งาน C' })).closest('li')!
+    expect(within(li).getByText(th.milestones.tasks.cardLabel('Go-live'))).toBeInTheDocument()
+    expect(within(li).queryByText(th.milestones.late)).toBeNull()
+  })
+
+  it('without a project the milestone filter is disabled', async () => {
+    renderTasks(<TeamTasks />)
+    await screen.findByRole('link', { name: 'งาน C' })
+    expect(filter()).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('with CRM selected it lists CRM milestones and the request carries milestoneId; changing the project clears it', async () => {
+    const user = userEvent.setup()
+    window.history.replaceState(null, '', `/tasks?projectId=${CRM}`)
+    renderTasks(<TeamTasks />)
+    await screen.findByRole('link', { name: 'งาน C' })
+    await user.click(filter())
+    await user.click(await screen.findByRole('option', { name: th.milestones.tasks.cardLabel('Go-live') }))
+    await waitFor(() =>
+      expect(m.getJson).toHaveBeenCalledWith(
+        `/api/tasks?projectId=${CRM}&milestoneId=${GOLIVE}`,
+        expect.anything(),
+      ),
+    )
+    expect(new URLSearchParams(window.location.search).get('milestoneId')).toBe(GOLIVE)
+    await user.click(screen.getByRole('combobox', { name: th.teamTasks.filters.project }))
+    await user.click(await screen.findByRole('option', { name: 'POS Upgrade' }))
+    expect(new URLSearchParams(window.location.search).get('milestoneId')).toBeNull()
+    await waitFor(() =>
+      expect(m.getJson).toHaveBeenCalledWith(`/api/tasks?projectId=${PID}`, expect.anything()),
+    )
+  })
+
+  it('syncUrl={false}: history.replaceState is never called', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(window.history, 'replaceState')
+    renderTasks(<TeamTasks syncUrl={false} />)
+    await screen.findByRole('link', { name: 'งาน C' })
+    await user.click(screen.getByRole('combobox', { name: th.teamTasks.filters.project }))
+    await user.click(await screen.findByRole('option', { name: 'CRM' }))
+    await user.click(filter())
+    await user.click(await screen.findByRole('option', { name: th.milestones.tasks.cardLabel('Go-live') }))
+    await waitFor(() =>
+      expect(m.getJson).toHaveBeenCalledWith(
+        `/api/tasks?projectId=${CRM}&milestoneId=${GOLIVE}`,
+        expect.anything(),
+      ),
+    )
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 })

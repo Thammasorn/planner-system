@@ -20,14 +20,18 @@ export const ROW_H = 32
 export const HEADER_H = 40
 /** M7.1 (FR-818, M7.1-D10): the month-year row above it. */
 export const MONTH_H = 24
+/** M8 (FR-705, M8-D26): the ◆ Milestones row on top of the header (◆ → month → week / day, SPEC §8.3). */
+export const MS_ROW_H = 28
 /** Everything above the first body row; the row virtualizer's paddingStart / scrollPaddingStart. */
-export const HEADER_TOTAL_H = MONTH_H + HEADER_H
+export const HEADER_TOTAL_H = MS_ROW_H + MONTH_H + HEADER_H
 export const CHUNK_WEEKS = 8
 export const TIMELINE_WEEKS = 156
 
-/** ARIA bookkeeping (C27, X85): header rows above the body (M7.1: month row + period row = 2; M8 adds the ◆ row → 3)
- *  and footer rows below it. Every aria-rowindex / aria-rowcount is computed from these — never a literal. */
-export const HEADER_ROWS = 2
+/** ARIA bookkeeping (C27, X85): header rows above the body (M8: ◆ row 1, month row 2, period row 3) and footer rows
+ *  below it. Every aria-rowindex / aria-rowcount is computed from these — never a literal. */
+export const HEADER_ROWS = 3
+/** M8: the ◆ row is the first header row. */
+export const MS_ROW_INDEX = 1
 export const FOOTER_ROWS = 3
 /** Frozen ARIA columns before the first period column: งาน (1) and ผู้รับผิดชอบ (2). With the assignee column hidden
  *  the task cells span both (aria-colspan 2), so period column indexes never shift (M7.1-D8). */

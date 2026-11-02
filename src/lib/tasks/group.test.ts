@@ -18,6 +18,8 @@ const task = (id: string, parentId: string | null, position: string, x: Partial<
   assignees: [],
   statusId: 'todo',
   blockers: { open: 0, total: 0 },
+  milestoneId: null,
+  lateForMilestone: false,
   ...x,
 })
 const st = (
@@ -42,7 +44,12 @@ const statuses = [
   st('blocked', 'ติดปัญหา', 'WAITING', 'a3'),
 ]
 const names: Record<string, string> = { cindy: 'Cindy', ivy: 'Ivy', kif: 'กิ๊ฟ', aom: 'อ้อม' }
-const ctx = { projectCertainty: 'CONFIRMED' as const, displayName: (u: string) => names[u] ?? u, statuses }
+const ctx = {
+  projectCertainty: 'CONFIRMED' as const,
+  displayName: (u: string) => names[u] ?? u,
+  statuses,
+  milestones: [],
+}
 const ids = (xs: readonly { id: string }[]) => xs.map((x) => x.id)
 const a = (assignmentId: string, userId: string) => ({ assignmentId, userId })
 
@@ -118,5 +125,53 @@ describe('FR-613 groupTasks', () => {
       ['status:blocked', 'status', 'blocked', []],
       ['status:done', 'status', 'done', []],
     ])
+  })
+})
+
+describe('FR-613 / M8-D13 groupTasks › milestone', () => {
+  // refs given out of date order: compareMilestones decides
+  const milestones = [
+    { id: 'm2', name: 'UAT sign-off', date: '2026-10-23', completedOn: null },
+    { id: 'm1', name: 'Data cutover', date: '2026-10-02', completedOn: null },
+    { id: 'm3', name: 'Unused', date: '2026-11-13', completedOn: null },
+  ]
+  const mctx = { ...ctx, milestones }
+  const rows = buildTaskRows([
+    task('A', null, 'a0', { milestoneId: 'm1' }),
+    task('A1', 'A', 'a0', { depth: 1 }),
+    task('B', null, 'a1', { milestoneId: 'm2' }),
+    task('C', null, 'a2'),
+  ])
+
+  it('one group per live milestone in date order (empty kept), then the none group; DFS order inside', () => {
+    expect(
+      groupTasks(rows, 'milestone', mctx).map((g) => [g.key, g.kind, g.milestoneId, ids(g.rows)]),
+    ).toEqual([
+      ['milestone:m1', 'milestone', 'm1', ['A']],
+      ['milestone:m2', 'milestone', 'm2', ['B']],
+      ['milestone:m3', 'milestone', 'm3', []],
+      ['milestone:none', 'noMilestone', undefined, ['A1', 'C']],
+    ])
+  })
+
+  it('same date → id order; a row bound to an unknown milestone reads as unbound', () => {
+    const same = [
+      { id: 'mb', name: 'B', date: '2026-10-02', completedOn: null },
+      { id: 'ma', name: 'A', date: '2026-10-02', completedOn: null },
+    ]
+    const r = buildTaskRows([task('X', null, 'a0', { milestoneId: 'gone' })])
+    expect(groupTasks(r, 'milestone', { ...ctx, milestones: same }).map((g) => [g.key, ids(g.rows)])).toEqual(
+      [
+        ['milestone:ma', []],
+        ['milestone:mb', []],
+        ['milestone:none', ['X']],
+      ],
+    )
+  })
+
+  it('no milestones → only the none group with every row', () => {
+    expect(
+      groupTasks(rows, 'milestone', { ...ctx, milestones: [] }).map((g) => [g.key, ids(g.rows)]),
+    ).toEqual([['milestone:none', ['A', 'A1', 'B', 'C']]])
   })
 })

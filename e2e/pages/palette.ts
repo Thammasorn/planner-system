@@ -57,6 +57,14 @@ export class Palette {
   option(name: string | RegExp): Locator {
     return this.dialog().getByRole('option', { name })
   }
+  /** M8 (X88, M8-D18): the options of the "คำสั่ง" group (never asserted by count or absence — M10 appends). */
+  commands(): Locator {
+    return this.group(th.milestones.palette.group).getByRole('option')
+  }
+  /** Runs a command by its label (by name, never by index — M4-D37d). */
+  async runCommand(label: string): Promise<void> {
+    await this.option(label).click()
+  }
   hint(): Locator {
     return this.dialog().getByText(th.palette.hint, { exact: true })
   }

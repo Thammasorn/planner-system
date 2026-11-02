@@ -45,6 +45,7 @@ describe('grid scope (M6, X07)', () => {
       'grid.moveRow',
       'grid.indentRow',
       'grid.addMarker',
+      'grid.milestoneOpen',
     ])
     expect(grid.find((s) => s.id === 'grid.full')?.combos).toEqual([['F']])
     expect(grid.find((s) => s.id === 'grid.shift')?.combos).toEqual([
@@ -120,5 +121,16 @@ describe('grid rows and markers (M7.1, FR-815/819, X07)', () => {
     })
     // The `?` help renders SHORTCUTS grouped by SHORTCUT_SCOPES, so a registered grid entry is a listed one.
     expect(SHORTCUT_SCOPES).toContain('grid')
+  })
+})
+
+describe('M8 grid ◆ entry (plan/m08 S0.7, M8-D10)', () => {
+  it('grid.milestoneOpen = Enter in the grid scope; Shift+F10 stays the single grid.cellMenu entry for ◆', () => {
+    expect(SHORTCUTS.find((s) => s.id === 'grid.milestoneOpen')).toMatchObject({
+      scope: 'grid',
+      combos: [['Enter']],
+      label: th.shortcuts.items.gridMilestoneOpen,
+    })
+    expect(SHORTCUTS.filter((s) => /milestone/i.test(s.id)).map((s) => s.id)).toEqual(['grid.milestoneOpen'])
   })
 })

@@ -10,9 +10,11 @@ import ExpandMore from '@mui/icons-material/ExpandMore'
 import MoreHoriz from '@mui/icons-material/MoreHoriz'
 import { CertaintyBadge } from '@/components/common/CertaintyBadge'
 import { InlineEditText } from '@/components/common/InlineEditText'
+import { MilestoneTaskTag } from '@/components/milestones/MilestoneTaskTag'
 import { TREE_INDENT, type HandleRef } from '@/components/tree/SortableTree'
 import type { Certainty } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { TaskStatusDTO } from '@/lib/contracts/tasks'
 import { formatThaiDate } from '@/lib/format'
@@ -65,6 +67,8 @@ export interface TaskRowProps {
   handleRef?: HandleRef | undefined
   handleProps?: Record<string, unknown> | undefined
   invalid?: boolean | undefined
+  /** M8 (FR-613/706): the row's live milestone → "◆ name" (+ "เลย milestone" when `row.lateForMilestone`). */
+  milestone?: MilestoneRef | null | undefined
   actions: TaskRowActions
 }
 
@@ -228,6 +232,9 @@ export function TaskRow(p: TaskRowProps) {
               />
             ) : null}
             {p.certainty === 'TENTATIVE' ? <CertaintyBadge certainty="TENTATIVE" /> : null}
+            {p.milestone ? (
+              <MilestoneTaskTag name={p.milestone.name} date={p.milestone.date} late={row.lateForMilestone} />
+            ) : null}
             <AssigneeChips
               assignees={row.assignees}
               unionUserIds={p.unionUserIds}

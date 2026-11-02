@@ -5,15 +5,18 @@ import { and, asc, eq, exists, inArray, isNull, ne, sql, type SQL } from 'drizzl
 import { alias } from 'drizzle-orm/pg-core'
 import type { Certainty } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { TaskCard, TaskStatusDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
 import type { TeamTasksQuery } from '@/lib/schemas/tasks'
 import { z } from '@/lib/z'
 import * as authz from '../authz'
-import { projects, taskAssignments, taskStatuses, tasks, user as users } from '../db/schema'
+import { milestones, projects, taskAssignments, taskStatuses, tasks, user as users } from '../db/schema'
 import type { DbOrTx } from '../db/types'
 import { NotFoundError, ValidationError } from '../errors'
 import * as repo from '../repo'
+import { LIVE_MILESTONE_ON } from '../repo/milestones'
 import type { SessionUser } from '../session'
+import { toRef } from './milestones'
 import { toStatusDTO } from './taskStatuses'
 
 export const TEAM_TASKS_PAGE = 200
@@ -42,12 +45,24 @@ const sortKey = sql`(coalesce(${tasks.dueDate}, 'infinity'::date), ${tasks.proje
 export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQuery): Promise<TeamTasksResponse> {
   const visible = await authz.visibleProjectIds(tx, user)
   if (q.projectId !== undefined && !(await authz.projectAccess(tx, user, q.projectId))) throw new NotFoundError()
-  const empty: TeamTasksResponse = { cards: [], projects: [], statusesByProject: {}, nextCursor: null }
+  if (q.milestoneId !== undefined) {
+    // M8-D15: a live milestone of a visible project, else 404 (never confirms another project's milestone)
+    const m = await repo.milestones.getLive(tx, q.milestoneId)
+    if (!m || (visible !== 'ALL' && !visible.has(m.projectId))) throw new NotFoundError()
+  }
+  const empty: TeamTasksResponse = {
+    cards: [],
+    projects: [],
+    statusesByProject: {},
+    milestonesByProject: {},
+    nextCursor: null,
+  }
   if (visible !== 'ALL' && visible.size === 0) return empty
 
   const where: SQL[] = [isNull(tasks.deletedAt)]
   if (visible !== 'ALL') where.push(inArray(tasks.projectId, [...visible]))
   if (q.projectId !== undefined) where.push(eq(tasks.projectId, q.projectId))
+  if (q.milestoneId !== undefined) where.push(eq(milestones.id, q.milestoneId)) // live by construction (join)
   if (q.userId !== undefined) {
     where.push(
       exists(
@@ -99,6 +114,7 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
       blockersTotal: repo.tasks.blockerCountSql.total,
       blockersOpen: repo.tasks.blockerCountSql.open,
       hasBody: repo.tasks.hasBodySql, // FR-691 (M6.1-D11): only on cards of visible projects
+      milestoneId: milestones.id, // live only (LIVE_MILESTONE_ON, M8-D15)
     })
     .from(tasks)
     .innerJoin(
@@ -108,6 +124,7 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
     .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
     .leftJoin(p1, eq(p1.id, tasks.parentId))
     .leftJoin(p2, eq(p2.id, p1.parentId))
+    .leftJoin(milestones, LIVE_MILESTONE_ON)
     .where(and(...where))
     .orderBy(sql`coalesce(${tasks.dueDate}, 'infinity'::date)`, asc(tasks.projectId), asc(tasks.position), asc(tasks.id))
     .limit(TEAM_TASKS_PAGE + 1)
@@ -130,16 +147,24 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
     completed: r.completedOn !== null,
     blockers: { open: r.blockersOpen, total: r.blockersTotal },
     hasBody: r.hasBody,
+    milestoneId: r.milestoneId,
   }))
   const projectIds = [...new Set(cards.map((c) => c.projectId))]
   const projectRows = await repo.projects.listProjects(tx, { ids: new Set(projectIds) })
   const statusRows = await repo.statuses.listLiveForProjects(tx, projectIds)
   const statusesByProject: Record<string, TaskStatusDTO[]> = {}
   for (const s of statusRows) (statusesByProject[s.projectId] ??= []).push(toStatusDTO(s))
+  // M8-D15: live milestones of the projects present in this page only (one query)
+  const milestonesByProject: Record<string, MilestoneRef[]> = {}
+  for (const m of await repo.milestones.listLiveForProjectIds(tx, projectIds)) {
+    const list = (milestonesByProject[m.projectId] ??= [])
+    list.push(toRef(m))
+  }
   return {
     cards,
     projects: projectRows.map((p) => ({ id: p.id, name: p.name, color: p.color })),
     statusesByProject,
+    milestonesByProject,
     nextCursor,
   }
 }
