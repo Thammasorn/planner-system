@@ -99,3 +99,52 @@ export function chartVar(index: number): string {
 export function markerVar(color: 'RED' | 'YELLOW' | 'GREEN'): string {
   return `var(--marker-${color.toLowerCase()})`
 }
+
+/** M11 (M11-D35, FR-1410): the 10 option colours of SELECT / MULTI_SELECT chips, as in tokens.css. Order = the BR-93
+ *  conversion cycle. Chips use `var(--option-<name>-bg/-fg)` and always show the option name (§8.9). */
+export const OPTION_COLOR_NAMES = [
+  'gray',
+  'brown',
+  'orange',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+  'pink',
+  'red',
+  'teal',
+] as const
+export type OptionColorName = (typeof OPTION_COLOR_NAMES)[number]
+export const OPTION_COLORS: Readonly<
+  Record<'light' | 'dark', Readonly<Record<OptionColorName, { bg: string; fg: string }>>>
+> = {
+  light: {
+    gray: { bg: '#ebedf0', fg: '#4b5563' },
+    brown: { bg: '#f1e6dd', fg: '#6f4e37' },
+    orange: { bg: '#fde7d4', fg: '#9a3d0b' },
+    yellow: { bg: '#fbf0c4', fg: '#7a5a00' },
+    green: { bg: '#dcf3e3', fg: '#1e6b3a' },
+    blue: { bg: '#dbeafe', fg: '#1e4fa8' },
+    purple: { bg: '#ece4fb', fg: '#5b3aa6' },
+    pink: { bg: '#fbe2ef', fg: '#9d2a62' },
+    red: { bg: '#fde2e1', fg: '#a1251f' },
+    teal: { bg: '#d5f2ee', fg: '#116b62' },
+  },
+  dark: {
+    gray: { bg: '#3a3d42', fg: '#d6d9de' },
+    brown: { bg: '#4a382c', fg: '#ecd5c3' },
+    orange: { bg: '#5a3218', fg: '#fed7b5' },
+    yellow: { bg: '#4d3f0d', fg: '#fbe9a6' },
+    green: { bg: '#1d4029', fg: '#bfeccc' },
+    blue: { bg: '#1d3557', fg: '#c3dafd' },
+    purple: { bg: '#3b2c5c', fg: '#ddd0fa' },
+    pink: { bg: '#52243b', fg: '#f9cde3' },
+    red: { bg: '#5a2121', fg: '#fdcdcb' },
+    teal: { bg: '#17423d', fg: '#b8ece5' },
+  },
+}
+
+/** `{ bg: var(--option-<name>-bg), fg: var(--option-<name>-fg) }`. */
+export function optionColorVars(name: OptionColorName): { bg: string; fg: string } {
+  return { bg: `var(--option-${name}-bg)`, fg: `var(--option-${name}-fg)` }
+}

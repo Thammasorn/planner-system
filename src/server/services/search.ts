@@ -8,6 +8,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { th } from '@/i18n/th'
 import type {
   ClientSearchHit,
+  DatabaseSearchHit,
   PageSearchHit,
   PersonSearchHit,
   ProjectSearchHit,
@@ -217,7 +218,89 @@ export async function searchClients(tx: Tx, user: SessionUser, q: string): Promi
   return rows.map((r) => ({ kind: 'client', id: r.id, name: r.name, archived: r.archived, href: `/clients/${r.id}` }))
 }
 
-/** All five categories (FR-1102 order); `titleOnly` (mention menu) → pages by title only, every other category []. */
+type DbHitRow = {
+  database_id: string
+  row_id: string | null
+  page_id: string
+  task_id: string | null
+  row_title: string | null
+  database_title: string
+  page_title: string
+}
+
+const toDbHit = (r: DbHitRow, matchedIn: DatabaseSearchHit['matchedIn']): DatabaseSearchHit => {
+  const base = r.task_id ? `/t/${r.task_id}` : `/p/${r.page_id}`
+  const query = r.row_id ? `?db=${r.database_id}&row=${r.row_id}` : `?db=${r.database_id}`
+  return {
+    kind: 'database',
+    rowId: r.row_id,
+    databaseId: r.database_id,
+    pageId: r.page_id,
+    rowTitle: r.row_title,
+    databaseTitle: r.database_title,
+    pageTitle: r.page_title,
+    matchedIn,
+    href: base + query,
+  }
+}
+
+/**
+ * M11-D28 / FR-1474: database titles, row titles, then row bodies (q ≥ 3, savepoint + statement timeout like pages)
+ * of attached databases whose owner page is live and visible (TASK owners: while their task is live); ≤ 8. Cell values
+ * are never searched. Visibility is in SQL (FR-1104).
+ */
+export async function searchDatabases(tx: Tx, user: SessionUser, q: string): Promise<DatabaseSearchHit[]> {
+  const vis = await authz.visibleProjectIds(tx, user)
+  const p = prep(q)
+  if (p === null) return []
+  const visible: SQL =
+    vis === 'ALL'
+      ? sql`(o.space = 'WORKSPACE' or pr.id is not null)`
+      : sql`(o.space = 'WORKSPACE' or (pr.id is not null and o.project_id = any(${uuidArray([...vis])})))`
+  const owner = sql`
+    join pages o on o.id = d.page_id and o.deleted_at is null and o.kind::text in ('DOC', 'TASK')
+    left join projects pr on pr.id = o.project_id and pr.deleted_at is null
+    left join tasks t on t.id = o.task_id
+    where d.detached_at is null and ${visible}
+      and (o.kind::text <> 'TASK' or (t.id is not null and t.deleted_at is null))`
+  const cols = sql`d.id as database_id, o.id as page_id, t.id as task_id, d.title as database_title,
+    coalesce(t.name, o.title) as page_title`
+  const titleRows = await tx.execute<DbHitRow>(sql`
+    select ${cols}, null::uuid as row_id, null::text as row_title
+    from databases d ${owner} and d.title ilike ${p.pattern} escape '\\'
+    order by word_similarity(${p.q}, d.title) desc, length(d.title), d.id
+    limit ${p.limit}`)
+  const hits = titleRows.map((r) => toDbHit(r, 'database'))
+  if (hits.length >= p.limit) return hits
+  const rowRows = await tx.execute<DbHitRow>(sql`
+    select ${cols}, r.id as row_id, r.title as row_title
+    from database_rows r join databases d on d.id = r.database_id ${owner}
+      and r.deleted_at is null and r.title ilike ${p.pattern} escape '\\'
+    order by word_similarity(${p.q}, r.title) desc, length(r.title), r.id
+    limit ${p.limit - hits.length}`)
+  hits.push(...rowRows.map((r) => toDbHit(r, 'row')))
+  if (hits.length >= p.limit || p.q.length < CONTENT_MIN_CHARS) return hits
+  const rowIds = hits.flatMap((h) => (h.rowId ? [h.rowId] : []))
+  try {
+    const bodyRows = await tx.transaction((sp) =>
+      sp.execute<DbHitRow>(sql`
+        select ${cols}, r.id as row_id, r.title as row_title
+        from pages b
+        join database_rows r on r.id = b.database_row_id and r.deleted_at is null
+        join databases d on d.id = r.database_id ${owner}
+          and b.deleted_at is null and b.kind::text = 'DB_ROW' and b.content_text ilike ${p.pattern} escape '\\'
+          and r.id <> all(${uuidArray(rowIds)})
+        order by length(r.title), r.id
+        limit ${p.limit - hits.length}`),
+    )
+    hits.push(...bodyRows.map((r) => toDbHit(r, 'content')))
+  } catch (e) {
+    if (pgErrorInfo(e).code !== '57014') throw e // statement timeout → keep the title hits (M4-D19)
+  }
+  return hits
+}
+
+/** All six categories (FR-1102 order); `titleOnly` (mention menu) → pages by title only, every other category []. */
 export async function searchAll(
   tx: Tx,
   user: SessionUser,
@@ -226,7 +309,8 @@ export async function searchAll(
 ): Promise<SearchAllResponse> {
   authz.requireUser(user)
   if (opts.titleOnly) {
-    return { projects: [], tasks: [], pages: await searchPages(tx, user, q, { titleOnly: true }), people: [], clients: [] }
+    const pages = await searchPages(tx, user, q, { titleOnly: true })
+    return { projects: [], tasks: [], pages, people: [], clients: [], databases: [] }
   }
   // Sequential: postgres.js runs one query at a time on a transaction connection.
   const projects = await searchProjects(tx, user, q)
@@ -234,7 +318,8 @@ export async function searchAll(
   const pages = await searchPages(tx, user, q, { titleOnly: false })
   const people = await searchPeople(tx, user, q)
   const clients = await searchClients(tx, user, q)
-  return { projects, tasks, pages, people, clients }
+  const databases = await searchDatabases(tx, user, q) // M11 (FR-1474): after M10's groups (X88)
+  return { projects, tasks, pages, people, clients, databases }
 }
 
 /** The palette's local index: visible projects (+ role, archived, color), people and clients (M10-D21). */

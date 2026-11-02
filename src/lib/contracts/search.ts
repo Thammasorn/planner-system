@@ -75,6 +75,22 @@ export interface SearchAllResponse extends SearchResponse {
   projects: ProjectSearchHit[]
   people: PersonSearchHit[]
   clients: ClientSearchHit[]
+  /** M11 (FR-1474, M11-D28): the "ฐานข้อมูล" group, after M10's groups (X88); `[]` with `titleOnly`. */
+  databases: DatabaseSearchHit[]
+}
+
+/** M11-D28: a database title, row title or row body hit (≤ 8); visibility of the owner page in SQL (FR-1104).
+ *  `pageTitle` = owner title (TASK owner: the task name); `href` per M11-D26 (`/p/<page>?db=&row=` or `/t/<task>?db=&row=`). */
+export interface DatabaseSearchHit {
+  kind: 'database'
+  rowId: string | null
+  databaseId: string
+  pageId: string
+  rowTitle: string | null
+  databaseTitle: string
+  pageTitle: string
+  matchedIn: 'database' | 'row' | 'content'
+  href: string
 }
 export type SearchCategory = keyof SearchAllResponse
 /** FR-1102 order. */

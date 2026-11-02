@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UndoContext, type UndoApi, type UndoEntry } from '@/components/undo/useUndo'
 import { th } from '@/i18n/th'
+import type { RowBodyView } from '@/lib/contracts/row-pages'
 import type { TaskBodyView } from '@/lib/contracts/task-pages'
 import { qk } from '@/lib/query-keys'
 import { useFullWidth } from './useFullWidth'
@@ -20,7 +21,7 @@ vi.mock('sonner', () => ({ toast: { error: m.toastError } }))
 function setup(opts: {
   initial?: boolean
   canEdit?: boolean
-  target?: { pageId: string } | { taskId: string }
+  target?: { pageId: string } | { taskId: string } | { rowId: string }
 }) {
   const pushed: { entry: UndoEntry; opts: { toast?: string } | undefined }[] = []
   const undo: UndoApi = {
@@ -112,5 +113,24 @@ describe('useFullWidth', () => {
     act(() => result.current.toggle())
     expect(m.setPageFullWidth).toHaveBeenCalledWith({ taskId: 't1', fullWidth: true })
     await waitFor(() => expect(qc.getQueryData<TaskBodyView>(qk.taskBody('t1'))?.page?.fullWidth).toBe(true))
+  })
+
+  it('a row target (M11-D8) sends rowId and patches the cached row body', async () => {
+    m.setPageFullWidth.mockResolvedValue(ok('rb1', true))
+    const { result, qc } = setup({ target: { rowId: 'r1' } })
+    const view: RowBodyView = {
+      rowId: 'r1',
+      databaseId: 'd1',
+      ownerPageId: 'p1',
+      space: 'WORKSPACE',
+      projectId: null,
+      page: { id: 'rb1', version: 1, content: [], fullWidth: false, isBlank: true },
+      can: { edit: true },
+      uploadLimits: { maxBytes: 1, imageTypes: [], fileTypes: [] } as unknown as RowBodyView['uploadLimits'],
+    }
+    qc.setQueryData(qk.rowBody('r1'), view)
+    act(() => result.current.toggle())
+    expect(m.setPageFullWidth).toHaveBeenCalledWith({ rowId: 'r1', fullWidth: true })
+    await waitFor(() => expect(qc.getQueryData<RowBodyView>(qk.rowBody('r1'))?.page?.fullWidth).toBe(true))
   })
 })

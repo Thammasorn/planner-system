@@ -8,6 +8,7 @@ import {
   formatThaiDate,
   formatThaiDateRange,
   formatThaiInstantDate,
+  formatThaiMonthYear,
   formatWeekHeader,
 } from './format'
 
@@ -114,5 +115,22 @@ describe('M10 helpers (bangkokHour, formatHomeDate, formatRelative)', () => {
     )
     // a future instant (clock skew) never shows a negative distance
     expect(formatRelative('2026-09-30T10:00:30+07:00', now)).toBe(formatRelative(now, now))
+  })
+})
+
+describe('formatThaiMonthYear (M11, FR-1441)', () => {
+  it.each([
+    ['2026-11-01', 'พฤศจิกายน 2569'],
+    ['2026-11-30', 'พฤศจิกายน 2569'],
+    ['2027-01-01', 'มกราคม 2570'],
+    ['2026-02-01', 'กุมภาพันธ์ 2569'],
+  ])('%s → %s', (iso, expected) => {
+    expect(formatThaiMonthYear(iso)).toBe(expected)
+  })
+
+  it('rejects invalid dates and ignores the process time zone', () => {
+    expect(() => formatThaiMonthYear('2026-02-30')).toThrow(RangeError)
+    vi.stubEnv('TZ', 'Pacific/Honolulu')
+    expect(formatThaiMonthYear('2026-11-01')).toBe('พฤศจิกายน 2569')
   })
 })

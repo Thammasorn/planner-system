@@ -29,6 +29,8 @@ export const BLOCK_TYPES = [
   'subpage',
   'taskView', // M10 (FR-1301, M10-D4)
   'projectWorkload', // M10 (FR-1303, M10-D4)
+  'database', // M11 (FR-1407): props.databaseId only — the data lives in the database tables (§7.7)
+  'equation', // M11 (FR-1501): props.latex only
 ] as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
@@ -39,6 +41,8 @@ export type LiveBlockType = (typeof LIVE_BLOCK_TYPES)[number]
 export const TASK_VIEW_LIMITS = [10, 20, 50, 100] as const
 export type TaskViewLimit = (typeof TASK_VIEW_LIMITS)[number]
 export const TASK_VIEW_MAX_STATUS_IDS = 12
+/** FR-1501/1502: maximum LaTeX source length of an equation block or inline equation. */
+export const EQUATION_LATEX_MAX = 2000
 
 export interface TaskViewProps {
   view: 'LIST' | 'BOARD'
@@ -124,7 +128,15 @@ const Mention = z.object({
   type: z.literal('mention'),
   props: z.object({ kind: z.enum(['user', 'page']), id: z.string().min(1).max(64) }),
 })
-const Inline = z.union([z.string().max(100_000), z.discriminatedUnion('type', [Text, Link, Mention])])
+/** M11 (FR-1502): inline LaTeX, no content. */
+const InlineEquation = z.object({
+  type: z.literal('inlineEquation'),
+  props: z.object({ latex: z.string().max(EQUATION_LATEX_MAX) }),
+})
+const Inline = z.union([
+  z.string().max(100_000),
+  z.discriminatedUnion('type', [Text, Link, Mention, InlineEquation]),
+])
 const InlineContent = z.union([z.string().max(100_000), z.array(Inline).max(2000)])
 const Prop = z.union([z.string().max(2048), z.number(), z.boolean(), z.null()])
 const Props = z.record(z.string().max(40), Prop)
@@ -181,6 +193,17 @@ const projectWorkloadPropsSchema = z
   .strict()
 
 const isLiveBlockType = (t: string): t is LiveBlockType => (LIVE_BLOCK_TYPES as readonly string[]).includes(t)
+
+// M11 (§7.7): islands with exactly one prop each — strict, so no data (rows, titles, rendered HTML) is ever stored.
+const databasePropsSchema = z
+  .object({
+    databaseId: z
+      .string()
+      .refine((s) => s === '' || isUuid(s))
+      .optional(),
+  })
+  .strict()
+const equationPropsSchema = z.object({ latex: z.string().max(EQUATION_LATEX_MAX).optional() }).strict()
 
 /** Fill defaults and drop junk for rendering (client) — never throws (M10-D4). */
 export function resolveTaskViewProps(p: Record<string, unknown> | undefined): TaskViewProps {
@@ -258,6 +281,14 @@ export function checkBlockProps(block: BlockInput, ctx: z.RefinementCtx): void {
   // M10 (FR-1302, M10-D4): live blocks hold view config only — never data in content, never children.
   if (isLiveBlockType(block.type)) {
     const schema = block.type === 'taskView' ? taskViewPropsSchema : projectWorkloadPropsSchema
+    if (!schema.safeParse(props).success) fail(['props'])
+    const c = block.content
+    if (c !== undefined && !(Array.isArray(c) && c.length === 0)) fail(['content'])
+    if (block.children !== undefined && block.children.length > 0) fail(['children'])
+  }
+  // M11 (FR-1407, FR-1501, M11-D29): database / equation blocks are non-text islands — props only.
+  if (block.type === 'database' || block.type === 'equation') {
+    const schema = block.type === 'database' ? databasePropsSchema : equationPropsSchema
     if (!schema.safeParse(props).success) fail(['props'])
     const c = block.content
     if (c !== undefined && !(Array.isArray(c) && c.length === 0)) fail(['content'])

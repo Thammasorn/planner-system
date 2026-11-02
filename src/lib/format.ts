@@ -46,6 +46,15 @@ export function formatThaiDate(iso: string, style: ThaiDateStyle = 'medium'): st
   return planDateFormat[style].format(utcDate(y, m, d))
 }
 
+const monthYearFormat = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+/** M11 (FR-1441, M11-D25): month heading "พฤศจิกายน 2569" of any date in the month (usually its first day). UTC build
+ *  like formatThaiDate, so the process time zone never shifts the month. */
+export function formatThaiMonthYear(isoMonthStart: ISODate): string {
+  const { y, m } = parseIso(isoMonthStart)
+  return monthYearFormat.format(utcDate(y, m, 1))
+}
+
 /** Grid week header "30/9" (no year). */
 export function formatWeekHeader(weekStart: string): string {
   const { m, d } = parseIso(weekStart)

@@ -249,3 +249,123 @@
   color: var(--text-secondary);
   font-style: italic;
 }
+
+/* ---- Database island (M11, FR-1401/1407/1408, FR-1602, M11-D21/D31) ----
+   The block takes the full content width of the column; whatever is wider (table columns, kanban groups) scrolls
+   inside the database view (its own overflow container), never the page. min-width: 0 lets the flex row of the block
+   shrink below the island's content width. */
+.bn-root .bn-block-content[data-content-type='database'] {
+  min-width: 0;
+  width: 100%;
+}
+.app-db-island {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  cursor: auto;
+  user-select: text;
+}
+/* Creating / copying / missing placeholder: the final block's minimum size (screenshot-ready, M11-D2); the state is
+   spelled out in text, the skeleton only supports it. */
+.app-db-placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: calc(var(--header-height) * 4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+}
+.app-db-placeholder .app-db-placeholder__skeleton {
+  width: 100%;
+  height: var(--header-height);
+}
+
+/* ---- Equations (M11, FR-1501…1506, M11-D29) ----
+   Not scoped to .bn-root: the popover's preview renders in a portal outside the editor. Block equations are centred
+   display math that scrolls sideways inside the block when wider than the column; inline ones flow with the text. */
+.app-equation {
+  color: var(--mui-palette-text-primary);
+}
+.app-equation--block {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+.app-equation--block .katex-display {
+  margin: 0;
+}
+.app-equation--inline {
+  display: inline;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.app-equation[role='button'] {
+  cursor: pointer;
+}
+.app-equation[role='button']:hover,
+.app-equation[role='button']:focus-visible {
+  background: var(--hover-bg);
+  outline: none;
+}
+.app-equation__placeholder {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+/* sized like the rendered result while KaTeX loads (the source keeps the width, hidden from sight) */
+.app-equation__skeleton {
+  display: inline-block;
+  min-width: calc(var(--header-height) * 2);
+  min-height: var(--font-lg);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: transparent;
+}
+.app-equation--block .app-equation__skeleton {
+  min-height: var(--header-height);
+}
+/* FR-1504: ⚠ + "สมการไม่ถูกต้อง" + the source — the border colour only supports the text, never alone */
+.app-equation[data-state='error'] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  border: 1px solid var(--load-over-fg);
+  text-align: start;
+}
+.app-equation--block[data-state='error'] {
+  display: flex;
+  justify-content: center;
+}
+.app-equation__icon {
+  align-self: center;
+  color: var(--load-over-fg);
+}
+.app-equation__error {
+  color: var(--load-over-fg);
+  font-weight: var(--weight-medium);
+}
+.app-equation__source,
+.app-equation-popover__input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+.app-equation-popover__preview {
+  min-height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}

@@ -41,6 +41,7 @@ import type { Tx } from '../db/types'
 import type { PageContent } from '@/lib/schemas/page-content'
 import * as pageService from '../services/pages'
 import * as pageTree from '../services/page-tree'
+import * as rowPages from '../services/row-pages'
 import * as taskPages from '../services/task-pages'
 import type { SessionUser } from '../session'
 
@@ -64,31 +65,35 @@ export const createPage = action(createPageSchema, (input, { user }): Promise<Cr
   }),
 )
 
-export const renamePage = action(renamePageSchema, ({ pageId, title }, { user }): Promise<{ title: string }> =>
-  db.transaction(async (tx) => {
-    const a = await authz.requireDocPage(tx, user, pageId, 'edit')
-    const r = await pageService.renamePage(tx, user, a, title)
-    if (r.before !== r.after) {
-      await audit.log(tx, user, {
-        entity: 'page',
-        entityId: pageId,
-        action: 'update',
-        projectId: a.page.projectId,
-        summary: th.audit.pageRenamed(r.before, r.after),
-        before: { title: r.before },
-        after: { title: r.after },
-      })
-    }
-    return { title: r.after }
-  }),
+export const renamePage = action(
+  renamePageSchema,
+  ({ pageId, title }, { user }): Promise<{ title: string }> =>
+    db.transaction(async (tx) => {
+      const a = await authz.requireDocPage(tx, user, pageId, 'edit')
+      const r = await pageService.renamePage(tx, user, a, title)
+      if (r.before !== r.after) {
+        await audit.log(tx, user, {
+          entity: 'page',
+          entityId: pageId,
+          action: 'update',
+          projectId: a.page.projectId,
+          summary: th.audit.pageRenamed(r.before, r.after),
+          before: { title: r.before },
+          after: { title: r.after },
+        })
+      }
+      return { title: r.after }
+    }),
 )
 
-export const setPageIcon = action(setPageIconSchema, ({ pageId, icon }, { user }): Promise<{ icon: string | null }> =>
-  db.transaction(async (tx) => {
-    const a = await authz.requireDocPage(tx, user, pageId, 'edit')
-    await pageService.setPageIcon(tx, user, a, icon)
-    return { icon }
-  }),
+export const setPageIcon = action(
+  setPageIconSchema,
+  ({ pageId, icon }, { user }): Promise<{ icon: string | null }> =>
+    db.transaction(async (tx) => {
+      const a = await authz.requireDocPage(tx, user, pageId, 'edit')
+      await pageService.setPageIcon(tx, user, a, icon)
+      return { icon }
+    }),
 )
 
 export const setPageCover = action(
@@ -134,12 +139,14 @@ export const deletePage = action(pageIdSchema, ({ pageId }, { user }): Promise<D
   }),
 )
 
-export const restorePageBatch = action(restorePageBatchSchema, ({ batch }, { user }): Promise<RestorePageResult> =>
-  db.transaction(async (tx) => {
-    const { roots, ids } = await pageTree.restorePageBatch(tx, user, batch) // authz on the roots inside
-    const first = roots[0]!
-    return { restoredIds: ids, space: first.space, projectId: first.projectId }
-  }),
+export const restorePageBatch = action(
+  restorePageBatchSchema,
+  ({ batch }, { user }): Promise<RestorePageResult> =>
+    db.transaction(async (tx) => {
+      const { roots, ids } = await pageTree.restorePageBatch(tx, user, batch) // authz on the roots inside
+      const first = roots[0]!
+      return { restoredIds: ids, space: first.space, projectId: first.projectId }
+    }),
 )
 
 export const setPageProtected = action(
@@ -183,8 +190,15 @@ export const savePageContent = action(savePageContentSchema, (input, { user }): 
  */
 export const setPageFullWidth = action(
   setPageFullWidthSchema,
-  ({ pageId, taskId, fullWidth }, { user }): Promise<SetPageFullWidthResult> =>
+  ({ pageId, taskId, rowId, fullWidth }, { user }): Promise<SetPageFullWidthResult> =>
     db.transaction((tx) =>
-      taskPages.setFullWidth(tx, user, pageId !== undefined ? { pageId } : { taskId: taskId! }, fullWidth),
+      rowId !== undefined
+        ? rowPages.setFullWidth(tx, user, { rowId }, fullWidth) // M11-D8
+        : taskPages.setFullWidth(
+            tx,
+            user,
+            pageId !== undefined ? { pageId } : { taskId: taskId! },
+            fullWidth,
+          ),
     ),
 )

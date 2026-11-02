@@ -8,6 +8,7 @@ import { rows as assignments } from './assignments'
 import { rows as authEndpoints } from './auth-endpoints'
 import { rows as calendar } from './calendar'
 import { rows as clients } from './clients'
+import { rows as databases } from './databases'
 import { rows as employees } from './employees'
 import { rows as files } from './files'
 import { rows as gridDay } from './grid-day'
@@ -22,6 +23,7 @@ import { rows as planMarkers } from './plan-markers'
 import { rows as positions } from './positions'
 import { rows as preferences } from './preferences'
 import { rows as projects } from './projects'
+import { rows as rowPages } from './row-pages'
 import { rows as search } from './search'
 import { rows as taskBlockers } from './task-blockers'
 import { rows as taskPages } from './task-pages'
@@ -73,4 +75,7 @@ export const rows: AuthzRow[] = [
   ...people,
   // M10
   ...home,
+  // M11
+  ...databases,
+  ...rowPages,
 ]

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import * as services from '@/server/services'
 import { rows } from './rows'
 import { M10_ROUTES } from './rows/_m10'
+import { M11_DATABASE_ACTIONS, M11_ROUTES, ROW_PAGE_LOADER } from './rows/_m11'
 import { M9_ROUTES, PERSON_HEADER_LOADER } from './rows/_m9'
 
 const API_DIR = path.resolve(process.cwd(), 'src/app/api')
@@ -110,6 +111,42 @@ describe('AZ-2 route coverage', () => {
       expect(routes, `${name} is exported`).toContain(name)
       expect(covered.has(name), `${name} has no authz row`).toBe(true)
     }
+  })
+
+  it('M11 (plan/m11 S6.5): the database route and the row-body route are exported and have rows; every §7.9 action, ensureRowBody and the /r loader have rows', async () => {
+    const routes = await exportedRoutes()
+    const covered = new Set(rows.map((r) => r.action))
+    for (const name of M11_ROUTES) {
+      expect(routes, `${name} is exported`).toContain(name)
+      expect(covered.has(name), `${name} has no authz row`).toBe(true)
+    }
+    for (const name of [...M11_DATABASE_ACTIONS, 'ensureRowBody', 'setPageFullWidth', ROW_PAGE_LOADER])
+      expect(covered.has(name), `${name} has no authz row`).toBe(true)
+    // SPEC §7.7 / M11-D8: the M4 routes and actions that now receive DB_ROW page ids carry DB_ROW-page rows too
+    const bodyRows = rows.filter((r) => /^RB-/.test(r.id)).map((r) => r.action)
+    for (const name of [
+      'GET /api/pages/[id]',
+      'PUT /api/pages/[id]/content',
+      'GET /api/pages/[id]/lock',
+      'POST /api/pages/[id]/lock',
+      'DELETE /api/pages/[id]/lock',
+      'POST /api/files',
+      'GET /api/files/[id]',
+      'GET /api/pages/tree',
+      'savePageContent',
+      'renamePage',
+      'setPageIcon',
+      'setPageCover',
+      'setPageProtected',
+      'applyTemplate',
+      'movePage',
+      'duplicatePage',
+      'deletePage',
+      'createPage',
+    ])
+      expect(bodyRows, `no DB_ROW-page row for ${name}`).toContain(name)
+    // §7.9: reads are these two routes only (no other database route)
+    expect(routes.filter((r) => /databases|database-rows/.test(r))).toEqual([...M11_ROUTES].sort())
   })
 
   it('every exported route handler method has an authz row', async () => {

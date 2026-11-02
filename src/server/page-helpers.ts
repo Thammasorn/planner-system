@@ -19,3 +19,9 @@ export async function orNotFound<T>(p: Promise<T>): Promise<T> {
 export function taskIdOfTaskPage(view: { page: { kind?: string; taskId?: string | null } }): string | null {
   return view.page.kind === 'TASK' && view.page.taskId ? view.page.taskId : null
 }
+
+/** M11-D8: `/p/<id>` of a database row body redirects to `/r/<rowId>` — after the loader authorised the view (an
+ *  invisible body is a 404 before this). Other kinds → null. */
+export function rowIdOfRowPage(view: { page: { kind?: string; rowId?: string | null } }): string | null {
+  return view.page.kind === 'DB_ROW' && view.page.rowId ? view.page.rowId : null
+}

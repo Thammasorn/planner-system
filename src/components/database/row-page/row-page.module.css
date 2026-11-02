@@ -1,0 +1,64 @@
+/* The row page /r/[rowId] (FR-1453, M11-D27): the task page's reading column — a big title (--font-3xl, --font-2xl on
+   phones) that may stay empty ("ไม่มีชื่อ" placeholder), then the light properties and the body. Tokens only (§8.12). */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-12) 0 var(--space-4);
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-3xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.heading[data-empty='true'] {
+  color: var(--text-secondary);
+}
+
+.title {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.title::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.title:focus-visible {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 2px var(--brand-blue);
+}
+
+.gone {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.divider {
+  margin: var(--space-6) 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 599.95px) {
+  .titleRow {
+    padding-top: var(--space-4);
+  }
+
+  .heading {
+    font-size: var(--font-2xl);
+  }
+}

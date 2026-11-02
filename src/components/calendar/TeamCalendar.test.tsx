@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import { renderCalendarUi } from './render.test.helper'
 import { IDS, VACATION, calendarData, full, masked } from './test-data.test.helper'
@@ -52,6 +52,12 @@ function stubNarrowViewport() {
     dispatchEvent: vi.fn(() => false),
   }))
 }
+
+// LeaveDialog is React.lazy in LeaveDialogProvider: load its chunk once up front so the first test that opens it does not
+// race the cold dynamic import against findByRole's 1 s timeout (it failed under full-suite load, M11 close-out).
+beforeAll(async () => {
+  await import('./LeaveDialog')
+})
 
 beforeEach(() => {
   peterLeave = true

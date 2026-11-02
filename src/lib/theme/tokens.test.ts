@@ -13,9 +13,12 @@ import {
   BORDER_MONTH,
   CHART,
   MARKER,
+  OPTION_COLOR_NAMES,
+  OPTION_COLORS,
   chartVar,
   fontVar,
   markerVar,
+  optionColorVars,
   spaceVar,
 } from './tokens'
 
@@ -115,5 +118,26 @@ describe('M7.1 colours ↔ tokens.css (X51)', () => {
     expect(markerVar('RED')).toBe('var(--marker-red)')
     expect(markerVar('YELLOW')).toBe('var(--marker-yellow)')
     expect(markerVar('GREEN')).toBe('var(--marker-green)')
+  })
+})
+
+describe('M11 option colours ↔ tokens.css (M11-D35)', () => {
+  it('OPTION_COLORS mirror :root and .dark for all 10 names', () => {
+    expect(OPTION_COLOR_NAMES).toHaveLength(10)
+    for (const scheme of ['light', 'dark'] as const) {
+      const block = scheme === 'light' ? root : dark
+      for (const name of OPTION_COLOR_NAMES) {
+        expect(block[`option-${name}-bg`], `${scheme} --option-${name}-bg`).toBe(
+          OPTION_COLORS[scheme][name].bg,
+        )
+        expect(block[`option-${name}-fg`], `${scheme} --option-${name}-fg`).toBe(
+          OPTION_COLORS[scheme][name].fg,
+        )
+      }
+    }
+  })
+
+  it('optionColorVars', () => {
+    expect(optionColorVars('teal')).toEqual({ bg: 'var(--option-teal-bg)', fg: 'var(--option-teal-fg)' })
   })
 })

@@ -9,6 +9,10 @@ import { z } from '@/lib/z'
 import type { PageKind, PageSpace } from '@/lib/contracts/pages'
 import {
   clients,
+  type DatabaseRow,
+  type DbColumnRow,
+  type DbRowRow,
+  type DbViewRow,
   type FileRow,
   type MilestoneDbRow,
   type PageRow,
@@ -21,6 +25,7 @@ import {
 } from './db/schema'
 import type { DbOrTx } from './db/types'
 import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors'
+import * as databasesRepo from './repo/databases'
 import * as filesRepo from './repo/files'
 import * as milestonesRepo from './repo/milestones'
 import * as pagesRepo from './repo/pages'
@@ -359,6 +364,9 @@ export interface PageAccess {
   /** The page or an ancestor has locked = true (WORKSPACE only, M4-D24). */
   effectiveProtected: boolean
   isManager: boolean
+  /** M11-D6: for a DB_ROW page — its live row, the database and the owner page's access (role/archived/protection
+   *  above are copied from `owner`). null for DOC and TASK pages. */
+  dbRow: { row: DbRowRow; database: DatabaseRow; owner: PageAccess } | null
 }
 
 /** Live page → PROJECT: requireProject(view|edit) · WORKSPACE: any user; edit blocked by effective protection for
@@ -385,6 +393,23 @@ export async function accessForPage(
 ): Promise<PageAccess> {
   requireUser(user)
   const manager = isManager(user)
+  if (page.kind === 'DB_ROW') {
+    // M11-D6: page → live row → database → owner access with `need` (protect → 404). Rights = the owner page's.
+    if (need === 'protect' || page.databaseRowId === null) throw new NotFoundError()
+    const row = await databasesRepo.getRow(tx, page.databaseRowId)
+    if (!row) throw new NotFoundError()
+    const d = await requireDatabase(tx, user, row.databaseId, need)
+    return {
+      page,
+      kind: 'DB_ROW',
+      task: null,
+      role: d.owner.role,
+      archived: d.owner.archived,
+      effectiveProtected: d.owner.effectiveProtected,
+      isManager: manager,
+      dbRow: { row, database: d.database, owner: d.owner },
+    }
+  }
   if (page.kind === 'TASK') {
     // M6.1-D4 / FR-687: a task body is exactly as visible / editable as its task. Never protectable (no wiki).
     if (need === 'protect' || page.taskId === null) throw new NotFoundError()
@@ -397,6 +422,7 @@ export async function accessForPage(
       archived: t.archived,
       effectiveProtected: false,
       isManager: manager,
+      dbRow: null,
     }
   }
   if (page.space === 'PROJECT') {
@@ -414,6 +440,7 @@ export async function accessForPage(
       archived: acc.archived,
       effectiveProtected: false,
       isManager: manager,
+      dbRow: null,
     }
   }
   const prot = await effectiveProtection(tx, page.id)
@@ -427,6 +454,7 @@ export async function accessForPage(
     archived: false,
     effectiveProtected: prot,
     isManager: manager,
+    dbRow: null,
   }
 }
 
@@ -504,6 +532,96 @@ export async function requireFile(tx: DbOrTx, user: SessionUser, fileId: string)
 /** True when the page or an ancestor is locked (recursive CTE, ≤ 10 levels; WORKSPACE only). */
 export function effectiveProtection(tx: DbOrTx, pageId: string): Promise<boolean> {
   return pagesRepo.anyLockedUpward(tx, pageId)
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M11 — databases inside pages (SPEC §3.2 PERM-24…26, FR-1460…1466, §7.9; plan/m11 S0.6, M11-D6/D7). Signatures by
+// S0; bodies by S2. Permissions are literally the owner page's: invisible owner / mismatch / missing → NotFoundError
+// (identical body, FR-1464); archived write, locked wiki for workers → ForbiddenError.
+// ---------------------------------------------------------------------------------------------------------------
+
+export type DatabaseNeed = 'view' | 'edit'
+
+export interface DatabaseAccess {
+  database: DatabaseRow
+  /** Access to the owner page (DOC or TASK, never DB_ROW). */
+  owner: PageAccess
+  /** canEditDatabase(owner). */
+  canEdit: boolean
+}
+
+/** M11-D6: may the viewer change the database data of a page (rows, columns, views, title)? Not archived, and not
+ *  effectively protected unless a manager. The page lease is irrelevant (FR-1462). */
+export function canEditDatabase(a: PageAccess): boolean {
+  return !a.archived && (!a.effectiveProtected || a.isManager)
+}
+
+/** Loads the database (`FOR UPDATE` when `lock`); `pageId` given and ≠ database.page_id → 404; owner via
+ *  getLivePageOrNotFound → accessForPage(owner, need); edit without canEditDatabase → 403. Every "invisible" case is
+ *  the same NotFoundError (FR-1464); only `databases.page_id` is read before the owner check (M11-D7). */
+export async function requireDatabase(
+  tx: DbOrTx,
+  user: SessionUser,
+  databaseId: string,
+  need: DatabaseNeed,
+  opts?: { pageId?: string; lock?: boolean },
+): Promise<DatabaseAccess> {
+  requireUser(user)
+  const ownerId = await databasesRepo.getDatabasePageId(tx, databaseId)
+  if (ownerId === null) throw new NotFoundError()
+  if (opts?.pageId !== undefined && opts.pageId !== ownerId) throw new NotFoundError()
+  const page = await pagesRepo.getLivePageOrNotFound(tx, ownerId)
+  if (page.kind === 'DB_ROW') throw new NotFoundError() // never happens (services refuse it); defensive
+  const owner = await accessForPage(tx, user, page, need) // W → 404; archived / locked wiki (workers) edit → 403
+  if (need === 'edit' && !canEditDatabase(owner)) throw new ForbiddenError()
+  const database = await databasesRepo.getDatabase(tx, databaseId, { lock: opts?.lock })
+  if (!database) throw new NotFoundError()
+  return { database, owner, canEdit: canEditDatabase(owner) }
+}
+
+/** Live row (or any row with `includeDeleted`, for restores) → requireDatabase(row.database_id, need). */
+export async function requireDbRow(
+  tx: DbOrTx,
+  user: SessionUser,
+  rowId: string,
+  need: DatabaseNeed,
+  opts?: { includeDeleted?: boolean; lock?: boolean },
+): Promise<DatabaseAccess & { row: DbRowRow }> {
+  requireUser(user)
+  const row = await databasesRepo.getRow(tx, rowId, { includeDeleted: opts?.includeDeleted })
+  if (!row) throw new NotFoundError()
+  const a = await requireDatabase(tx, user, row.databaseId, need, { lock: opts?.lock })
+  return { ...a, row }
+}
+
+/** Live column (or any with `includeDeleted`) → requireDatabase(column.database_id, need). */
+export async function requireDbColumn(
+  tx: DbOrTx,
+  user: SessionUser,
+  columnId: string,
+  need: DatabaseNeed,
+  opts?: { includeDeleted?: boolean; lock?: boolean },
+): Promise<DatabaseAccess & { column: DbColumnRow }> {
+  requireUser(user)
+  const column = await databasesRepo.getColumn(tx, columnId, { includeDeleted: opts?.includeDeleted })
+  if (!column) throw new NotFoundError()
+  const a = await requireDatabase(tx, user, column.databaseId, need, { lock: opts?.lock })
+  return { ...a, column }
+}
+
+/** Live view (or any with `includeDeleted`) → requireDatabase(view.database_id, need). */
+export async function requireDbView(
+  tx: DbOrTx,
+  user: SessionUser,
+  viewId: string,
+  need: DatabaseNeed,
+  opts?: { includeDeleted?: boolean; lock?: boolean },
+): Promise<DatabaseAccess & { view: DbViewRow }> {
+  requireUser(user)
+  const view = await databasesRepo.getView(tx, viewId, { includeDeleted: opts?.includeDeleted })
+  if (!view) throw new NotFoundError()
+  const a = await requireDatabase(tx, user, view.databaseId, need, { lock: opts?.lock })
+  return { ...a, view }
 }
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // src/components/layout/useFullWidth.ts — the shared "เต็มความกว้าง" switch of a document / task body (FR-1602,
 // SPEC §8.12, M6.1-D15): optimistic toggle through `setPageFullWidth`; on success an undo entry WITHOUT a toast
 // (Cmd+Z toggles back — not a deletion); on failure revert + error toast. The page property is shared by every viewer,
-// so the cached page / task body views are patched too. Hidden (canToggle false) without edit rights.
+// so the cached page / task body / row body (M11-D8) views are patched too. Hidden (canToggle false) without edit rights.
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useContext, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -10,15 +10,16 @@ import { UndoContext } from '@/components/undo/useUndo'
 import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
 import type { PageView } from '@/lib/contracts/pages'
+import type { RowBodyView } from '@/lib/contracts/row-pages'
 import type { TaskBodyView } from '@/lib/contracts/task-pages'
 import { qk } from '@/lib/query-keys'
 import { setPageFullWidth } from '@/server/actions/pages'
 
 export interface UseFullWidthOptions {
-  target: { pageId: string } | { taskId: string }
+  target: { pageId: string } | { taskId: string } | { rowId: string }
   initial: boolean
   canEdit: boolean
-  /** Page title or task name (kept for the undo stack's description). */
+  /** Page title, task name or row title (kept for the undo stack's description). */
   label: string
 }
 
@@ -42,15 +43,20 @@ export function useFullWidth(o: UseFullWidthOptions): {
   const { canEdit } = o
   const pageId = 'pageId' in o.target ? o.target.pageId : null
   const taskId = 'taskId' in o.target ? o.target.taskId : null
+  const rowId = 'rowId' in o.target ? o.target.rowId : null
   const target = useMemo<UseFullWidthOptions['target']>(
-    () => (pageId !== null ? { pageId } : { taskId: taskId ?? '' }),
-    [pageId, taskId],
+    () => (pageId !== null ? { pageId } : rowId !== null ? { rowId } : { taskId: taskId ?? '' }),
+    [pageId, taskId, rowId],
   )
 
   const patchCache = useCallback(
     (to: UseFullWidthOptions['target'], value: boolean) => {
       if ('taskId' in to)
         qc.setQueryData<TaskBodyView>(qk.taskBody(to.taskId), (v) =>
+          v?.page ? { ...v, page: { ...v.page, fullWidth: value } } : v,
+        )
+      else if ('rowId' in to)
+        qc.setQueryData<RowBodyView>(qk.rowBody(to.rowId), (v) =>
           v?.page ? { ...v, page: { ...v.page, fullWidth: value } } : v,
         )
       else

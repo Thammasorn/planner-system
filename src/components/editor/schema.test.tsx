@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { BLOCK_TYPES } from '@/lib/schemas/page-content'
 import { IMAGE_MIME } from '@/lib/files/upload-rules'
+import { InlineEquation } from './inline/inline-equation'
 import { HEADING_LEVELS, schema } from './schema'
 
 describe('editor schema', () => {
@@ -21,7 +22,7 @@ describe('editor schema', () => {
 
   it('has the mention inline content and the default styles', () => {
     expect(Object.keys(schema.inlineContentSpecs)).toEqual(
-      expect.arrayContaining(['text', 'link', 'mention']),
+      expect.arrayContaining(['text', 'link', 'mention', 'inlineEquation']),
     )
     expect(Object.keys(schema.styleSpecs)).toEqual(
       expect.arrayContaining([
@@ -34,5 +35,14 @@ describe('editor schema', () => {
         'backgroundColor',
       ]),
     )
+  })
+
+  it('M11: database / equation hold one prop each and no content; inlineEquation holds latex', () => {
+    expect(schema.blockSpecs.database.config.content).toBe('none')
+    expect(Object.keys(schema.blockSpecs.database.config.propSchema)).toEqual(['databaseId'])
+    expect(schema.blockSpecs.equation.config.content).toBe('none')
+    expect(Object.keys(schema.blockSpecs.equation.config.propSchema)).toEqual(['latex'])
+    expect(Object.keys(InlineEquation.config.propSchema)).toEqual(['latex'])
+    expect(schema.inlineContentSpecs.inlineEquation?.config).toEqual(InlineEquation.config)
   })
 })

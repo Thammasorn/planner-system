@@ -37,6 +37,12 @@ export const taskDictionary: Dictionary = {
   placeholders: { ...thaiDictionary.placeholders, emptyDocument: th.editor.taskPlaceholder },
 }
 
+/** M11 (FR-1453): database row bodies show "เพิ่มเนื้อหา… พิมพ์ / เพื่อแทรก" while the document is empty. */
+export const rowDictionary: Dictionary = {
+  ...thaiDictionary,
+  placeholders: { ...thaiDictionary.placeholders, emptyDocument: th.editor.rowPlaceholder },
+}
+
 export function dictionaryFor(kind: PageKind): Dictionary {
-  return kind === 'TASK' ? taskDictionary : thaiDictionary
+  return kind === 'TASK' ? taskDictionary : kind === 'DB_ROW' ? rowDictionary : thaiDictionary
 }

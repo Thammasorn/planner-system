@@ -423,8 +423,10 @@ export const taskBlockers = pgTable(
 
 export const pageSpace = pgEnum('page_space', ['WORKSPACE', 'PROJECT'])
 
-/** SPEC §6.2: M6.1 creates DOC + TASK; M11 adds 'DB_ROW' with `alter type page_kind add value` (custom migration). */
-export const pageKind = pgEnum('page_kind', ['DOC', 'TASK'])
+/** SPEC §6.2: M6.1 creates DOC + TASK; M11 adds 'DB_ROW' — drizzle-kit emits `ALTER TYPE … ADD VALUE` in the generated
+ *  migration (M11-D4). Never use 'DB_ROW' as an enum literal in SQL that may run in the migration transaction (55P04):
+ *  compare `kind::text` instead. */
+export const pageKind = pgEnum('page_kind', ['DOC', 'TASK', 'DB_ROW'])
 
 /** FR-501…510: one page system for the team wiki (WORKSPACE) and project documents (PROJECT); depth 0..9 (FR-502). */
 export const pages = pgTable(
@@ -444,6 +446,10 @@ export const pages = pgTable(
     // M6.1 (§4.6.4, FR-681): a TASK page is the 1:1 body of a task — never in a tree, fixed key 'a0' (X48).
     kind: pageKind('kind').notNull().default('DOC'),
     taskId: uuid('task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
+    // M11 (FR-1453, M11-D8): a DB_ROW page is the 1:1 body of a database row — same shape rules as TASK pages.
+    databaseRowId: uuid('database_row_id').references((): AnyPgColumn => databaseRows.id, {
+      onDelete: 'cascade',
+    }),
     fullWidth: boolean('full_width').notNull().default(false), // FR-1602: shared page property, every kind
     locked: boolean('locked').notNull().default(false), // FR-510 "protected" (WORKSPACE only, service-enforced)
     version: integer('version').notNull().default(1), // FR-543 (content saves only, M4-D4)
@@ -470,6 +476,9 @@ export const pages = pgTable(
     ),
     check('pages_task_space', sql`${t.kind} <> 'TASK' or ${t.space} = 'PROJECT'`),
     uniqueIndex('pages_task_id_unique').on(t.taskId),
+    // M11 (SPEC §6.2, M11-D4): `::text` is mandatory — the enum value is added in the same migration transaction.
+    check('pages_kind_row', sql`(${t.kind}::text = 'DB_ROW') = (${t.databaseRowId} is not null)`),
+    uniqueIndex('pages_database_row_id_unique').on(t.databaseRowId),
     index('pages_tree_idx')
       .on(t.space, t.projectId, t.parentId, t.position)
       .where(sql`${t.deletedAt} is null and ${t.kind} = 'DOC'`),
@@ -689,6 +698,160 @@ export const milestones = pgTable(
 /** "Db" suffix: the name `MilestoneRow` belongs to the grid component (S3.3, C81). */
 export type MilestoneDbRow = typeof milestones.$inferSelect
 export type NewMilestone = typeof milestones.$inferInsert
+
+// ---------------------------------------------------------------------------------------------------------------
+// M11 — databases inside pages (SPEC §6.2, §4.14, BR-90…98; plan/m11 S0.2, M11-D4/D34). No FK to tasks / allocations /
+// projects / project_members on purpose (BR-98): the project and the permissions always come from the owner page.
+// Positions are orderKey (X48). Soft delete + batch (§7.5) for columns, views and rows; restore by batch index.
+// ---------------------------------------------------------------------------------------------------------------
+
+export const dbColumnType = pgEnum('db_column_type', [
+  'TITLE',
+  'TEXT',
+  'NUMBER',
+  'SELECT',
+  'MULTI_SELECT',
+  'DATE',
+  'CHECKBOX',
+  'PERSON',
+  'URL',
+])
+export const dbViewType = pgEnum('db_view_type', ['TABLE', 'KANBAN', 'CALENDAR'])
+
+/** FR-1402: one owner page per database; `detached_at` = the block is no longer in the owner's content (FR-1472). */
+export const databases = pgTable(
+  'databases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    pageId: uuid('page_id')
+      .notNull()
+      .references((): AnyPgColumn => pages.id, { onDelete: 'cascade' }),
+    title: text('title').notNull().default(''),
+    version: integer('version').notNull().default(1), // FR-1463 (database title)
+    detachedAt: timestamptz('detached_at'),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    updatedBy: text('updated_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check('databases_title_len', sql`length(${t.title}) <= 200`),
+    index('databases_page_id_idx').on(t.pageId),
+    index('databases_title_trgm').using('gin', t.title.op('gin_trgm_ops')),
+  ],
+)
+
+/** Typed columns (FR-1410). config: SELECT/MULTI_SELECT `{ options }`, NUMBER `{ decimals, thousands }`, others `{}`. */
+export const databaseColumns = pgTable(
+  'database_columns',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    databaseId: uuid('database_id')
+      .notNull()
+      .references(() => databases.id, { onDelete: 'cascade' }),
+    type: dbColumnType('type').notNull(),
+    name: text('name').notNull(),
+    config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+    position: orderKey('position').notNull(), // column order of every view (FR-1413)
+    version: integer('version').notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('database_columns_name_len', sql`length(trim(${t.name})) between 1 and 100`),
+    check('database_columns_title_not_deleted', sql`${t.type} <> 'TITLE' or ${t.deletedAt} is null`),
+    uniqueIndex('database_columns_one_title')
+      .on(t.databaseId)
+      .where(sql`${t.type} = 'TITLE'`),
+    index('database_columns_db_pos_idx')
+      .on(t.databaseId, t.position)
+      .where(sql`${t.deletedAt} is null`),
+    index('database_columns_batch_idx')
+      .on(t.deletedBatch)
+      .where(sql`${t.deletedBatch} is not null`),
+  ],
+)
+
+/** Shared views (FR-1405/1406); config = ViewConfig (§7.9). */
+export const databaseViews = pgTable(
+  'database_views',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    databaseId: uuid('database_id')
+      .notNull()
+      .references(() => databases.id, { onDelete: 'cascade' }),
+    type: dbViewType('type').notNull(),
+    name: text('name').notNull(),
+    config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+    position: orderKey('position').notNull(), // tab order
+    version: integer('version').notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('database_views_name_len', sql`length(trim(${t.name})) between 1 and 100`),
+    index('database_views_db_pos_idx')
+      .on(t.databaseId, t.position)
+      .where(sql`${t.deletedAt} is null`),
+    index('database_views_batch_idx')
+      .on(t.deletedBatch)
+      .where(sql`${t.deletedBatch} is not null`),
+  ],
+)
+
+/** Rows (BR-90): `cells` = { [columnId]: CellValue } — numbers and dates are strings (BR-91/92). */
+export const databaseRows = pgTable(
+  'database_rows',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    databaseId: uuid('database_id')
+      .notNull()
+      .references(() => databases.id, { onDelete: 'cascade' }),
+    title: text('title').notNull().default(''),
+    cells: jsonb('cells').$type<Record<string, unknown>>().notNull().default({}),
+    position: orderKey('position').notNull(), // manual order shared by every view
+    version: integer('version').notNull().default(1), // FR-1463
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    updatedBy: text('updated_by')
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: timestamptz('deleted_at'),
+    deletedBatch: uuid('deleted_batch'),
+  },
+  (t) => [
+    check('database_rows_title_len', sql`length(${t.title}) <= 500`),
+    check('database_rows_cells_object', sql`jsonb_typeof(${t.cells}) = 'object'`),
+    index('database_rows_db_pos_idx')
+      .on(t.databaseId, t.position)
+      .where(sql`${t.deletedAt} is null`),
+    index('database_rows_title_trgm').using('gin', t.title.op('gin_trgm_ops')),
+    index('database_rows_batch_idx')
+      .on(t.deletedBatch)
+      .where(sql`${t.deletedBatch} is not null`),
+  ],
+)
+
+/** Row types (plan/m11 S0.2). `DbRowRow` = a database_rows row (the "Row" suffix is the Drizzle row type). */
+export type DatabaseRow = typeof databases.$inferSelect
+export type NewDatabase = typeof databases.$inferInsert
+export type DbColumnRow = typeof databaseColumns.$inferSelect
+export type NewDbColumn = typeof databaseColumns.$inferInsert
+export type DbViewRow = typeof databaseViews.$inferSelect
+export type NewDbView = typeof databaseViews.$inferInsert
+export type DbRowRow = typeof databaseRows.$inferSelect
+export type NewDbRow = typeof databaseRows.$inferInsert
 
 export type HolidayRow = typeof holidays.$inferSelect
 export type NewHoliday = typeof holidays.$inferInsert

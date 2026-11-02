@@ -1,6 +1,9 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import {
+  invalidateDatabase,
+  patchDatabase,
+  patchRowHasBody,
   invalidateCalendar,
   invalidateLeaveTypes,
   invalidateLoad,
@@ -14,8 +17,9 @@ import {
   invalidateTaskViews,
   patchTaskHasBody,
 } from './invalidate'
+import type { DatabaseResponse, DbRowDTO } from './contracts/databases'
 import type { ProjectTasksResponse, TaskDTO } from './contracts/tasks'
-import { type GridChunk, qk } from './query-keys'
+import { type GridChunk, qk, qkPrefix } from './query-keys'
 import { teamTasksQuerySchema } from './schemas/tasks'
 
 const LOAD_KEYS = [
@@ -388,5 +392,70 @@ describe('home, search index and live-block keys (M10 S0.5, X18, X82, M10-D10)',
     expect(invalidated(qc, keys.searchIndex)).toBe(true)
     expect(invalidated(qc, keys.search)).toBe(true)
     expect(invalidated(qc, keys.home)).toBe(false)
+  })
+})
+
+describe('databases (M11 S0.8, M11-D20/D39)', () => {
+  const row = (id: string, hasBody = false): DbRowDTO => ({
+    id,
+    title: id,
+    cells: {},
+    position: 'a0',
+    version: 1,
+    hasBody,
+    createdBy: 'u',
+    createdAt: '2026-09-30T03:00:00.000Z',
+    updatedBy: 'u',
+    updatedAt: '2026-09-30T03:00:00.000Z',
+  })
+  const dbr = (): DatabaseResponse => ({
+    id: 'd1',
+    pageId: 'p1',
+    title: 'ฐานข้อมูล',
+    version: 1,
+    canEdit: true,
+    columns: [],
+    views: [],
+    rows: [row('r1'), row('r2', true)],
+    people: {},
+  })
+
+  it('keys live under the databases prefix', () => {
+    expect(qk.database('p1', 'd1')).toEqual(['databases', 'p1', 'd1'])
+    expect(qk.rowBody('r1')).toEqual(['databases', 'rowBody', 'r1'])
+    expect(qkPrefix.databases).toEqual(['databases'])
+    expect(qk.database('p1', 'd1').slice(0, 1)).toEqual(qkPrefix.databases)
+  })
+
+  it('invalidateDatabase marks only that database', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(qk.database('p1', 'd1'), dbr())
+    qc.setQueryData(qk.database('p1', 'd2'), dbr())
+    await invalidateDatabase(qc, 'p1', 'd1')
+    expect(invalidated(qc, qk.database('p1', 'd1'))).toBe(true)
+    expect(invalidated(qc, qk.database('p1', 'd2'))).toBe(false)
+  })
+
+  it('patchDatabase is a no-op when not cached', () => {
+    const qc = new QueryClient()
+    patchDatabase(qc, 'p1', 'd1', (d) => ({ ...d, title: 'x' }))
+    expect(qc.getQueryData(qk.database('p1', 'd1'))).toBeUndefined()
+    qc.setQueryData(qk.database('p1', 'd1'), dbr())
+    patchDatabase(qc, 'p1', 'd1', (d) => ({ ...d, title: 'ใหม่' }))
+    expect(qc.getQueryData<DatabaseResponse>(qk.database('p1', 'd1'))?.title).toBe('ใหม่')
+  })
+
+  it('patchRowHasBody changes one row; same value keeps the reference', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(qk.database('p1', 'd1'), dbr())
+    const before = qc.getQueryData<DatabaseResponse>(qk.database('p1', 'd1'))
+    patchRowHasBody(qc, 'p1', 'd1', 'r2', true)
+    expect(qc.getQueryData(qk.database('p1', 'd1'))).toBe(before)
+    patchRowHasBody(qc, 'p1', 'd1', 'r1', true)
+    const after = qc.getQueryData<DatabaseResponse>(qk.database('p1', 'd1'))
+    expect(after?.rows.map((r) => r.hasBody)).toEqual([true, true])
+    expect(after?.rows[1]).toBe(before?.rows[1])
+    patchRowHasBody(qc, 'p1', 'd1', 'missing', true)
+    expect(qc.getQueryData(qk.database('p1', 'd1'))).toBe(after)
   })
 })

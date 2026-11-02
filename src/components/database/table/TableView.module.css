@@ -1,0 +1,419 @@
+/* The table view (FR-1420…1429, M11-D22/D31): plain elements + CSS variables, state in data-* / aria-* attributes.
+   One scroll container per block: horizontal scroll stays inside (the page never scrolls sideways); above 50 rows the
+   body is virtualised inside a bounded height. Lead column + title column are sticky on the left. */
+.wrap {
+  /* width of the lead column (drag handle + row checkbox) — a layout constant, mirrored by LEAD_W in TableView */
+  --db-lead: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.scroller {
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.scroller[data-virtual='true'] {
+  max-height: min(70vh, calc(var(--header-height) * 12));
+  overflow-y: auto;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  outline: none;
+}
+
+.row {
+  display: flex;
+  align-items: stretch;
+  min-height: 34px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.row:hover,
+.row:focus-within {
+  background: var(--hover-bg);
+}
+
+.row[aria-selected='true'] {
+  background: var(--mui-palette-action-selected);
+}
+
+.row[data-dragging='true'] {
+  position: relative;
+  z-index: 3;
+  opacity: 0.85;
+  box-shadow: 0 2px 8px var(--border-subtle);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+}
+
+.header:hover {
+  background: var(--surface);
+}
+
+.lead {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  width: var(--db-lead);
+  padding: 0 var(--space-1);
+  background: inherit;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0 var(--space-2);
+  border-right: 1px solid var(--border-subtle);
+  outline: none;
+  overflow: hidden;
+  cursor: default;
+}
+
+.cell[data-editable='true'] {
+  cursor: text;
+}
+
+.cell[data-type='CHECKBOX'] {
+  justify-content: center;
+}
+
+.cell[data-type='NUMBER'] {
+  justify-content: flex-end;
+}
+
+.cell[data-active='true'] {
+  box-shadow: inset 0 0 0 2px var(--mui-palette-primary-main);
+}
+
+.cell:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--brand-blue);
+}
+
+.cell[data-editing='true'] {
+  overflow: visible;
+  z-index: 5;
+}
+
+.titleCell {
+  position: sticky;
+  left: var(--db-lead);
+  z-index: 1;
+  background: inherit;
+}
+
+.titleCell[data-editing='true'] {
+  z-index: 6;
+}
+
+.titleText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 0;
+}
+
+.row:hover .rowActions,
+.titleCell:focus-within .rowActions,
+.titleCell[data-active='true'] .rowActions {
+  display: inline-flex;
+}
+
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 100%;
+  min-height: 100%;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 4px 16px var(--border-subtle);
+}
+
+.overlay[data-wide='true'] {
+  min-width: 280px;
+}
+
+.headCell {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+}
+
+/* the title header must stay sticky like its body cells: `.headCell { position: relative }` above would
+   otherwise win the cascade and turn `left: var(--db-lead)` into a relative 56 px shift */
+.headCell.titleCell {
+  position: sticky;
+  left: var(--db-lead);
+  z-index: 3;
+  background: var(--surface);
+}
+
+.headButton {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headButton:hover {
+  background: var(--hover-bg);
+}
+
+.headButton:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.headButton:disabled {
+  cursor: default;
+}
+
+.headButton:disabled:hover {
+  background: transparent;
+}
+
+.headIcon {
+  display: inline-flex;
+  flex: none;
+  font-size: var(--font-lg);
+}
+
+.headLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize:hover,
+.resize:focus-visible,
+.resize[data-active='true'] {
+  background: var(--mui-palette-primary-main);
+}
+
+/* focus is shown by an outline too, not by the fill colour alone (SPEC §8.9) */
+.resize:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+.iconBtn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.iconBtn:hover {
+  background: var(--hover-bg);
+  color: var(--mui-palette-text-primary);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle[disabled] {
+  visibility: hidden;
+}
+
+.lead .handle,
+.lead .select {
+  opacity: 0;
+}
+
+.row:hover .lead .handle,
+.row:hover .lead .select,
+.row:focus-within .lead .handle,
+.row:focus-within .lead .select,
+.lead .select[data-checked='true'],
+.lead .select:focus-visible {
+  opacity: 1;
+}
+
+.header .lead .select {
+  opacity: 1;
+}
+
+.select {
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-1);
+  accent-color: var(--mui-palette-primary-main);
+  cursor: pointer;
+}
+
+.addColumn {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 0 var(--space-1);
+}
+
+.newRow {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.newRowButton {
+  position: sticky;
+  left: var(--db-lead);
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-left: var(--db-lead);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.newRowButton:hover {
+  background: var(--hover-bg);
+  color: var(--mui-palette-text-primary);
+}
+
+.newRowButton:focus-visible,
+.newRowButton[data-active='true'] {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.empty {
+  padding: var(--space-3) var(--space-2) var(--space-3) calc(var(--db-lead) + var(--space-2));
+  color: var(--text-secondary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--brand-light);
+  color: var(--brand-navy);
+  font-size: var(--font-sm);
+}
+
+.spacer {
+  flex: none;
+}
+
+@media (max-width: 599.95px) {
+  .row,
+  .newRow {
+    min-height: 36px;
+  }
+
+  .headButton {
+    min-height: 36px;
+  }
+
+  /* touch: the row tools are always reachable (no hover) */
+  .lead .handle,
+  .lead .select,
+  .rowActions {
+    opacity: 1;
+    display: inline-flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .headCell {
+    transition: none !important;
+  }
+}

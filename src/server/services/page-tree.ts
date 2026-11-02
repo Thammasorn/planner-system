@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { th } from '@/i18n/th'
 import type { PageCrumb, PageSpace, PageTreeNode, PageTreeResponse } from '@/lib/contracts/pages'
-import { extractContentText, remapSubpageIds } from '@/lib/editor/content-text'
+import { extractContentText, remapContentIds } from '@/lib/editor/content-text'
 import type { CreatePageInput, MovePageInput, TreeQuery } from '@/lib/schemas/pages'
 import * as audit from '../audit'
 import * as authz from '../authz'
@@ -19,6 +19,7 @@ import * as order from '../repo/order'
 import * as pagesRepo from '../repo/pages'
 import type { SessionUser } from '../session'
 import { keyAmong } from './order-keys'
+import { copyPageDatabases, planPageDatabases } from './database-copy'
 import { clearLeases } from './page-lease'
 
 /** FR-502: depth index 0..9 (ten levels). */
@@ -216,12 +217,16 @@ export async function duplicatePage(
     sql`select gen_random_uuid() as id from generate_series(1, ${rows.length})`,
   )
   const map = new Map<string, string>(rows.map((r, i) => [r.id, fresh[i]!.id]))
+  // FR-1470 / M11-D11: every attached database of the copied pages gets a new id up front so content can be remapped
+  const dbPlan = await planPageDatabases(tx, rows.map((r) => r.id))
+  const dbMap = new Map([...dbPlan].map(([oldId, p]) => [oldId, p.newId]))
   await lockPageScope(tx, scope)
   const rootPosition = await keyAt(tx, { ...scope, afterId: source.id })
   let root: PageRow | undefined
+  const copies = new Map<string, PageRow>()
   for (const r of rows) {
     const isRoot = r.id === source.id
-    const content = remapSubpageIds(r.content, map)
+    const content = remapContentIds(r.content, { pages: map, databases: dbMap })
     const values: NewPage = {
       id: map.get(r.id)!,
       space: r.space,
@@ -242,8 +247,10 @@ export async function duplicatePage(
       updatedBy: user.id,
     }
     const inserted = await pagesRepo.insertPage(tx, values)
+    copies.set(r.id, inserted)
     if (isRoot) root = inserted
   }
+  await copyPageDatabases(tx, user, dbPlan, copies)
   await audit.log(tx, user, {
     entity: 'page',
     entityId: root!.id,

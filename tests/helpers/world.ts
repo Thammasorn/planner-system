@@ -9,6 +9,10 @@ import { extractContentText } from '@/lib/editor/content-text'
 import type { RemovedMemberSnapshot } from '@/lib/contracts/tasks'
 import type {
   ClientRow,
+  DatabaseRow,
+  DbColumnRow,
+  DbRowRow,
+  DbViewRow,
   FileRow,
   HolidayRow,
   LeaveTypeRow,
@@ -35,12 +39,17 @@ import {
   makeClient,
   makeFile,
   makeHoliday,
+  makeDatabase,
+  makeDbColumn,
+  makeDbRow,
+  makeDbView,
   makeLeaveType,
   makeMembership,
   makeMilestone,
   makePage,
   makePlanMarker,
   makeProject,
+  makeRowBody,
   makeStatus,
   makeStatuses,
   makeTask,
@@ -53,7 +62,7 @@ import {
 
 /** Pinned part list (X91); each milestone adds the builder for its part(s).
  *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations · M7.1 planMarkers ·
- *  M8 milestones · M10 home */
+ *  M8 milestones · M10 home · M11 databases */
 export type WorldPart =
   | 'tasks'
   | 'pages'
@@ -65,6 +74,7 @@ export type WorldPart =
   | 'planMarkers'
   | 'milestones'
   | 'home'
+  | 'databases'
 
 /** Fixed build order of the parts. */
 export const WORLD_PART_ORDER: readonly WorldPart[] = [
@@ -77,7 +87,8 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
   'dayAllocations',
   'planMarkers', // M7.1: needs only P / Q / A
   'milestones',
-  'home', // M10: last — adds keys to the tasks / pages / timeOff / milestones objects of the earlier parts
+  'home', // M10: adds keys to the tasks / pages / timeOff / milestones objects of the earlier parts
+  'databases', // M11: last — databases on the world's DOC / TASK pages (plan/m11 S0.17)
 ]
 
 /** Implications; the owning milestone adds its entry (M6 allocations → tasks + timeOff, M7 dayAllocations →
@@ -89,6 +100,7 @@ export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>
   dayAllocations: ['allocations'], // M7: day plans on M6's assignments (plan/m07 S0.9, G17 — no new users/tasks)
   milestones: ['tasks', 'allocations'], // M8: bound M3 tasks; lateness reads M6's plans (plan/m08 S0.10, X91)
   home: ['tasks', 'pages', 'timeOff', 'allocations', 'milestones'], // M10: every home card (plan/m10 S0.12)
+  databases: ['pages', 'taskBodies', 'files'], // M11 (X91): owner pages incl. a TASK body; a row-body image
 }
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
@@ -344,6 +356,68 @@ export interface WorldMilestones {
   }
 }
 
+/** Part 'databases' (M11, plan/m11 S0.17; implies 'pages', 'taskBodies', 'files'). Created by the manager.
+ *  Distinctive titles for leak tests; cell values of dbP are distinctive too (never searchable, FR-1474). */
+export interface WorldDatabases {
+  databases: {
+    /** On pages.pPage, 'ฐานข้อมูล P-ลับ20': every column type, views ตาราง / คัมบัง (สถานะ) / ปฏิทิน (วันที่). */
+    dbP: DatabaseRow
+    /** Live columns of dbP by role (+ `deleted` = soft-deleted 'ลบแล้ว' under w.batches.dbColumn). */
+    dbPColumns: {
+      title: DbColumnRow
+      status: DbColumnRow
+      date: DbColumnRow
+      text: DbColumnRow
+      number: DbColumnRow
+      multi: DbColumnRow
+      check: DbColumnRow
+      person: DbColumnRow
+      url: DbColumnRow
+      deleted: DbColumnRow
+    }
+    /** Option ids: status (ยังไม่เริ่ม / กำลังทำ / เสร็จ) and multi (แท็ก A / แท็ก B). */
+    dbPOptions: { todo: string; doing: string; done: string; tagA: string; tagB: string }
+    /** Views of dbP (+ `deleted` = soft-deleted view under w.batches.dbView). */
+    dbPViews: { table: DbViewRow; kanban: DbViewRow; calendar: DbViewRow; deleted: DbViewRow }
+    /** 'แถว P-ลับ21': every cell set (text 'ค่าเซลล์ P-ลับ28', คน = [member], date 2026-09-30); has pRowBody. */
+    pRow1: DbRowRow
+    /** 'แถว P-2' (no body; = pRowNoBody). */
+    pRow2: DbRowRow
+    /** 'แถว P-3' (no cells). */
+    pRow3: DbRowRow
+    pRowNoBody: DbRowRow
+    /** DB_ROW page of pRow1: 'เนื้อหาแถว P-ลับ22' + an image block of pRowImage. */
+    pRowBody: PageRow
+    /** IMAGE on pRowBody (project P). */
+    pRowImage: FileRow
+    /** Soft-deleted row 'แถวลบแล้ว P' (+ body pRowDeletedBody) under w.batches.dbRows. */
+    pRowDeleted: DbRowRow
+    pRowDeletedBody: PageRow
+    /** On pPage, detached (block no longer in the page content): 'ฐานข้อมูลหลุด P'. */
+    dbPDetached: DatabaseRow
+    /** On taskBodies.pLeafBody (a TASK owner page), 'ฐานข้อมูลงาน P', one row taskRow. */
+    dbTask: DatabaseRow
+    taskRow: DbRowRow
+    /** On pages.aPage (archived A), 'ฐานข้อมูล A-ลับ26', row aRow with body aRowBody. */
+    dbA: DatabaseRow
+    aRow: DbRowRow
+    aRowBody: PageRow
+    /** On pages.qPage, 'ฐานข้อมูล Q-ลับ23', row 'แถว Q-ลับ24'. */
+    dbQ: DatabaseRow
+    qRow: DbRowRow
+    /** On pages.wiki, 'ฐานข้อมูล W-08', row 'แถว W-25' with body wikiRowBody. */
+    dbWiki: DatabaseRow
+    wikiRow: DbRowRow
+    wikiRowBody: PageRow
+    /** On pages.wikiProtected (locked), 'ฐานข้อมูลล็อก W-09', one row wikiProtRow. */
+    dbWikiProt: DatabaseRow
+    wikiProtRow: DbRowRow
+    /** On deletedPages.pDeleted, 'ฐานข้อมูลในหน้าที่ลบ P', one row. */
+    dbDeletedPage: DatabaseRow
+    deletedPageRow: DbRowRow
+  }
+}
+
 /** Batch ids of every part; each part fills its own keys (reading another part's key throws). */
 export type WorldBatches = WorldTasks['batches'] & {
   /** P root 'ลบแล้ว P', deleted 1 day ago. */
@@ -362,6 +436,12 @@ export type WorldBatches = WorldTasks['batches'] & {
   pExpiredMilestone: string
   /** M8: batch of deletedMilestones.aDeleted (archived A, 1 day ago). */
   aDeletedMilestone: string
+  /** M11: rows batch of dbP (pRowDeleted + pRowDeletedBody, 1 day ago). */
+  dbRows: string
+  /** M11: column batch of dbP (dbPColumns.deleted, 1 day ago). */
+  dbColumn: string
+  /** M11: view batch of dbP (dbPViews.deleted, 1 day ago). */
+  dbView: string
 }
 
 export interface World
@@ -374,7 +454,8 @@ export interface World
     WorldAllocations,
     WorldDayAllocations,
     WorldPlanMarkers,
-    WorldMilestones {
+    WorldMilestones,
+    WorldDatabases {
   batches: WorldBatches
   manager: TestUser
   lead: TestUser
@@ -445,6 +526,9 @@ const BATCH_PART: Record<keyof WorldBatches, WorldPart> = {
   pDeletedMilestone: 'milestones',
   pExpiredMilestone: 'milestones',
   aDeletedMilestone: 'milestones',
+  dbRows: 'databases',
+  dbColumn: 'databases',
+  dbView: 'databases',
 }
 
 /** w.batches: builders Object.assign their keys; reading a key of an unbuilt part throws like notBuilt. */
@@ -851,8 +935,18 @@ async function buildMilestones(w: World): Promise<void> {
     await bindTask(task, m)
     Object.assign(task, { milestoneId: m.id })
   }
-  const p = await makeMilestone({ project: w.P, name: 'Milestone P-ลับ06', date: '2026-10-23', createdBy: w.lead })
-  const pLate = await makeMilestone({ project: w.P, name: 'ส่งมอบรอบแรก P', date: '2026-10-02', createdBy: w.lead })
+  const p = await makeMilestone({
+    project: w.P,
+    name: 'Milestone P-ลับ06',
+    date: '2026-10-23',
+    createdBy: w.lead,
+  })
+  const pLate = await makeMilestone({
+    project: w.P,
+    name: 'ส่งมอบรอบแรก P',
+    date: '2026-10-02',
+    createdBy: w.lead,
+  })
   const pDone = await makeMilestone({
     project: w.P,
     name: 'Kickoff P',
@@ -860,7 +954,12 @@ async function buildMilestones(w: World): Promise<void> {
     completedOn: '2026-09-16',
     createdBy: w.lead,
   })
-  const q = await makeMilestone({ project: w.Q, name: 'Milestone Q-ลับ05', date: '2026-10-20', createdBy: w.manager })
+  const q = await makeMilestone({
+    project: w.Q,
+    name: 'Milestone Q-ลับ05',
+    date: '2026-10-20',
+    createdBy: w.manager,
+  })
   const a = await makeMilestone({ project: w.A, name: 'Milestone A', date: '2026-10-30', createdBy: w.lead })
   await bind(t.pChildB, p)
   await bind(t.pLeaf, pLate)
@@ -868,7 +967,11 @@ async function buildMilestones(w: World): Promise<void> {
   await bind(t.qTask, q)
   await bind(t.aTask, a)
 
-  const batches = { pDeletedMilestone: randomUUID(), pExpiredMilestone: randomUUID(), aDeletedMilestone: randomUUID() }
+  const batches = {
+    pDeletedMilestone: randomUUID(),
+    pExpiredMilestone: randomUUID(),
+    aDeletedMilestone: randomUUID(),
+  }
   const pDeleted = await makeMilestone({
     project: w.P,
     name: 'Milestone ที่ลบแล้ว P',
@@ -914,9 +1017,24 @@ async function buildHome(w: World): Promise<void> {
   const pOnly = w.users.pOnly!
 
   Object.assign(w.milestones, {
-    pOverdue: await makeMilestone({ project: P, name: 'Milestone P-ลับ13', date: '2026-09-25', createdBy: lead }),
-    qSoon: await makeMilestone({ project: Q, name: 'Milestone Q-ลับ15', date: '2026-10-05', createdBy: manager }),
-    pAncient: await makeMilestone({ project: P, name: 'Milestone P-ลับ16', date: '2026-08-31', createdBy: lead }),
+    pOverdue: await makeMilestone({
+      project: P,
+      name: 'Milestone P-ลับ13',
+      date: '2026-09-25',
+      createdBy: lead,
+    }),
+    qSoon: await makeMilestone({
+      project: Q,
+      name: 'Milestone Q-ลับ15',
+      date: '2026-10-05',
+      createdBy: manager,
+    }),
+    pAncient: await makeMilestone({
+      project: P,
+      name: 'Milestone P-ลับ16',
+      date: '2026-08-31',
+      createdBy: lead,
+    }),
   })
 
   Object.assign(w.timeOff, {
@@ -956,7 +1074,10 @@ async function buildHome(w: World): Promise<void> {
   await db.update(pages).set({ updatedAt: HOME_OLDER_AT }).where(gt(pages.updatedAt, HOME_OLDER_AT))
   await db.update(pages).set({ updatedAt: HOME_RECENT_AT }).where(eq(pages.id, qRecent.id))
   const stamps = new Map(
-    (await db.select({ id: pages.id, updatedAt: pages.updatedAt }).from(pages)).map((r) => [r.id, r.updatedAt]),
+    (await db.select({ id: pages.id, updatedAt: pages.updatedAt }).from(pages)).map((r) => [
+      r.id,
+      r.updatedAt,
+    ]),
   )
   const added = { ...embeds, qRecent }
   for (const row of [
@@ -971,6 +1092,169 @@ async function buildHome(w: World): Promise<void> {
   Object.assign(w.pages, added)
 }
 
+/** M11 'databases' part (plan/m11 S0.17). Created by the manager; deleted objects under fresh batches. */
+async function buildDatabases(w: World): Promise<void> {
+  const { manager, member } = w
+  const by = { createdBy: manager }
+  const P = await makeDatabase({
+    page: w.pages.pPage,
+    title: 'ฐานข้อมูล P-ลับ20',
+    columns: [
+      { type: 'SELECT', name: 'สถานะ', options: ['ยังไม่เริ่ม', 'กำลังทำ', 'เสร็จ'] },
+      { type: 'DATE', name: 'วันที่' },
+      { type: 'TEXT', name: 'ข้อความ' },
+      { type: 'NUMBER', name: 'ตัวเลข' },
+      { type: 'MULTI_SELECT', name: 'หลาย', options: ['แท็ก A', 'แท็ก B'] },
+      { type: 'CHECKBOX', name: 'ติ๊ก' },
+      { type: 'PERSON', name: 'คน' },
+      { type: 'URL', name: 'ลิงก์' },
+    ],
+    views: [
+      { type: 'TABLE', name: 'ตาราง' },
+      { type: 'KANBAN', name: 'คัมบัง', config: (c) => ({ groupByColumnId: c['สถานะ']!.id }) },
+      { type: 'CALENDAR', name: 'ปฏิทิน', config: (c) => ({ dateColumnId: c['วันที่']!.id }) },
+    ],
+    ...by,
+  })
+  const c = P.columns
+  const status = P.options['สถานะ']!
+  const multi = P.options['หลาย']!
+  const dbRows = randomUUID()
+  const dbColumn = randomUUID()
+  const dbView = randomUUID()
+  const deletedColumn = (
+    await makeDbColumn({
+      database: P.database,
+      type: 'TEXT',
+      name: 'ลบแล้ว',
+      deleted: { batch: dbColumn, ...DAY_AGO },
+    })
+  ).column
+  const deletedView = await makeDbView({
+    database: P.database,
+    type: 'TABLE',
+    name: 'มุมมองที่ลบ',
+    deleted: { batch: dbView, ...DAY_AGO },
+  })
+  const pRow1 = await makeDbRow({
+    database: P.database,
+    title: 'แถว P-ลับ21',
+    cells: {
+      [c['สถานะ']!.id]: status['กำลังทำ'],
+      [c['วันที่']!.id]: '2026-09-30',
+      [c['ข้อความ']!.id]: 'ค่าเซลล์ P-ลับ28',
+      [c['ตัวเลข']!.id]: '1234.5',
+      [c['หลาย']!.id]: [multi['แท็ก A']],
+      [c['ติ๊ก']!.id]: true,
+      [c['คน']!.id]: [member.id],
+      [c['ลิงก์']!.id]: 'https://example.com/p',
+      [deletedColumn.id]: 'ค่าในคอลัมน์ที่ลบ P',
+    },
+    ...by,
+  })
+  const pRow2 = await makeDbRow({
+    database: P.database,
+    title: 'แถว P-2',
+    cells: { [c['สถานะ']!.id]: status['ยังไม่เริ่ม'] },
+    ...by,
+  })
+  const pRow3 = await makeDbRow({ database: P.database, title: 'แถว P-3', ...by })
+  const pRowDeleted = await makeDbRow({
+    database: P.database,
+    title: 'แถวลบแล้ว P',
+    deleted: { batch: dbRows, ...DAY_AGO },
+    ...by,
+  })
+  const pRowDeletedBody = await makeRowBody({
+    row: pRowDeleted,
+    content: 'เนื้อหาแถวที่ลบ P',
+    deleted: { batch: dbRows, ...DAY_AGO },
+    ...by,
+  })
+  const bodyNoImage = await makeRowBody({ row: pRow1, content: 'เนื้อหาแถว P-ลับ22', ...by })
+  const pRowImage = await makeFile({ page: bodyNoImage, uploadedBy: manager })
+  const bodyContent = [
+    { type: 'paragraph', content: 'เนื้อหาแถว P-ลับ22' },
+    { type: 'image', props: { url: `/api/files/${pRowImage.id}`, name: 'image.png' } },
+  ]
+  const [pRowBody] = await db
+    .update(pages)
+    .set({ content: bodyContent, contentText: extractContentText(bodyContent) })
+    .where(eq(pages.id, bodyNoImage.id))
+    .returning()
+
+  const one = async (page: { id: string }, title: string, rowTitle: string) => {
+    const made = await makeDatabase({ page, title, ...by })
+    const row = await makeDbRow({ database: made.database, title: rowTitle, ...by })
+    return { database: made.database, row }
+  }
+  const detached = await makeDatabase({
+    page: w.pages.pPage,
+    title: 'ฐานข้อมูลหลุด P',
+    detached: true,
+    ...by,
+  })
+  const task = await one(w.taskBodies.pLeafBody, 'ฐานข้อมูลงาน P', 'แถวงาน P')
+  const a = await one(w.pages.aPage, 'ฐานข้อมูล A-ลับ26', 'แถว A-ลับ27')
+  const q = await one(w.pages.qPage, 'ฐานข้อมูล Q-ลับ23', 'แถว Q-ลับ24')
+  const wiki = await one(w.pages.wiki, 'ฐานข้อมูล W-08', 'แถว W-25')
+  const wikiProt = await one(w.pages.wikiProtected, 'ฐานข้อมูลล็อก W-09', 'แถวล็อก W-10')
+  const deletedPage = await one(w.deletedPages.pDeleted, 'ฐานข้อมูลในหน้าที่ลบ P', 'แถวในหน้าที่ลบ P')
+
+  w.databases = {
+    dbP: P.database,
+    dbPColumns: {
+      title: c['ชื่อ']!,
+      status: c['สถานะ']!,
+      date: c['วันที่']!,
+      text: c['ข้อความ']!,
+      number: c['ตัวเลข']!,
+      multi: c['หลาย']!,
+      check: c['ติ๊ก']!,
+      person: c['คน']!,
+      url: c['ลิงก์']!,
+      deleted: deletedColumn,
+    },
+    dbPOptions: {
+      todo: status['ยังไม่เริ่ม']!,
+      doing: status['กำลังทำ']!,
+      done: status['เสร็จ']!,
+      tagA: multi['แท็ก A']!,
+      tagB: multi['แท็ก B']!,
+    },
+    dbPViews: {
+      table: P.views['ตาราง']!,
+      kanban: P.views['คัมบัง']!,
+      calendar: P.views['ปฏิทิน']!,
+      deleted: deletedView,
+    },
+    pRow1,
+    pRow2,
+    pRow3,
+    pRowNoBody: pRow2,
+    pRowBody: pRowBody!,
+    pRowImage,
+    pRowDeleted,
+    pRowDeletedBody,
+    dbPDetached: detached.database,
+    dbTask: task.database,
+    taskRow: task.row,
+    dbA: a.database,
+    aRow: a.row,
+    aRowBody: await makeRowBody({ row: a.row, content: 'เนื้อหาแถว A-ลับ29', ...by }),
+    dbQ: q.database,
+    qRow: q.row,
+    dbWiki: wiki.database,
+    wikiRow: wiki.row,
+    wikiRowBody: await makeRowBody({ row: wiki.row, content: 'เนื้อหาแถว W-11', ...by }),
+    dbWikiProt: wikiProt.database,
+    wikiProtRow: wikiProt.row,
+    dbDeletedPage: deletedPage.database,
+    deletedPageRow: deletedPage.row,
+  }
+  Object.assign(w.batches, { dbRows, dbColumn, dbView })
+}
+
 /** Builders by part; each milestone adds its own. */
 const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   tasks: buildTasks,
@@ -983,6 +1267,7 @@ const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   planMarkers: buildPlanMarkers,
   milestones: buildMilestones,
   home: buildHome,
+  databases: buildDatabases,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -1049,12 +1334,19 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     planMarkers: notBuilt('planMarkers', 'planMarkers'),
     milestones: notBuilt('milestones', 'milestones'),
     deletedMilestones: notBuilt('milestones', 'deletedMilestones'),
+    databases: notBuilt('databases', 'databases'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
   // M10: keys the 'home' part adds to earlier parts' objects throw clearly without it.
   if (!parts.has('home')) {
     w.tasks = withPendingKeys(w.tasks, 'home', 'tasks', ['pDueThisWeek'])
-    w.pages = withPendingKeys(w.pages, 'home', 'pages', ['qRecent', 'pEmbed', 'qEmbed', 'aEmbed', 'wikiEmbed'])
+    w.pages = withPendingKeys(w.pages, 'home', 'pages', [
+      'qRecent',
+      'pEmbed',
+      'qEmbed',
+      'aEmbed',
+      'wikiEmbed',
+    ])
     w.timeOff = withPendingKeys(w.timeOff, 'home', 'timeOff', ['coworkerToday', 'pOnlyNextWeek'])
     w.milestones = withPendingKeys(w.milestones, 'home', 'milestones', ['pOverdue', 'qSoon', 'pAncient'])
   }

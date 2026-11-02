@@ -7,15 +7,9 @@
 // and kill every onClick/onKeyDown inside (spike). Mod+K is untouched (the palette's window listener sees it);
 // Mod+Z / Mod+Shift+Z outside form fields run the app undo stack (M1's window listener skips `.bn-editor` targets).
 import Box from '@mui/material/Box'
-import type { JSX, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { useUndo } from '@/components/undo/useUndo'
+import type { JSX, ReactNode } from 'react'
 import { th } from '@/i18n/th'
-import { isRedoKey, isUndoKey } from '@/lib/keys'
-
-const FORM_FIELD = 'input,textarea,select,[contenteditable="true"],[contenteditable=""]'
-/** Targets that take focus or act on mousedown themselves (cards, handles, menus, fields, links). */
-const INTERACTIVE =
-  'a[href],button,input,select,textarea,label,[tabindex],[role="button"],[role="combobox"],[role="checkbox"],[role="switch"]'
+import { useIslandEvents } from './island-events'
 
 export interface LiveBlockFrameProps {
   title: string
@@ -27,26 +21,7 @@ export interface LiveBlockFrameProps {
 }
 
 export function LiveBlockFrame({ title, projectName, actions, children }: LiveBlockFrameProps): JSX.Element {
-  const undo = useUndo()
-  const onKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
-    if (e.defaultPrevented) return
-    // only fields inside the frame count: the BlockNote root around it is contenteditable="true" itself
-    const field = (e.target as Element).closest(FORM_FIELD)
-    if (field !== null && e.currentTarget.contains(field)) return // the field's own text undo
-    const redo = isRedoKey(e.nativeEvent)
-    if (!redo && !isUndoKey(e.nativeEvent)) return
-    e.preventDefault()
-    void (redo ? undo.redo() : undo.undo())
-  }
-  // A press on the frame's own surface (text, padding, an empty column) would let the browser put the caret into the
-  // editable page next to the block — BlockNote only blurs the editor 10 ms later — so typing right after it edits the
-  // page. Keep the default (focus, menus, drag) only for interactive targets inside the frame (M10-D8, e2e B7).
-  const onMouseDown = (e: MouseEvent<HTMLElement>): void => {
-    const target = e.target as Element
-    if (!e.currentTarget.contains(target)) return // React-bubbled from a portal (filter popover, menus)
-    const hit = target.closest(INTERACTIVE)
-    if (hit === null || !e.currentTarget.contains(hit)) e.preventDefault()
-  }
+  const { onKeyDown, onMouseDown } = useIslandEvents()
   return (
     <Box
       component="section"

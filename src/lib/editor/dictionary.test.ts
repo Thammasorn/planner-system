@@ -2,7 +2,7 @@
 import { en } from '@blocknote/core/locales'
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import { buildThaiDictionary, dictionaryFor, taskDictionary, thaiDictionary } from './dictionary'
+import { buildThaiDictionary, dictionaryFor, rowDictionary, taskDictionary, thaiDictionary } from './dictionary'
 
 describe('thaiDictionary', () => {
   it('every slash item has the Thai title, subtext and group', () => {
@@ -47,5 +47,11 @@ describe('taskDictionary (M6.1 S2.4, FR-681)', () => {
   it('dictionaryFor picks by page kind', () => {
     expect(dictionaryFor('TASK')).toBe(taskDictionary)
     expect(dictionaryFor('DOC')).toBe(thaiDictionary)
+    expect(dictionaryFor('DB_ROW')).toBe(rowDictionary)
+  })
+
+  it('M11 (FR-1453): a row body has its own empty-document placeholder, everything else shared', () => {
+    expect(rowDictionary.placeholders.emptyDocument).toBe(th.editor.rowPlaceholder)
+    expect(rowDictionary.slash_menu).toBe(thaiDictionary.slash_menu)
   })
 })

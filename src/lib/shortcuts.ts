@@ -3,7 +3,15 @@
 // the widgets' own key handlers (e.code, X49).
 import { th } from '@/i18n/th'
 
-export type ShortcutScope = 'global' | 'taskList' | 'taskPage' | 'calendar' | 'grid' | 'palette'
+export type ShortcutScope =
+  | 'global'
+  | 'taskList'
+  | 'taskPage'
+  | 'calendar'
+  | 'grid'
+  | 'palette'
+  | 'database' // M11 (§8.6)
+  | 'equation' // M11 (§8.6, FR-1503)
 export type KeyToken =
   | 'Mod'
   | 'Shift'
@@ -48,6 +56,8 @@ export const SHORTCUT_SCOPES: readonly ShortcutScope[] = [
   'calendar',
   'grid',
   'palette', // M10 (KEY-06)
+  'database', // M11
+  'equation', // M11
 ]
 
 /** Section heading of each scope in the `?` help (M5: the calendar heading lives in its own namespace). */
@@ -58,6 +68,8 @@ export const SHORTCUT_SCOPE_LABELS: Readonly<Record<ShortcutScope, string>> = {
   calendar: th.calendar.shortcuts.scope,
   grid: th.shortcuts.scopes.grid,
   palette: th.shortcuts.scopes.palette,
+  database: th.shortcuts.scopes.database,
+  equation: th.shortcuts.scopes.equation,
 }
 
 /** Key caption of every token ('Mod' = Ctrl here; the help shows ⌘ on Apple platforms). */
@@ -231,7 +243,12 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   },
   // M8 (FR-707, M8-D10, X49): Enter on a focused ◆ opens its popover (date field = keyboard move). Shift+F10 on ◆ is
   // M7's grid.cellMenu entry (same CellMenu, other items) — no second entry.
-  { id: 'grid.milestoneOpen', scope: 'grid', combos: [['Enter']], label: th.shortcuts.items.gridMilestoneOpen },
+  {
+    id: 'grid.milestoneOpen',
+    scope: 'grid',
+    combos: [['Enter']],
+    label: th.shortcuts.items.gridMilestoneOpen,
+  },
   // M10 palette scope (KEY-06, X07): moving in results, opening the selected hit/command, Backspace on an empty
   // input leaves a command step. 'palette.open' (Cmd+K) is M4's global entry, so Enter is 'palette.select'.
   {
@@ -242,4 +259,35 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   },
   { id: 'palette.select', scope: 'palette', combos: [['Enter']], label: th.shortcuts.items.paletteOpen },
   { id: 'palette.back', scope: 'palette', combos: [['Backspace']], label: th.shortcuts.items.paletteBack },
+  // M11 database table (§8.6, FR-1421–1422, X49 — matched on e.code by the table keyboard hook)
+  {
+    id: 'db.move',
+    scope: 'database',
+    combos: [['ArrowUp'], ['ArrowDown'], ['ArrowLeft'], ['ArrowRight']],
+    label: th.shortcuts.items.dbMove,
+  },
+  { id: 'db.edit', scope: 'database', combos: [['Enter']], label: th.shortcuts.items.dbEdit },
+  { id: 'db.cancel', scope: 'database', combos: [['Esc']], label: th.shortcuts.items.dbCancel },
+  {
+    id: 'db.nextCell',
+    scope: 'database',
+    combos: [['Tab'], ['Shift', 'Tab']],
+    label: th.shortcuts.items.dbNextCell,
+  },
+  { id: 'db.clear', scope: 'database', combos: [['Delete']], label: th.shortcuts.items.dbClear },
+  { id: 'db.space', scope: 'database', combos: [['Space']], label: th.shortcuts.items.dbSpace },
+  // M11 equations (§8.6, FR-1503)
+  {
+    id: 'equation.confirmInline',
+    scope: 'equation',
+    combos: [['Enter']],
+    label: th.shortcuts.items.equationConfirmInline,
+  },
+  {
+    id: 'equation.confirmBlock',
+    scope: 'equation',
+    combos: [['Mod', 'Enter']],
+    label: th.shortcuts.items.equationConfirmBlock,
+  },
+  { id: 'equation.cancel', scope: 'equation', combos: [['Esc']], label: th.shortcuts.items.equationCancel },
 ]

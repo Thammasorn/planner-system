@@ -2,7 +2,7 @@
 
 > Appendix of `PLAN.md` (§7). Every requirement id that `SPEC.md` v3.2 defines (FR-, BR-, AC-), every §3.2 permission row (PERM-01…28) and every §9 row (NFR-01…10 r7 numbering + NFR-11…12 appended in v3.2) maps to the milestone(s) that deliver it, the plan step(s) that build it and the test(s) that prove it.
 > **Precedence:** `SPEC.md` > `CLAUDE.md` > `PLAN.md` / `plan/**` (this file included) > `docs/**`. If a row here disagrees with a milestone plan, the milestone plan's §1.1/§7 wins for *how*; SPEC wins for *what*. This file replaces `plan/research/r7-traceability.md` §F–§I (v3.0 baseline) and the interim v3.1-only version of this file.
-> **Generated** 2026-10-30 (HANDOFF T9) from the 12 milestone plans `plan/m00…m11-*.md` of that day (all complete, reviewed, consistency-checked; PLAN §1.4 rulings X01–X96). **Updated 2026-11-01 (SPEC v3.2, PLAN §1.8):** the hardening plan is now `plan/m12-hardening-deploy.md` (every former "M11"/"m11" here reads M12/m12; r6b gap ids `M11-nn` unchanged); rows for the new M11 (FR-1401…1506, BR-90…98, AC-1401…1504, PERM-24…28, NFR-11…12; plus the M6.1 ids FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, AC-1414) are placeholders marked "plan pending" until `plan/m11-database-views.md` is written; the same holds for the M6.1 rows (FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, PERM-27…28) until `plan/m06.1-task-page-ui.md` is written.
+> **Generated** 2026-10-30 (HANDOFF T9) from the 12 milestone plans `plan/m00…m11-*.md` of that day (all complete, reviewed, consistency-checked; PLAN §1.4 rulings X01–X96). **Updated 2026-11-01 (SPEC v3.2, PLAN §1.8):** the hardening plan is now `plan/m12-hardening-deploy.md` (every former "M11"/"m11" here reads M12/m12; r6b gap ids `M11-nn` unchanged); rows for the new M11 (FR-1401…1506, BR-90…98, AC-1401…1504, PERM-24…28, NFR-11…12; plus the M6.1 ids FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, AC-1414) are placeholders marked "plan pending" until `plan/m11-database-views.md` is written; the same holds for the M6.1 rows (FR-680…693, AC-621…628, FR-1601…1606, AC-1601…1605, PERM-27…28) until `plan/m06.1-task-page-ui.md` is written. **Updated 2026-11-03 (M11 close-out):** the M11 rows (FR-1401…1506, BR-90…98, AC-1401…1414, AC-1501…1504, PERM-24…26, NFR-11/12) now point at `plan/m11-database-views.md` §1.1 / §7.1 / §7.2 and the tests as built (e2e scenarios in `e2e/m11-database.spec.ts`; D9 and D13 have no e2e scenario — covered by int/authz/golden).
 
 > **Updated 2026-11-01 (SPEC v3.3, PLAN §1.9):** rows for M7.1 (FR-810…820, BR-100…105, AC-806…813, PERM-29, NFR-13) point to `plan/m07.1-grid-improvements.md`; e2e index `e2e/m7.1-grid.spec.ts`.
 
@@ -201,66 +201,66 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | FR-1305 | Charter template section "งานและภาระของทีม" | M10 | m10 §5.S0.8 | `src/i18n/templates.test.ts` · `src/components/editor/templates.headless.test.ts` · `src/server/services/charters.int.test.ts` (M4, still green) | §4.13, M4-D30 |
 | FR-1306 | Refetch on focus + invalidate after mutation | M10 | m10 §5.S0.5, §5.S3.3 | `src/lib/invalidate.test.ts` · `src/components/tasks/embed/EmbeddedTasks.test.tsx` › refetch · `e2e/m10-home-search.spec.ts` › B4 | §4.13 |
 | FR-1307 | Blocks contribute nothing to `content_text` | M10 | m10 (M4 walker (M4-D30) — test only) | `src/lib/editor/content-text.test.ts` › live blocks · `e2e/m10-home-search.spec.ts` › B5 | §4.13, M4-D30 |
-| FR-1401 | Database = one data source (title, typed columns, rows) with several views | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
-| FR-1402 | Owned by exactly one page; no linked views in MVP | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, D15 |
-| FR-1403 | Slash items table/kanban/calendar view with Thai titles + English aliases | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
-| FR-1404 | Insert creates a ready database (title + สถานะ + วันที่ columns, first view) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, P5 |
-| FR-1405 | Block header: editable title + view tabs (add/switch/rename/duplicate/delete/reorder) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
-| FR-1406 | Views are shared by everyone; read-only viewers cannot change view settings | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1 |
-| FR-1407 | Block is a non-text island; delete/undo of the block via editor; Cmd+Z inside = database undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, §7.5 |
-| FR-1408 | Narrow screens: horizontal scroll inside block, calendar as day list, menu instead of drag | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.1, §9 |
-| FR-1410 | Column types TITLE, TEXT, NUMBER, SELECT, MULTI_SELECT, DATE, CHECKBOX, PERSON (1–20 active users), URL | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2, BR-90 |
-| FR-1411 | Add column with type and default name | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
-| FR-1412 | Column header menu (rename, type, config, sort, filter, hide, insert, duplicate, delete) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
-| FR-1413 | Column order per database; hidden/width/card props per view | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
-| FR-1414 | Change type converts all rows (BR-93), no dialog, undo restores everything | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2, BR-93 |
-| FR-1415 | Delete column with undo; dependent sort/filter/group suspended | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2 |
-| FR-1416 | Delete select option with undo; values shown empty | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.2, BR-95 |
-| FR-1420 | Table view: rows × columns, title pinned, virtualized > 50 rows | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
-| FR-1421 | Inline cell editing per type; type-to-replace | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
-| FR-1422 | Table keyboard navigation | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, §8.6 |
-| FR-1423 | Add row (no required value); inherits "is" filter values | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, P1 |
-| FR-1424 | Select rows, delete with undo toast | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, P2 |
-| FR-1425 | Column width per view (80–600 px) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
-| FR-1426 | Sort up to 3 keys; manual drag order only without sort | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, BR-94 |
-| FR-1427 | Filter up to 10 AND conditions | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3, BR-95 |
-| FR-1428 | Hide columns per view | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
-| FR-1429 | Row count footer "N / N จาก M แถว"; no aggregates | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.3 |
-| FR-1430 | Kanban group by SELECT / PERSON / CHECKBOX; auto-create สถานะ | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4, BR-96 |
-| FR-1431 | Groups with counts and "ไม่มีค่า"; hide empty groups | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4, BR-96 |
-| FR-1432 | Cards show chosen properties; view filter/sort apply | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4 |
-| FR-1433 | Drag between groups sets value; reorder within group; undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4, BR-96 |
-| FR-1434 | Quick add per group; add group = new option | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4 |
-| FR-1435 | Card click opens row detail | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.4 |
-| FR-1440 | Calendar month grid by date column, Monday first, Thai month/พ.ศ., today marker | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5, BR-97 |
-| FR-1441 | Cards per day, "+N เพิ่มเติม" | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5, BR-97 |
-| FR-1442 | Drag card to another day = reschedule with undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5 |
-| FR-1443 | Add row on a day | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5 |
-| FR-1444 | Rows without date listed separately; drag in/out | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5 |
-| FR-1445 | Calendar shows database data only (no leave/holidays/milestones) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.5, BR-98 |
-| FR-1450 | Row detail side panel with all properties | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6 |
-| FR-1451 | Prev/next row in panel; Esc closes | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6 |
-| FR-1452 | Row deep link /p/[pageId]?db=&row= | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6 |
-| FR-1453 | Rows open as pages (kind DB_ROW, /r/[rowId]) with a document body, same mechanism as tasks (§4.6.4) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.6, §13 |
-| FR-1460 | Permissions = owning page (view/edit/protected/archived); 404 when invisible | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §3.2 PERM-24/25 |
-| FR-1461 | Read-only viewers see data without edit controls | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7 |
-| FR-1462 | Database edits independent of the page edit lease | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, D16 |
-| FR-1463 | Per-row/column/view/database version; conflict toast; refetch on focus | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §7.9 |
-| FR-1464 | Foreign/missing/forbidden databaseId → generic placeholder, 404 without data | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §3.3 |
-| FR-1465 | Undo for everything without confirm dialogs | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, §7.5, P2 |
-| FR-1466 | Audit per action, no cell values | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.7, FR-1201 |
-| FR-1470 | Page duplicate deep-copies databases | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, FR-508 |
-| FR-1471 | Paste/copy block = deep copy (view source + edit target); cut-paste same page keeps id | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, D15, PERM-26 |
-| FR-1472 | Removing the block detaches the database on save; editor undo re-attaches | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8 |
-| FR-1473 | Page delete/restore and project permanent delete | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, FR-509 |
-| FR-1474 | Cmd+K database group: database titles + row titles; cells not indexed | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8, FR-1102, §6.4 |
-| FR-1475 | Server-enforced limits (1,000 rows, 30 columns, 10 views, …) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.14.8 |
-| FR-1501 | Block equation via /สมการ (/equation, /math, /latex) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
-| FR-1502 | Inline equation via slash or toolbar button on selection | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
-| FR-1503 | Equation editing popover with live preview | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
-| FR-1504 | Invalid LaTeX error state; source kept | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15 |
-| FR-1505 | KaTeX bundled locally, safe options, MathML output | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15, NFR-09 |
-| FR-1506 | Stored in pages.content; LaTeX source in content_text | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §4.15, §6.4 |
+| FR-1401 | Database = one data source (title, typed columns, rows) with several views | M11 | m11 §5 S0.4, S3.1, S3.2 | ui `useDatabase.test.tsx` · e2e D4 | §4.14.1 |
+| FR-1402 | Owned by exactly one page; no linked views in MVP | M11 | m11 §5 S0.2, S2.3 | authz DB-GET-WRONGPAGE · e2e D10 | §4.14.1, D15 |
+| FR-1403 | Slash items table/kanban/calendar view with Thai titles + English aliases | M11 | m11 §5 S5.3 | ui `slash-menu.test.tsx › database group + ranking` · e2e D1 | §4.14.1 |
+| FR-1404 | Insert creates a ready database (title + สถานะ + วันที่ columns, first view) | M11 | m11 §5 S2.4, S5.3, S3.2 | int `databases.int.test.ts › create` · ui `DatabaseHeader.test.tsx` · e2e D1 | §4.14.1, P5 |
+| FR-1405 | Block header: editable title + view tabs (add/switch/rename/duplicate/delete/reorder) | M11 | m11 §5 S3.3 | ui `ViewTabs.test.tsx` · e2e D3, D7 | §4.14.1 |
+| FR-1406 | Views are shared by everyone; read-only viewers cannot change view settings | M11 | m11 §5 S2.7, S3.3 | authz VIEW-UPDATE-WIKIPROT · e2e D3 | §4.14.1 |
+| FR-1407 | Block is a non-text island; delete/undo of the block via editor; Cmd+Z inside = database undo | M11 | m11 §5 S5.2, S5.4 | ui `DatabaseBlock.test.tsx › isolation` · e2e D11 | §4.14.1, §7.5 |
+| FR-1408 | Narrow screens: horizontal scroll inside block, calendar as day list, menu instead of drag | M11 | m11 §5 S3.5, S4.1, S4.2 | ui · e2e V1 | §4.14.1, §9 |
+| FR-1410 | Column types TITLE, TEXT, NUMBER, SELECT, MULTI_SELECT, DATE, CHECKBOX, PERSON (1–20 active users), URL | M11 | m11 §5 S1.2–S1.5, S3.4 | unit `database.cells.test.ts` · ui `cells/*.test.tsx` · int · e2e D2 | §4.14.2, BR-90 |
+| FR-1411 | Add column with type and default name | M11 | m11 §5 S1.6, S3.6 | unit `defaultColumnName` · ui `ColumnMenu.test.tsx` | §4.14.2 |
+| FR-1412 | Column header menu (rename, type, config, sort, filter, hide, insert, duplicate, delete) | M11 | m11 §5 S3.6 | ui `ColumnMenu.test.tsx` · e2e D2, D6, D7 | §4.14.2 |
+| FR-1413 | Column order per database; hidden/width/card props per view | M11 | m11 §5 S2.6, S3.2 | int · ui `TableView.test.tsx` · e2e D3 | §4.14.2 |
+| FR-1414 | Change type converts all rows (BR-93), no dialog, undo restores everything | M11 | m11 §5 S1.7, S2.6, S3.6 | unit `database.convert.test.ts` · int `› changeType/revert` · e2e D6 | §4.14.2, BR-93 |
+| FR-1415 | Delete column with undo; dependent sort/filter/group suspended | M11 | m11 §5 S2.6, S3.6, S4.1, S4.2 | int · ui · e2e D7 | §4.14.2 |
+| FR-1416 | Delete select option with undo; values shown empty | M11 | m11 §5 S1.3, S3.6 | unit `readCell` · e2e D2 | §4.14.2, BR-95 |
+| FR-1420 | Table view: rows × columns, title pinned, virtualized > 50 rows | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3 |
+| FR-1421 | Inline cell editing per type; type-to-replace | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3 |
+| FR-1422 | Table keyboard navigation | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3, §8.6 |
+| FR-1423 | Add row (no required value); inherits "is" filter values | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3, P1 |
+| FR-1424 | Select rows, delete with undo toast | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3, P2 |
+| FR-1425 | Column width per view (80–600 px) | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3 |
+| FR-1426 | Sort up to 3 keys; manual drag order only without sort | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3, BR-94 |
+| FR-1427 | Filter up to 10 AND conditions | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3, BR-95 |
+| FR-1428 | Hide columns per view | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3 |
+| FR-1429 | Row count footer "N / N จาก M แถว"; no aggregates | M11 | m11 §5 S3.2–S3.8 | ui `TableView.test.tsx`, `useTableKeyboard.test.tsx`, `toolbar.test.tsx` (filter/sort menus) · unit `database.filter.test.ts` · e2e D1, D3, D7 | §4.14.3 |
+| FR-1430 | Kanban group by SELECT / PERSON / CHECKBOX; auto-create สถานะ | M11 | m11 §5 S1.9, S4.1 | unit `database.group.test.ts` · ui `KanbanView.test.tsx` · e2e D4 | §4.14.4, BR-96 |
+| FR-1431 | Groups with counts and "ไม่มีค่า"; hide empty groups | M11 | m11 §5 S1.9, S4.1 | unit `database.group.test.ts` · ui `KanbanView.test.tsx` · e2e D4 | §4.14.4, BR-96 |
+| FR-1432 | Cards show chosen properties; view filter/sort apply | M11 | m11 §5 S1.9, S4.1 | unit `database.group.test.ts` · ui `KanbanView.test.tsx` · e2e D4 | §4.14.4 |
+| FR-1433 | Drag between groups sets value; reorder within group; undo | M11 | m11 §5 S1.9, S4.1 | unit `database.group.test.ts` · ui `KanbanView.test.tsx` · e2e D4 | §4.14.4, BR-96 |
+| FR-1434 | Quick add per group; add group = new option | M11 | m11 §5 S1.9, S4.1 | unit `database.group.test.ts` · ui `KanbanView.test.tsx` · e2e D4 | §4.14.4 |
+| FR-1435 | Card click opens row detail | M11 | m11 §5 S1.9, S4.1 | unit `database.group.test.ts` · ui `KanbanView.test.tsx` · e2e D4 | §4.14.4 |
+| FR-1440 | Calendar month grid by date column, Monday first, Thai month/พ.ศ., today marker | M11 | m11 §5 S1.10, S4.2 | unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` · e2e D5 | §4.14.5, BR-97 |
+| FR-1441 | Cards per day, "+N เพิ่มเติม" | M11 | m11 §5 S1.10, S4.2 | unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` · e2e D5 | §4.14.5, BR-97 |
+| FR-1442 | Drag card to another day = reschedule with undo | M11 | m11 §5 S1.10, S4.2 | unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` · e2e D5 | §4.14.5 |
+| FR-1443 | Add row on a day | M11 | m11 §5 S1.10, S4.2 | unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` · e2e D5 | §4.14.5 |
+| FR-1444 | Rows without date listed separately; drag in/out | M11 | m11 §5 S1.10, S4.2 | unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` · e2e D5 | §4.14.5 |
+| FR-1445 | Calendar shows database data only (no leave/holidays/milestones) | M11 | m11 §5 S1.10, S4.2 | unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` · e2e D5 | §4.14.5, BR-98 |
+| FR-1450 | Row detail side panel with all properties | M11 | m11 §5 S3.7 | ui `RowPanel.test.tsx` · e2e D14 | §4.14.6 |
+| FR-1451 | Prev/next row in panel; Esc closes | M11 | m11 §5 S3.7 | ui `RowPanel.test.tsx` · e2e D14 | §4.14.6 |
+| FR-1452 | Row deep link /p/[pageId]?db=&row= | M11 | m11 §5 S3.7 | ui `RowPanel.test.tsx` · e2e D14 | §4.14.6 |
+| FR-1453 | Rows open as pages (kind DB_ROW, /r/[rowId]) with a document body, same mechanism as tasks (§4.6.4) | M11 | m11 §5 S0.2, S2.2, S2.9, S4.3, S5.6 | int `row-pages.int.test.ts` · authz RB-*, RP-* · e2e D14 | §4.14.6, §13 |
+| FR-1460 | Permissions = owning page (view/edit/protected/archived); 404 when invisible | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7, §3.2 PERM-24/25 |
+| FR-1461 | Read-only viewers see data without edit controls | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7 |
+| FR-1462 | Database edits independent of the page edit lease | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7, D16 |
+| FR-1463 | Per-row/column/view/database version; conflict toast; refetch on focus | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7, §7.9 |
+| FR-1464 | Foreign/missing/forbidden databaseId → generic placeholder, 404 without data | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7, §3.3 |
+| FR-1465 | Undo for everything without confirm dialogs | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7, §7.5, P2 |
+| FR-1466 | Audit per action, no cell values | M11 | m11 §5 S0.6, S2.1–S2.8, S3.1 | authz (whole file) · mask · int · e2e D8 | §4.14.7, FR-1201 |
+| FR-1470 | Page duplicate deep-copies databases | M11 | m11 §5 S2.10 | int `database-copy.int.test.ts › duplicatePage` · e2e D10 | §4.14.8, FR-508 |
+| FR-1471 | Paste/copy block = deep copy (view source + edit target); cut-paste same page keeps id | M11 | m11 §5 S2.10, S5.5 | int `› copyDatabase` · authz DB-COPY-* · ui `paste-database.test.tsx` · e2e D10 | §4.14.8, D15, PERM-26 |
+| FR-1472 | Removing the block detaches the database on save; editor undo re-attaches | M11 | m11 §5 S2.11 | int `pages.int.test.ts › detach reconcile` · e2e D11 | §4.14.8 |
+| FR-1473 | Page delete/restore and project permanent delete | M11 | m11 §5 S2.12 | int · e2e D11 | §4.14.8, FR-509 |
+| FR-1474 | Cmd+K database group: database titles + row titles; cells not indexed | M11 | m11 §5 S2.13, S4.4 | int `search.databases.int.test.ts` · authz SR-DB-* · mask · e2e D8 | §4.14.8, FR-1102, §6.4 |
+| FR-1475 | Server-enforced limits (1,000 rows, 30 columns, 10 views, …) | M11 | m11 §5 S1.1, S2.* | unit · int `› limits` · authz *-LIMIT · e2e D12 | §4.14.8 |
+| FR-1501 | Block equation via /สมการ (/equation, /math, /latex) | M11 | m11 §5 S0.9, S0.11, S5.7–S5.9 | unit `content-text.test.ts › latex` · ui `Equation*.test.tsx` · e2e E1–E4 | §4.15 |
+| FR-1502 | Inline equation via slash or toolbar button on selection | M11 | m11 §5 S0.9, S0.11, S5.7–S5.9 | unit `content-text.test.ts › latex` · ui `Equation*.test.tsx` · e2e E1–E4 | §4.15 |
+| FR-1503 | Equation editing popover with live preview | M11 | m11 §5 S0.9, S0.11, S5.7–S5.9 | unit `content-text.test.ts › latex` · ui `Equation*.test.tsx` · e2e E1–E4 | §4.15 |
+| FR-1504 | Invalid LaTeX error state; source kept | M11 | m11 §5 S0.9, S0.11, S5.7–S5.9 | unit `content-text.test.ts › latex` · ui `Equation*.test.tsx` · e2e E1–E4 | §4.15 |
+| FR-1505 | KaTeX bundled locally, safe options, MathML output | M11 | m11 §5 S0.9, S0.11, S5.7–S5.9 | unit `content-text.test.ts › latex` · ui `Equation*.test.tsx` · e2e E1–E4 | §4.15, NFR-09 |
+| FR-1506 | Stored in pages.content; LaTeX source in content_text | M11 | m11 §5 S0.9, S0.11, S5.7–S5.9 | unit `content-text.test.ts › latex` · ui `Equation*.test.tsx` · e2e E1–E4 | §4.15, §6.4 |
 | FR-1601 | Work screens use full width after the sidebar (1920/2560), no max-width | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
 | FR-1602 | Documents (/p, /t, /r bodies) in a centred 760 px reading column by default + per-page "เต็มความกว้าง" toggle (pages.full_width, shared, undo, audit) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
 | FR-1603 | 48 px page header bar: breadcrumb left, page actions right | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.16, §8.12, D19 |
@@ -325,15 +325,15 @@ SPEC §5 (incl. BR-20a, BR-20b, BR-21a). Every §5 rule is a pure function in `s
 | BR-85 | Blocker validity + `wouldCreateCycle` with path | M3 | m03 §5.S1.6, §5.S2.15 | unit + property · int (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/task-blockers.int.test.ts`) | §5.10 |
 | BR-86 | Badge states open/done/none | M3 · M12 (§7.1 tests) | m03 §5.S1.6, §5.S2.10, §5.S2.16 | M3: unit · int (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/my-tasks.int.test.ts` …)<br>M12: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10, X73 |
 | BR-87 | Status/blockers never change plan, capacity, overload | M3 · M6 (load part) · M9 · M12 (§7.1 tests) | m03 §5.S2.6, §5.S2.15<br>m06 §5.S2.2<br>m09 §5.S2.1 | M3: int (files per step: `src/server/services/task-status.int.test.ts`, `src/server/services/task-statuses.int.test.ts`, `src/server/services/tasks.int.test.ts`, `src/server/services/task-blockers.int.test.ts`)<br>M6: int `src/server/services/grid.int.test.ts` › WAITING counts<br>M9: int `› WAITING`, `› milestones no load`, `› BR-50` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`) · int `repo/allocations › loadByUserProjectWeek`, `workload › WAITING / milestones no load` (files per step: `src/server/repo/allocations.int.test.ts`, `src/server/services/masking.int.test.ts`)<br>M12: `scripts/lib/demo.int.test.ts` › DM-06 · DM-07 | §5.10 |
-| BR-90 | Cell value shapes per column type; validated against current type | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-91 | Numbers as canonical decimal strings, no float | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-92 | Cell dates are ISODate; input formats incl. พ.ศ. | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-93 | Column type conversion rules | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-94 | Sort: empties last, collator, stable by position/id | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-95 | Filters: AND, per-type operators, empty semantics | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-96 | Kanban grouping order and drop effect (multi-person: card in every person group; A→B replaces A) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-97 | Calendar month range and placement | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
-| BR-98 | Databases never touch planning, membership or automation | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) (unit `src/domain/database.test.ts`) | §5.11 |
+| BR-90 | Cell value shapes per column type; validated against current type | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-91 | Numbers as canonical decimal strings, no float | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-92 | Cell dates are ISODate; input formats incl. พ.ศ. | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-93 | Column type conversion rules | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-94 | Sort: empties last, collator, stable by position/id | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-95 | Filters: AND, per-type operators, empty semantics | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-96 | Kanban grouping order and drop effect (multi-person: card in every person group; A→B replaces A) | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-97 | Calendar month range and placement | M11 | m11 §5 S1 | unit `src/domain/database*.test.ts` | §5.11 |
+| BR-98 | Databases never touch planning, membership or automation | M11 | m11 §5 S0.2, S2.14, S6.4 | int `tests/golden/database-isolation.int.test.ts` · int `tests/integration/br98-imports.int.test.ts` | §5.11 |
 | BR-100 | Summed cell = task row totals (view, BR-50); day columns = Σ per-person days | M7.1 | m07.1 §5.S1.2 | unit `src/lib/grid/rows.test.ts` (+ fast-check Σ days = week) | §5.12 |
 | BR-101 | Summed cell editable ⇔ leaf with exactly one active assignee; never distribute | M7.1 | m07.1 §5.S1.2, §5.S3.3 | unit `rows.test.ts` · ui `SumModeHint.test.tsx` · `e2e/m7.1-grid.spec.ts` › P1 | §5.12, D23 |
 | BR-102 | Marker edge = right edge of the displayed column containing the date (week / day / last shown day); never "รวม" | M7.1 | m07.1 §5.S1.7 | unit `src/lib/grid/markers.test.ts` | §5.12, D24 |
@@ -395,24 +395,24 @@ SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets
 | AC-1301 | `/มุมมองงาน` in POS charter; drag updates the tasks tab | M10 | m10 §5.S3.4, §5.S3.6 | `e2e/m10-home-search.spec.ts` › B1 · `src/components/editor/slash-menu.test.ts` › มุมมองงาน · `src/components/tasks/embed/EmbeddedTasks.test.tsx` › onMove | §4.13 |
 | AC-1302 | Copied block follows the destination page's project; wiki placeholder | M10 | m10 §5.S3.4, §5.S1.9 | `e2e/m10-home-search.spec.ts` › B2 · `src/server/services/embed.int.test.ts` › binding · `src/server/services/embed.int.test.ts` › tasks binding · rows `tests/authz/rows/pages.ts` › EMB-T-WIKI | §4.13 |
 | AC-1303 | Worker sees "งานในโปรเจคอื่น" with no other project name | M10 | m10 §5.S1.10 | `tests/authz/masking.int.test.ts` › K6–K8 · `e2e/m10-home-search.spec.ts` › B3 · `tests/authz/masking.int.test.ts` › **K6/K8** + golden Ivy variant · `src/server/services/embed.int.test.ts` › workload | §4.13 |
-| AC-1401 | Insert table view, add rows by keyboard, page JSON holds only databaseId | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1402 | Every column type round-trips (exact number, ISO date, active people, URL guard) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1403 | Sort + AND filters + hidden column + width persist and are shared | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1404 | Kanban drag between groups, undo, regroup by person (multi-person rows in each group, A→B replace) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1405 | Calendar Monday-first พ.ศ., drag reschedule, add on day, no-date list | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1406 | Type change text→number→undo restores; text→select | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1407 | Delete rows/column/view with undo; last view protected | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1408 | Non-member 404 + no leak; search scoped; locked wiki; archived project | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, §3.3 |
-| AC-1409 | Edits while another user holds the lease; version conflict | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, D16 |
-| AC-1410 | Duplicate page / copy block = independent copy; forged id = placeholder | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, D15 |
-| AC-1411 | Block delete + undo; detached not searchable; page delete + undo | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14 |
-| AC-1412 | 1,000-row limit; perf budget | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, §9 |
-| AC-1413 | Cell values do not change planning (golden F1 unchanged) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, BR-98 |
-| AC-1414 | Row opens as page /r/[rowId] with body; no sub-page/database blocks; 404 for non-members; duplicate/delete carry the body | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.14, FR-1453 |
-| AC-1501 | Block equation renders, persists, no external requests | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
-| AC-1502 | Inline equation from selection / slash | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
-| AC-1503 | Invalid LaTeX error state survives reload | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
-| AC-1504 | Equation source searchable; read-only view | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) · `e2e/m11-database.spec.ts` | §4.15 |
+| AC-1401 | Insert table view, add rows by keyboard, page JSON holds only databaseId | M11 | m11 §7.1 | e2e D1 · ui `useTableKeyboard.test.tsx`, `DatabaseHeader.test.tsx` · int `databases.int.test.ts › create` · e2e DB assertion (page JSON has only `databaseId`) | §4.14 |
+| AC-1402 | Every column type round-trips (exact number, ISO date, active people, URL guard) | M11 | m11 §7.1 | e2e D2 · unit `database.number/cells/date.test.ts` · ui `cells/*.test.tsx` · int `› rows validation` · authz ROW-UPDATE-BAD*, ROW-UPDATE-URL-JS | §4.14 |
+| AC-1403 | Sort + AND filters + hidden column + width persist and are shared | M11 | m11 §7.1 | e2e D3 · unit `database.sort/filter.test.ts` (`valuesFromFilters`) · ui `TableView.test.tsx › footer + inherit` | §4.14 |
+| AC-1404 | Kanban drag between groups, undo, regroup by person (multi-person rows in each group, A→B replace) | M11 | m11 §7.1 | e2e D4 · unit `database.group.test.ts` · ui `KanbanView.test.tsx` | §4.14 |
+| AC-1405 | Calendar Monday-first พ.ศ., drag reschedule, add on day, no-date list | M11 | m11 §7.1 | e2e D5 · unit `database.calendar.test.ts` · ui `CalendarView.test.tsx` | §4.14 |
+| AC-1406 | Type change text→number→undo restores; text→select | M11 | m11 §7.1 | e2e D6 · unit `database.convert.test.ts` · int `› changeType/revert` · authz COL-TYPE-TITLE | §4.14 |
+| AC-1407 | Delete rows/column/view with undo; last view protected | M11 | m11 §7.1 | e2e D7 · int `› deletes/restores` · ui `useDbMutations.test.tsx › toasts` · authz VIEW-DELETE-LAST | §4.14 |
+| AC-1408 | Non-member 404 + no leak; search scoped; locked wiki; archived project | M11 | m11 §7.1 | e2e D8 · authz (whole files) · mask · int `search.databases.int.test.ts` | §4.14, §3.3 |
+| AC-1409 | Edits while another user holds the lease; version conflict | M11 | m11 §7.1 | int `database-race.int.test.ts` · authz ROW-UPDATE-LEASED | §4.14, D16 |
+| AC-1410 | Duplicate page / copy block = independent copy; forged id = placeholder | M11 | m11 §7.1 | e2e D10 · int `database-copy.int.test.ts` · authz DB-COPY-*, DB-GET-WRONGPAGE · ui `paste-database.test.tsx` | §4.14, D15 |
+| AC-1411 | Block delete + undo; detached not searchable; page delete + undo | M11 | m11 §7.1 | e2e D11 · int `pages.int.test.ts › detach reconcile`, `› page delete/restore` | §4.14 |
+| AC-1412 | 1,000-row limit; perf budget | M11 | m11 §7.1 | e2e D12, P1 · int `› limits` · perf `databases.perf.int.test.ts`, `database.perf.test.ts` | §4.14, §9 |
+| AC-1413 | Cell values do not change planning (golden F1 unchanged) | M11 | m11 §7.1 | golden `database-isolation.int.test.ts` · int `br98-imports.int.test.ts` | §4.14, BR-98 |
+| AC-1414 | Row opens as page /r/[rowId] with body; no sub-page/database blocks; 404 for non-members; duplicate/delete carry the body | M11 | m11 §7.1 | e2e D14 · int `row-pages.int.test.ts` · authz RB-*, RP-* · ui `RowPageScreen.test.tsx`, `RowBody.test.tsx`, `slash-menu.test.tsx › DB_ROW` | §4.14, FR-1453 |
+| AC-1501 | Block equation renders, persists, no external requests | M11 | m11 §7.1 | e2e E1 · ui `EquationView.test.tsx`, `EquationPopover.test.tsx` · unit `katex.test.ts` | §4.15 |
+| AC-1502 | Inline equation from selection / slash | M11 | m11 §7.1 | e2e E2 · ui `formatting-toolbar.test.tsx`, `inline-equation.test.tsx` | §4.15 |
+| AC-1503 | Invalid LaTeX error state survives reload | M11 | m11 §7.1 | e2e E3 · ui `EquationView.test.tsx › invalid` | §4.15 |
+| AC-1504 | Equation source searchable; read-only view | M11 | m11 §7.1 | e2e E4 · unit `content-text.test.ts › latex` · int `search.int.test.ts › latex in content_text` | §4.15 |
 | AC-1601 | Full-width work screens at 1920 and 2560 px | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
 | AC-1602 | Reading column ≤ 760 px; wide tables scroll inside the block; full-width toggle persists for all viewers, Cmd+Z reverts, audited | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
 | AC-1603 | 48 px header bar with correct breadcrumb on main screens | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · viewport e2e | §4.16 |
@@ -448,9 +448,9 @@ Outcomes: `M` manager · `L` LEAD of that project · `Me` MEMBER of that project
 | PERM-21 | "บันทึก/แก้/ลบวันลาของคนอื่น" — M allow · workers 403 (404 when the person is outside their visibility) | M5 · M9 | m05 §5.S4.2 | M5: `tests/authz/rows/time-off.ts` › PERM-21a, PERM-21b, PERM-21c, PERM-21d, PERM-21e, PERM-21f, PERM-21g | §3.2, M5-D3 |
 | PERM-22 | "ดู workload" — per §3.3 (MASK-1…7, §7 below) | M5 (calendar part) · M9 · M10 (home, search, embed part) | m05 §5.S4.3<br>m09 §5.S5.1<br>m10 §5.S1.2, §5.S1.6, §5.S1.8, §5.S1.10, §5.S4.1 | M5: `tests/authz/rows/calendar.ts` › PERM-22a, CAL-400<br>M9: `tests/authz/rows/workload.ts` › WL-TABLE, WL-DEFAULT, WL-CELL-ME, WL-CELL-W, WL-BADGE · `tests/authz/rows/people.ts` › PEOPLE, PG-ME, PG-W, PG-CO, PH-ME, PH-W, PT-ME, PT-W<br>M10: `tests/authz/rows/home.ts` › HM-HOME · `tests/authz/rows/search.ts` › SR-ALL, SR-INDEX · `tests/authz/rows/pages.ts` › EMB-W-P, EMB-W-Q, EMB-W-A<br>masking: `tests/authz/masking.int.test.ts` (M2, M5, M6–M10 blocks — §7) | §3.2 |
 | PERM-23 | "จัดการชุดสถานะงานของโปรเจค (เพิ่ม/แก้/เรียง/ลบ)" — M/L allow · Me 403 · W 404 · archived 403 | M3 | m03 §5.S4.2 | M3: `tests/authz/rows/task-statuses.ts` › S-CREATE, S-CREATE-ARCH, S-UPDATE, S-REORDER, S-DELETE, S-RESTORE, S-RESTORE-ARCH | §3.2, X79, v3.1 new (X79) |
-| PERM-24 | "ดูฐานข้อมูลในหน้าเอกสาร" — = view of the owning page (project page: M/L/Me allow · W 404; wiki: all allow) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2) |
-| PERM-25 | "แก้ฐานข้อมูลในหน้า" — = edit of the owning page, lease not required (locked wiki: workers 403; archived: 403) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2), D16 |
-| PERM-26 | "คัดลอกฐานข้อมูลไปหน้าอื่น" — view source (else 404) + edit target (invisible 404, protected/archived 403) | M11 | m11 (plan pending — PLAN §1.8) | TBD (`plan/m11-database-views.md`) | §3.2 (v3.2), D15 |
+| PERM-24 | "ดูฐานข้อมูลในหน้าเอกสาร" — = view of the owning page (project page: M/L/Me allow · W 404; wiki: all allow) | M11 | m11 §7.2 | authz `tests/authz/rows/databases.ts` / `row-pages.ts` › DB-GET*, RB-GET*, RP-LOADER*, RB-PAGE-GET, RB-LOCK-GET, RB-FILE-GET, SR-DB-* | §3.2 (v3.2) |
+| PERM-25 | "แก้ฐานข้อมูลในหน้า" — = edit of the owning page, lease not required (locked wiki: workers 403; archived: 403) | M11 | m11 §7.2 | authz `tests/authz/rows/databases.ts` / `row-pages.ts` › DB-CREATE*, DB-RENAME*, ROW-*, COL-*, VIEW-*, RB-ENSURE*, RB-SAVE*, RB-KEEPALIVE, RB-LOCK-POST*, RB-UPLOAD*, FW-ROW* | §3.2 (v3.2), D16 |
+| PERM-26 | "คัดลอกฐานข้อมูลไปหน้าอื่น" — view source (else 404) + edit target (invisible 404, protected/archived 403) | M11 | m11 §7.2 | authz `tests/authz/rows/databases.ts` / `row-pages.ts` › DB-COPY-* , PG-DUP-DB | §3.2 (v3.2), D15 |
 | PERM-27 | "เปิด task เป็นหน้า / ดูเนื้อหางาน" — = view of the task (M/L/Me allow, archived allowed · W 404) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §3.2 (v3.2) |
 | PERM-28 | "แก้เนื้อหางาน" (save, lease, upload) — = edit of the task (M/L/Me allow · archived 403 · W 404) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §3.2 (v3.2) |
 | PERM-29 | "เพิ่ม/แก้/ลบ/กู้คืน เส้นกำกับบนแผนงาน" = plan edit (M/L/Me allow · archived 403 · W 404); GET markers = PERM-06 | M7.1 | m07.1 §5.S2.2–S2.4, §5.S5.1 | `tests/authz/rows/plan-markers.ts` › PM-LIST…PM-LIMIT | §3.2 (v3.3), M7.1-D22 |
@@ -477,8 +477,8 @@ Rows not tied to one PERM line: M1 `ACC-01/02` (own password, sign-out everywher
 | NFR-08c | Security headers: CSP, frame-ancestors 'none' (+ nosniff) | M0 · M4 (editor part) · M12 | m00 §5.S1.4, §5.S1.5<br>m04 §5.S2.4<br>m12 (M0) + verification | M0: `src/lib/csp.test.ts`, `src/proxy.test.ts` · `e2e/m0-smoke.spec.ts` › "security headers and CSP nonce" + CSP guard on every test · CSP guard on every e2e test<br>M4: e2e CSP + external-request guards (M0 fixtures) on every M4 test<br>M12: `e2e/m12-hardening.spec.ts` H1–H2, H4 · `e2e/m12-deploy.spec.ts` › D1 · H6 | §9 (r7 numbering) |
 | NFR-09 | No CDN or external service at runtime (server may be offline) | M0 · M4 (editor part) · M12 | m00 §5.S2.1, §5.S3.4<br>m04 §5.S2.4<br>m12 §5.S3.5, §5.S2.9 | M0: e2e/fixtures.ts external-request guard on every test · m00 §5.S2.13 grep · m00 §6 I9 grep<br>M4: e2e CSP + external-request guards (M0 fixtures) on every M4 test<br>M12: `tests/hardening/no-external-urls.test.ts` · `scripts/offline-check.sh` · every e2e (external-request guard) · external-request guard in every e2e · `offline:check` · `e2e/m12-deploy.spec.ts` › D6 | §9 (r7 numbering) |
 | NFR-10 | Backup: daily pg_dump kept 14 days + UPLOAD_DIR backup | M12 | m12 §5.S2.4 | `tests/deploy/files.test.ts` · `e2e/m12-deploy.spec.ts` › D3–D4 · m12 §7.4 M1 restore drill · `tests/deploy/backup.int.test.ts` | §9 (r7 numbering) |
-| NFR-11 | Page database 1,000 rows × 20 columns: GET < 500 ms p95, table render < 300 ms, view switch < 100 ms, cell edit < 50 ms | M11 (smoke) · M12 | m11 (plan pending — PLAN §1.8)<br>m12 (to be added, PLAN §1.8) | TBD | §9 (v3.2, appended) |
-| NFR-12 | Page with 3 database blocks (1,000 rows) + 50 equations opens < 1.5 s; KaTeX lazy | M11 (smoke) · M12 | m11 (plan pending — PLAN §1.8)<br>m12 (to be added, PLAN §1.8) | TBD | §9 (v3.2, appended) |
+| NFR-11 | Page database 1,000 rows × 20 columns: GET < 500 ms p95, table render < 300 ms, view switch < 100 ms, cell edit < 50 ms | M11 (smoke) · M12 | m11 §5 S1.12, S2.15, S7.3 | perf (§7.4) · e2e P1 | §9 (v3.2, appended) |
+| NFR-12 | Page with 3 database blocks (1,000 rows) + 50 equations opens < 1.5 s; KaTeX lazy | M11 (smoke) · M12 | m11 §5 S5.8, S7.3 | e2e P2 | §9 (v3.2, appended) |
 | NFR-13 | Plan tab (M7.1): chart 20 people × 26 weeks < 200 ms after data; calendar month switch < 150 ms with 500 tasks; drag/resize ≥ 50 fps on 200 rows | M7.1 (smoke) · M12 | m07.1 §5.S3.8, §5.S4.5 | `e2e/m7.1-grid.spec.ts` › P10 (local smoke) · M12 perf | §9 (v3.3 row) |
 
 ## 6. Other v3.1 ids (kept from the interim v3.1 table; r7 families)

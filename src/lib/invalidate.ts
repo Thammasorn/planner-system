@@ -1,5 +1,6 @@
 // src/lib/invalidate.ts — grouped TanStack invalidations so features don't forget views (PLAN.md §3.5, X18).
 import type { QueryClient } from '@tanstack/react-query'
+import type { DatabaseResponse } from './contracts/databases'
 import type { PageSpace } from './contracts/pages'
 import type { ProjectTasksResponse } from './contracts/tasks'
 import { qk, qkPrefix } from './query-keys'
@@ -128,4 +129,37 @@ export async function invalidateMilestones(qc: QueryClient, projectId: string): 
     qc.invalidateQueries({ queryKey: qkPrefix.calendar }),
     qc.invalidateQueries({ queryKey: qk.home() }), // M10: the home milestones card
   ])
+}
+
+// ── M11 (plan/m11 S0.8, M11-D20/D39) ───────────────────────────────────────────────────────────────────────────────
+
+/** Refetch one database (conflict recovery, type changed elsewhere, after a restore). */
+export function invalidateDatabase(qc: QueryClient, pageId: string, databaseId: string): Promise<void> {
+  return invalidateAll(qc, [qk.database(pageId, databaseId)])
+}
+
+/** Optimistic / server-confirmed patch of one cached database; no-op when it is not cached. `fn` must not mutate. */
+export function patchDatabase(
+  qc: QueryClient,
+  pageId: string,
+  databaseId: string,
+  fn: (d: DatabaseResponse) => DatabaseResponse,
+): void {
+  qc.setQueryData<DatabaseResponse>(qk.database(pageId, databaseId), (d) => (d ? fn(d) : d))
+}
+
+/** M11-D39: the open row body patches 📄 (`hasBody`) of its row — no refetch per autosave. No-op when the database
+ *  is not cached, the row is missing or the value is unchanged (same reference). */
+export function patchRowHasBody(
+  qc: QueryClient,
+  pageId: string,
+  databaseId: string,
+  rowId: string,
+  hasBody: boolean,
+): void {
+  patchDatabase(qc, pageId, databaseId, (d) => {
+    const r = d.rows.find((x) => x.id === rowId)
+    if (!r || r.hasBody === hasBody) return d
+    return { ...d, rows: d.rows.map((x) => (x.id === rowId ? { ...x, hasBody } : x)) }
+  })
 }

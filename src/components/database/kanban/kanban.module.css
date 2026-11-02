@@ -1,0 +1,238 @@
+/* Kanban view (FR-1430…1435, M11-D24/D31) and the cards the calendar shares (FR-1432): plain elements + tokens only
+   (SPEC §8.12). The board scrolls sideways inside the block (the page never scrolls horizontally, FR-1408). */
+.board {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-bottom: var(--space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 260px;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  font-size: var(--font-sm);
+}
+
+.groupText {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--weight-medium);
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.count {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.list[data-over='true'] {
+  outline: 2px dashed var(--border-month);
+  outline-offset: 2px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--mui-palette-text-primary);
+  touch-action: manipulation;
+}
+
+.card:hover,
+.card:focus-within {
+  background: var(--hover-bg);
+}
+
+.card[data-dragging='true'] {
+  opacity: 0.4;
+}
+
+.card[data-overlay='true'] {
+  box-shadow: 0 4px 12px var(--border-month);
+  cursor: grabbing;
+}
+
+.cardMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 36px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cardMain:focus-visible,
+.tool:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-weight: var(--weight-medium);
+}
+
+.cardTitleText {
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.cardTitleText[data-empty='true'] {
+  color: var(--text-secondary);
+}
+
+.cardProp {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-sm);
+}
+
+.cardTools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: var(--space-1);
+  opacity: 0;
+}
+
+.card:hover .cardTools,
+.card:focus-within .cardTools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .cardTools {
+    opacity: 1;
+  }
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+  cursor: pointer;
+}
+
+.tool:hover {
+  background: var(--hover-bg);
+}
+
+.tool[aria-roledescription] {
+  cursor: grab;
+}
+
+.add {
+  justify-content: flex-start;
+  color: var(--text-secondary);
+}
+
+.quickAdd {
+  width: 100%;
+  min-height: 36px;
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-md);
+}
+
+.quickAdd:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -1px;
+}
+
+.addGroup {
+  flex: none;
+  width: 220px;
+  padding: var(--space-2);
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+}
+
+.promptActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.menuHeading {
+  font-size: var(--font-xs);
+  line-height: var(--leading-ui);
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-1);
+}
+
+@media (max-width: 599.95px) {
+  .group {
+    width: 240px;
+  }
+
+  .tool {
+    width: 36px;
+    height: 36px;
+  }
+}

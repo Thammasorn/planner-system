@@ -405,6 +405,8 @@ test.describe('P ⟲ Cmd/Ctrl+K palette and quick commands (FR-1102…1105, KEY-
     await screen.editor.focusEnd()
     await page.keyboard.type(' ลิงก์ทดสอบ')
     await screen.editor.selectText('ลิงก์ทดสอบ')
+    // BlockNote's Mod+K link handler lives in the formatting toolbar: wait until it has mounted with the selection
+    await expect(screen.editor.formattingToolbar()).toBeVisible()
     await palette.openByKeyboard()
     await expect(
       page.getByPlaceholder(th.editor.blocknote.link_toolbar.form.url_placeholder, { exact: true }),

@@ -1,0 +1,203 @@
+/* Cell displays and editors of database columns (FR-1410, M11-D35/D36). Plain elements + tokens (PLAN §3.9): one
+   cell renders no MUI component until it is edited. Chips always show the option / person name (SPEC §8.9). */
+.text {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multiline {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.number {
+  display: block;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Property lists (row panel, /r) align every value to the start of the value column. */
+.number[data-align='start'] {
+  text-align: left;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--option-gray-bg);
+  color: var(--option-gray-fg);
+  font-size: var(--font-sm);
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+}
+
+.chipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip[data-color='gray'] {
+  background: var(--option-gray-bg);
+  color: var(--option-gray-fg);
+}
+.chip[data-color='brown'] {
+  background: var(--option-brown-bg);
+  color: var(--option-brown-fg);
+}
+.chip[data-color='orange'] {
+  background: var(--option-orange-bg);
+  color: var(--option-orange-fg);
+}
+.chip[data-color='yellow'] {
+  background: var(--option-yellow-bg);
+  color: var(--option-yellow-fg);
+}
+.chip[data-color='green'] {
+  background: var(--option-green-bg);
+  color: var(--option-green-fg);
+}
+.chip[data-color='blue'] {
+  background: var(--option-blue-bg);
+  color: var(--option-blue-fg);
+}
+.chip[data-color='purple'] {
+  background: var(--option-purple-bg);
+  color: var(--option-purple-fg);
+}
+.chip[data-color='pink'] {
+  background: var(--option-pink-bg);
+  color: var(--option-pink-fg);
+}
+.chip[data-color='red'] {
+  background: var(--option-red-bg);
+  color: var(--option-red-fg);
+}
+.chip[data-color='teal'] {
+  background: var(--option-teal-bg);
+  color: var(--option-teal-fg);
+}
+
+.person {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.badge {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+}
+
+.check[data-checked='true'] {
+  color: var(--mui-palette-primary-main);
+}
+
+.checkButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.checkButton:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.link {
+  overflow: hidden;
+  color: var(--mui-palette-primary-main);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bodyMark {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+/* editors */
+.input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--mui-palette-primary-main);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--mui-palette-text-primary);
+  font: inherit;
+  font-size: var(--font-md);
+  line-height: var(--leading-ui);
+  outline: none;
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--load-over-fg);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.editorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.error {
+  color: var(--load-over-fg);
+  font-size: var(--font-xs);
+}

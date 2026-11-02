@@ -31,3 +31,5 @@ export * as planMarkers from './plan-markers'
 export * as milestones from './milestones'
 // M9 (plan/m09 S2.2)
 export * as workload from './workload'
+// M11 (plan/m11 S0.7)
+export * as databases from './databases'

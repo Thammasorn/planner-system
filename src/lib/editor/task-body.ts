@@ -4,8 +4,12 @@
 //   so the open body can patch 📄 in the task list without a refetch (M6.1-D11).
 // - Sub-page cards have no place in a task body (no page tree, FR-680): pasted / dropped cards become a paragraph with
 //   a page mention (the link survives); the server rejects any that remain (M6.1-D9).
+// - M11-D38 (FR-1453): database blocks have no place in a row body (no nesting): pasted / dropped ones become a
+//   paragraph with the database title; the server rejects any that remain.
 import type { AppEditor, AppPartialBlock } from '@/components/editor/schema'
+import { th } from '@/i18n/th'
 import { extractContentText } from './content-text'
+import { findDatabaseBlocks } from './database-clipboard'
 
 type Obj = Record<string, unknown>
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x)
@@ -61,22 +65,54 @@ export function subpageAsMention(block: {
   }
 }
 
-/** Replaces every sub-page card of the editor's document (FR-680). Returns whether anything changed. */
-export function replaceSubpagesWithMentions(editor: Pick<AppEditor, 'document' | 'replaceBlocks'>): boolean {
-  const cards = findSubpageBlocks(editor.document)
-  if (cards.length === 0) return false
+function blocksById(doc: unknown): Map<string, Obj> {
   const byId = new Map<string, Obj>()
-  const stack: unknown[] = (editor.document as unknown[]).slice()
+  const stack: unknown[] = Array.isArray(doc) ? (doc as unknown[]).slice() : []
   while (stack.length > 0) {
     const b = stack.pop()
     if (!isObj(b)) continue
     if (typeof b.id === 'string') byId.set(b.id, b)
     if (Array.isArray(b.children)) stack.push(...(b.children as unknown[]))
   }
+  return byId
+}
+
+/** Replaces every sub-page card of the editor's document (FR-680). Returns whether anything changed. */
+export function replaceSubpagesWithMentions(editor: Pick<AppEditor, 'document' | 'replaceBlocks'>): boolean {
+  const cards = findSubpageBlocks(editor.document)
+  if (cards.length === 0) return false
+  const byId = blocksById(editor.document)
   for (const card of cards) {
     const block = byId.get(card.id)
     const props = block && isObj(block.props) ? block.props : {}
     editor.replaceBlocks([card.id], [subpageAsMention({ props, children: block?.children })])
+  }
+  return true
+}
+
+/** M11-D38: the paragraph that replaces a database block in a row body — the database title (children kept). */
+export function databaseAsParagraph(
+  block: { props: Record<string, unknown>; children?: unknown },
+  titleOf: (databaseId: string) => string | undefined,
+): AppPartialBlock {
+  const id = typeof block.props.databaseId === 'string' ? block.props.databaseId : ''
+  const title = (id === '' ? undefined : titleOf(id)) || th.database.untitled
+  const children = Array.isArray(block.children) ? (block.children as AppPartialBlock[]) : []
+  return { type: 'paragraph', content: title, children }
+}
+
+/** Replaces every database block of a row body's document (M11-D38). Returns whether anything changed. */
+export function replaceDatabasesWithParagraphs(
+  editor: Pick<AppEditor, 'document' | 'replaceBlocks'>,
+  titleOf: (databaseId: string) => string | undefined,
+): boolean {
+  const refs = findDatabaseBlocks(editor.document)
+  if (refs.length === 0) return false
+  const byId = blocksById(editor.document)
+  for (const ref of refs) {
+    const block = byId.get(ref.blockId)
+    const props = block && isObj(block.props) ? block.props : {}
+    editor.replaceBlocks([ref.blockId], [databaseAsParagraph({ props, children: block?.children }, titleOf)])
   }
   return true
 }

@@ -4,8 +4,9 @@ import type { BlockInput } from '@/lib/schemas/page-content'
 
 export type PageSpace = 'WORKSPACE' | 'PROJECT'
 
-/** SPEC §6.2 page_kind (M6.1): DOC = a document in a tree; TASK = the 1:1 body of a task. M11 adds 'DB_ROW'. */
-export type PageKind = 'DOC' | 'TASK'
+/** SPEC §6.2 page_kind: DOC = a document in a tree; TASK = the 1:1 body of a task (M6.1); DB_ROW = the 1:1 body of a
+ *  database row (M11, FR-1453). */
+export type PageKind = 'DOC' | 'TASK' | 'DB_ROW'
 
 /** Sidebar / project-tab tree row (lazy children per node, M4-D23). */
 export interface PageTreeNode {
@@ -68,6 +69,8 @@ export interface PageDTO {
   kind: PageKind
   /** Set when kind = 'TASK'. */
   taskId: string | null
+  /** M11 (M11-D8): set when kind = 'DB_ROW'. Optional until S2's getPageView sends it (then `string | null`). */
+  rowId: string | null
   /** FR-1602: shared page property (every viewer sees the same width). */
   fullWidth: boolean
 }

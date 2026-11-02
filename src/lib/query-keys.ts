@@ -84,6 +84,11 @@ export const qk = {
   pageEmbedWorkload: (pageId: string) => ['embed', 'workload', pageId] as const,
   /** Prefix of every projectWorkload block query (invalidateLoad). */
   pageEmbedWorkloadAll: () => ['embed', 'workload'] as const,
+  // ── M11 (plan/m11 S0.8, M11-D20): one cache entry per database, shared by every view, the row panel and /r ──
+  /** GET /api/pages/[id]/databases/[databaseId] — the whole DatabaseResponse. */
+  database: (pageId: string, databaseId: string) => ['databases', pageId, databaseId] as const,
+  /** GET /api/database-rows/[id]/body — the row body view (M11-D8). */
+  rowBody: (rowId: string) => ['databases', 'rowBody', rowId] as const,
 }
 
 /** Prefixes for load views (M6 grid = qk.gridAll(…) under ['grid'], M9 workload, M10 home). Invalidating an unused prefix is a no-op,
@@ -102,4 +107,6 @@ export const qkPrefix = {
   /** Every calendar range (M5). */
   calendar: ['calendar'] as const,
   leaveTypes: ['leaveTypes'] as const,
+  /** M11: every database and row-body query. */
+  databases: ['databases'] as const,
 }

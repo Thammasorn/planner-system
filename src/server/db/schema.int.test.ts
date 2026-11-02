@@ -940,9 +940,9 @@ describe('M6.1 schema (SPEC §6.2 page_kind, pages.kind / task_id / full_width, 
     await sql.end()
   })
 
-  it('page_kind has exactly DOC, TASK (M11 adds DB_ROW)', async () => {
+  it('page_kind has DOC, TASK (+ DB_ROW since M11)', async () => {
     const rows = await sql<{ v: string }[]>`select unnest(enum_range(null::page_kind))::text as v`
-    expect(rows.map((r) => r.v)).toEqual(['DOC', 'TASK'])
+    expect(rows.map((r) => r.v)).toEqual(['DOC', 'TASK', 'DB_ROW'])
   })
 
   it('defaults: kind DOC, task_id null, full_width false; pages_tree_idx covers DOC pages only', async () => {
@@ -1225,5 +1225,227 @@ describe('M8 schema (SPEC §6.2 milestones, tasks.milestone_id; plan/m08 S0.2, M
       select data_type, is_nullable from information_schema.columns
       where table_name = 'tasks' and column_name = 'milestone_id'`
     expect(c).toEqual({ data_type: 'uuid', is_nullable: 'YES' })
+  })
+})
+
+describe('M11 schema (SPEC §6.2 databases / database_columns / database_views / database_rows, pages.database_row_id)', () => {
+  let sql: postgres.Sql
+
+  async function pgError(
+    run: () => Promise<unknown>,
+  ): Promise<{ code?: string; constraint?: string } | null> {
+    try {
+      await run()
+      return null
+    } catch (e) {
+      const err = e as { code?: string; constraint_name?: string }
+      return { code: err.code, constraint: err.constraint_name }
+    }
+  }
+
+  /** user → WORKSPACE DOC page → database (+ TITLE column) → one row. */
+  async function seedDb(): Promise<{
+    userId: string
+    pageId: string
+    databaseId: string
+    rowId: string
+    titleColumnId: string
+  }> {
+    const u = await makeUser()
+    const [p] = await sql<{ id: string }[]>`
+      insert into pages (space, title, position, created_by, updated_by)
+      values ('WORKSPACE', 'เจ้าของ', 'a0', ${u.id}, ${u.id}) returning id`
+    const [d] = await sql<{ id: string }[]>`
+      insert into databases (page_id, title, created_by, updated_by)
+      values (${p!.id}, 'ฐานข้อมูล', ${u.id}, ${u.id}) returning id`
+    const [c] = await sql<{ id: string }[]>`
+      insert into database_columns (database_id, type, name, position)
+      values (${d!.id}, 'TITLE', 'ชื่อ', 'a0') returning id`
+    const [r] = await sql<{ id: string }[]>`
+      insert into database_rows (database_id, title, position, created_by, updated_by)
+      values (${d!.id}, 'แถว', 'a0', ${u.id}, ${u.id}) returning id`
+    return { userId: u.id, pageId: p!.id, databaseId: d!.id, rowId: r!.id, titleColumnId: c!.id }
+  }
+
+  function insertRowPage(o: { userId: string; rowId: string | null; kind?: 'DOC' | 'DB_ROW' }) {
+    return sql<{ id: string }[]>`
+      insert into pages (space, kind, database_row_id, position, created_by, updated_by)
+      values ('WORKSPACE', ${o.kind ?? 'DB_ROW'}, ${o.rowId}, 'a0', ${o.userId}, ${o.userId})
+      returning id`
+  }
+
+  const count = async (table: string, id: string): Promise<number> => {
+    const [r] = await sql<{ n: number }[]>`select count(*)::int as n from ${sql(table)} where id = ${id}`
+    return r!.n
+  }
+
+  beforeAll(() => {
+    sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
+  })
+
+  afterAll(async () => {
+    await sql.end()
+  })
+
+  it('db_column_type and db_view_type values are exactly SPEC §6.2', async () => {
+    const cols = await sql<{ v: string }[]>`select unnest(enum_range(null::db_column_type))::text as v`
+    expect(cols.map((r) => r.v)).toEqual([
+      'TITLE',
+      'TEXT',
+      'NUMBER',
+      'SELECT',
+      'MULTI_SELECT',
+      'DATE',
+      'CHECKBOX',
+      'PERSON',
+      'URL',
+    ])
+    const views = await sql<{ v: string }[]>`select unnest(enum_range(null::db_view_type))::text as v`
+    expect(views.map((r) => r.v)).toEqual(['TABLE', 'KANBAN', 'CALENDAR'])
+  })
+
+  it('pages_kind_row: DB_ROW needs database_row_id, DOC may not have one; one page per row (23514, 23514, 23505)', async () => {
+    const { userId, rowId } = await seedDb()
+    expect(await pgError(() => insertRowPage({ userId, rowId: null }))).toMatchObject({
+      code: '23514',
+      constraint: 'pages_kind_row',
+    })
+    expect(await pgError(() => insertRowPage({ userId, rowId, kind: 'DOC' }))).toMatchObject({
+      code: '23514',
+      constraint: 'pages_kind_row',
+    })
+    expect(await pgError(() => insertRowPage({ userId, rowId }))).toBeNull()
+    expect(await pgError(() => insertRowPage({ userId, rowId }))).toMatchObject({
+      code: '23505',
+      constraint: 'pages_database_row_id_unique',
+    })
+  })
+
+  it('pages_kind_shape applies to DB_ROW pages (no title, no parent)', async () => {
+    const { userId, rowId } = await seedDb()
+    expect(
+      await pgError(
+        () => sql`insert into pages (space, kind, database_row_id, title, position, created_by, updated_by)
+                  values ('WORKSPACE', 'DB_ROW', ${rowId}, 'x', 'a0', ${userId}, ${userId})`,
+      ),
+    ).toMatchObject({ code: '23514', constraint: 'pages_kind_shape' })
+  })
+
+  it('deleting a database_rows row cascades its body page', async () => {
+    const { userId, rowId } = await seedDb()
+    const [body] = await insertRowPage({ userId, rowId })
+    await sql`delete from database_rows where id = ${rowId}`
+    expect(await count('pages', body!.id)).toBe(0)
+  })
+
+  it('deleting the owner page cascades databases → columns / views / rows → row-body pages', async () => {
+    const { userId, pageId, databaseId, rowId, titleColumnId } = await seedDb()
+    const [v] = await sql<{ id: string }[]>`
+      insert into database_views (database_id, type, name, position) values (${databaseId}, 'TABLE', 'ตาราง', 'a0')
+      returning id`
+    const [body] = await insertRowPage({ userId, rowId })
+    await sql`delete from pages where id = ${pageId}`
+    expect(await count('databases', databaseId)).toBe(0)
+    expect(await count('database_columns', titleColumnId)).toBe(0)
+    expect(await count('database_views', v!.id)).toBe(0)
+    expect(await count('database_rows', rowId)).toBe(0)
+    expect(await count('pages', body!.id)).toBe(0)
+  })
+
+  it('database_columns_one_title rejects a second TITLE (23505); a TITLE column cannot be soft-deleted (23514)', async () => {
+    const { databaseId, titleColumnId } = await seedDb()
+    expect(
+      await pgError(
+        () => sql`insert into database_columns (database_id, type, name, position)
+                  values (${databaseId}, 'TITLE', 'ชื่อ 2', 'a1')`,
+      ),
+    ).toMatchObject({ code: '23505', constraint: 'database_columns_one_title' })
+    expect(
+      await pgError(() => sql`update database_columns set deleted_at = now() where id = ${titleColumnId}`),
+    ).toMatchObject({ code: '23514', constraint: 'database_columns_title_not_deleted' })
+  })
+
+  it('cells must be a JSON object; title / name lengths are enforced', async () => {
+    const { userId, databaseId, rowId } = await seedDb()
+    expect(
+      await pgError(() => sql`update database_rows set cells = '[]'::jsonb where id = ${rowId}`),
+    ).toMatchObject({ code: '23514', constraint: 'database_rows_cells_object' })
+    expect(
+      await pgError(() => sql`update database_rows set title = ${'ก'.repeat(501)} where id = ${rowId}`),
+    ).toMatchObject({ code: '23514', constraint: 'database_rows_title_len' })
+    expect(
+      await pgError(() => sql`update database_rows set title = ${'ก'.repeat(500)} where id = ${rowId}`),
+    ).toBeNull()
+    expect(
+      await pgError(() => sql`update databases set title = ${'ก'.repeat(201)} where id = ${databaseId}`),
+    ).toMatchObject({ code: '23514', constraint: 'databases_title_len' })
+    for (const name of ['   ', 'ก'.repeat(101)]) {
+      expect(
+        await pgError(
+          () => sql`insert into database_columns (database_id, type, name, position)
+                    values (${databaseId}, 'TEXT', ${name}, 'a1')`,
+        ),
+      ).toMatchObject({ code: '23514', constraint: 'database_columns_name_len' })
+      expect(
+        await pgError(
+          () => sql`insert into database_views (database_id, type, name, position)
+                    values (${databaseId}, 'TABLE', ${name}, 'a1')`,
+        ),
+      ).toMatchObject({ code: '23514', constraint: 'database_views_name_len' })
+    }
+    // defaults
+    const [row] = await sql<{ cells: unknown; version: number }[]>`
+      insert into database_rows (database_id, position, created_by, updated_by)
+      values (${databaseId}, 'a1', ${userId}, ${userId}) returning cells, version`
+    expect(row).toEqual({ cells: {}, version: 1 })
+  })
+
+  it('the four tables reference only pages, databases and "user" (BR-98, M11-D34)', async () => {
+    const rows = await sql<{ src: string; dst: string }[]>`
+      select c.conrelid::regclass::text as src, c.confrelid::regclass::text as dst
+      from pg_constraint c
+      where c.contype = 'f'
+        and c.conrelid::regclass::text in ('databases', 'database_columns', 'database_views', 'database_rows')`
+    const targets = [...new Set(rows.map((r) => r.dst))].sort()
+    expect(targets).toEqual(['"user"', 'databases', 'pages'])
+  })
+
+  it('has every SPEC §6.2/§6.4 index plus the three batch indexes, by name', async () => {
+    const names = [
+      'databases_page_id_idx',
+      'databases_title_trgm',
+      'database_columns_one_title',
+      'database_columns_db_pos_idx',
+      'database_columns_batch_idx',
+      'database_views_db_pos_idx',
+      'database_views_batch_idx',
+      'database_rows_db_pos_idx',
+      'database_rows_title_trgm',
+      'database_rows_batch_idx',
+      'pages_database_row_id_unique',
+    ]
+    const rows = await sql<{ indexname: string; indexdef: string }[]>`
+      select indexname, indexdef from pg_indexes where indexname = any(${names})`
+    expect(rows.map((r) => r.indexname).sort()).toEqual([...names].sort())
+    const def = (n: string) => rows.find((r) => r.indexname === n)!.indexdef
+    expect(def('database_rows_db_pos_idx')).toMatch(/deleted_at IS NULL/)
+    expect(def('database_rows_batch_idx')).toMatch(/deleted_batch IS NOT NULL/)
+    expect(def('database_rows_title_trgm')).toMatch(/gin .*gin_trgm_ops/)
+  })
+
+  it('positions are byte-ordered (orderKey, X48)', async () => {
+    const rows = await sql<{ table_name: string; collation_name: string | null }[]>`
+      select table_name, collation_name from information_schema.columns
+      where column_name = 'position' and table_name in ('database_columns', 'database_views', 'database_rows')`
+    expect(rows).toHaveLength(3)
+    expect(rows.every((r) => r.collation_name === 'C')).toBe(true)
+  })
+
+  it("title ilike '%ลูกค้า%' on database_rows uses database_rows_title_trgm", async () => {
+    const plan = await sql.begin(async (tx) => {
+      await tx`set local enable_seqscan = off`
+      return tx<{ 'QUERY PLAN': string }[]>`explain select id from database_rows where title ilike '%ลูกค้า%'`
+    })
+    expect(plan.map((r) => r['QUERY PLAN']).join('\n')).toContain('database_rows_title_trgm')
   })
 })

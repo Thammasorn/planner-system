@@ -141,13 +141,13 @@ describe('searchAll — world', () => {
     expect(r.people.find((p) => p.id === co.id)).toMatchObject({ active: false })
   })
 
-  it('route: titleOnly → only pages; otherwise all five keys in FR-1102 order; 401 for nobody', async () => {
+  it('route: titleOnly → only pages; otherwise all six keys in FR-1102 order (M11 databases last); 401 for nobody', async () => {
     asUser(w.member)
     const t = await searchHttp('P-ลับ', true)
     expect(t.pages.length).toBeGreaterThan(0)
-    expect({ ...t, pages: [] }).toEqual({ projects: [], tasks: [], pages: [], people: [], clients: [] })
+    expect({ ...t, pages: [] }).toEqual({ projects: [], tasks: [], pages: [], people: [], clients: [], databases: [] })
     const full = await searchHttp('P-ลับ')
-    expect(Object.keys(full)).toEqual(['projects', 'tasks', 'pages', 'people', 'clients'])
+    expect(Object.keys(full)).toEqual(['projects', 'tasks', 'pages', 'people', 'clients', 'databases'])
     expect(full.tasks.length).toBeGreaterThan(0)
     asNobody()
     expect((await callRoute(searchRoute, '/api/search?q=x')).status).toBe(401)

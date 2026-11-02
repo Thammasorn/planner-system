@@ -358,6 +358,7 @@ describe('M10 palette categories, local index and debounce', () => {
     projects: [],
     people: [],
     clients: [],
+    databases: [],
     tasks: [
       {
         kind: 'task',
@@ -721,5 +722,96 @@ describe('M10 quick commands (FR-1103, M10-D23/D24)', () => {
     await openPalette()
     await user.click(await within(dialog()).findByRole('option', { name: th.palette.commands.goToday.label }))
     expect(nav.push).toHaveBeenCalledWith('/home')
+  })
+})
+
+describe('M11 databases group (FR-1474, M11-D28, X88)', () => {
+  const PG = '00000000-0000-4000-8000-0000000000e1'
+  const DB = '00000000-0000-4000-8000-0000000000e2'
+  const R1 = '00000000-0000-4000-8000-0000000000e3'
+  const R2 = '00000000-0000-4000-8000-0000000000e4'
+  const withDatabases: SearchAllResponse = {
+    pages: hits.pages,
+    tasks: [],
+    projects: [],
+    people: [],
+    clients: [],
+    databases: [
+      {
+        kind: 'database',
+        rowId: null,
+        databaseId: DB,
+        pageId: PG,
+        rowTitle: null,
+        databaseTitle: 'ติดตามลูกค้า',
+        pageTitle: 'POS charter',
+        matchedIn: 'database',
+        href: `/p/${PG}?db=${DB}`,
+      },
+      {
+        kind: 'database',
+        rowId: R1,
+        databaseId: DB,
+        pageId: PG,
+        rowTitle: 'ลูกค้า Coral',
+        databaseTitle: 'ติดตามลูกค้า',
+        pageTitle: 'POS charter',
+        matchedIn: 'row',
+        href: `/p/${PG}?db=${DB}&row=${R1}`,
+      },
+      {
+        kind: 'database',
+        rowId: R2,
+        databaseId: DB,
+        pageId: PG,
+        rowTitle: '',
+        databaseTitle: '',
+        pageTitle: 'POS charter',
+        matchedIn: 'content',
+        href: `/p/${PG}?db=${DB}&row=${R2}`,
+      },
+    ],
+  }
+
+  it('the ฐานข้อมูล group comes after M10 groups; titles, subtitles, chips and Enter → href', async () => {
+    api.getJson.mockResolvedValue(withDatabases)
+    renderPalette()
+    openWithKeys()
+    const input = await within(await screen.findByRole('dialog')).findByRole('combobox')
+    fireEvent.change(input, { target: { value: 'ลูกค้า' } })
+    const group = await within(dialog()).findByRole('group', { name: th.palette.groupDatabases })
+    const headings = within(dialog())
+      .getAllByRole('group')
+      .map((g) => g.getAttribute('aria-labelledby'))
+      .map((id) => (id ? document.getElementById(id)?.textContent : null))
+    expect(headings.at(-1)).toBe(th.palette.groupDatabases)
+    expect(headings.indexOf(th.palette.groups.pages)).toBeLessThan(
+      headings.indexOf(th.palette.groupDatabases),
+    )
+
+    const options = within(group).getAllByRole('option')
+    expect(options.map((o) => o.getAttribute('data-value'))).toEqual([`db:${DB}`, `db:${R1}`, `db:${R2}`])
+    expect(options[0]).toHaveAccessibleName(/ติดตามลูกค้า/)
+    expect(options[0]).toHaveAccessibleName(/POS charter/)
+    expect(options[1]).toHaveAccessibleName(/ลูกค้า Coral/)
+    expect(options[1]).toHaveAccessibleName(/ติดตามลูกค้า · POS charter/)
+    // untitled row in an untitled database, found in its body
+    expect(within(options[2]!).getByText(th.database.table.untitledRow)).toBeInTheDocument()
+    expect(options[2]).toHaveAccessibleName(new RegExp(`${th.database.untitled} · POS charter`))
+    expect(within(options[2]!).getByText(th.palette.matchedInRow)).toBeInTheDocument()
+    expect(within(options[1]!).queryByText(th.palette.matchedInRow)).toBeNull()
+
+    fireEvent.click(options[1]!)
+    expect(nav.push).toHaveBeenCalledWith(`/p/${PG}?db=${DB}&row=${R1}`)
+  })
+
+  it('a response without databases (older server) renders no ฐานข้อมูล group', async () => {
+    api.getJson.mockResolvedValue({ ...withDatabases, databases: undefined })
+    renderPalette()
+    openWithKeys()
+    const input = await within(await screen.findByRole('dialog')).findByRole('combobox')
+    fireEvent.change(input, { target: { value: 'ลูกค้า' } })
+    await within(dialog()).findByRole('group', { name: th.palette.groups.pages })
+    expect(within(dialog()).queryByRole('group', { name: th.palette.groupDatabases })).toBeNull()
   })
 })

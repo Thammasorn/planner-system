@@ -260,3 +260,62 @@ describe('live blocks (taskView / projectWorkload)', () => {
     expect(resolveWorkloadProps({ view: 'TOTAL' })).toEqual({ view: 'ALL' })
   })
 })
+
+describe('database / equation / inlineEquation (M11, FR-1407, FR-1501…1506)', () => {
+  const ok = (v: unknown): boolean => pageContentSchema.safeParse(v).success
+  const latex = (n: number) => 'x'.repeat(n)
+
+  it('are part of BLOCK_TYPES', () => {
+    expect(BLOCK_TYPES).toContain('database')
+    expect(BLOCK_TYPES).toContain('equation')
+  })
+
+  it('database: props only databaseId (uuid or empty), no content, no children', () => {
+    expect(ok([{ type: 'database', props: { databaseId: V4 } }])).toBe(true)
+    expect(ok([{ type: 'database', props: { databaseId: '' } }])).toBe(true)
+    expect(ok([{ type: 'database' }])).toBe(true)
+    expect(ok([{ type: 'database', props: { databaseId: 'nope' } }])).toBe(false)
+    expect(ok([{ type: 'database', props: { databaseId: 5 } }])).toBe(false)
+    expect(ok([{ type: 'database', props: { databaseId: V4, title: 'x' } }])).toBe(false)
+    expect(ok([{ type: 'database', props: { databaseId: V4 }, content: 'x' }])).toBe(false)
+    expect(ok([{ type: 'database', props: { databaseId: V4 }, children: [{ type: 'paragraph' }] }])).toBe(
+      false,
+    )
+  })
+
+  it('equation: latex string ≤ 2,000, no other props, no content/children', () => {
+    expect(ok([{ type: 'equation', props: { latex: latex(2000) } }])).toBe(true)
+    expect(ok([{ type: 'equation', props: { latex: '' } }])).toBe(true)
+    expect(ok([{ type: 'equation', props: { latex: latex(2001) } }])).toBe(false)
+    expect(ok([{ type: 'equation', props: { latex: 1 } }])).toBe(false)
+    expect(ok([{ type: 'equation', props: { latex: 'x', size: 2 } }])).toBe(false)
+    expect(ok([{ type: 'equation', props: { latex: 'x' }, content: 'x' }])).toBe(false)
+    expect(ok([{ type: 'equation', props: { latex: 'x' }, children: [{ type: 'paragraph' }] }])).toBe(false)
+  })
+
+  it('inlineEquation: latex ≤ 2,000 inside inline content and table cells', () => {
+    const inl = (l: unknown) => [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'a' },
+          { type: 'inlineEquation', props: { latex: l } },
+        ],
+      },
+    ]
+    expect(ok(inl(latex(2000)))).toBe(true)
+    expect(ok(inl(latex(2001)))).toBe(false)
+    expect(ok(inl(3))).toBe(false)
+    expect(
+      ok([
+        {
+          type: 'table',
+          content: {
+            type: 'tableContent',
+            rows: [{ cells: [[{ type: 'inlineEquation', props: { latex: '\\pi' } }]] }],
+          },
+        },
+      ]),
+    ).toBe(true)
+  })
+})

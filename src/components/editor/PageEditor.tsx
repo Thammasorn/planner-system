@@ -6,10 +6,19 @@
 // `ensurePageId` once (memoised); then the lease is requested (`leaseAcquire 'focus'`) and autosave sends what was
 // typed meanwhile. The BlockNote instance is keyed by `editorKey` (never re-created when the id arrives). TASK bodies:
 // no sub-page item / cards (FR-680), their own empty-document placeholder, `variant` page | compact.
+// M11: DB_ROW bodies (row pages, FR-1453) — no sub-page and no database blocks (M11-D38); the slash "ฐานข้อมูล" group
+// creates databases (FR-1404); copy/cut adds the database clipboard type and a paste deep-copies database blocks
+// (M11-D13); the formatting toolbar gains "สมการ" (FR-1502); custom blocks read the page context (kind, getPageId,
+// canEdit, variant).
 import './editor-theme.css' // before BlockNote's CSS (doubled selectors win regardless of order, r3 §10)
 import '@blocknote/mantine/style.css' // never BlockNote's bundled Inter font CSS (Thai font stack, r3 §2)
 import { BlockNoteView } from '@blocknote/mantine'
-import { FilePanelController, GridSuggestionMenuController, useCreateBlockNote } from '@blocknote/react'
+import {
+  FilePanelController,
+  FormattingToolbarController,
+  GridSuggestionMenuController,
+  useCreateBlockNote,
+} from '@blocknote/react'
 import Box from '@mui/material/Box'
 import { useColorScheme } from '@mui/material/styles'
 import { useQueryClient } from '@tanstack/react-query'
@@ -27,22 +36,28 @@ import {
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { th } from '@/i18n/th'
-import { unwrap } from '@/lib/action-result'
+import { ActionFailure, unwrap } from '@/lib/action-result'
 import { getJson } from '@/lib/api'
+import type { DbViewType } from '@/lib/contracts/databases'
 import type { PageEditorProps, PageView } from '@/lib/contracts/pages'
+import { databaseTitleOf } from '@/lib/editor/database-block-state'
+import { databaseIdsInHtml, writeDatabaseClip } from '@/lib/editor/database-clipboard'
+import { makeDatabasePasteHook } from '@/lib/editor/database-copy-flow'
 import { dictionaryFor } from '@/lib/editor/dictionary'
 import { resolveLinkTarget } from '@/lib/editor/links'
 import { makePasteHandler } from '@/lib/editor/paste'
 import { findForeignMedia, foreignMediaReplacement, prepareInitialContent } from '@/lib/editor/sanitize'
 import { atWordStart } from '@/lib/editor/suggest'
-import { replaceSubpagesWithMentions } from '@/lib/editor/task-body'
+import { replaceDatabasesWithParagraphs, replaceSubpagesWithMentions } from '@/lib/editor/task-body'
 import { makeUploadFile, registerUploadEditor } from '@/lib/editor/upload'
 import { invalidatePages } from '@/lib/invalidate'
 import { qk } from '@/lib/query-keys'
 import { isBlankPage } from '@/lib/pages/blank'
 import { isSafeHref } from '@/lib/schemas/page-content'
+import { copyDatabase, createDatabase } from '@/server/actions/databases'
 import { createPage } from '@/server/actions/pages'
 import { EditorBanners } from './EditorBanners'
+import { AppFormattingToolbar } from './formatting-toolbar'
 import { LeaseBadge } from './lease/LeaseBadge'
 import { useEditLease } from './lease/useEditLease'
 import { MentionMenu } from './mention-menu'
@@ -70,6 +85,10 @@ export interface PageEditorShellProps extends PageEditorProps {
   focusHandle?: Ref<{ focus(): void }>
 }
 
+/** Thai message of a failed action, or the fallback. */
+const messageOf = (err: unknown, fallback: string): string =>
+  err instanceof ActionFailure && err.message !== '' ? err.message : fallback
+
 /** Native events that mean "the user starts working in the body" (M6.1-D8). Capture phase: before ProseMirror. */
 const ACTIVATING_EVENTS = ['focusin', 'beforeinput', 'paste', 'drop'] as const
 
@@ -96,7 +115,7 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
   const variant = props.variant ?? 'page'
   const editorKey = props.editorKey ?? props.pageId ?? ''
   const lazy = useLazyPageId({ pageId: props.pageId, ensurePageId: props.ensurePageId, canEdit, notify })
-  const { pageId, getPageId } = lazy
+  const { pageId, getPageId, peekPageId } = lazy
   const router = useRouter()
   const qc = useQueryClient()
   const { mode, systemMode } = useColorScheme()
@@ -113,7 +132,19 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
       initialContent,
       // getPageId is stable and resolves the id when it arrives later (uploads of a new task body await it)
       uploadFile: makeUploadFile({ getPageId, editorKey, notify, limits: uploadLimits }),
-      pasteHandler: makePasteHandler({ notify, limits: uploadLimits, kind }),
+      pasteHandler: makePasteHandler({
+        notify,
+        limits: uploadLimits,
+        kind,
+        databaseTitle: databaseTitleOf,
+        // M11-D13: database blocks a paste inserted → copy or keep (getPageId: a task body creates its row first)
+        onDatabaseBlocksPasted: makeDatabasePasteHook({
+          currentPageId: peekPageId,
+          getPageId,
+          copyDatabase: (input) => unwrap(copyDatabase(input)),
+          notify,
+        }),
+      }),
       tables: { headers: true, cellBackgroundColor: true, cellTextColor: false, splitCells: false },
       links: {
         isValidLink: isSafeHref, // the same rule the server enforces on save (M4-D9)
@@ -198,14 +229,51 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
     const el = surface.current
     if (!el) return
     const on = (): void => activateRef.current()
+    // M11-D13: bubble phase — BlockNote's copy handler (on the editor element inside) clears the clipboard first
+    const onCopy = (e: ClipboardEvent): void => {
+      const dt = e.clipboardData
+      const sourcePageId = peekPageId()
+      if (!dt || sourcePageId === null) return
+      const ids = databaseIdsInHtml(dt.getData('blocknote/html'))
+      if (ids.length > 0) writeDatabaseClip(dt, { v: 1, sourcePageId, cut: e.type === 'cut', ids })
+    }
     for (const t of ACTIVATING_EVENTS) el.addEventListener(t, on, true)
+    el.addEventListener('copy', onCopy)
+    el.addEventListener('cut', onCopy)
     return () => {
       for (const t of ACTIVATING_EVENTS) el.removeEventListener(t, on, true)
+      el.removeEventListener('copy', onCopy)
+      el.removeEventListener('cut', onCopy)
     }
-  }, [])
+  }, [peekPageId])
 
-  // M10: the live blocks read the page id and the editable flag from here (they never store the id).
-  const liveCtx = useMemo<PageEditorContextValue>(() => ({ pageId, editable }), [pageId, editable])
+  // M10/M11: the custom blocks read the page from here (they never store its id).
+  const liveCtx = useMemo<PageEditorContextValue>(
+    () => ({ pageId, editable, kind, canEdit, getPageId, variant }),
+    [pageId, editable, kind, canEdit, getPageId, variant],
+  )
+
+  // M11 (FR-1404, M11-D10): the slash item's database — row of a task body first, then createDatabase; the answer
+  // seeds qk.database so the block renders without a GET. null after a failure (toasted here or by getPageId).
+  const createDatabaseFor = useCallback(
+    async (view: DbViewType): Promise<string | null> => {
+      let id: string
+      try {
+        id = await getPageId()
+      } catch {
+        return null
+      }
+      try {
+        const res = await unwrap(createDatabase({ pageId: id, view }))
+        qc.setQueryData(qk.database(id, res.databaseId), res.database)
+        return res.databaseId
+      } catch (err) {
+        notify(messageOf(err, th.database.toasts.createFailed))
+        return null
+      }
+    },
+    [getPageId, qc],
+  )
 
   const slashCtx = useMemo<SlashCtx>(
     () => ({
@@ -224,8 +292,9 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
           return null
         }
       },
+      ...(canEdit && (kind === 'DOC' || kind === 'TASK') ? { createDatabase: createDatabaseFor } : {}),
     }),
-    [kind, canEdit, props.depth, space, projectId, pageId, qc],
+    [kind, canEdit, props.depth, space, projectId, pageId, qc, createDatabaseFor],
   )
 
   return (
@@ -262,13 +331,17 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
             theme={scheme}
             aria-label={th.editor.label}
             slashMenu={false}
+            formattingToolbar={false}
             emojiPicker={false}
             filePanel={false}
             comments={false}
             onChange={() => {
               if (editor.isEditable) {
                 fixForeignMedia(editor)
-                if (kind === 'TASK') replaceSubpagesWithMentions(editor) // dropped / moved cards too (FR-680)
+                if (kind !== 'DOC') replaceSubpagesWithMentions(editor) // dropped / moved cards too (FR-680)
+                // M11-D38: a database dropped into a row body becomes its title
+                if (kind === 'DB_ROW' && replaceDatabasesWithParagraphs(editor, databaseTitleOf))
+                  notify(th.editor.errors.databaseNotAllowed)
               }
               save.schedule()
               props.onBlankChange?.(isBlankPage({ title: '', content: editor.document }))
@@ -276,6 +349,7 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
             }}
           >
             <SlashMenu editor={editor} ctx={slashCtx} />
+            <FormattingToolbarController formattingToolbar={AppFormattingToolbar} />
             <GridSuggestionMenuController
               triggerCharacter=":"
               columns={10}

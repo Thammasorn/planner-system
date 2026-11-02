@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import { GET as searchRoute } from '@/app/api/search/route'
+import { savePageContent } from '@/server/actions/pages'
 import type { SearchResponse } from '@/lib/contracts/search'
 import { callRoute, okJson } from '../../../tests/authz/_support/http'
 import { asUser } from '../../../tests/helpers/as-user'
@@ -71,6 +72,33 @@ describe('searchPages', () => {
     asUser(w.member)
     expect((await search('คู่มือย่อย')).pages).toHaveLength(8)
     expect((await search(' ภาษา\u200Bไทย ')).pages.map((p) => p.title)).toEqual(['สอนภาษาไทย'])
+  })
+
+  // AC-1504 / FR-1506: the LaTeX source of equation blocks and inline equations is part of content_text, so a saved
+  // page is found by a fragment of it (matchedIn 'content'); backslashes and braces match literally.
+  it('latex in content_text: equation block and inlineEquation sources are searchable after a save', async () => {
+    const page = await makePage({ project: w.P, title: 'สูตรฟิสิกส์', createdBy: w.manager })
+    asUser(w.member)
+    const saved = await savePageContent({
+      pageId: page.id,
+      baseVersion: page.version,
+      content: [
+        { type: 'equation', props: { latex: 'E=mc^2' } },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'อัตราส่วน ', styles: {} },
+            { type: 'inlineEquation', props: { latex: '\\frac{a}{b}' } },
+          ],
+        },
+      ],
+    })
+    expect(saved).toMatchObject({ ok: true })
+    expect((await search('mc^2')).pages.map((p) => [p.id, p.matchedIn])).toEqual([[page.id, 'content']])
+    expect((await search('\\frac{a}')).pages.map((p) => [p.id, p.matchedIn])).toEqual([[page.id, 'content']])
+    expect((await search('mc^2', true)).pages).toEqual([]) // titleOnly never reads content
+    asUser(w.outsider)
+    expect((await search('mc^2')).pages).toEqual([])
   })
 
   it('an empty query → 400', async () => {

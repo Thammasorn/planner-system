@@ -46,3 +46,7 @@ export * as workload from './workload'
 // M10 (X87, plan/m10 S0)
 export * as embed from './embed'
 export * as home from './home'
+// M11 (plan/m11 S0.7)
+export * as databaseCopy from './database-copy'
+export * as databases from './databases'
+export * as rowPages from './row-pages'

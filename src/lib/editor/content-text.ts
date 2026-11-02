@@ -39,6 +39,10 @@ function inlineText(content: unknown, opts: ContentTextOptions): string {
       case 'link':
         run += inlineText(ic.content, opts) // link text only (href not indexed)
         break
+      case 'inlineEquation':
+        // M11 (FR-1506): the LaTeX source is searchable; appended without a separator like other runs
+        if (isObj(ic.props)) run += str(ic.props.latex)
+        break
       case 'mention': {
         const p = isObj(ic.props) ? ic.props : {}
         // page mentions: NOT indexed (title may be invisible to the searcher + goes stale on rename)
@@ -89,6 +93,9 @@ function blockText(
     if (str(props.name)) out.push(str(props.name)) // "สัญญา.pdf" is searchable
     if (str(props.caption)) out.push(str(props.caption))
   }
+  // M11 (FR-1506): equation blocks contribute their LaTeX source.
+  if (type === 'equation' && str(props.latex)) out.push(str(props.latex))
+  // M11 (FR-1474): database blocks contribute nothing (data lives in the database tables, searched separately).
   // subpage: its title is indexed on its own pages row → not duplicated here.
   const children = block.children
   if (Array.isArray(children)) for (const c of children) blockText(c, out, opts, depth + 1)
@@ -132,23 +139,55 @@ export function collectMentionIds(doc: unknown): { users: Set<string>; pages: Se
   return { users, pages }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** M11 (FR-1472, M11-D9): ids of every `database` block at any depth; only well-formed uuids (lower-cased). */
+export function collectDatabaseIds(doc: unknown): Set<string> {
+  const ids = new Set<string>()
+  if (!Array.isArray(doc)) return ids
+  const stack: [unknown, number][] = doc.map((b) => [b, 0])
+  while (stack.length > 0) {
+    const [b, depth] = stack.pop()!
+    if (!isObj(b) || depth > 64) continue
+    if (b.type === 'database' && isObj(b.props)) {
+      const id = str(b.props.databaseId)
+      if (UUID_RE.test(id)) ids.add(id.toLowerCase())
+    }
+    if (Array.isArray(b.children)) for (const c of b.children) stack.push([c, depth + 1])
+  }
+  return ids
+}
+
 /**
- * FR-508 duplicate: deep copy of `doc` where every `subpage` block whose `props.pageId` is a key of `map` gets the
- * mapped id; everything else (mentions included) is untouched. The input is never mutated. Callers pass stored,
- * validated content (nesting ≤ PAGE_MAX_NESTING); non-array input → [].
+ * FR-508 / M11-D11 duplicate: deep copy of `doc` where every `subpage` block whose `props.pageId` is a key of
+ * `maps.pages` and every `database` block whose `props.databaseId` is a key of `maps.databases` gets the mapped id;
+ * everything else (mentions included) is untouched. The input is never mutated. Callers pass stored, validated
+ * content (nesting ≤ PAGE_MAX_NESTING); non-array input → [].
  */
-export function remapSubpageIds(doc: unknown, map: ReadonlyMap<string, string>): unknown[] {
+export function remapContentIds(
+  doc: unknown,
+  maps: { pages?: ReadonlyMap<string, string>; databases?: ReadonlyMap<string, string> },
+): unknown[] {
   if (!Array.isArray(doc)) return []
   const root = structuredClone(doc) as unknown[]
   const stack: unknown[] = [...root]
   while (stack.length > 0) {
     const b = stack.pop()
     if (!isObj(b)) continue
-    if (b.type === 'subpage' && isObj(b.props)) {
-      const next = map.get(str(b.props.pageId))
+    if (b.type === 'subpage' && isObj(b.props) && maps.pages) {
+      const next = maps.pages.get(str(b.props.pageId))
       if (next !== undefined) b.props.pageId = next
+    }
+    if (b.type === 'database' && isObj(b.props) && maps.databases) {
+      const next = maps.databases.get(str(b.props.databaseId))
+      if (next !== undefined) b.props.databaseId = next
     }
     if (Array.isArray(b.children)) for (const c of b.children) stack.push(c)
   }
   return root
+}
+
+/** M4 name kept for its callers: `remapContentIds(doc, { pages: map })`. */
+export function remapSubpageIds(doc: unknown, map: ReadonlyMap<string, string>): unknown[] {
+  return remapContentIds(doc, { pages: map })
 }

@@ -8,7 +8,17 @@ import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { generateKeyBetween } from 'fractional-indexing'
 import { addDays, weekStart } from '@/domain/dates'
 import { DEFAULT_STATUSES, type DefaultStatusKey } from '@/domain/status'
-import type { Cd, Certainty, HalfDay, ISODate, TaskStatusCategory } from '@/domain/types'
+import type {
+  Cd,
+  Certainty,
+  DbColumnType,
+  DbViewType,
+  HalfDay,
+  ISODate,
+  OptionColor,
+  TaskStatusCategory,
+  ViewConfig,
+} from '@/domain/types'
 import { cdToNumeric, numericToCd } from '@/domain/units'
 import { th } from '@/i18n/th'
 import type { PageSpace } from '@/lib/contracts/pages'
@@ -18,6 +28,10 @@ import {
   account,
   allocations,
   clients,
+  databaseColumns,
+  databaseRows,
+  databases,
+  databaseViews,
   files,
   holidays,
   leaveTypes,
@@ -36,6 +50,10 @@ import {
   user,
   workSchedules,
   type ClientRow,
+  type DatabaseRow,
+  type DbColumnRow,
+  type DbRowRow,
+  type DbViewRow,
   type FileRow,
   type HolidayRow,
   type LeaveTypeRow,
@@ -920,4 +938,228 @@ export async function deactivateUser(u: { id: string }, on: ISODate): Promise<vo
     .set({ banned: true, banReason: 'DEACTIVATED', banExpires: null, deactivatedOn: on })
     .where(eq(user.id, u.id))
   await db.delete(session).where(eq(session.userId, u.id))
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M11 — databases inside pages (plan/m11 S0.17): plain Drizzle inserts (never through src/server/repo/**). Positions
+// are appended per database with generateKeyBetween (X48); option ids are real uuids.
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface DbColumnSpec {
+  type: DbColumnType
+  name: string
+  /** SELECT / MULTI_SELECT: option names (+ colours, default gray, blue, green, …) → ids assigned here. */
+  options?: readonly (string | { name: string; color: OptionColor })[]
+  config?: Record<string, unknown>
+}
+
+export interface MadeDatabase {
+  database: DatabaseRow
+  /** By column name (TITLE first). */
+  columns: Record<string, DbColumnRow>
+  /** By view name. */
+  views: Record<string, DbViewRow>
+  /** Option ids by column name → option name. */
+  options: Record<string, Record<string, string>>
+}
+
+const OPTION_CYCLE: readonly OptionColor[] = [
+  'gray',
+  'blue',
+  'green',
+  'orange',
+  'purple',
+  'pink',
+  'red',
+  'teal',
+  'yellow',
+  'brown',
+]
+
+async function lastPosition(
+  table: typeof databaseColumns | typeof databaseViews | typeof databaseRows,
+  databaseId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ position: table.position })
+    .from(table)
+    .where(eq(table.databaseId, databaseId))
+    .orderBy(desc(table.position), desc(table.id))
+    .limit(1)
+  return row?.position ?? null
+}
+
+/** One column at the end of the database (soft-deleted under `deleted` when given). */
+export async function makeDbColumn(o: {
+  database: { id: string }
+  type: DbColumnType
+  name: string
+  options?: DbColumnSpec['options']
+  config?: Record<string, unknown>
+  deleted?: DeletedAs
+}): Promise<{ column: DbColumnRow; options: Record<string, string> }> {
+  const optionIds: Record<string, string> = {}
+  let config: Record<string, unknown> = o.config ?? {}
+  if (o.options) {
+    config = {
+      options: o.options.map((opt, i) => {
+        const name = typeof opt === 'string' ? opt : opt.name
+        const color = typeof opt === 'string' ? OPTION_CYCLE[i % OPTION_CYCLE.length]! : opt.color
+        const id = randomUUID()
+        optionIds[name] = id
+        return { id, name, color }
+      }),
+    }
+  } else if (!o.config && (o.type === 'SELECT' || o.type === 'MULTI_SELECT')) config = { options: [] }
+  else if (!o.config && o.type === 'NUMBER') config = { decimals: null, thousands: false }
+  const [column] = await db
+    .insert(databaseColumns)
+    .values({
+      databaseId: o.database.id,
+      type: o.type,
+      name: o.name,
+      config,
+      position: generateKeyBetween(await lastPosition(databaseColumns, o.database.id), null),
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return { column: column!, options: optionIds }
+}
+
+/** One view at the end of the tab list (soft-deleted under `deleted` when given). */
+export async function makeDbView(o: {
+  database: { id: string }
+  type: DbViewType
+  name: string
+  config?: ViewConfig
+  deleted?: DeletedAs
+}): Promise<DbViewRow> {
+  const [view] = await db
+    .insert(databaseViews)
+    .values({
+      databaseId: o.database.id,
+      type: o.type,
+      name: o.name,
+      config: (o.config ?? {}) as Record<string, unknown>,
+      position: generateKeyBetween(await lastPosition(databaseViews, o.database.id), null),
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return view!
+}
+
+/**
+ * A database on `page` (M11-D10 defaults): TITLE "ชื่อ" + SELECT "สถานะ" (ยังไม่เริ่ม · กำลังทำ · เสร็จ) + DATE "วันที่"
+ * and one TABLE view "ตาราง". `columns` replaces the non-title defaults; `views` replaces the default view (config
+ * may reference columns by name through the callback).
+ */
+export async function makeDatabase(o: {
+  page: { id: string }
+  createdBy: { id: string }
+  title?: string
+  detached?: boolean
+  columns?: readonly DbColumnSpec[]
+  views?: readonly {
+    type: DbViewType
+    name: string
+    config?: ViewConfig | ((cols: Record<string, DbColumnRow>) => ViewConfig)
+  }[]
+}): Promise<MadeDatabase> {
+  const [database] = await db
+    .insert(databases)
+    .values({
+      pageId: o.page.id,
+      title: o.title ?? '',
+      detachedAt: o.detached ? new Date(Date.now() - 60_000) : null,
+      createdBy: o.createdBy.id,
+      updatedBy: o.createdBy.id,
+    })
+    .returning()
+  const d = database!
+  const specs: DbColumnSpec[] = [
+    { type: 'TITLE', name: th.database.defaults.title },
+    ...(o.columns ?? [
+      { type: 'SELECT', name: th.database.defaults.status, options: th.database.defaults.statusOptions },
+      { type: 'DATE', name: th.database.defaults.date },
+    ]),
+  ]
+  const columns: Record<string, DbColumnRow> = {}
+  const options: Record<string, Record<string, string>> = {}
+  for (const spec of specs) {
+    const made = await makeDbColumn({ database: d, ...spec })
+    columns[spec.name] = made.column
+    if (spec.options) options[spec.name] = made.options
+  }
+  const viewSpecs = o.views ?? [{ type: 'TABLE' as const, name: th.database.views.TABLE }]
+  const views: Record<string, DbViewRow> = {}
+  for (const v of viewSpecs) {
+    const config = typeof v.config === 'function' ? v.config(columns) : v.config
+    views[v.name] = await makeDbView({ database: d, type: v.type, name: v.name, config })
+  }
+  return { database: d, columns, views, options }
+}
+
+/** One row at the end of the database (soft-deleted under `deleted` when given). Cells are stored as given (BR-90). */
+export async function makeDbRow(o: {
+  database: { id: string }
+  createdBy: { id: string }
+  title?: string
+  cells?: Record<string, unknown>
+  deleted?: DeletedAs
+}): Promise<DbRowRow> {
+  const [row] = await db
+    .insert(databaseRows)
+    .values({
+      databaseId: o.database.id,
+      title: o.title ?? '',
+      cells: o.cells ?? {},
+      position: generateKeyBetween(await lastPosition(databaseRows, o.database.id), null),
+      createdBy: o.createdBy.id,
+      updatedBy: o.createdBy.id,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return row!
+}
+
+/** The DB_ROW body page of `row` (kind 'DB_ROW', key 'a0', title '', space / project of the owner page). */
+export async function makeRowBody(o: {
+  row: { id: string; databaseId: string; createdBy: string }
+  /** Default [] (as ensureRowBody creates it). A string = one paragraph. */
+  content?: unknown[] | string
+  fullWidth?: boolean
+  createdBy?: { id: string }
+  deleted?: DeletedAs
+}): Promise<PageRow> {
+  const [owner] = await db
+    .select({ space: pages.space, projectId: pages.projectId })
+    .from(databases)
+    .innerJoin(pages, eq(pages.id, databases.pageId))
+    .where(eq(databases.id, o.row.databaseId))
+  if (!owner) throw new Error('makeRowBody: database of the row not found')
+  const content: unknown[] =
+    typeof o.content === 'string' ? [{ type: 'paragraph', content: o.content }] : (o.content ?? [])
+  const by = o.createdBy?.id ?? o.row.createdBy
+  const [page] = await db
+    .insert(pages)
+    .values({
+      space: owner.space,
+      projectId: owner.projectId,
+      kind: 'DB_ROW',
+      databaseRowId: o.row.id,
+      title: '',
+      content,
+      contentText: extractContentText(content),
+      fullWidth: o.fullWidth ?? false,
+      position: 'a0',
+      createdBy: by,
+      updatedBy: by,
+      deletedAt: deletedAt(o.deleted),
+      deletedBatch: o.deleted?.batch ?? null,
+    })
+    .returning()
+  return page!
 }

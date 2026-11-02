@@ -86,6 +86,7 @@ const view = (over: Partial<PageView['page']> = {}, can: PageCan = EDIT): PageVi
     updatedBy: { id: uuid(1), name: 'Cindy' },
     kind: 'DOC',
     taskId: null,
+    rowId: null,
     fullWidth: false,
     ...over,
   },

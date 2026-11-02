@@ -1,0 +1,223 @@
+/* The database block (SPEC §8.11, FR-1405/1408, M11-D2/D31): full content width, everything wider scrolls inside the
+   block (never the page). Token scale only (SPEC §8.12); dark mode through the tokens. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 0;
+  margin: var(--space-2) 0;
+  color: var(--mui-palette-text-primary);
+  font-size: var(--font-md);
+  line-height: var(--leading-ui);
+}
+
+.block[data-highlight='true'] {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: var(--space-1);
+  border-radius: var(--radius-md);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.title {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-ui);
+  outline: none;
+}
+
+.title::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.title:focus-visible {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 2px var(--brand-blue);
+}
+
+.titleText {
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-1) 0;
+  font-size: var(--font-xl);
+  font-weight: var(--weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.untitled {
+  color: var(--text-secondary);
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.toolbar [data-active='true'] {
+  color: var(--mui-palette-primary-main);
+}
+
+.tabsBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.tabWrap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+}
+
+.tabWrap[data-selected='true'] {
+  border-bottom-color: var(--mui-palette-primary-main);
+}
+
+.tabWrap[data-dragging='true'] {
+  opacity: 0.6;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-md);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  background: var(--hover-bg);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--mui-palette-text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.tabIcon {
+  display: inline-flex;
+  font-size: var(--font-lg);
+}
+
+.tabLabel {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabMore {
+  font-size: var(--font-lg);
+}
+
+.tabInput {
+  width: 160px;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--mui-palette-primary-main);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.viewSlot {
+  min-width: 0;
+}
+
+.emptySlot {
+  padding: var(--space-4);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* FR-1464: a grey box with an icon and one sentence — no title, no detail */
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: calc(var(--header-height) * 2);
+  margin: var(--space-2) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+}
+
+.placeholderIcon {
+  display: inline-flex;
+  font-size: var(--font-xl);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: calc(var(--header-height) * 4);
+  margin: var(--space-2) 0;
+}
+
+@media (max-width: 599.95px) {
+  .title,
+  .titleText {
+    font-size: var(--font-lg);
+  }
+
+  .tab {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabWrap {
+    transition: none !important;
+  }
+}

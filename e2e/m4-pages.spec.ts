@@ -628,14 +628,15 @@ test.describe('E6 ⟲ (AC-505, FR-540, FR-541, FR-542) one editor at a time: ban
     await ivy.focusEnd()
     await ivy.type('ต่อโดย Ivy')
     await ivy.waitSaved()
-    await ivyCtx.page.close() // pagehide → DELETE lease
-    await ivyCtx.close()
+    await ivyCtx.page.close() // pagehide → DELETE lease (keepalive)
 
-    // cindy re-acquires (retrying the "tab visible again" POST until the released lease is seen — no sleeps)
+    // cindy re-acquires (retrying the "tab visible again" POST until the released lease is seen — no sleeps). Ivy's
+    // context stays open until then: closing it right away can cancel the in-flight keepalive DELETE under load.
     await expect(async () => {
       await cindy.pokeLease()
       await expect(cindy.leaseBanner()).toHaveCount(0, { timeout: 1_000 })
     }).toPass()
+    await ivyCtx.close()
     await cindy.expectEditable()
     await expect(cindy.content()).toContainText('ต่อโดย Ivy') // re-created from the newer version
   })
@@ -1259,6 +1260,8 @@ test.describe('E16 ⟲ (FR-1102/1104/1105 pages part, X08, X49, KEY-01) Cmd/Ctrl
     await editor.content().locator('blockquote, [data-content-type="quote"]').first().click()
     await page.keyboard.press('Home')
     await page.keyboard.press('Shift+End')
+    // the selection is live in the editable editor (its formatting toolbar shows) before Cmd+K
+    await expect(editor.formattingToolbar()).toBeVisible()
     await palette.openByKeyboard()
     await expect(palette.dialog()).toHaveCount(0)
     await page.keyboard.press('Escape')

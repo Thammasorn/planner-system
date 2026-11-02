@@ -34,10 +34,18 @@ export const movePageSchema = z.object({
 })
 export const restorePageBatchSchema = z.object({ batch: z.uuid() })
 export const setPageProtectedSchema = z.object({ pageId: z.uuid(), protected: z.boolean() })
-/** FR-1602 / M6.1-D15: exactly one of pageId (DOC page) or taskId (task body, created when missing); M11 adds rowId. */
+/** FR-1602 / M6.1-D15 / M11-D8: exactly one of pageId (DOC page), taskId (task body, created when missing) or rowId
+ *  (database row body, created when missing). */
 export const setPageFullWidthSchema = z
-  .object({ pageId: z.uuid().optional(), taskId: z.uuid().optional(), fullWidth: z.boolean() })
-  .refine((v) => (v.pageId === undefined) !== (v.taskId === undefined), { path: ['pageId'] })
+  .object({
+    pageId: z.uuid().optional(),
+    taskId: z.uuid().optional(),
+    rowId: z.uuid().optional(),
+    fullWidth: z.boolean(),
+  })
+  .refine((v) => [v.pageId, v.taskId, v.rowId].filter((id) => id !== undefined).length === 1, {
+    path: ['pageId'],
+  })
 
 export const templateIdSchema = z.enum(['charter', 'meeting', 'sop'])
 export const applyTemplateSchema = z.object({

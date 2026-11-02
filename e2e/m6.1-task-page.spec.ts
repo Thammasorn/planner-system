@@ -38,6 +38,7 @@ import { SidebarPage } from './pages/sidebar'
 import { TaskPage } from './pages/task-page'
 import { PlanRangeDialog, TaskListPage } from './pages/tasks'
 import { TeamTasksPage } from './pages/team-tasks'
+import { newTabOpenedBy } from './support/new-tab'
 import { escapeRegExp } from './pages/text'
 import { toastWith, undoButtonOf } from './pages/toast'
 import { PNG_1X1_B64, realClipboardImage, syntheticPaste } from './support/clipboard'
@@ -97,7 +98,8 @@ async function attachShot(testInfo: TestInfo, page: Page, name: string): Promise
 /** The lease POST answered (TASK bodies take the lease on first focus, M6.1-D8). Start before the focus. */
 function waitForLeasePost(page: Page) {
   return page.waitForResponse(
-    (r) => r.request().method() === 'POST' && /\/api\/pages\/[0-9a-f-]{36}\/lock$/.test(new URL(r.url()).pathname),
+    (r) =>
+      r.request().method() === 'POST' && /\/api\/pages\/[0-9a-f-]{36}\/lock$/.test(new URL(r.url()).pathname),
   )
 }
 function waitForSearch(page: Page) {
@@ -139,7 +141,10 @@ async function expectReadingColumn(page: Page, what: string): Promise<void> {
   const c = await box(column)
   const main = await box(shell.main())
   expect(c.width, `${what}: column ≤ 760`).toBeLessThanOrEqual(760)
-  expect(Math.abs(c.x + c.width / 2 - (main.x + main.width / 2)), `${what}: column centred`).toBeLessThanOrEqual(2)
+  expect(
+    Math.abs(c.x + c.width / 2 - (main.x + main.width / 2)),
+    `${what}: column centred`,
+  ).toBeLessThanOrEqual(2)
   const wrapper = new EditorPage(page).content().locator('[data-content-type="table"] .tableWrapper').first()
   await expect
     .poll(() => wrapper.evaluate((el) => el.scrollWidth > el.clientWidth), {
@@ -315,7 +320,6 @@ test.describe('T3 ⟲ (AC-623, FR-685, FR-686) opening rules, back / Esc with th
 
   test('row click = panel; ↗ = page; Esc = back at the same scroll; Cmd+click = new tab; Shift+Space; direct entry; board, /my, /tasks and grid ↗', async ({
     page,
-    context,
   }) => {
     const pos = await projectIdByName(POS)
     const rollout = await taskIdOf(POS, ROLLOUT)
@@ -337,15 +341,15 @@ test.describe('T3 ⟲ (AC-623, FR-685, FR-686) opening rules, back / Esc with th
     await tasks.waitReady()
     await expect.poll(async () => Math.abs((await scrollY(page)) - before)).toBeLessThanOrEqual(8)
 
-    // Cmd/Ctrl+click on ↗ → a new tab (a real link, FR-685)
+    // Cmd/Ctrl+click on ↗ → a new tab (a real link, FR-685). Watched in the browser's target list, not with
+    // context.waitForEvent('page'): see e2e/support/new-tab.ts for the Chromium/Playwright race that made it flaky.
     await tasks.row(ROLLOUT).hover()
-    const [tab] = await Promise.all([
-      context.waitForEvent('page'),
-      tasks.openAsPageLink(ROLLOUT).click({ modifiers: ['ControlOrMeta'] }),
-    ])
-    await tab.waitForURL(TASK_URL)
-    expect(new URL(tab.url()).pathname).toBe(`/t/${rollout}`)
-    await tab.close()
+    const tabUrl = await newTabOpenedBy(
+      page,
+      () => tasks.openAsPageLink(ROLLOUT).click({ modifiers: ['ControlOrMeta'] }),
+      TASK_URL,
+    )
+    expect(new URL(tabUrl).pathname).toBe(`/t/${rollout}`)
     expect(pathOf(page)).toBe(`/projects/${pos}/tasks`)
 
     // Shift+Space on a focused row → the page
@@ -464,7 +468,9 @@ test.describe('T4 ⟲ (AC-624, FR-687, FR-690) permissions on a POS body with an
     await new TaskPage(page).waitReady()
   })
 
-  test('peter (not in POS): 404 on /t, the body, lease, save, the image; Cmd+K finds nothing', async ({ page }) => {
+  test('peter (not in POS): 404 on /t, the body, lease, save, the image; Cmd+K finds nothing', async ({
+    page,
+  }) => {
     expect(imageId, 'the previous test uploaded the image').not.toBe('')
     await loginAs(page, 'peter')
     expect((await page.request.get(`/api/tasks/${uat}/body`)).status()).toBe(404)
@@ -718,7 +724,12 @@ test.describe('T8 ⟲ (AC-1602, FR-1602) เต็มความกว้าง
     const uat = await taskIdOf(POS, UAT)
     await loginAs(page, 'cindy')
 
-    const steps: { name: string; open: () => Promise<void>; toggle: () => Promise<void>; entityId: string }[] = [
+    const steps: {
+      name: string
+      open: () => Promise<void>
+      toggle: () => Promise<void>
+      entityId: string
+    }[] = [
       {
         name: '/p',
         entityId: docId,
@@ -879,9 +890,10 @@ test.describe('V1 ⟲ (AC-1601, FR-1601) work screens use the full width · mana
 
       const team = new TeamTasksPage(page)
       await team.goto()
-      expect(await rightGap(page, page.locator('[data-team-project]').first()), `/tasks @${width}`).toBeLessThanOrEqual(
-        24,
-      )
+      expect(
+        await rightGap(page, page.locator('[data-team-project]').first()),
+        `/tasks @${width}`,
+      ).toBeLessThanOrEqual(24)
       await expectNoOverflow(page, `/tasks @${width}`)
     }
     expect(weeks[2560]!, 'more whole week columns at 2560 than at 1920').toBeGreaterThan(weeks[1920]!)
@@ -926,7 +938,9 @@ test.describe('V2 ⟲ (AC-1602) the 760 px column with a 12-column table · mana
       await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/)
       const td = page.locator('.bn-editor [data-content-type="table"] td').first()
       await expect(td).toBeVisible()
-      await expect.poll(() => td.evaluate((el) => getComputedStyle(el).borderTopColor)).toBe('rgb(46, 50, 56)')
+      await expect
+        .poll(() => td.evaluate((el) => getComputedStyle(el).borderTopColor))
+        .toBe('rgb(46, 50, 56)')
     } finally {
       // leave the shared account on the default theme for later specs
       await shell.goto('/home')
@@ -1059,7 +1073,9 @@ test.describe('V4 ⟲ (AC-1604) tablet 768×1024: every route · manager', () =>
     await resetDb()
   })
 
-  test('no horizontal overflow, header bar visible; the task page properties are editable', async ({ page }) => {
+  test('no horizontal overflow, header bar visible; the task page properties are editable', async ({
+    page,
+  }) => {
     const pos = await projectIdByName(POS)
     const charter = await charterIdOf(POS)
     const r1 = await taskIdOf(POS, R1)

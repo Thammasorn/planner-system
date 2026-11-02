@@ -17,7 +17,7 @@ import type {
   SavePageResult,
 } from '@/lib/contracts/pages'
 import { displayName } from '@/lib/display-name'
-import { extractContentText } from '@/lib/editor/content-text'
+import { collectDatabaseIds, extractContentText } from '@/lib/editor/content-text'
 import { fileUrl } from '@/lib/files/upload-rules'
 import { formatThaiDate } from '@/lib/format'
 import { isBlankPage } from '@/lib/pages/blank'
@@ -35,6 +35,7 @@ import * as repo from '../repo'
 import * as filesRepo from '../repo/files'
 import * as pagesRepo from '../repo/pages'
 import type { SessionUser } from '../session'
+import { reconcileDetached } from './databases'
 import { getLease } from './page-lease'
 import { getBreadcrumb, PAGE_MAX_DEPTH_INDEX } from './page-tree'
 
@@ -44,6 +45,11 @@ const versionConflict = (version: number): ConflictError =>
 /** What the viewer may do on the page, computed without throwing (mirrors requirePage / requirePageCreate). A task
  *  body (M6.1-D5) can only be edited — it has no tree, no protection, no copy and is deleted with its task. */
 async function pageCan(tx: DbOrTx, a: PageAccess): Promise<PageCan> {
+  if (a.kind === 'DB_ROW') {
+    // M11-D8: a row body is edited only (title = the row's, no tree, deleted with its row)
+    const edit = authz.canEditDatabase(a)
+    return { edit, protect: false, delete: false, createChild: false, move: false, duplicate: false }
+  }
   if (a.kind === 'TASK') {
     return { edit: !a.archived, protect: false, delete: false, createChild: false, move: false, duplicate: false }
   }
@@ -79,7 +85,8 @@ export async function getPageView(tx: DbOrTx, user: SessionUser, pageId: string)
       projectArchived: a.archived,
       parentId: p.parentId,
       depth: p.depth,
-      title: a.task ? a.task.name : p.title, // FR-682: a body has no title of its own
+      // FR-682 / M11-D8: a body has no title of its own (task name / row title)
+      title: a.task ? a.task.name : a.dbRow ? a.dbRow.row.title : p.title,
       icon: p.icon,
       cover: p.coverFileId ? { fileId: p.coverFileId, url: fileUrl(p.coverFileId) } : null,
       isCharter: p.isCharter,
@@ -92,9 +99,10 @@ export async function getPageView(tx: DbOrTx, user: SessionUser, pageId: string)
       updatedBy: { id: p.updatedBy, name: updater ? displayName(updater) : '' },
       kind: a.kind,
       taskId: p.taskId,
+      rowId: p.databaseRowId,
       fullWidth: p.fullWidth,
     },
-    breadcrumb: a.kind === 'TASK' ? [] : await getBreadcrumb(tx, p.id),
+    breadcrumb: a.kind === 'DOC' ? await getBreadcrumb(tx, p.id) : [],
     can: await pageCan(tx, a),
     uploadLimits: uploadLimits(),
   }
@@ -251,12 +259,19 @@ export async function savePageContent(
   a: PageAccess,
   i: { baseVersion: number; content: PageContent },
 ): Promise<SavePageResult> {
-  if (a.kind === 'TASK' && containsSubpage(i.content)) {
+  if (a.kind !== 'DOC' && containsSubpage(i.content)) {
     const msg = th.editor.errors.subpageNotAllowed
+    throw new ValidationError({ content: [msg] }, msg)
+  }
+  if (a.kind === 'DB_ROW' && collectDatabaseIds(i.content).size > 0) {
+    // M11-D8 / M11-D38: no database inside a row body
+    const msg = th.editor.errors.databaseNotAllowed
     throw new ValidationError({ content: [msg] }, msg)
   }
   const content = sanitizeContent(i.content)
   const version = await bumpContent(tx, user, a.page.id, i.baseVersion, { content })
+  // M11-D9 / FR-1472: detach databases whose block is gone, re-attach those that are back (DOC / TASK owners)
+  if (a.kind !== 'DB_ROW') await reconcileDetached(tx, a.page.id, content)
   return { version, lease: await getLease(tx, user, a.page.id) }
 }
 
@@ -267,6 +282,10 @@ export function saveAuditInput(a: PageAccess, version: number): AuditInput {
   const base = { entity: 'page', entityId: a.page.id, action: 'update', projectId: a.page.projectId } as const
   if (a.task) {
     return { ...base, summary: th.audit.taskBodySaved(a.task.name), after: { version, taskId: a.task.id } }
+  }
+  if (a.dbRow) {
+    // M11-D5: row-body saves name the database (never the row title)
+    return { ...base, summary: th.audit.rowBodySaved(a.dbRow.database.title), after: { version, rowId: a.dbRow.row.id } }
   }
   return { ...base, summary: th.audit.pageSaved(a.page.title), after: { version } }
 }

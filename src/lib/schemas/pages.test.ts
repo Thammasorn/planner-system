@@ -27,6 +27,13 @@ describe('page schemas', () => {
     expect(setPageFullWidthSchema.safeParse({ pageId: A }).success).toBe(false)
   })
 
+  it('setPageFullWidth: rowId is the third exclusive target (M11-D8)', () => {
+    expect(setPageFullWidthSchema.parse({ rowId: A, fullWidth: true })).toEqual({ rowId: A, fullWidth: true })
+    expect(setPageFullWidthSchema.safeParse({ rowId: A, taskId: B, fullWidth: true }).success).toBe(false)
+    expect(setPageFullWidthSchema.safeParse({ rowId: A, pageId: B, fullWidth: true }).success).toBe(false)
+    expect(setPageFullWidthSchema.safeParse({ rowId: 'x', fullWidth: true }).success).toBe(false)
+  })
+
   it('createPageSchema ties space to projectId', () => {
     expect(createPageSchema.safeParse({ space: 'PROJECT', projectId: null, parentId: null }).success).toBe(
       false,

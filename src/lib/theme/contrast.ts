@@ -21,6 +21,17 @@ export const TEXT_PAIRS: ReadonlyArray<readonly [fg: string, bg: string]> = [
   ['text-secondary', 'hover-bg'],
   ['text-secondary', 'surface-muted'],
   ['faded-fg', 'hover-bg'],
+  // M11 (M11-D35): database option chips — 10 pairs, checked in light and dark (20 checks)
+  ['option-gray-fg', 'option-gray-bg'],
+  ['option-brown-fg', 'option-brown-bg'],
+  ['option-orange-fg', 'option-orange-bg'],
+  ['option-yellow-fg', 'option-yellow-bg'],
+  ['option-green-fg', 'option-green-bg'],
+  ['option-blue-fg', 'option-blue-bg'],
+  ['option-purple-fg', 'option-purple-bg'],
+  ['option-pink-fg', 'option-pink-bg'],
+  ['option-red-fg', 'option-red-bg'],
+  ['option-teal-fg', 'option-teal-bg'],
 ]
 
 /** M7.1 (X51): non-text tokens (lines, marks, flags) that must reach 3:1 (WCAG 1.4.11) against every background they are

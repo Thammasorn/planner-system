@@ -1113,3 +1113,16 @@ Decisions to record in `PROGRESS.md` (suggested wording):
 | fixtures | `fixtures/excel.html`, `fixtures/excel.tsv`, `fixtures/gsheets.html`, `fixtures/complex-doc.json` |
 | key source files read | core: `editor/BlockNoteEditor.ts(.d.ts)`, `api/clipboard/fromClipboard/{pasteExtension,handleFileInsertion,fileDropExtension,acceptedMIMETypes}.ts`, `api/parsers/markdown/detectMarkdown.ts`, `extensions/SuggestionMenu/{SuggestionMenu,getDefaultSlashMenuItems,getDefaultEmojiPickerItems}.ts`, `extensions/Placeholder/Placeholder.ts`, `blocks/{defaultBlocks,Table/block,Table/TableExtension,Image/block,File/block,Heading/block}.ts`, `i18n/locales/en.ts`, `editor/editor.css`; react: `hooks/useCreateBlockNote.tsx`, `editor/{BlockNoteView,BlockNoteDefaultUI,ElementRenderer}.tsx`, `schema/{ReactBlockSpec,ReactInlineContentSpec}.tsx`, `components/SuggestionMenu/**`, `components/FilePanel/**`, `components/TableHandles/**`, `components/FormattingToolbar/**`, `hooks/useUploadLoading.ts`; mantine: `BlockNoteView.tsx`, `BlockNoteTheme.ts`, `mantineStyles.css`, `blocknoteStyles.css`; next: `dist/server/lib/generate-agent-files.js`, `dist/server/config-shared.d.ts`, `dist/server/app-render/action-handler.js` |
 | web | blocknotejs.org/docs/getting-started/nextjs, /docs/features/localization, /pricing; github.com/TypeCellOS/BlockNote/releases |
+
+## M11 addendum — S5.1 spike results (2026-11-02, BlockNote 0.55)
+
+- **(a) Islands:** the M10 `selectable: false` isolation (`LiveBlockFrame`) is reused for the database block; native
+  `stopPropagation` on the island stays forbidden for the events BlockNote needs (M10-D8) — the frame filters by target.
+- **(b) Clipboard:** BlockNote's copy / cut handler calls `clipboardData.clearData()`, so custom MIME types
+  (`application/x-teamos-databases+json`) are added in a **bubble-phase** listener after it; block props appear as
+  `data-*` attributes in the `blocknote/html` flavour (the paste side reads them there).
+- **(c) Inline content:** `updateInlineContent` is available in the inline-content render props (inline equation edits).
+- **(d) Toolbar:** `FormattingToolbar` + `getFormattingToolbarItems()` keeps the default items; the "สมการ" button is
+  appended (`formattingToolbar={false}` + `FormattingToolbarController`).
+- **(e) Tests:** headless editors cannot undo — mount with `editor.mount(div)`; a real `BlockNoteView` renders in jsdom
+  once `window.matchMedia` is stubbed.

@@ -106,7 +106,9 @@ describe('ChangePasswordForm', () => {
     await vi.waitFor(() => expect(current).toHaveAccessibleDescription(th.errors.INVALID_PASSWORD))
 
     mocks.changeOwnPassword.mockResolvedValueOnce({ ok: true, redirectTo: '/home' })
-    await user.click(screen.getByRole('button', { name: th.account.submit }))
+    // the error can render while the first submit's transition is still pending (button reads th.common.saving):
+    // wait for the idle submit button instead of assuming it is already back (flaked under full-suite load)
+    await user.click(await screen.findByRole('button', { name: th.account.submit }))
     await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/home'))
     expect(mocks.changeOwnPassword).toHaveBeenLastCalledWith({
       currentPassword: 'wrong-current',

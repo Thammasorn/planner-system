@@ -1,0 +1,116 @@
+/* Column / view menus of a database (FR-1405, FR-1411…1416, FR-1426…1428). Token scale only (SPEC §8.12). */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 280px;
+  max-width: calc(100vw - var(--space-8));
+  padding: var(--space-2);
+}
+
+.wide {
+  width: 420px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sectionTitle {
+  padding: 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 32px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.handle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  border-radius: var(--radius-sm);
+}
+
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.swatch[data-color='gray'] {
+  background: var(--option-gray-bg);
+}
+.swatch[data-color='brown'] {
+  background: var(--option-brown-bg);
+}
+.swatch[data-color='orange'] {
+  background: var(--option-orange-bg);
+}
+.swatch[data-color='yellow'] {
+  background: var(--option-yellow-bg);
+}
+.swatch[data-color='green'] {
+  background: var(--option-green-bg);
+}
+.swatch[data-color='blue'] {
+  background: var(--option-blue-bg);
+}
+.swatch[data-color='purple'] {
+  background: var(--option-purple-bg);
+}
+.swatch[data-color='pink'] {
+  background: var(--option-pink-bg);
+}
+.swatch[data-color='red'] {
+  background: var(--option-red-bg);
+}
+.swatch[data-color='teal'] {
+  background: var(--option-teal-bg);
+}
+
+.incomplete {
+  opacity: 0.6;
+}
+
+.hint {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.typeIcon {
+  display: inline-flex;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none !important;
+  }
+}

@@ -7,20 +7,28 @@ import { formatThaiDate } from '@/lib/format'
 import {
   applyTemplate,
   createPage,
+  deletePage,
   renamePage,
+  restorePageBatch,
   savePageContent,
   setPageCover,
   setPageIcon,
 } from '../actions/pages'
+import { PUT as keepaliveRoute } from '@/app/api/pages/[id]/content/route'
+import { GET as databaseRoute } from '@/app/api/pages/[id]/databases/[databaseId]/route'
+import { createDatabaseRows } from '../actions/databases'
+import { callRoute } from '../../../tests/authz/_support/http'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
 import { auditCount, auditRowsAfter } from '../../../tests/helpers/audit'
-import { makePage } from '../../../tests/helpers/factories'
+import { makeDatabase, makeDbRow, makePage } from '../../../tests/helpers/factories'
 import { testCache } from '../../../tests/helpers/request'
 import { createWorld, type World } from '../../../tests/helpers/world'
 import { db } from '../db/client'
-import { pages, type PageRow } from '../db/schema'
+import { databases, pages, type PageRow } from '../db/schema'
 import { acquireLease } from './page-lease'
+import { getDatabase } from './databases'
 import { getPageTitles, getPageView } from './pages'
+import { searchDatabases } from './search'
 
 const S = toSessionUser
 let w: World
@@ -317,5 +325,126 @@ describe('titles', () => {
     expect(json).not.toContain(w.deletedPages.pDeleted.title)
     const member = await getPageTitles(db, S(w.member), [w.deletedPages.pDeleted.id])
     expect(member.items).toEqual([{ id: w.deletedPages.pDeleted.id, visible: true, deleted: true }])
+  })
+})
+
+// M11 (plan/m11 §7.1 AC-1411; FR-1472, M11-D9): savePageContent reconciles databases.detached_at with the database
+// blocks in the saved content; a deleted owner page hides its databases (404, no search hits) until it is restored.
+describe('databases on pages (M11)', () => {
+  const dbBlock = (id: string) => ({ type: 'database' as const, props: { databaseId: id } })
+
+  async function detachedOf(...ids: string[]): Promise<boolean[]> {
+    const out: boolean[] = []
+    for (const id of ids) {
+      const [d] = await db.select({ detachedAt: databases.detachedAt }).from(databases).where(eq(databases.id, id))
+      out.push(d!.detachedAt !== null)
+    }
+    return out
+  }
+
+  it('detach reconcile: a save without the block detaches, a save with it re-attaches; other pages untouched', async () => {
+    const page = await makePage({ project: w.P, title: 'หน้าตาราง', createdBy: w.manager })
+    const d1 = (await makeDatabase({ page, title: 'ตารางหนึ่ง', createdBy: w.manager })).database
+    const d2 = (await makeDatabase({ page, title: 'ตารางสอง', createdBy: w.manager })).database
+    const other = (await makeDatabase({ page: w.pages.pChild, title: 'ตารางหน้าอื่น', createdBy: w.manager })).database
+    asUser(w.member)
+    const save = async (baseVersion: number, content: unknown[]) => {
+      const res = await savePageContent({ pageId: page.id, baseVersion, content })
+      expect(res).toMatchObject({ ok: true, version: baseVersion + 1 })
+    }
+    await save(1, [dbBlock(d1.id), dbBlock(d2.id)])
+    expect(await detachedOf(d1.id, d2.id)).toEqual([false, false])
+    // a block of another page's database is ignored by the reconcile (SPEC §7.7)
+    await save(2, [dbBlock(d1.id), dbBlock(other.id), ...para('ลบตารางสองออก')])
+    expect(await detachedOf(d1.id, d2.id, other.id)).toEqual([false, true, false])
+    // a detached database is still served through its page (Cmd+Z brings the block back) but leaves search
+    const served = await db.transaction((tx) => getDatabase(tx, S(w.member), { pageId: page.id, databaseId: d2.id }))
+    expect(served).toMatchObject({ id: d2.id, pageId: page.id })
+    expect(await db.transaction((tx) => searchDatabases(tx, S(w.member), 'ตารางสอง'))).toEqual([])
+    // undo of the block removal (the block nested in a list item still counts)
+    await save(3, [dbBlock(d1.id), { type: 'bulletListItem', content: 'ข้อ', children: [dbBlock(d2.id)] }])
+    expect(await detachedOf(d1.id, d2.id)).toEqual([false, false])
+    expect((await db.transaction((tx) => searchDatabases(tx, S(w.member), 'ตารางสอง'))).map((h) => h.databaseId)).toEqual([
+      d2.id,
+    ])
+    await save(4, para('ว่าง'))
+    expect(await detachedOf(d1.id, d2.id, other.id)).toEqual([true, true, false])
+  })
+
+  it('page delete hides its databases and those of its subpages; restore brings them back', async () => {
+    const parent = await makePage({ project: w.P, title: 'หน้าแม่ฐาน', createdBy: w.manager })
+    const child = await makePage({ parent, title: 'หน้าลูกฐาน', createdBy: w.manager })
+    const onParent = (await makeDatabase({ page: parent, title: 'ฐานบนหน้าแม่', createdBy: w.manager })).database
+    const onChild = (await makeDatabase({ page: child, title: 'ฐานบนหน้าลูก', createdBy: w.manager })).database
+    await makeDbRow({ database: onChild, title: 'แถวบนหน้าลูก', createdBy: w.manager })
+    asUser(w.member)
+    const hits = async (q: string) =>
+      (await db.transaction((tx) => searchDatabases(tx, S(w.member), q))).map((h) => [h.matchedIn, h.databaseId])
+    expect(await hits('ฐานบนหน้า')).toHaveLength(2)
+
+    const del = await deletePage({ pageId: parent.id })
+    if (!del.ok) throw new Error(del.message)
+    expect(await hits('ฐานบนหน้า')).toEqual([])
+    expect(await hits('แถวบนหน้าลูก')).toEqual([])
+    await expect(
+      db.transaction((tx) => getDatabase(tx, S(w.member), { pageId: child.id, databaseId: onChild.id })),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(await detachedOf(onParent.id, onChild.id)).toEqual([false, false]) // deletion never detaches
+
+    const restored = await restorePageBatch({ batch: del.batch })
+    if (!restored.ok) throw new Error(restored.message)
+    expect((await hits('ฐานบนหน้า')).map(([, id]) => id).sort()).toEqual([onParent.id, onChild.id].sort())
+    expect(await hits('แถวบนหน้าลูก')).toEqual([['row', onChild.id]])
+    const view = await db.transaction((tx) =>
+      getDatabase(tx, S(w.member), { pageId: child.id, databaseId: onChild.id }),
+    )
+    expect(view).toMatchObject({ id: onChild.id })
+  })
+
+  describe('› detach reconcile (FR-1472)', () => {
+    it('the keepalive save reconciles too: block removed → detached_at set; re-added → cleared', async () => {
+      const page = await makePage({ project: w.P, title: 'หน้าคีปอะไลฟ์', createdBy: w.manager })
+      const d1 = (await makeDatabase({ page, title: 'ตารางคีปอะไลฟ์', createdBy: w.manager })).database
+      const put = (baseVersion: number, content: unknown[]) =>
+        callRoute(keepaliveRoute, `/api/pages/${page.id}/content`, { id: page.id }, {
+          method: 'PUT',
+          body: JSON.stringify({ baseVersion, content }),
+          headers: { 'content-type': 'application/json' },
+        })
+      asUser(w.member)
+      expect((await put(1, [dbBlock(d1.id)])).status).toBe(200)
+      expect(await detachedOf(d1.id)).toEqual([false])
+      expect((await put(2, para('ไม่มีตาราง'))).status).toBe(200)
+      expect(await detachedOf(d1.id)).toEqual([true])
+      expect((await put(3, [...para('กลับมา'), dbBlock(d1.id)])).status).toBe(200)
+      expect(await detachedOf(d1.id)).toEqual([false])
+    })
+  })
+
+  describe('› page delete/restore (FR-1473)', () => {
+    it('deleting the owner page → database route and actions 404 without leaking names; restore → served again', async () => {
+      const page = await makePage({ project: w.P, title: 'หน้าเจ้าของฐาน', createdBy: w.manager })
+      const d = (await makeDatabase({ page, title: 'ฐานลับหน้าลบ', createdBy: w.manager })).database
+      await makeDbRow({ database: d, title: 'แถวลับหน้าลบ', createdBy: w.manager })
+      const get = () =>
+        callRoute(databaseRoute, `/api/pages/${page.id}/databases/${d.id}`, { id: page.id, databaseId: d.id })
+      asUser(w.member)
+      expect((await get()).status).toBe(200)
+      const del = await deletePage({ pageId: page.id })
+      if (!del.ok) throw new Error(del.message)
+      const gone = await get()
+      expect(gone.status).toBe(404)
+      const body = JSON.stringify(await gone.json())
+      expect(body).not.toContain('ฐานลับหน้าลบ')
+      expect(body).not.toContain('แถวลับหน้าลบ')
+      expect(await createDatabaseRows({ databaseId: d.id, rows: [{ title: 'x' }] })).toMatchObject({
+        ok: false,
+        code: 'NOT_FOUND',
+      })
+      const restored = await restorePageBatch({ batch: del.batch })
+      if (!restored.ok) throw new Error(restored.message)
+      expect((await get()).status).toBe(200)
+      expect(await createDatabaseRows({ databaseId: d.id, rows: [{ title: 'หลังกู้' }] })).toMatchObject({ ok: true })
+    })
   })
 })

@@ -9,6 +9,8 @@
    (plan markers) and --border-month (month boundary line) — non-text, ≥ 3:1 against --surface, --surface-muted,
    --nonworking, --holiday and --hover-bg in both themes (contrast.test.ts). DEVIATION (like X51): --border-month is
    #7b8597 / dark #7c8aa0 instead of the plan's #94A3B8 (2.56:1) / #64748B (2.64:1 on dark --holiday).
+   M11 (M11-D35, FR-1410): --option-<name>-bg/-fg for the 10 database option colours (gray brown orange yellow green
+   blue purple pink red teal), each pair ≥ 4.5:1 in both themes (contrast.test.ts); chips always show the name too.
    src/lib/theme/tokens.ts mirrors this file (tokens.test.ts checks the parity). */
 
 :root {
@@ -53,6 +55,27 @@
   --marker-yellow: #a16207;
   --marker-green: #15803d;
   --border-month: #7b8597;
+  /* M11 database option colours (text pairs, ≥ 4.5:1) */
+  --option-gray-bg: #ebedf0;
+  --option-gray-fg: #4b5563;
+  --option-brown-bg: #f1e6dd;
+  --option-brown-fg: #6f4e37;
+  --option-orange-bg: #fde7d4;
+  --option-orange-fg: #9a3d0b;
+  --option-yellow-bg: #fbf0c4;
+  --option-yellow-fg: #7a5a00;
+  --option-green-bg: #dcf3e3;
+  --option-green-fg: #1e6b3a;
+  --option-blue-bg: #dbeafe;
+  --option-blue-fg: #1e4fa8;
+  --option-purple-bg: #ece4fb;
+  --option-purple-fg: #5b3aa6;
+  --option-pink-bg: #fbe2ef;
+  --option-pink-fg: #9d2a62;
+  --option-red-bg: #fde2e1;
+  --option-red-fg: #a1251f;
+  --option-teal-bg: #d5f2ee;
+  --option-teal-fg: #116b62;
   /* M6.1 typography — UI 14 px, documents 16 px */
   --font-xs: 12px;
   --font-sm: 13px;
@@ -127,4 +150,25 @@
   --marker-yellow: #facc15;
   --marker-green: #4ade80;
   --border-month: #7c8aa0;
+  /* M11 (M11-D35) */
+  --option-gray-bg: #3a3d42;
+  --option-gray-fg: #d6d9de;
+  --option-brown-bg: #4a382c;
+  --option-brown-fg: #ecd5c3;
+  --option-orange-bg: #5a3218;
+  --option-orange-fg: #fed7b5;
+  --option-yellow-bg: #4d3f0d;
+  --option-yellow-fg: #fbe9a6;
+  --option-green-bg: #1d4029;
+  --option-green-fg: #bfeccc;
+  --option-blue-bg: #1d3557;
+  --option-blue-fg: #c3dafd;
+  --option-purple-bg: #3b2c5c;
+  --option-purple-fg: #ddd0fa;
+  --option-pink-bg: #52243b;
+  --option-pink-fg: #f9cde3;
+  --option-red-bg: #5a2121;
+  --option-red-fg: #fdcdcb;
+  --option-teal-bg: #17423d;
+  --option-teal-fg: #b8ece5;
 }

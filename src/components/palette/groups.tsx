@@ -1,11 +1,13 @@
 // src/components/palette/groups.tsx — result groups of the command palette (X88, M4-D37e). M6.1 adds the tasks group
 // before M4's pages group; M8 renders its commands group before these; M10 completes FR-1102's order — projects, tasks,
 // pages, people, clients — with an optional `source` and an optional `local` input (a superset of M4's shape, C60).
+// M11 appends the ฐานข้อมูล group (database titles, row titles, row bodies) after them.
 import type { ReactNode } from 'react'
 import { ColorSquare } from '@/components/common/ProjectChip'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { th } from '@/i18n/th'
 import type {
+  DatabaseSearchHit,
   SearchAllResponse,
   SearchIndexClient,
   SearchIndexPerson,
@@ -71,6 +73,19 @@ const clientItem = (c: SearchIndexClient): PaletteItem => ({
   chips: c.archived ? [th.search.archived] : [],
 })
 
+/** M11 (FR-1474, M11-D28): a database title / row title / row body hit; Enter opens the owner page with `?db=&row=`. */
+export const databaseItem = (h: DatabaseSearchHit): PaletteItem => {
+  const databaseTitle = h.databaseTitle || th.database.untitled
+  return {
+    value: `db:${h.rowId ?? h.databaseId}`,
+    href: h.href,
+    title: h.rowId !== null ? h.rowTitle || th.database.table.untitledRow : databaseTitle,
+    subtitle: h.rowId !== null ? `${databaseTitle} · ${h.pageTitle}` : h.pageTitle,
+    icon: h.rowId !== null ? '▤' : '▦',
+    chips: h.matchedIn === 'content' ? [th.palette.matchedInRow] : [],
+  }
+}
+
 export const PALETTE_GROUPS: readonly PaletteGroupDef[] = [
   {
     key: 'projects',
@@ -123,5 +138,11 @@ export const PALETTE_GROUPS: readonly PaletteGroupDef[] = [
     source: 'local',
     map: ({ server, local }) =>
       local ? local.clients.map(clientItem) : (server?.clients ?? []).map(clientItem),
+  },
+  // M11 (FR-1474, X88): appended after M10's groups
+  {
+    key: 'databases',
+    heading: th.palette.groupDatabases,
+    map: ({ server }) => (server?.databases ?? []).map(databaseItem),
   },
 ]

@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import { db } from '@/server/db/client'
 import {
+  databaseRows,
+  databases,
   files,
   holidays,
   leaveTypes,
@@ -456,10 +458,25 @@ describe('world fixture (X91)', () => {
     const w = await createWorld({ with: ['milestones'] })
     const m = w.milestones
     const d = w.deletedMilestones
-    expect(m.p).toMatchObject({ projectId: w.P.id, name: 'Milestone P-ลับ06', date: '2026-10-23', completedOn: null })
+    expect(m.p).toMatchObject({
+      projectId: w.P.id,
+      name: 'Milestone P-ลับ06',
+      date: '2026-10-23',
+      completedOn: null,
+    })
     expect(m.pLate).toMatchObject({ projectId: w.P.id, name: 'ส่งมอบรอบแรก P', date: '2026-10-02' })
-    expect(m.pDone).toMatchObject({ projectId: w.P.id, name: 'Kickoff P', date: '2026-09-15', completedOn: '2026-09-16' })
-    expect(m.q).toMatchObject({ projectId: w.Q.id, name: 'Milestone Q-ลับ05', date: '2026-10-20', createdBy: w.manager.id })
+    expect(m.pDone).toMatchObject({
+      projectId: w.P.id,
+      name: 'Kickoff P',
+      date: '2026-09-15',
+      completedOn: '2026-09-16',
+    })
+    expect(m.q).toMatchObject({
+      projectId: w.Q.id,
+      name: 'Milestone Q-ลับ05',
+      date: '2026-10-20',
+      createdBy: w.manager.id,
+    })
     expect(m.a).toMatchObject({ projectId: w.A.id, name: 'Milestone A', date: '2026-10-30' })
     for (const x of Object.values(m)) expect(x.deletedAt).toBeNull()
 
@@ -467,7 +484,8 @@ describe('world fixture (X91)', () => {
     expect(d.pDeleted).toMatchObject({ projectId: w.P.id, deletedBatch: w.batches.pDeletedMilestone })
     expect(d.pExpired).toMatchObject({ projectId: w.P.id, deletedBatch: w.batches.pExpiredMilestone })
     expect(d.aDeleted).toMatchObject({ projectId: w.A.id, deletedBatch: w.batches.aDeletedMilestone })
-    const age = (row: { deletedAt: Date | null }) => Math.round((Date.now() - row.deletedAt!.getTime()) / 86_400_000)
+    const age = (row: { deletedAt: Date | null }) =>
+      Math.round((Date.now() - row.deletedAt!.getTime()) / 86_400_000)
     expect([age(d.pDeleted), age(d.pExpired), age(d.aDeleted)]).toEqual([1, 31, 1])
 
     // bindings (raw column; pParent points at the deleted milestone and reads as unbound, M8-D5)
@@ -512,13 +530,35 @@ describe('world fixture (X91)', () => {
   })
 
   it('M10 with home: implies every card part; milestones, leave, due task, recent and embed pages (plan/m10 S0.12)', async () => {
-    expect([...expandParts(['home'])].sort()).toEqual(['allocations', 'home', 'milestones', 'pages', 'tasks', 'timeOff'])
-    expect(WORLD_PART_ORDER.at(-1)).toBe('home')
+    expect([...expandParts(['home'])].sort()).toEqual([
+      'allocations',
+      'home',
+      'milestones',
+      'pages',
+      'tasks',
+      'timeOff',
+    ])
+    expect(WORLD_PART_ORDER.at(-2)).toBe('home') // M11's 'databases' is last
     const w = await createWorld({ with: ['home'] })
     const m = w.milestones
-    expect(m.pOverdue).toMatchObject({ projectId: w.P.id, name: 'Milestone P-ลับ13', date: '2026-09-25', completedOn: null })
-    expect(m.qSoon).toMatchObject({ projectId: w.Q.id, name: 'Milestone Q-ลับ15', date: '2026-10-05', completedOn: null })
-    expect(m.pAncient).toMatchObject({ projectId: w.P.id, name: 'Milestone P-ลับ16', date: '2026-08-31', completedOn: null })
+    expect(m.pOverdue).toMatchObject({
+      projectId: w.P.id,
+      name: 'Milestone P-ลับ13',
+      date: '2026-09-25',
+      completedOn: null,
+    })
+    expect(m.qSoon).toMatchObject({
+      projectId: w.Q.id,
+      name: 'Milestone Q-ลับ15',
+      date: '2026-10-05',
+      completedOn: null,
+    })
+    expect(m.pAncient).toMatchObject({
+      projectId: w.P.id,
+      name: 'Milestone P-ลับ16',
+      date: '2026-08-31',
+      completedOn: null,
+    })
     expect(m.pLate.name).toBe('ส่งมอบรอบแรก P')
 
     expect(w.timeOff.coworkerToday).toMatchObject({
@@ -536,7 +576,11 @@ describe('world fixture (X91)', () => {
       note: 'โน้ตลับ-โลก-04',
     })
 
-    expect(w.tasks.pDueThisWeek).toMatchObject({ projectId: w.P.id, name: 'งานกำหนดส่ง P-ลับ17', dueDate: '2026-10-02' })
+    expect(w.tasks.pDueThisWeek).toMatchObject({
+      projectId: w.P.id,
+      name: 'งานกำหนดส่ง P-ลับ17',
+      dueDate: '2026-10-02',
+    })
     const assigned = await db
       .select({ id: taskAssignments.id, userId: taskAssignments.userId })
       .from(taskAssignments)
@@ -576,5 +620,76 @@ describe('world fixture (X91)', () => {
       .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
     expect(statusProjects.every((r) => r.taskProject === r.statusProject)).toBe(true)
     await assertCompletionInvariant()
+  })
+
+  it('M11 without databases: its fields and batches throw clearly', async () => {
+    const plain = await createWorld({ with: ['pages'] })
+    expect(() => plain.databases.dbP).toThrow("needs createWorld({ with: ['databases'] })")
+    expect(() => plain.batches.dbRows).toThrow("needs createWorld({ with: ['databases'] })")
+  })
+
+  it('M11 with databases: implies pages + taskBodies + files; owner pages, rows, bodies, batches (plan/m11 S0.17)', async () => {
+    expect([...expandParts(['databases'])].sort()).toEqual([
+      'databases',
+      'files',
+      'pages',
+      'taskBodies',
+      'tasks',
+    ])
+    expect(WORLD_PART_ORDER.at(-1)).toBe('databases')
+    const w = await createWorld({ with: ['databases'] })
+    const d = w.databases
+    expect(d.dbP).toMatchObject({ pageId: w.pages.pPage.id, title: 'ฐานข้อมูล P-ลับ20', detachedAt: null })
+    expect(Object.values(d.dbPColumns).map((c) => c.type)).toEqual([
+      'TITLE',
+      'SELECT',
+      'DATE',
+      'TEXT',
+      'NUMBER',
+      'MULTI_SELECT',
+      'CHECKBOX',
+      'PERSON',
+      'URL',
+      'TEXT',
+    ])
+    expect(d.dbPColumns.deleted).toMatchObject({ name: 'ลบแล้ว', deletedBatch: w.batches.dbColumn })
+    expect(d.dbPViews.kanban.config).toEqual({ groupByColumnId: d.dbPColumns.status.id })
+    expect(d.dbPViews.calendar.config).toEqual({ dateColumnId: d.dbPColumns.date.id })
+    expect(d.dbPViews.deleted.deletedBatch).toBe(w.batches.dbView)
+    expect(d.pRow1.cells).toMatchObject({
+      [d.dbPColumns.status.id]: d.dbPOptions.doing,
+      [d.dbPColumns.person.id]: [w.member.id],
+      [d.dbPColumns.check.id]: true,
+      [d.dbPColumns.number.id]: '1234.5',
+    })
+    expect(d.pRowNoBody.id).toBe(d.pRow2.id)
+    expect(d.pRowBody).toMatchObject({
+      kind: 'DB_ROW',
+      databaseRowId: d.pRow1.id,
+      space: 'PROJECT',
+      projectId: w.P.id,
+      position: 'a0',
+      title: '',
+    })
+    expect(d.pRowBody.contentText).toBe('เนื้อหาแถว P-ลับ22 image.png')
+    expect(d.pRowImage).toMatchObject({ pageId: d.pRowBody.id, projectId: w.P.id })
+    expect(d.pRowDeleted.deletedBatch).toBe(w.batches.dbRows)
+    expect(d.pRowDeletedBody.deletedBatch).toBe(w.batches.dbRows)
+    expect(d.dbPDetached.detachedAt).not.toBeNull()
+    expect(d.dbTask.pageId).toBe(w.taskBodies.pLeafBody.id)
+    expect(d.aRowBody).toMatchObject({ projectId: w.A.id, databaseRowId: d.aRow.id })
+    expect(d.wikiRowBody).toMatchObject({ space: 'WORKSPACE', projectId: null, databaseRowId: d.wikiRow.id })
+    expect(d.dbQ.pageId).toBe(w.pages.qPage.id)
+    expect(d.qRow.title).toBe('แถว Q-ลับ24')
+    expect(d.dbWikiProt.pageId).toBe(w.pages.wikiProtected.id)
+    expect(d.dbDeletedPage.pageId).toBe(w.deletedPages.pDeleted.id)
+
+    const [n] = await db.select({ n: count() }).from(databases)
+    expect(n?.n).toBe(8)
+    const live = await db
+      .select({ id: databaseRows.id })
+      .from(databaseRows)
+      .where(and(eq(databaseRows.databaseId, d.dbP.id), isNull(databaseRows.deletedAt)))
+    expect(live).toHaveLength(3)
   })
 })

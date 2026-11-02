@@ -11,6 +11,8 @@ export interface LazyPageId {
   pageId: string | null
   /** Known id, or the (memoised) ensure call; rejects when it cannot be created (already notified). */
   getPageId: () => Promise<string>
+  /** The id known right now, without ensuring (M11 paste handler: "is this block from this page?"). Stable. */
+  peekPageId: () => string | null
 }
 
 export function useLazyPageId(o: {
@@ -57,5 +59,7 @@ export function useLazyPageId(o: {
     return pending.current
   }, [])
 
-  return { pageId, getPageId }
+  const peekPageId = useCallback((): string | null => idRef.current, [])
+
+  return { pageId, getPageId, peekPageId }
 }

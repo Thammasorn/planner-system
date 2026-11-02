@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AppEditor, schema } from '@/components/editor/schema'
 import { th } from '@/i18n/th'
 import { DEFAULT_UPLOAD_LIMITS } from '@/lib/files/upload-rules'
+import { DATABASE_MIME, encodeDatabaseClip } from './database-clipboard'
 import { externalImagesToLinks, htmlHasText, makePasteHandler } from './paste'
 import { gridToHtmlTable } from './tsv'
 import { insertFilesAtCursor } from './upload'
@@ -139,6 +140,84 @@ describe('makePasteHandler › TASK body (FR-680, M6.1-D9): subpage → mention'
     const handler = makePasteHandler({ notify: vi.fn(), limits: DEFAULT_UPLOAD_LIMITS })
     handler({ event: internalCopy, editor: e, defaultPasteHandler: pastesCard(e) })
     expect(e.document.some((b) => b.type === 'subpage')).toBe(true)
+  })
+})
+
+describe('makePasteHandler › database blocks (FR-1453, FR-1471, M11-D13/D38)', () => {
+  const DB = '9b2d5f4e-1c3a-4b5d-8e7f-0a1b2c3d4e5f'
+  const SOURCE = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+  function realEditor(): AppEditor {
+    const e = BlockNoteEditor.create({ schema, initialContent: [{ type: 'paragraph', content: 'ก่อน' }] })
+    e.setTextCursorPosition(e.document[0]!, 'end')
+    return e
+  }
+  /** Stands in for BlockNote's internal paste of a copied database block. */
+  const pastesDatabase = (e: AppEditor) =>
+    vi.fn(() => {
+      e.insertBlocks([{ type: 'database', props: { databaseId: DB } }], e.document[0]!, 'after')
+      return true
+    })
+  const internalCopy = clip({
+    'blocknote/html': `<div data-content-type="database" data-database-id="${DB}"></div>`,
+    [DATABASE_MIME]: encodeDatabaseClip({ v: 1, sourcePageId: SOURCE, cut: false, ids: [DB] }),
+  })
+
+  it('DB_ROW: a pasted database becomes a paragraph with its title + toast', () => {
+    const e = realEditor()
+    const notify = vi.fn()
+    const onDatabaseBlocksPasted = vi.fn()
+    const handler = makePasteHandler({
+      notify,
+      limits: DEFAULT_UPLOAD_LIMITS,
+      kind: 'DB_ROW',
+      databaseTitle: (id) => (id === DB ? 'ลูกค้าใหม่' : undefined),
+      onDatabaseBlocksPasted,
+    })
+    expect(handler({ event: internalCopy, editor: e, defaultPasteHandler: pastesDatabase(e) })).toBe(true)
+    expect(e.document.some((b) => b.type === 'database')).toBe(false)
+    expect(e.document[1]?.type).toBe('paragraph')
+    expect(e.document[1]?.content).toEqual([{ type: 'text', text: 'ลูกค้าใหม่', styles: {} }])
+    expect(notify).toHaveBeenCalledWith(th.editor.errors.databaseNotAllowed)
+    expect(onDatabaseBlocksPasted).not.toHaveBeenCalled()
+  })
+
+  it('DB_ROW: sub-page cards become mentions too, and nothing to convert → no toast', () => {
+    const e = realEditor()
+    const notify = vi.fn()
+    const handler = makePasteHandler({ notify, limits: DEFAULT_UPLOAD_LIMITS, kind: 'DB_ROW' })
+    handler({
+      event: clip({ 'blocknote/html': '<div/>' }),
+      editor: e,
+      defaultPasteHandler: vi.fn(() => {
+        e.insertBlocks([{ type: 'subpage', props: { pageId: SOURCE } }], e.document[0]!, 'after')
+        return true
+      }),
+    })
+    expect(e.document.some((b) => b.type === 'subpage')).toBe(false)
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('DOC / TASK: inserted database blocks are reported with the clipboard payload', () => {
+    for (const kind of ['DOC', 'TASK'] as const) {
+      const e = realEditor()
+      const onDatabaseBlocksPasted = vi.fn()
+      const handler = makePasteHandler({ notify: vi.fn(), limits: DEFAULT_UPLOAD_LIMITS, kind, onDatabaseBlocksPasted })
+      handler({ event: internalCopy, editor: e, defaultPasteHandler: pastesDatabase(e) })
+      expect(e.document.some((b) => b.type === 'database')).toBe(true)
+      expect(onDatabaseBlocksPasted).toHaveBeenCalledOnce()
+      const arg = onDatabaseBlocksPasted.mock.calls[0]![0] as { inserted: unknown; clip: unknown; before: unknown[] }
+      expect(arg.inserted).toEqual([{ blockId: e.document[1]!.id, databaseId: DB }])
+      expect(arg.clip).toEqual({ v: 1, sourcePageId: SOURCE, cut: false, ids: [DB] })
+      expect(arg.before).toHaveLength(1)
+    }
+  })
+
+  it('a paste without database blocks does not call the hook', () => {
+    const e = realEditor()
+    const onDatabaseBlocksPasted = vi.fn()
+    const handler = makePasteHandler({ notify: vi.fn(), limits: DEFAULT_UPLOAD_LIMITS, onDatabaseBlocksPasted })
+    handler({ event: clip({ 'text/plain': 'x' }), editor: e, defaultPasteHandler: vi.fn(() => true) })
+    expect(onDatabaseBlocksPasted).not.toHaveBeenCalled()
   })
 })
 

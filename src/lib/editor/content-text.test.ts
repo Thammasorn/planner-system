@@ -2,7 +2,13 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { collectMentionIds, extractContentText, remapSubpageIds } from './content-text'
+import {
+  collectDatabaseIds,
+  collectMentionIds,
+  extractContentText,
+  remapContentIds,
+  remapSubpageIds,
+} from './content-text'
 
 const complex: unknown = JSON.parse(
   readFileSync(path.resolve(import.meta.dirname, '__fixtures__/complex-doc.json'), 'utf8'),
@@ -155,5 +161,120 @@ describe('remapSubpageIds', () => {
     const doc = [{ type: 'paragraph', content: [{ type: 'mention', props: { kind: 'page', id: 'a' } }] }]
     expect(remapSubpageIds(doc, new Map([['a', 'x']]))).toEqual(doc)
     expect(remapSubpageIds(null, new Map())).toEqual([])
+  })
+})
+
+const DB1 = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
+const DB2 = '9b2d7c1e-2a4b-4c6d-8e0f-1a2b3c4d5e6f'
+
+describe('latex (M11, FR-1506)', () => {
+  it('equation blocks and inline equations add their LaTeX source', () => {
+    const doc = [
+      { type: 'equation', props: { latex: 'E=mc^2' } },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'สูตร' },
+          { type: 'inlineEquation', props: { latex: '\\frac{a}{b}' } },
+          { type: 'text', text: 'จบ' },
+        ],
+      },
+    ]
+    // inline runs join without a separator (like styled text); blocks are separated by a space
+    expect(extractContentText(doc)).toBe('E=mc^2 สูตร\\frac{a}{b}จบ')
+  })
+
+  it('nested in a list item and inside a table cell', () => {
+    const doc = [
+      {
+        type: 'bulletListItem',
+        content: 'ข้อ',
+        children: [{ type: 'equation', props: { latex: 'x^2' } }],
+      },
+      {
+        type: 'table',
+        content: {
+          type: 'tableContent',
+          rows: [{ cells: [[{ type: 'inlineEquation', props: { latex: '\\pi' } }], 'ค่า'] }],
+        },
+      },
+    ]
+    expect(extractContentText(doc)).toBe('ข้อ x^2 \\pi ค่า')
+  })
+
+  it('empty or non-string latex adds nothing', () => {
+    expect(extractContentText([{ type: 'equation', props: { latex: '' } }])).toBe('')
+    expect(extractContentText([{ type: 'equation', props: { latex: 5 } }])).toBe('')
+    expect(extractContentText([{ type: 'paragraph', content: [{ type: 'inlineEquation' }] }])).toBe('')
+  })
+})
+
+describe('database blocks (M11, FR-1474)', () => {
+  it('a database block adds nothing to content_text (not its id, not its data)', () => {
+    const t = extractContentText([
+      { type: 'paragraph', content: 'ก่อน' },
+      { type: 'database', props: { databaseId: DB1 } },
+      { type: 'paragraph', content: 'หลัง' },
+    ])
+    expect(t).toBe('ก่อน หลัง')
+  })
+
+  it('collectDatabaseIds walks every depth, keeps uuids only', () => {
+    const doc = [
+      { type: 'database', props: { databaseId: DB1 } },
+      {
+        type: 'toggleListItem',
+        children: [
+          { type: 'paragraph', children: [{ type: 'database', props: { databaseId: DB2.toUpperCase() } }] },
+        ],
+      },
+      { type: 'database', props: { databaseId: '' } },
+      { type: 'database', props: { databaseId: 'not-a-uuid' } },
+      { type: 'database', props: {} },
+      { type: 'paragraph', props: { databaseId: DB1 } },
+      null,
+    ]
+    expect([...collectDatabaseIds(doc)].sort()).toEqual([DB1, DB2].sort())
+    expect(collectDatabaseIds(null).size).toBe(0)
+  })
+})
+
+describe('remapContentIds (M11-D11)', () => {
+  it('remaps subpage and database ids at any depth without mutating the input', () => {
+    const input = [
+      { type: 'subpage', props: { pageId: 'p1' } },
+      {
+        type: 'paragraph',
+        children: [
+          { type: 'database', props: { databaseId: DB1 } },
+          { type: 'database', props: { databaseId: DB2 } },
+        ],
+      },
+    ]
+    const before = structuredClone(input)
+    const out = remapContentIds(input, {
+      pages: new Map([['p1', 'p9']]),
+      databases: new Map([[DB1, DB2]]),
+    }) as typeof input
+    expect(out[0]?.props).toEqual({ pageId: 'p9' })
+    expect(out[1]?.children?.[0]?.props).toEqual({ databaseId: DB2 })
+    expect(out[1]?.children?.[1]?.props).toEqual({ databaseId: DB2 }) // unmapped ids stay
+    expect(input).toEqual(before)
+  })
+
+  it('either map may be omitted; remapSubpageIds delegates', () => {
+    const doc = [
+      { type: 'subpage', props: { pageId: 'a' } },
+      { type: 'database', props: { databaseId: DB1 } },
+    ]
+    expect(remapContentIds(doc, { databases: new Map([[DB1, DB2]]) })).toEqual([
+      { type: 'subpage', props: { pageId: 'a' } },
+      { type: 'database', props: { databaseId: DB2 } },
+    ])
+    expect(remapContentIds(doc, {})).toEqual(doc)
+    expect(remapSubpageIds(doc, new Map([['a', 'b']]))).toEqual(
+      remapContentIds(doc, { pages: new Map([['a', 'b']]) }),
+    )
+    expect(remapContentIds('x', {})).toEqual([])
   })
 })

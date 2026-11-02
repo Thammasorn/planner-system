@@ -1,9 +1,12 @@
 // M6.1 S2 — task-body helpers: the hasBody rule (M6.1-D11 mirror of the SQL) and sub-page → page mention (FR-680,
 // M6.1-D9). Node env: pure functions only.
 import { describe, expect, it, vi } from 'vitest'
+import { th } from '@/i18n/th'
 import {
+  databaseAsParagraph,
   findSubpageBlocks,
   hasTaskBodyContent,
+  replaceDatabasesWithParagraphs,
   replaceSubpagesWithMentions,
   subpageAsMention,
 } from './task-body'
@@ -102,6 +105,47 @@ describe('sub-page blocks in a task body (FR-680)', () => {
   it('no cards → no edit (returns false)', () => {
     const replaceBlocks = vi.fn()
     expect(replaceSubpagesWithMentions({ document: [doc[0]], replaceBlocks } as never)).toBe(false)
+    expect(replaceBlocks).not.toHaveBeenCalled()
+  })
+})
+
+describe('replaceDatabasesWithParagraphs (FR-1453, M11-D38: no database inside a row body)', () => {
+  const DB = '9b2d5f4e-1c3a-4b5d-8e7f-0a1b2c3d4e5f'
+  const rowDoc = [
+    { id: 'p', type: 'paragraph', content: [], children: [] },
+    { id: 'd1', type: 'database', props: { databaseId: DB }, children: [] },
+    {
+      id: 'q',
+      type: 'paragraph',
+      content: [],
+      children: [{ id: 'd2', type: 'database', props: { databaseId: '' }, children: [] }],
+    },
+  ]
+
+  it('a database block becomes a paragraph with its known title; unknown → the untitled label', () => {
+    expect(databaseAsParagraph({ props: { databaseId: DB } }, () => 'งานเปิดตัว')).toEqual({
+      type: 'paragraph',
+      content: 'งานเปิดตัว',
+      children: [],
+    })
+    expect(databaseAsParagraph({ props: { databaseId: DB } }, () => undefined)).toEqual({
+      type: 'paragraph',
+      content: th.database.untitled,
+      children: [],
+    })
+  })
+
+  it('replaces every database block (any depth) and reports it', () => {
+    const replaceBlocks = vi.fn()
+    expect(replaceDatabasesWithParagraphs({ document: rowDoc, replaceBlocks } as never, () => 'T')).toBe(true)
+    expect(replaceBlocks.mock.calls.map((c) => (c[0] as string[])[0]).sort()).toEqual(['d1', 'd2'])
+  })
+
+  it('no database blocks → no edit', () => {
+    const replaceBlocks = vi.fn()
+    expect(replaceDatabasesWithParagraphs({ document: [rowDoc[0]], replaceBlocks } as never, () => 'T')).toBe(
+      false,
+    )
     expect(replaceBlocks).not.toHaveBeenCalled()
   })
 })

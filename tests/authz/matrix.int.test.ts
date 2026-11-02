@@ -334,6 +334,64 @@ describe('authz matrix', () => {
     }
   })
 
+  it('M11 meta (plan/m11 §7.2, S6.1): every DB-*, ROW-*, COL-*, VIEW-*, RP-*, RB-*, FW-ROW*, PG-*-DB and SR-DB-* row exists on the databases world; PERM-24…26 are cited; audits per M11-D5', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const want = [
+      ...['GET', 'GET-ARCH', 'GET-WIKI', 'GET-WIKIPROT', 'GET-TASK', 'GET-DETACHED', 'GET-WRONGPAGE', 'GET-DELETEDPAGE']
+        .map((k) => `DB-${k}`),
+      ...['GET-MISSING', 'GET-BAD', 'CREATE', 'CREATE-ARCH', 'CREATE-WIKI', 'CREATE-WIKIPROT', 'CREATE-TASK'].map((k) => `DB-${k}`),
+      ...['CREATE-ROWBODY', 'CREATE-LIMIT', 'CREATE-BAD', 'COPY', 'COPY-TO-ARCH', 'COPY-FROM-ARCH', 'COPY-TO-Q'].map((k) => `DB-${k}`),
+      ...['COPY-FROM-Q', 'COPY-MISMATCH', 'COPY-TO-WIKIPROT', 'COPY-TO-ROWBODY', 'RENAME', 'RENAME-STALE'].map((k) => `DB-${k}`),
+      ...['RENAME-ARCH', 'RENAME-WIKIPROT'].map((k) => `DB-${k}`),
+      ...['CREATE', 'CREATE-51', 'CREATE-FULL', 'CREATE-WIKI', 'UPDATE', 'UPDATE-LEASED', 'UPDATE-STALE'].map((k) => `ROW-${k}`),
+      ...['UPDATE-BADTYPE', 'UPDATE-URL-JS', 'UPDATE-INACTIVE', 'UPDATE-DELCOL', 'UPDATE-ARCH', 'UPDATE-WIKIPROT'].map((k) => `ROW-${k}`),
+      ...['DELETE', 'DELETE-MIXED', 'RESTORE'].map((k) => `ROW-${k}`),
+      ...['CREATE', 'UPDATE', 'DUP', 'LIMIT', 'TYPE', 'TYPE-TITLE', 'REVERT', 'REVERT-FORGED', 'DELETE', 'RESTORE'].map((k) => `COL-${k}`),
+      ...['DELETE-TITLE', 'ARCH'].map((k) => `COL-${k}`),
+      ...['CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'UPDATE-WIKIPROT', 'UPDATE-BADCOL', 'DELETE-LAST', 'LIMIT'].map((k) => `VIEW-${k}`),
+      ...['LOADER', 'LOADER-WIKI', 'LOADER-ARCH', 'LOADER-MISSING'].map((k) => `RP-${k}`),
+      ...['GET', 'GET-NONE', 'GET-DELETED', 'GET-BAD', 'ENSURE', 'ENSURE-EXISTING', 'ENSURE-ARCH', 'ENSURE-WIKIPROT'].map((k) => `RB-${k}`),
+      ...['PAGE-GET', 'SAVE', 'SAVE-DB', 'SAVE-SUBPAGE', 'SAVE-ARCH', 'KEEPALIVE', 'LOCK-GET', 'LOCK-POST', 'LOCK-DELETE'].map((k) => `RB-${k}`),
+      ...['UPLOAD', 'FILE-GET'].map((k) => `RB-${k}`),
+      ...['TREE', 'RENAME', 'ICON', 'COVER', 'PROTECT', 'TEMPLATE', 'MOVE', 'DUP', 'DELETE', 'CREATE-CHILD'].map((k) => `RB-DOCAPI-${k}`),
+      'FW-ROW',
+      'FW-ROW-WIKIPROT',
+      'FW-ROW-ARCH',
+      'PG-SAVE-DETACH',
+      'PG-DUP-DB',
+      ...['ROW', 'TITLE', 'BODY', 'WIKI', 'TITLEONLY'].map((k) => `SR-DB-${k}`),
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M11 rows').toEqual([])
+    const m11 = rows.filter((r) => /^(DB|ROW|COL|VIEW|RP|RB|FW-ROW|SR-DB)(-|$)/.test(r.id) || /^PG-.*-DB$|^PG-SAVE-(DETACH|REATTACH)$/.test(r.id))
+    for (const perm of ['PERM-24', 'PERM-25', 'PERM-26'])
+      expect(m11.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M11 row`).toBe(true)
+    for (const r of m11) expect([...expandParts(r.with ?? [])], `${r.id} needs the databases world`).toContain('databases')
+    // M11-D5 / X44: the §7.9 actions audit `database`; row bodies audit `page` (files: `file`); leases and an ensure without
+    // insert are not audited
+    const DB_ACTIONS = /^(create|copy|rename|update|delete|restore|duplicate|change|revert)Database/
+    for (const r of m11.filter((x) => x.mutates && DB_ACTIONS.test(x.action)))
+      expect(r.audit, r.id).toMatchObject({ entity: 'database' })
+    for (const r of m11.filter((x) => x.mutates && !DB_ACTIONS.test(x.action) && x.audit !== false))
+      expect(['page', 'file'], r.id).toContain((r.audit as { entity: string }).entity)
+    expect(rows.find((r) => r.id === 'RB-ENSURE-EXISTING')?.audit).toBe(false)
+    // FR-1453 / FR-682: every page-tree API addressed at a DB_ROW page is a 404 for everyone
+    for (const r of m11.filter((x) => x.id.startsWith('RB-DOCAPI-')))
+      expect(r.expect, r.id).toEqual({ M: '404', L: '404', Me: '404', W: '404' })
+    // PERM-24/25: the outsider never reaches a P / A database (only wiki, Q and zod-level 400 rows differ)
+    const wReaches = /-(WIKI|WIKIPROT)$|^DB-COPY-FROM-Q$/
+    for (const r of m11.filter((x) => !wReaches.test(x.id) && !x.id.startsWith('SR-DB-')))
+      expect(['404', '400'], `${r.id} W`).toContain(r.expect.W)
+    // X42: every write on archived A is 403 for its team, 404 for W
+    for (const r of m11.filter((x) => x.mutates && /-ARCH(-|$)/.test(x.id) && x.id !== 'DB-COPY-FROM-ARCH'))
+      expect(r.expect, r.id).toEqual({ M: '403', L: '403', Me: '403', W: '404' })
+    // FR-510: writes on a locked wiki database are the manager's only
+    for (const r of m11.filter((x) => x.mutates && /-WIKIPROT$/.test(x.id) && x.id !== 'DB-COPY-TO-WIKIPROT'))
+      expect(r.expect, r.id).toEqual({ M: 'allow', L: '403', Me: '403', W: '403' })
+    // FR-1464: wrong page / missing / deleted page → one 404 for everyone
+    for (const id of ['DB-GET-WRONGPAGE', 'DB-GET-DELETEDPAGE', 'DB-GET-MISSING', 'DB-GET-BAD', 'DB-COPY-MISMATCH'])
+      expect(rows.find((r) => r.id === id)?.expect, id).toEqual({ M: '404', L: '404', Me: '404', W: '404' })
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })

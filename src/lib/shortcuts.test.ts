@@ -147,3 +147,33 @@ describe('palette scope (M10, KEY-06)', () => {
     expect(SHORTCUTS.find((s) => s.id === 'palette.open')?.combos).toEqual([['Mod', 'K']])
   })
 })
+
+describe('database + equation scopes (M11, §8.6)', () => {
+  it('registers the table keys and the equation keys with Thai labels', () => {
+    expect(SHORTCUT_SCOPES).toEqual(expect.arrayContaining(['database', 'equation']))
+    expect(SHORTCUT_SCOPE_LABELS.database).toBe(th.shortcuts.scopes.database)
+    expect(SHORTCUT_SCOPE_LABELS.equation).toBe(th.shortcuts.scopes.equation)
+    const db = SHORTCUTS.filter((s) => s.scope === 'database')
+    expect(db.map((s) => s.id)).toEqual([
+      'db.move',
+      'db.edit',
+      'db.cancel',
+      'db.nextCell',
+      'db.clear',
+      'db.space',
+    ])
+    expect(db.find((s) => s.id === 'db.nextCell')?.combos).toEqual([['Tab'], ['Shift', 'Tab']])
+    const eq = SHORTCUTS.filter((s) => s.scope === 'equation')
+    expect(eq.map((s) => [s.id, s.combos])).toEqual([
+      ['equation.confirmInline', [['Enter']]],
+      ['equation.confirmBlock', [['Mod', 'Enter']]],
+      ['equation.cancel', [['Esc']]],
+    ])
+    for (const s of [...db, ...eq]) expect(s.label).toBeTruthy()
+  })
+
+  it('ids stay unique', () => {
+    const ids = SHORTCUTS.map((s) => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+})

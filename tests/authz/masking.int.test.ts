@@ -14,6 +14,9 @@
 // 404 bodies, hasBody without body text, /my statusesByProject of the viewer's projects only.
 // M10 (plan/m10 S4.2, K1–K10 + golden): GET /api/search (all categories), /api/search/index, /api/home and the two
 // live-block embeds /api/pages/{id}/embed/{tasks,workload} (MASK-1/2/3/5/6/7, TST-2, AC-1303).
+// M11 (plan/m11 S6.3, FR-1464, AC-1408, §3.3): the database route, every database action and the row-body route as an
+// outsider (404 bodies without secrets, one identical 404 body), the search group, and the `people` map (4 fields).
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -62,7 +65,11 @@ import type {
   ProjectTasksResponse,
   TeamTasksResponse,
 } from '@/lib/contracts/tasks'
-import { createPage, movePage } from '@/server/actions/pages'
+import type { DatabaseResponse } from '@/lib/contracts/databases'
+import type { RowBodyView } from '@/lib/contracts/row-pages'
+import * as dbActions from '@/server/actions/databases'
+import { createPage, movePage, setPageFullWidth } from '@/server/actions/pages'
+import { ensureRowBody } from '@/server/actions/row-pages'
 import { addTaskBlocker } from '@/server/actions/task-blockers'
 import { db } from '@/server/db/client'
 import {
@@ -105,6 +112,7 @@ import { calendarGet } from './rows/_m5'
 import { GRID_RANGE, gridGet, save, weekItem } from './rows/_m6'
 import { bodyGet } from './rows/_m6_1'
 import { markersGet } from './rows/_m7_1'
+import { databaseById, dbGet, liveRows, pDbSecrets, qDbSecrets, rowBodyGet } from './rows/_m11'
 import { embedTasksGet, embedWorkloadGet, homeGet, searchIndexGet, searchQ } from './rows/_m10'
 import {
   milestonesGet,
@@ -2155,5 +2163,154 @@ describe('masking — home, search, embeds golden (M10, r8 §4.3, AC-1303, FR-11
     asUser(await goldenUser('Jack'))
     const jack = await okJson<SearchAllResponse>(await searchQ('ลูกค้า'))
     expect(containsAny(jack, ['ย้ายข้อมูลลูกค้า', 'CRM Migration', await goldenProjectId('CRM Migration')])).toEqual([])
+  })
+})
+
+describe('masking — databases (M11, plan/m11 S6.3; FR-1460, FR-1464, FR-1474, AC-1408, §3.3)', () => {
+  const DBW = ['databases'] as const
+
+  it('fixture sanity: the database secrets S0.17 promised', async () => {
+    const w = await createWorld({ with: DBW })
+    const d = w.databases
+    expect(d.dbP.title).toBe('ฐานข้อมูล P-ลับ20')
+    expect(d.pRow1.title).toBe('แถว P-ลับ21')
+    expect(d.pRowBody.contentText).toContain('เนื้อหาแถว P-ลับ22')
+    expect(d.dbQ.title).toBe('ฐานข้อมูล Q-ลับ23')
+    // FR-1474: database data never enters pages.content_text of the owner page
+    const [owner] = await db.select().from(pagesTable).where(eq(pagesTable.id, w.pages.pPage.id))
+    expect(owner!.contentText).not.toContain('P-ลับ2')
+  })
+
+  it('outsider: GET /api/pages/{pPage}/databases/{dbP} and /{qPage}/databases/{dbP} → 404 without a P secret', async () => {
+    const w = await createWorld({ with: DBW })
+    asUser(w.outsider)
+    for (const res of [await dbGet(w.pages.pPage.id, w.databases.dbP.id), await dbGet(w.pages.qPage.id, w.databases.dbP.id)]) {
+      expect(res.status).toBe(404)
+      assertNoLeak(await res.json(), pDbSecrets(w))
+    }
+  })
+
+  it('FR-1464 / M11-D7: invisible, mismatch, deleted page and random uuid answer byte-identical 404 bodies', async () => {
+    const w = await createWorld({ with: DBW })
+    const bodies: string[] = []
+    asUser(w.outsider)
+    bodies.push(await (await dbGet(w.pages.pPage.id, w.databases.dbP.id)).text())
+    asUser(w.member)
+    for (const res of [
+      await dbGet(w.pages.qPage.id, w.databases.dbP.id), // mismatch (member cannot see Q either)
+      await dbGet(w.pages.pChild.id, w.databases.dbP.id), // mismatch on a visible page
+      await dbGet(w.pages.pPage.id, randomUUID()), // missing
+      await dbGet(w.deletedPages.pDeleted.id, w.databases.dbDeletedPage.id), // deleted owner
+      await dbGet(w.pages.pPage.id, 'not-a-uuid'), // malformed
+    ]) {
+      expect(res.status).toBe(404)
+      bodies.push(await res.text())
+    }
+    expect(new Set(bodies).size, bodies.join('\n')).toBe(1)
+  })
+
+  it('outsider: every database action on dbP / pRow1 ids → 404 with no P secret in the result', async () => {
+    const w = await createWorld({ with: DBW })
+    const d = w.databases
+    asUser(w.outsider)
+    const calls: [string, () => Promise<object>][] = [
+      ['createDatabase', () => dbActions.createDatabase({ pageId: w.pages.pPage.id, view: 'TABLE' })],
+      ['copyDatabase', () => dbActions.copyDatabase({ sourcePageId: w.pages.pPage.id, sourceDatabaseId: d.dbP.id, targetPageId: w.pages.qPage.id })],
+      ['renameDatabase', () => dbActions.renameDatabase({ databaseId: d.dbP.id, baseVersion: 1, title: 'x' })],
+      ['createDatabaseRows', () => dbActions.createDatabaseRows({ databaseId: d.dbP.id, rows: [{ title: 'x' }] })],
+      ['updateDatabaseRow', () => dbActions.updateDatabaseRow({ rowId: d.pRow1.id, baseVersion: 1, title: 'x' })],
+      ['deleteDatabaseRows', () => dbActions.deleteDatabaseRows({ rowIds: [d.pRow1.id] })],
+      ['restoreDatabaseRowBatch', () => dbActions.restoreDatabaseRowBatch({ batch: w.batches.dbRows })],
+      ['createDatabaseColumn', () => dbActions.createDatabaseColumn({ databaseId: d.dbP.id, type: 'TEXT' })],
+      ['updateDatabaseColumn', () => dbActions.updateDatabaseColumn({ columnId: d.dbPColumns.status.id, baseVersion: 1, name: 'x' })],
+      ['duplicateDatabaseColumn', () => dbActions.duplicateDatabaseColumn({ columnId: d.dbPColumns.text.id })],
+      ['changeDatabaseColumnType', () => dbActions.changeDatabaseColumnType({ columnId: d.dbPColumns.text.id, baseVersion: 1, type: 'NUMBER' })],
+      [
+        'revertDatabaseColumnType',
+        () =>
+          dbActions.revertDatabaseColumnType({
+            columnId: d.dbPColumns.text.id,
+            previous: { type: 'TEXT', config: {}, columnVersion: 1, values: {} },
+          }),
+      ],
+      ['deleteDatabaseColumn', () => dbActions.deleteDatabaseColumn({ columnId: d.dbPColumns.text.id })],
+      ['restoreDatabaseColumnBatch', () => dbActions.restoreDatabaseColumnBatch({ batch: w.batches.dbColumn })],
+      ['createDatabaseView', () => dbActions.createDatabaseView({ databaseId: d.dbP.id, type: 'TABLE' })],
+      ['updateDatabaseView', () => dbActions.updateDatabaseView({ viewId: d.dbPViews.table.id, baseVersion: 1, name: 'x' })],
+      ['deleteDatabaseView', () => dbActions.deleteDatabaseView({ viewId: d.dbPViews.kanban.id })],
+      ['restoreDatabaseViewBatch', () => dbActions.restoreDatabaseViewBatch({ batch: w.batches.dbView })],
+      ['ensureRowBody', () => ensureRowBody({ rowId: d.pRow1.id })],
+      ['setPageFullWidth', () => setPageFullWidth({ rowId: d.pRow1.id, fullWidth: true })],
+    ]
+    for (const [name, call] of calls) {
+      const r = await call()
+      expect(outcomeOf(r as Parameters<typeof outcomeOf>[0]), name).toBe('404')
+      assertNoLeak(r, pDbSecrets(w))
+    }
+    // nothing changed
+    expect(await databaseById(d.dbP.id)).toMatchObject({ title: 'ฐานข้อมูล P-ลับ20', version: 1, detachedAt: null })
+    expect(await liveRows(d.dbP.id)).toHaveLength(3)
+  })
+
+  it('outsider: GET /api/database-rows/{pRow1}/body and the body page → 404 without a secret', async () => {
+    const w = await createWorld({ with: DBW })
+    asUser(w.outsider)
+    for (const res of [
+      await rowBodyGet(w.databases.pRow1.id),
+      await pageGet(w.databases.pRowBody.id),
+      await fileGet(w.databases.pRowImage.id),
+      await lockCall('GET', w.databases.pRowBody.id),
+    ]) {
+      expect(res.status).toBe(404)
+      assertNoLeak(await res.json(), [...pDbSecrets(w), w.databases.pRowImage.id])
+    }
+  })
+
+  it('outsider: /api/search?q=ลับ2 → no P database hit (Q hits allowed), no P secret anywhere in the body', async () => {
+    const w = await createWorld({ with: DBW })
+    asUser(w.outsider)
+    const body = await okJson<SearchAllResponse>(await searchQ('ลับ2'))
+    for (const h of body.databases ?? []) expect([w.pages.qPage.id, w.pages.wiki.id]).toContain(h.pageId)
+    assertNoLeak(body, pDbSecrets(w))
+    // the outsider does find Q's row (sanity: the query runs)
+    const q = await okJson<SearchAllResponse>(await searchQ('แถว Q-ลับ24'))
+    expect(q.databases?.map((h) => h.rowId)).toEqual([w.databases.qRow.id])
+  })
+
+  it('member: search never returns Q databases; page hits never include DB_ROW pages', async () => {
+    const w = await createWorld({ with: DBW })
+    asUser(w.member)
+    const body = await okJson<SearchAllResponse>(await searchQ('ลับ2'))
+    assertNoLeak(body, qDbSecrets(w))
+    const ids = (body.databases ?? []).map((h) => h.databaseId)
+    expect(ids).toEqual(expect.arrayContaining([w.databases.dbP.id]))
+    const content = await okJson<SearchAllResponse>(await searchQ('เนื้อหาแถว'))
+    for (const b of [w.databases.pRowBody, w.databases.aRowBody, w.databases.wikiRowBody])
+      expect(content.pages.map((p) => p.id)).not.toContain(b.id)
+  })
+
+  it('member: GET dbP → `people` entries carry exactly name / nickname / color / deactivated (no email, load, leave, projects)', async () => {
+    const w = await createWorld({ with: DBW })
+    asUser(w.member)
+    const body = await okJson<DatabaseResponse>(await dbGet(w.pages.pPage.id, w.databases.dbP.id))
+    const people = Object.entries(body.people)
+    expect(people.length).toBeGreaterThan(0)
+    for (const [, p] of people) expect(Object.keys(p).sort()).toEqual(['color', 'deactivated', 'name', 'nickname'])
+    assertNoLeak(body, [w.member.email, w.manager.email, w.lead.email, 'P-ลับ01', w.Q.name])
+    // the soft-deleted row / column / view are not sent (M11-D19)
+    assertNoLeak(
+      { columns: body.columns, views: body.views, rows: body.rows.map((r) => r.title) },
+      ['แถวลบแล้ว P', w.databases.dbPColumns.deleted.id, w.databases.dbPViews.deleted.id],
+    )
+  })
+
+  it('member: the body of a Q row → 404; archived A body readable with can.edit false', async () => {
+    const w = await createWorld({ with: DBW })
+    asUser(w.member)
+    const q = await rowBodyGet(w.databases.qRow.id)
+    expect(q.status).toBe(404)
+    assertNoLeak(await q.json(), qDbSecrets(w))
+    const a = await okJson<RowBodyView>(await rowBodyGet(w.databases.aRow.id))
+    expect(a.can.edit).toBe(false)
   })
 })

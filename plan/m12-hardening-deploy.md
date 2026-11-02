@@ -1342,3 +1342,30 @@ seed:perf at §9 scale; Dockerfile/compose/backup/Caddy/README; deploy smoke + r
 Co-Authored-By: <attribution trailer required by the session>
 ```
 **Tag:** `git tag m12`.
+
+---
+
+## 11. Forward notes from M11 (added at the M11 close-out, 2026-11-03)
+
+Inputs for the M12 kickoff (plan/m11-database-views.md §10). Each one goes into the matching M12 stream; none is built yet.
+
+- **Perf gates for NFR-11/12.** Add to `scripts/perf-check.ts` P-DB1: `GET /api/pages/:id/databases/:databaseId`, 1,000 rows × 20
+  columns, p95 < 500 ms on `planner_perf`. Add to `e2e/perf/m12-perf.spec.ts`: PF-DB1 table render < 300 ms, PF-DB2 view switch /
+  filter / sort < 100 ms, PF-DB3 cell edit < 50 ms, PF-DB4 page with 3 database blocks (1,000 rows) + 50 equations opens < 1.5 s.
+  M11 shipped smoke versions only (e2e P1/P2, `databases.perf.int.test.ts`, `database.perf.test.ts`). Also check how heavy the clipboard /
+  internal copy of a large database block is: it renders the whole `DatabaseBlockView` through BlockNote's `elementRenderer` (M11 S5 note).
+- **`seed:perf`.** Use `addSyntheticDatabase` for 2,000 databases / 200,000 rows (NFR-01 v3.2 row).
+- **Audit sweep (AUD-*).** Register the audit entity `database` (X93 now lists it) and the row-body `page` saves (`DB_ROW` bodies) in the
+  coverage meta-test.
+- **Offline / image checks.** The offline check must allowlist KaTeX's MathML namespace string (`http://www.w3.org/1998/Math/MathML`),
+  and the image check must confirm the KaTeX fonts are inside the image (bundled, lazy chunk). README third-party notices: `katex` (MIT).
+- **Remove the unused `@mui/x-charts` dependency.** M7.1-D30 replaced the MUI X load chart with the grid-geometry chart, and
+  `src/components/load-chart/no-chart-lib.test.ts` asserts that nothing imports it, but `package.json` still pins `@mui/x-charts 9.14.0`.
+  Drop it (and its PLAN §1.2 row) and re-measure the bundle.
+- **`lateFacts` query plan.** Without planner statistics `repo.milestones.lateFacts` picks a nested-loop plan that takes more than 18 s
+  (M8 fix-r1, PROGRESS "R2 / M6-D22" row); the M8 perf smoke runs `ANALYZE` first. For M12: add an index that serves the bound-task /
+  milestone join without statistics (check with `EXPLAIN` on `planner_perf` straight after `seed:perf`, before autovacuum) or run
+  `ANALYZE` at the end of `seed:perf` and in the post-restore steps, and make P-series measurements include a "fresh restore" case.
+- **E2E new-tab assertions.** Use `e2e/support/new-tab.ts` (`newTabOpenedBy`) instead of `context.waitForEvent('page')` for
+  Cmd/Ctrl+click checks. The Playwright page event depends on `Page.frameNavigated`, which Chromium sometimes skips when the opener's
+  renderer is busy (M11 close-out T3 fix).

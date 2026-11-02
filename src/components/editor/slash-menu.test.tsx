@@ -1,9 +1,15 @@
 // S2.5 — slash items with the real schema in a headless editor (FR-502/506/520/528, AC-501/504, M4-D14).
 import { BlockNoteEditor } from '@blocknote/core'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import { thaiDictionary } from '@/lib/editor/dictionary'
+import {
+  consumeDatabaseJustCreated,
+  getDatabaseBlockPhase,
+  resetDatabaseBlockState,
+} from '@/lib/editor/database-block-state'
 import { rankSuggestionItems } from '@/lib/editor/suggest'
+import { takeBlockEquationOpen, takeInlineEquationOpen } from './math/open-request'
 import { type AppEditor, schema } from './schema'
 import { getSlashMenuItems, type SlashCtx } from './slash-menu'
 
@@ -136,10 +142,16 @@ describe('getSlashMenuItems › live blocks (FR-1301/1303, M10-D5)', () => {
   const live = th.editor.slash
   const project = (over: Partial<SlashCtx> = {}) => ctx({ space: 'PROJECT', canEdit: true, ...over })
 
-  it('a PROJECT page offers มุมมองงาน and ภาระทีม, right after หน้า', () => {
+  it('a PROJECT page offers มุมมองงาน and ภาระทีม, right after the ขั้นสูง group (หน้า, สมการ…)', () => {
     const t = titles(makeEditor(), project())
     const at = t.indexOf(live.subpage.title)
-    expect(t.slice(at, at + 3)).toEqual([live.subpage.title, live.taskView.title, live.projectWorkload.title])
+    expect(t.slice(at, at + 5)).toEqual([
+      live.subpage.title,
+      live.equation.title,
+      live.inlineEquation.title,
+      live.taskView.title,
+      live.projectWorkload.title,
+    ])
   })
 
   it('ranks Thai titles and English aliases first', () => {
@@ -180,5 +192,117 @@ describe('getSlashMenuItems › live blocks (FR-1301/1303, M10-D5)', () => {
     items.find((i) => i.title === live.projectWorkload.title)!.onItemClick()
     const pw = editor.document.find((b) => b.type === 'projectWorkload')
     expect(pw?.props).toEqual({ view: 'ALL' })
+  })
+})
+
+describe('getSlashMenuItems › database group + equations + ranking (FR-1403/1404, FR-1501/1502, M11-D38)', () => {
+  const sl = th.editor.slash
+  const DB_ITEMS = [sl.databaseTable.title, sl.databaseKanban.title, sl.databaseCalendar.title]
+  const DB_ID = '9b2d5f4e-1c3a-4b5d-8e7f-0a1b2c3d4e5f'
+  const withDb = (over: Partial<SlashCtx> = {}) =>
+    ctx({ createDatabase: () => Promise.resolve(DB_ID), canEdit: true, ...over })
+  const first = (items: ReturnType<typeof getSlashMenuItems>, q: string) => rankSuggestionItems(items, q)[0]?.title
+
+  beforeEach(() => {
+    resetDatabaseBlockState()
+  })
+
+  it('DOC and TASK bodies offer the three database items in their own contiguous "ฐานข้อมูล" group', () => {
+    for (const kind of ['DOC', 'TASK'] as const) {
+      const items = getSlashMenuItems(makeEditor(), withDb({ kind }))
+      const t = items.map((i) => i.title)
+      const at = t.indexOf(sl.databaseTable.title)
+      expect(t.slice(at, at + 3)).toEqual(DB_ITEMS)
+      expect(items.filter((i) => i.group === sl.databaseTable.group).map((i) => i.title)).toEqual(DB_ITEMS)
+    }
+  })
+
+  it('a row body (DB_ROW) has no database items, no หน้า — but keeps the equations and the table', () => {
+    const items = getSlashMenuItems(makeEditor(), withDb({ kind: 'DB_ROW' }))
+    const t = items.map((i) => i.title)
+    for (const x of [...DB_ITEMS, sl.subpage.title]) expect(t).not.toContain(x)
+    expect(t).toEqual(expect.arrayContaining([sl.equation.title, sl.inlineEquation.title, slash.table.title]))
+    expect(rankSuggestionItems(items, 'db').map((i) => i.title)).not.toContain(sl.databaseTable.title)
+  })
+
+  it('no createDatabase wired → no database items', () => {
+    expect(titles(makeEditor(), ctx())).not.toContain(sl.databaseTable.title)
+  })
+
+  it('groups stay contiguous (one heading per group)', () => {
+    const items = getSlashMenuItems(makeEditor(), withDb({ space: 'PROJECT' }))
+    const seen: string[] = []
+    for (const i of items) if (seen.at(-1) !== i.group) seen.push(i.group ?? '')
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('ranking: /ตาราง → plain table; /ตารางข้อมูล, /db, /database, /table view → database table', () => {
+    const items = getSlashMenuItems(makeEditor(), withDb({ space: 'PROJECT' }))
+    expect(first(items, slash.table.title)).toBe(slash.table.title)
+    expect(first(items, 'table')).toBe(slash.table.title)
+    for (const q of [sl.databaseTable.title, 'db', 'database', 'table view', 'ฐานข้อมูล'])
+      expect(first(items, q)).toBe(sl.databaseTable.title)
+  })
+
+  it('ranking: /board → M10 task view; /kanban, /คัมบัง → kanban; /calendar view, /ปฏิทิน → calendar', () => {
+    const items = getSlashMenuItems(makeEditor(), withDb({ space: 'PROJECT' }))
+    expect(first(items, 'board')).toBe(sl.taskView.title)
+    for (const q of ['kanban', 'kanban view', sl.databaseKanban.title]) expect(first(items, q)).toBe(sl.databaseKanban.title)
+    for (const q of ['calendar', 'calendar view', sl.databaseCalendar.title])
+      expect(first(items, q)).toBe(sl.databaseCalendar.title)
+  })
+
+  it('ranking: /สมการ → block equation first; /สมการในบรรทัด and /inline math → inline', () => {
+    const items = getSlashMenuItems(makeEditor(), withDb())
+    expect(first(items, sl.equation.title)).toBe(sl.equation.title)
+    for (const q of ['equation', 'math', 'latex']) expect(first(items, q)).toBe(sl.equation.title)
+    for (const q of [sl.inlineEquation.title, 'inline equation', 'inline math'])
+      expect(first(items, q)).toBe(sl.inlineEquation.title)
+  })
+
+  it('database item: placeholder block ("creating") → createDatabase(view) → id filled + just-created mark', async () => {
+    const editor = makeEditor()
+    let resolve!: (v: string | null) => void
+    const createDatabase = vi.fn(() => new Promise<string | null>((r) => (resolve = r)))
+    getSlashMenuItems(editor, withDb({ createDatabase }))
+      .find((i) => i.title === sl.databaseKanban.title)!
+      .onItemClick()
+    const block = () => editor.document.find((b) => b.type === 'database')
+    expect(block()?.props).toEqual({ databaseId: '' })
+    expect(getDatabaseBlockPhase(block()!.id)).toBe('creating')
+    expect(createDatabase).toHaveBeenCalledWith('KANBAN')
+    resolve(DB_ID)
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(block()?.props).toEqual({ databaseId: DB_ID })
+    expect(getDatabaseBlockPhase(block()!.id)).toBeNull()
+    expect(consumeDatabaseJustCreated(block()!.id)).toBe(true)
+    expect(consumeDatabaseJustCreated(block()!.id)).toBe(false)
+  })
+
+  it('database item: failure (null or rejection) removes the placeholder block', async () => {
+    for (const createDatabase of [() => Promise.resolve(null), () => Promise.reject(new Error('x'))]) {
+      const editor = makeEditor()
+      getSlashMenuItems(editor, withDb({ createDatabase }))
+        .find((i) => i.title === sl.databaseTable.title)!
+        .onItemClick()
+      expect(editor.document.some((b) => b.type === 'database')).toBe(true)
+      for (let i = 0; i < 4; i++) await Promise.resolve()
+      expect(editor.document.some((b) => b.type === 'database')).toBe(false)
+    }
+  })
+
+  it('equation items insert an empty block equation / an inline equation in the paragraph', () => {
+    const editor = makeEditor()
+    const items = getSlashMenuItems(editor, ctx())
+    items.find((i) => i.title === sl.inlineEquation.title)!.onItemClick()
+    const para = editor.document[0]!
+    expect(para.content).toEqual([{ type: 'inlineEquation', props: { latex: '' } }])
+    expect(takeInlineEquationOpen()).toBe(true)
+    items.find((i) => i.title === sl.equation.title)!.onItemClick()
+    const eq = editor.document.find((b) => b.type === 'equation')
+    expect(eq?.props).toEqual({ latex: '' })
+    expect(takeBlockEquationOpen(eq!.id)).toBe(true)
   })
 })
