@@ -45,7 +45,6 @@ import { viewLoad } from '@/domain/certainty'
 import { addWeeks, isoWeekday, weekStart } from '@/domain/dates'
 import { formatCd } from '@/domain/units'
 import type { Cd, ISODate, LoadPair, PeriodKey } from '@/domain/types'
-import { LoadChartPanel } from '@/components/load-chart/LoadChartPanel'
 import { QuickAdd } from '@/components/tasks/QuickAdd'
 import { useProjectTasks } from '@/components/tasks/useProjectTasks'
 import { useTaskMutations } from '@/components/tasks/useTaskMutations'
@@ -96,7 +95,6 @@ import {
   initialColumnLeft,
   initialHoldStep,
 } from '@/lib/grid/initial-scroll'
-import { chartWeeks, memberLoadSeries } from '@/lib/grid/load-series'
 import {
   defaultMarkerDate,
   defaultToolbarMarkerDate,
@@ -175,6 +173,7 @@ import { useExpansion } from './useExpansion'
 import { useGridMilestones } from './useGridMilestones'
 import { useGridUndo } from './useGridUndo'
 import { useSaveAllocations } from './useSaveAllocations'
+import { GridLoadChart } from './GridLoadChart'
 import { VirtualGrid, type VirtualGridHandle } from './VirtualGrid'
 import styles from './grid.module.css'
 
@@ -201,9 +200,6 @@ export interface PlanGridProps {
   /** M9 (M9-D28): `?week=` — the grid opens with this week as the first column and marks its header */
   focusWeek?: ISODate
 }
-
-/** M7.1-D5: the chart's x-weeks follow the rendered columns, debounced. */
-const CHART_RANGE_DEBOUNCE_MS = 150
 
 /** First column of a week (its first day column when expanded); −1 when absent. */
 function firstColOfWeek(cols: readonly GridColumn[], week: string): number {
@@ -258,7 +254,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   )
   // the กราฟภาระ pane is the project's member chart (M7.1 FR-813) — not part of the person grid (M9 scope)
   const chartOpen = isPerson ? false : chartPref
-  const [rendered, setRendered] = useState<{ first: number; last: number } | null>(null)
   const [gridWidth, setGridWidth] = useState(0)
 
   // ── zoom + expansion (FR-802/803, M7-D10/D11; view only, never data) ──
@@ -299,8 +294,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     const d = columnIndexOfPeriod(cols, `D:${today}`)
     return d >= 0 ? d : Math.max(firstColOfWeek(cols, thisWeek), columnIndexOfPeriod(cols, `W:${thisWeek}`))
   }, [cols, today, thisWeek])
-  const rangeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => () => clearTimeout(rangeTimer.current), [])
   const onRangeChange = useCallback(
     (first: number, last: number) => {
       const a = cols[first]
@@ -308,14 +301,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       if (!a || !b) return
       const next = chunksForRange(today, a.weekStart, b.weekStart)
       setChunkStarts((prev) => (sameList(prev, next) ? prev : next))
-      clearTimeout(rangeTimer.current)
-      rangeTimer.current = setTimeout(
-        () =>
-          setRendered((prev) =>
-            prev && prev.first === first && prev.last === last ? prev : { first, last },
-          ),
-        CHART_RANGE_DEBOUNCE_MS,
-      )
     },
     [cols, today],
   )
@@ -1601,19 +1586,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             : th.grid.emptyReadOnly
         : null
 
-  // ── M7.1 chart pane (FR-813, M7.1-D3/D5): computed from the loaded chunks, x = the rendered weeks (4–26) ──
-  const weeksForChart = useMemo(
-    () =>
-      rendered
-        ? chartWeeks(cols, rendered.first, rendered.last)
-        : chartWeeks(cols, initialIdx, initialIdx + 12),
-    [cols, rendered, initialIdx],
-  )
-  const series = useMemo(
-    () => (chartOpen && model ? memberLoadSeries(model, weeksForChart, { view, includeOthers, unit }) : []),
-    [chartOpen, model, weeksForChart, view, includeOthers, unit],
-  )
-
   // ── M7.1 resize handle (one element, re-rendered with the header) ──
   const frozen = frozenWidths(gridWidth, taskWidthPref, showAssignees)
   const resizeHandle = (
@@ -1800,6 +1772,30 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             }
           />
         )}
+        renderBelow={
+          chartOpen
+            ? (g) => (
+                // M7.1-D30: the กราฟภาระ pane on the grid's own column geometry, scrolled with it
+                <GridLoadChart
+                  cols={cols}
+                  vCols={g.vCols}
+                  contentWidth={g.totalWidth}
+                  frozenWidth={g.frozenWidth}
+                  totalColWidth={g.totalColWidth}
+                  viewWidth={g.viewWidth}
+                  follow={g.follow}
+                  model={model}
+                  view={view}
+                  unit={unit}
+                  includeOthers={includeOthers}
+                  onIncludeOthers={setIncludeOthers}
+                  monthStarts={monthStarts}
+                  edges={edges}
+                  today={today}
+                />
+              )
+            : undefined
+        }
         message={message}
         onRangeChange={onRangeChange}
         onKeyDown={onKeyDown}
@@ -1813,21 +1809,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         subscribeTabStop={store.subscribe}
         onEnter={enterGrid}
       />
-      {chartOpen ? (
-        <div className={styles.chartPane} data-testid="chart-pane">
-          <LoadChartPanel
-            weeks={weeksForChart}
-            series={series}
-            unit={unit}
-            view={view}
-            includeOthers={includeOthers}
-            onIncludeOthers={setIncludeOthers}
-            markers={markerViews}
-            today={today}
-            loading={!model}
-          />
-        </div>
-      ) : null}
       <AddPersonPopover
         taskId={canEdit && !isPerson ? addPersonTask : null}
         picker={picker}

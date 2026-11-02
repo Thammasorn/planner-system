@@ -1,8 +1,8 @@
-// src/components/load-chart/ShapeGlyph.tsx — the mark shape of a person in the legend and the table (M7.1-D4, §8.9:
-// colour + shape + name). Plain SVG, no chart code (stays out of the lazy chart chunk).
-import type { MarkShape } from '@mui/x-charts/models'
+// src/components/load-chart/ShapeGlyph.tsx — the mark shape of a person in the legend, the table and the chart
+// (M7.1-D4, §8.9: colour + shape + name). Plain SVG on a 12 × 12 box centred at (6, 6).
+import type { MarkShape } from './chart-model'
 
-const PATHS: Record<Exclude<MarkShape, 'circle'>, string> = {
+export const SHAPE_PATHS: Record<Exclude<MarkShape, 'circle'>, string> = {
   square: 'M2 2h8v8H2z',
   triangle: 'M6 1.5 10.5 10h-9z',
   diamond: 'M6 1 11 6 6 11 1 6z',
@@ -11,10 +11,19 @@ const PATHS: Record<Exclude<MarkShape, 'circle'>, string> = {
   wye: 'M5 1h2v4.2l3.6 2.1-1 1.7L6 6.9 2.4 9 1.4 7.3 5 5.2z',
 }
 
+/** The shape as SVG children of a 12 × 12 box (centre 6, 6). */
+export function ShapePath({ shape, color }: { shape: MarkShape; color: string }) {
+  return shape === 'circle' ? (
+    <circle cx={6} cy={6} r={4.5} fill={color} />
+  ) : (
+    <path d={SHAPE_PATHS[shape]} fill={color} />
+  )
+}
+
 export function ShapeGlyph({ shape, color }: { shape: MarkShape; color: string }) {
   return (
     <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true" focusable="false" data-shape={shape}>
-      {shape === 'circle' ? <circle cx={6} cy={6} r={4.5} fill={color} /> : <path d={PATHS[shape]} fill={color} />}
+      <ShapePath shape={shape} color={color} />
     </svg>
   )
 }

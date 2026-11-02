@@ -5,7 +5,8 @@ import type { LoadView } from '@/domain/types'
 import { footerTotals, footerValue } from './aggregate'
 import { buildColumns } from './columns'
 import { gridResponse, POS_PEOPLE, POS_TASKS, type FxPerson, type FxTask } from './fixtures.test.data'
-import { CHART_WEEKS_MAX, CHART_WEEKS_MIN, chartWeeks, memberLoadSeries } from './load-series'
+import { periodSlots, slotWeeks } from './chart-geometry'
+import { memberLoadSeries } from './load-series'
 import { mergeChunks } from './merge'
 
 const weeks = (from: string, n: number) => Array.from({ length: n }, (_, i) => addWeeks(from, i))
@@ -22,30 +23,6 @@ const pos = (includeOthers = false) =>
   ])!
 const point = (s: ReturnType<typeof memberLoadSeries>, name: string, week: string) =>
   s.find((x) => x.name === name)!.points.find((p) => p.week === week)!
-
-describe('chartWeeks (M7.1-D5)', () => {
-  it('distinct week starts of the visible columns', () => {
-    const cs = buildColumns(weeks('2026-09-14', 10), new Set(['2026-09-28']), new Map())
-    const last = cs.findIndex((c) => c.key === 'W:2026-10-19')
-    expect(chartWeeks(cs, 0, last)).toEqual(weeks('2026-09-14', 6))
-  })
-  it(`fewer than ${CHART_WEEKS_MIN} → extend right from the first visible week`, () => {
-    const cs = buildColumns(weeks('2026-09-14', 10), new Set(['2026-09-14']), new Map())
-    expect(chartWeeks(cs, 1, 3)).toEqual(weeks('2026-09-14', 4))
-  })
-  it(`more than ${CHART_WEEKS_MAX} → the first ${CHART_WEEKS_MAX}`, () => {
-    const cs = buildColumns(weeks('2026-01-05', 40), new Set(), new Map())
-    const w = chartWeeks(cs, 2, 39)
-    expect(w).toHaveLength(26)
-    expect(w[0]).toBe('2026-01-19')
-  })
-  it('indexes are clamped; no columns → []', () => {
-    const cs = buildColumns(weeks('2026-09-14', 6), new Set(), new Map())
-    expect(chartWeeks(cs, -3, 99)).toEqual(weeks('2026-09-14', 6))
-    expect(chartWeeks([], 0, 5)).toEqual([])
-    expect(chartWeeks(cs, 4, 2)).toEqual([])
-  })
-})
 
 describe('memberLoadSeries (BR-104, AC-807)', () => {
   const W = weeks('2026-09-21', 4)
@@ -204,9 +181,9 @@ describe('memberLoadSeries (BR-104, AC-807)', () => {
 
 // NFR-13 (plan/m07.1 §1.1, S3.8 / S4.5, e2e P10): "chart < 200 ms for 20 people × 26 weeks". The e2e smoke has no
 // 20-person fixture (measured end to end in M12); this node-level check times the chart's data path on a generated
-// 20 × 26 model (40 tasks, every week allocated) so a regression in memberLoadSeries / chartWeeks shows up in CI.
+// 20 × 26 model (40 tasks, every week allocated) so a regression in memberLoadSeries / slotWeeks shows up in CI.
 describe('NFR-13: the chart data for 20 people × 26 weeks well under 200 ms', () => {
-  it('chartWeeks + memberLoadSeries (both views, with otherProjects): median of 5 runs < 200 ms', () => {
+  it('slotWeeks + memberLoadSeries (both views, with otherProjects): median of 5 runs < 200 ms', () => {
     const FROM = '2026-08-31'
     const WK = weeks(FROM, 32)
     const users = Array.from({ length: 20 }, (_, i) => `u${i}`)
@@ -243,13 +220,15 @@ describe('NFR-13: the chart data for 20 people × 26 weeks well under 200 ms', (
     let series: ReturnType<typeof memberLoadSeries> = []
     for (let r = 0; r < 5; r++) {
       const t0 = performance.now()
-      const ws = chartWeeks(cs, 0, cs.length - 1)
+      // 26 rendered week columns at the virtualizer's x (frozen 352 px)
+      const rendered = cs.slice(0, 26).map((c, i) => ({ index: i, start: 352 + c.offset, size: c.width }))
+      const ws = slotWeeks(periodSlots(cs, rendered))
       for (const view of ['ALL', 'COMMITTED'] as const)
         series = memberLoadSeries(m, ws, { view, includeOthers: true })
       runs.push(performance.now() - t0)
     }
     expect(series).toHaveLength(20)
-    expect(series[0]!.points).toHaveLength(CHART_WEEKS_MAX)
+    expect(series[0]!.points).toHaveLength(26)
     expect(series.every((s) => s.points.every((p) => p.loadCd !== null))).toBe(true)
     const median = [...runs].sort((a, b) => a - b)[2]!
     expect(median).toBeLessThan(200)

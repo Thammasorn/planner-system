@@ -5,9 +5,10 @@ import { th } from '../../src/i18n/th'
 /**
  * "กราฟภาระ" pane under the plan grid (plan/m07.1 S4.4, S6; FR-813). DOM contract (S4): `load-chart-panel` (section
  * named th.loadChart.title) with the "รวมงานโปรเจคอื่น" switch, the "ดูเป็นตาราง" / "ดูเป็นกราฟ" toggle
- * (aria-pressed), a legend list named th.loadChart.legend (one button per person, `data-user`), the lazy chart
- * `load-line-chart`, and the table `load-table` whose rows are `tr[data-user=<userId>]` and cells `td[data-week]`
- * with th.loadChart.daysValue(load, cap) (+ 🔴 / ⚠ and the alert text for screen readers).
+ * (aria-pressed), a legend list named th.loadChart.legend (one button per person, `data-user`), the chart
+ * `load-line-chart`, and the table `load-table` (role=table on the grid's columns, M7.1-D30) whose rows are
+ * `[role=row][data-user=<userId>]` and cells `[role=cell][data-week]`; a cell's text starts with the full value
+ * th.loadChart.daysValue(load, cap) (+ the alert text, for screen readers), then the compact visible value.
  */
 export class LoadChartPage {
   constructor(readonly page: Page) {}
@@ -51,12 +52,12 @@ export class LoadChartPage {
   }
   /** One person × week cell of the table. */
   cell(userId: string, week: ISODate): Locator {
-    return this.table().locator(`tr[data-user="${userId}"] td[data-week="${week}"]`)
+    return this.table().locator(`[role="row"][data-user="${userId}"] [role="cell"][data-week="${week}"]`)
   }
   /** Names of the table rows, in order. */
   async tableNames(): Promise<string[]> {
     return this.table()
-      .locator('tbody th[scope="row"]')
+      .locator('[role="rowheader"]')
       .evaluateAll((els) => els.map((e) => (e.textContent ?? '').trim()))
   }
 }

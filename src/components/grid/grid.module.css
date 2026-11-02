@@ -1296,6 +1296,8 @@
   min-height: min(382px, var(--grid-content-h, 382px));
 }
 
+/* M7.1-D30: same left / right borders as .scroller so the pane's chart and table sit on the grid's columns; the pane
+   never scrolls sideways itself (its inner scroller follows the grid's scrollLeft). */
 .chartPane {
   flex: none;
   min-height: 0;
@@ -1303,7 +1305,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  overflow: auto;
+  overflow: hidden auto;
   max-height: 320px;
 }
 

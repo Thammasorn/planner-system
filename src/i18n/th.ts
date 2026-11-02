@@ -1839,6 +1839,8 @@ export const th = {
     loading: 'กำลังโหลดกราฟ…',
     personHeader: 'คน',
     tableCaption: (unit: string) => `ภาระรายคนต่อสัปดาห์ (${unit})`,
+    /** M7.1-D30: the pane's horizontal scroller (moves with the grid's columns) */
+    scroller: 'ภาระรายคนตามคอลัมน์ของตารางแผนงาน',
   },
   planMarkers: {
     menu: (n: number) => `เส้นกำกับ (${n})`,

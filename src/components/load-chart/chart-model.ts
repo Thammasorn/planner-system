@@ -1,15 +1,15 @@
 // src/components/load-chart/chart-model.ts — display model of the "กราฟภาระ" pane (SPEC FR-813, BR-104, M7.1-D4).
 // Pure: turns S1's integer-cd LoadSeries into the per-person colour/shape and the display values of the chart and the
 // table. Division happens only here, at the display edge (BR-104: cd / 100, pct / 100).
-import type { MarkShape } from '@mui/x-charts/models'
-import { weekStart } from '@/domain/dates'
 import type { CellUnit, Cd } from '@/domain/types'
 import { formatCd } from '@/domain/units'
 import { th } from '@/i18n/th'
 import { formatWeekHeader } from '@/lib/format'
-import { chartVar, markerVar } from '@/lib/theme/tokens'
-import type { GridMarkerView, MarkerTone } from '@/lib/contracts/plan-markers'
+import { chartVar } from '@/lib/theme/tokens'
 import type { LoadSeries, LoadSeriesPoint } from './types'
+
+/** The mark shapes (M7.1-D4); drawn by ShapeGlyph / the chart's own SVG (M7.1-D30: no chart library). */
+export type MarkShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'star' | 'wye'
 
 /** M7.1-D4: person i → SHAPES[i mod 7] (never colour alone, §8.9). */
 export const SHAPES: readonly MarkShape[] = ['circle', 'square', 'triangle', 'diamond', 'cross', 'star', 'wye']
@@ -90,36 +90,12 @@ export function weekLabels(weeks: readonly string[]): string[] {
   return weeks.map(formatWeekHeader)
 }
 
-export interface ChartReference {
-  id: string
-  /** the x-axis label of the marker's week */
-  x: string
-  label: string
-  stroke: string
-  dash: string | undefined
-}
-
-const DASH: Record<MarkerTone, string | undefined> = {
-  RED: undefined,
-  YELLOW: '6 4',
-  GREEN: '2 3',
-  MILESTONE: '8 3 2 3',
-}
-
-/** Markers whose week is on the x axis → vertical reference lines (FR-813, FR-820); pattern per tone like the grid. */
-export function markerReferences(markers: readonly GridMarkerView[], weeks: readonly string[]): ChartReference[] {
-  const onAxis = new Set(weeks)
-  const out: ChartReference[] = []
-  for (const m of markers) {
-    const week = weekStart(m.date)
-    if (!onAxis.has(week)) continue
-    out.push({
-      id: m.id,
-      x: formatWeekHeader(week),
-      label: m.label ?? '',
-      stroke: m.tone === 'MILESTONE' ? 'var(--milestone)' : markerVar(m.tone),
-      dash: DASH[m.tone],
-    })
-  }
-  return out
+/**
+ * The short text of a table cell on the grid's column width (M7.1-D30): DAYS "2.5/5.0", FRACTION "0.50"; not loaded or
+ * no capacity → "–". The full text (pointText) is the cell's accessible text and tooltip.
+ */
+export function compactText(p: LoadSeriesPoint, unit: CellUnit): string {
+  if (p.loadCd === null || p.capacityCd === null) return '–'
+  if (unit === 'FRACTION') return p.pct === null ? '–' : (p.pct / 100).toFixed(2)
+  return `${days1(p.loadCd)}/${days1(p.capacityCd)}`
 }

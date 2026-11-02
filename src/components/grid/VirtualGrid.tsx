@@ -77,6 +77,13 @@ export interface VirtualGridProps {
     bodyHeight: number,
     frozenW: number,
   ) => ReactNode
+  /**
+   * Owner feedback 2026-11-02 (M7.1-D30): rendered right after the scroller (the กราฟภาระ pane). It gets the grid's own
+   * column geometry — the rendered columns with their x, the content width, the frozen / "รวม" widths and the
+   * scroller's clientWidth — and `follow`, a ref callback for its horizontal scroller: VirtualGrid keeps that
+   * element's scrollLeft equal to the grid's both ways (scrollbar, wheel, keyboard, วันนี้, the chart's own scroll).
+   */
+  renderBelow?: (g: BelowGeometry) => ReactNode
   /** M7.1 (FR-814): the `grid.taskColumnWidth` preference (clamped by frozenWidths); undefined = 240 */
   taskWidth?: number
   /** M7.1 (FR-816): false = no assignee column (the task cells span both frozen ARIA columns) */
@@ -102,6 +109,21 @@ export interface VirtualGridProps {
   ref?: Ref<VirtualGridHandle>
 }
 
+/** What `renderBelow` gets (M7.1-D30): the geometry of the grid's period columns in content coordinates. */
+export interface BelowGeometry {
+  vCols: readonly VirtualItem[]
+  /** the sized body's width: frozen + every period column + the "รวม" padding */
+  totalWidth: number
+  /** task + assignee (0 when hidden) */
+  frozenWidth: number
+  /** the sticky "รวม" column's width (stickyTotalWidth) */
+  totalColWidth: number
+  /** the scroller's clientWidth (0 = not measured) */
+  viewWidth: number
+  /** ref callback of the follower scroller (overflow-x: auto); its scrollLeft is synced with the grid's */
+  follow: (el: HTMLElement | null) => (() => void) | undefined
+}
+
 /** A rendered roving tab stop of the body (cell or selected row header). */
 const TAB_STOP = '[data-cell][tabindex="0"], [data-row-header][tabindex="0"]'
 
@@ -117,6 +139,23 @@ export function VirtualGrid(p: VirtualGridProps) {
   const fw = frozenWidths(viewW, p.taskWidth, showAssignees)
   const nameW = fw.task + fw.assignee
   const liveRaf = useRef(0)
+  // M7.1-D30: elements below the grid that scroll horizontally in lockstep with it (the กราฟภาระ pane)
+  const followers = useRef(new Set<HTMLElement>())
+  const follow = useCallback((f: HTMLElement | null) => {
+    if (!f) return undefined
+    const grid = scrollRef.current
+    followers.current.add(f)
+    if (grid) f.scrollLeft = grid.scrollLeft
+    const back = () => {
+      const g = scrollRef.current
+      if (g && Math.abs(g.scrollLeft - f.scrollLeft) >= 1) g.scrollLeft = f.scrollLeft
+    }
+    f.addEventListener('scroll', back, { passive: true })
+    return () => {
+      f.removeEventListener('scroll', back)
+      followers.current.delete(f)
+    }
+  }, [])
   const { onWidthChange } = p
   useEffect(() => {
     onWidthChange?.(viewW)
@@ -146,6 +185,9 @@ export function VirtualGrid(p: VirtualGridProps) {
     }
     const remember = () => {
       if (!hidden && el.clientWidth > 0) last = { left: el.scrollLeft, top: el.scrollTop }
+      // same task, same frame as the grid's own scroll: the followers never lag a paint behind (M7.1-D30)
+      for (const f of followers.current)
+        if (Math.abs(f.scrollLeft - el.scrollLeft) >= 1) f.scrollLeft = el.scrollLeft
     }
     measure()
     el.addEventListener('scroll', remember, { passive: true })
@@ -220,6 +262,7 @@ export function VirtualGrid(p: VirtualGridProps) {
         if (!el) return
         el.style.setProperty('--grid-task-w', `${px}px`)
         el.style.setProperty('--grid-frozen-w', `${px + fw.assignee}px`)
+        for (const f of followers.current) f.style.setProperty('--grid-frozen-w', `${px + fw.assignee}px`)
       })
     },
   }))
@@ -283,62 +326,72 @@ export function VirtualGrid(p: VirtualGridProps) {
   const headerView = viewW > 0 ? { from: scrollX, to: scrollX + viewW - nameW - totalColW } : null
 
   return (
-    <div
-      ref={scrollRef}
-      role="grid"
-      aria-label={p.label}
-      aria-rowcount={HEADER_ROWS + p.rowCount + FOOTER_ROWS}
-      aria-colcount={totalColIndex(cols.length)}
-      aria-multiselectable="true"
-      data-save-state={p.saveState}
-      // initial value only: syncTabStop owns it afterwards (React never rewrites an unchanged prop)
-      tabIndex={-1}
-      className={styles.scroller}
-      style={
-        {
-          '--grid-task-w': `${fw.task}px`,
-          '--grid-assignee-w': `${fw.assignee}px`,
-          '--grid-frozen-w': `${nameW}px`,
-          '--grid-total-w': `${totalColW}px`,
-          ...(contentH === undefined ? {} : { '--grid-content-h': `${contentH}px` }),
-        } as CSSProperties
-      }
-      data-fit={contentH === undefined ? undefined : 'content'}
-      data-compact={fw.task < TASK_COMPACT_W ? 'true' : undefined}
-      data-assignees={showAssignees ? undefined : 'hidden'}
-      onKeyDown={p.onKeyDown}
-      onFocus={onFocus}
-      onPointerDownCapture={() => {
-        pointerFocus.current = true
-        setTimeout(() => (pointerFocus.current = false), 0)
-      }}
-      onPointerDown={p.onPointerDown}
-      onPointerMove={p.onPointerMove}
-      onPointerUp={p.onPointerUp}
-      onCopy={p.onCopy}
-      onPaste={p.onPaste}
-      onBlur={p.onBlur}
-      onContextMenu={p.onContextMenu}
-    >
+    <>
       <div
-        className={styles.sized}
-        // with a message the box grows with it (in flow, sticky-left) instead of clipping it
+        ref={scrollRef}
+        role="grid"
+        aria-label={p.label}
+        aria-rowcount={HEADER_ROWS + p.rowCount + FOOTER_ROWS}
+        aria-colcount={totalColIndex(cols.length)}
+        aria-multiselectable="true"
+        data-save-state={p.saveState}
+        // initial value only: syncTabStop owns it afterwards (React never rewrites an unchanged prop)
+        tabIndex={-1}
+        className={styles.scroller}
         style={
-          p.message
-            ? { width: totalW, minHeight: Math.max(totalH, HEADER_TOTAL_H) }
-            : { width: totalW, height: Math.max(totalH, HEADER_TOTAL_H) }
+          {
+            '--grid-task-w': `${fw.task}px`,
+            '--grid-assignee-w': `${fw.assignee}px`,
+            '--grid-frozen-w': `${nameW}px`,
+            '--grid-total-w': `${totalColW}px`,
+            ...(contentH === undefined ? {} : { '--grid-content-h': `${contentH}px` }),
+          } as CSSProperties
         }
+        data-fit={contentH === undefined ? undefined : 'content'}
+        data-compact={fw.task < TASK_COMPACT_W ? 'true' : undefined}
+        data-assignees={showAssignees ? undefined : 'hidden'}
+        onKeyDown={p.onKeyDown}
+        onFocus={onFocus}
+        onPointerDownCapture={() => {
+          pointerFocus.current = true
+          setTimeout(() => (pointerFocus.current = false), 0)
+        }}
+        onPointerDown={p.onPointerDown}
+        onPointerMove={p.onPointerMove}
+        onPointerUp={p.onPointerUp}
+        onCopy={p.onCopy}
+        onPaste={p.onPaste}
+        onBlur={p.onBlur}
+        onContextMenu={p.onContextMenu}
       >
-        {p.renderHeader(vCols, totalW, headerView)}
-        {p.message ? (
-          <div className={styles.message} style={{ marginTop: Math.max(0, totalH - HEADER_TOTAL_H) }}>
-            {p.message}
-          </div>
-        ) : null}
-        {vRows.map((r) => p.renderRow(r.index, vCols, r.start, totalW))}
-        {p.renderOverlay?.(vCols, totalW, Math.max(0, totalH - HEADER_TOTAL_H), nameW)}
+        <div
+          className={styles.sized}
+          // with a message the box grows with it (in flow, sticky-left) instead of clipping it
+          style={
+            p.message
+              ? { width: totalW, minHeight: Math.max(totalH, HEADER_TOTAL_H) }
+              : { width: totalW, height: Math.max(totalH, HEADER_TOTAL_H) }
+          }
+        >
+          {p.renderHeader(vCols, totalW, headerView)}
+          {p.message ? (
+            <div className={styles.message} style={{ marginTop: Math.max(0, totalH - HEADER_TOTAL_H) }}>
+              {p.message}
+            </div>
+          ) : null}
+          {vRows.map((r) => p.renderRow(r.index, vCols, r.start, totalW))}
+          {p.renderOverlay?.(vCols, totalW, Math.max(0, totalH - HEADER_TOTAL_H), nameW)}
+        </div>
+        {p.renderFooter(vCols, totalW, HEADER_ROWS + p.rowCount + 1)}
       </div>
-      {p.renderFooter(vCols, totalW, HEADER_ROWS + p.rowCount + 1)}
-    </div>
+      {p.renderBelow?.({
+        vCols,
+        totalWidth: totalW,
+        frozenWidth: nameW,
+        totalColWidth: totalColW,
+        viewWidth: viewW,
+        follow,
+      })}
+    </>
   )
 }

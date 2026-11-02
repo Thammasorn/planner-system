@@ -1,14 +1,24 @@
 /* "กราฟภาระ" pane (FR-813, §8.13, PLAN §3.9): plain elements + theme CSS variables, §8.12 scale (M7.1-D21).
-   Never colour alone: each person = colour + mark shape + name; OVER/RISK = ring + glyph + text. */
+   Never colour alone: each person = colour + mark shape + name; OVER/RISK = ring + glyph + text.
+   M7.1-D30: the chart and the table sit on the grid's columns — no horizontal padding on the panel (the pane's left
+   border = the grid scroller's), the head / legend / caption carry their own inline padding. */
 .panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  /* head 32 + legend 28 + the 240 px chart (x labels included) + 3 × 4 px fit the pane's 320 px with its borders */
+  gap: var(--space-1);
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) 0;
   border-top: 1px solid var(--border-subtle);
   background: var(--mui-palette-background-paper);
   color: var(--mui-palette-text-primary);
+}
+
+.head,
+.legend,
+.caption,
+.empty {
+  padding-inline: var(--space-3);
 }
 
 .head {
@@ -34,7 +44,7 @@
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-2);
   margin: 0;
-  padding: 0;
+  padding-block: 0;
   list-style: none;
 }
 
@@ -80,63 +90,9 @@
 
 .empty {
   margin: 0;
-  padding: var(--space-4) 0;
+  padding-block: var(--space-4);
   font-size: var(--font-sm);
   color: var(--mui-palette-text-secondary);
-}
-
-.tableWrap {
-  max-height: 240px;
-  overflow: auto;
-}
-
-.table {
-  border-collapse: collapse;
-  font-size: var(--font-sm);
-  white-space: nowrap;
-}
-
-.table caption {
-  padding-bottom: var(--space-1);
-  font-size: var(--font-xs);
-  color: var(--mui-palette-text-secondary);
-  text-align: start;
-}
-
-.table th,
-.table td {
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
-  text-align: end;
-}
-
-.table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--mui-palette-background-paper);
-  font-weight: var(--weight-bold);
-}
-
-.table th[scope='row'] {
-  position: sticky;
-  left: 0;
-  background: var(--mui-palette-background-paper);
-  text-align: start;
-  font-weight: var(--weight-medium);
-}
-
-.rowName {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.table td[data-level='OVER'] {
-  font-weight: var(--weight-bold);
-}
-
-.glyph {
-  margin-inline-start: var(--space-1);
 }
 
 .srOnly {
@@ -150,4 +106,264 @@
 
 .toggle {
   white-space: nowrap;
+}
+
+/* ── M7.1-D30: the grid-aligned scroller (same clientWidth, content width and scrollLeft as the grid) ── */
+.follow {
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.follow::-webkit-scrollbar {
+  display: none;
+}
+
+.follow:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}
+
+.track {
+  position: relative;
+  display: flex;
+}
+
+/* the frozen area (task + assignee width): y axis / person names; sticky like the grid's frozen columns */
+.frozen,
+.rowName {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--grid-frozen-w);
+  background: var(--mui-palette-background-paper);
+  border-right: 1px solid var(--border-subtle);
+}
+
+/* the sticky "รวม" column's place: blank (the chart plots weekly loads only) */
+.cover {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--grid-total-w);
+  margin-left: auto;
+  background: var(--mui-palette-background-paper);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.axisUnit {
+  position: absolute;
+  top: 0;
+  left: var(--space-3);
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+}
+
+.yTick,
+.yRefLabel {
+  position: absolute;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  font-size: var(--font-xs);
+  line-height: 1;
+  color: var(--mui-palette-text-secondary);
+}
+
+.yRefLabel {
+  right: auto;
+  left: var(--space-3);
+}
+
+.cols,
+.plot {
+  position: absolute;
+  top: 0;
+}
+
+.plot {
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.col[data-role='day'] {
+  border-right-style: dotted;
+}
+
+.col[data-hover='true'] {
+  background: var(--hover-bg);
+}
+
+.col[data-month-start]::before,
+.tcell[data-month-start]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--border-month);
+  pointer-events: none;
+}
+
+.hLine {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.refLine {
+  stroke: var(--mui-palette-text-secondary);
+  stroke-dasharray: 4 3;
+}
+
+.line,
+.capLine {
+  fill: none;
+  stroke-width: 2;
+}
+
+.capLine {
+  stroke-dasharray: 6 4;
+}
+
+.xTick {
+  position: absolute;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+  white-space: nowrap;
+}
+
+.markerLine {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  width: 0;
+  border-left: 2px solid var(--marker-red);
+  pointer-events: none;
+}
+
+.markerLine[data-tone='YELLOW'] {
+  border-left-style: dashed;
+  border-left-color: var(--marker-yellow);
+}
+
+.markerLine[data-tone='GREEN'] {
+  border-left-style: dotted;
+  border-left-color: var(--marker-green);
+}
+
+.markerLine[data-tone='MILESTONE'] {
+  border-left-style: dashed;
+  border-left-color: var(--milestone);
+}
+
+.tooltip {
+  position: absolute;
+  top: var(--space-2);
+  z-index: 5;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--mui-palette-background-paper);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tooltipTitle {
+  font-weight: var(--weight-bold);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tooltipValue {
+  margin-left: var(--space-2);
+  font-weight: var(--weight-medium);
+}
+
+/* ── the table (ดูเป็นตาราง) on the same columns ── */
+.caption {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+}
+
+.table {
+  position: relative;
+  font-size: var(--font-xs);
+}
+
+.trow {
+  position: relative;
+  display: flex;
+  height: 28px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.trow[data-head] {
+  font-weight: var(--weight-bold);
+  color: var(--mui-palette-text-secondary);
+}
+
+.rowName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline: var(--space-3);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tcell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tcell[data-role='day'] {
+  border-right-style: dotted;
+  font-weight: var(--weight-regular);
+}
+
+.tcell[data-level='OVER'] {
+  font-weight: var(--weight-bold);
+}
+
+.glyph {
+  margin-inline-start: var(--space-1);
 }

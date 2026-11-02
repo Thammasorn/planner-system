@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
-import type { GridMarkerView } from '@/lib/contracts/plan-markers'
 import {
   alertPoints,
   alertText,
   capacityValue,
   chartPeople,
   days1,
-  markerReferences,
+  compactText,
   pointText,
   pointValue,
   SHAPES,
@@ -77,28 +76,11 @@ describe('axis + markers (FR-813, FR-820)', () => {
     expect(weekLabels(['2026-09-28', '2026-10-05'])).toEqual(['28/9', '5/10'])
   })
 
-  it('markers on an axis week become reference lines with their tone pattern; others are dropped', () => {
-    const m = (id: string, date: string, tone: GridMarkerView['tone'], label: string | null): GridMarkerView => ({
-      id,
-      source: tone === 'MILESTONE' ? 'MILESTONE' : 'PLAN',
-      date,
-      tone,
-      label,
-      editable: true,
-    })
-    const refs = markerReferences(
-      [
-        m('a', '2026-10-02', 'RED', 'UAT sign-off'),
-        m('b', '2026-10-06', 'YELLOW', null),
-        m('c', '2026-10-30', 'GREEN', 'late'),
-        m('d', '2026-09-28', 'MILESTONE', 'go-live'),
-      ],
-      ['2026-09-28', '2026-10-05'],
-    )
-    expect(refs).toEqual([
-      { id: 'a', x: '28/9', label: 'UAT sign-off', stroke: 'var(--marker-red)', dash: undefined },
-      { id: 'b', x: '5/10', label: '', stroke: 'var(--marker-yellow)', dash: '6 4' },
-      { id: 'd', x: '28/9', label: 'go-live', stroke: 'var(--milestone)', dash: '8 3 2 3' },
-    ])
+  it('compact table text (M7.1-D30): DAYS load/cap, FRACTION ratio, not loaded / no capacity → –', () => {
+    expect(compactText(pt(), 'DAYS')).toBe('2.5/5.0')
+    expect(compactText(pt({ loadCd: 0 }), 'DAYS')).toBe('0/5.0')
+    expect(compactText(pt(), 'FRACTION')).toBe('0.50')
+    expect(compactText(pt({ pct: null, capacityCd: 0 }), 'FRACTION')).toBe('–')
+    expect(compactText(NULL_PT, 'DAYS')).toBe('–')
   })
 })

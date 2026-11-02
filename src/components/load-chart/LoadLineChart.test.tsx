@@ -1,60 +1,34 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import type { GridMarkerView } from '@/lib/contracts/plan-markers'
+import { DAY_W, WEEK_TOTAL_W, WEEK_W } from '@/lib/grid/columns'
 import { theme } from '@/lib/theme/theme'
 import { chartPeople } from './chart-model'
+import { FROZEN, testLayout, W } from './layout.test.data'
 import { LoadLineChart, type LoadLineChartProps } from './LoadLineChart'
 import type { LoadSeries } from './types'
 
-// The real MUI X LineChart in jsdom (r9 §3c): offset getters + a no-op ResizeObserver; explicit width/height.
-const restore: (() => void)[] = []
-beforeAll(() => {
-  for (const [prop, v] of [
-    ['offsetWidth', 700],
-    ['clientWidth', 700],
-    ['offsetHeight', 240],
-    ['clientHeight', 240],
-  ] as const) {
-    const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop)
-    Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => v })
-    restore.push(() => {
-      if (before) Object.defineProperty(HTMLElement.prototype, prop, before)
-    })
-  }
-  const RO = globalThis.ResizeObserver
-  globalThis.ResizeObserver ??= class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver
-  restore.push(() => {
-    globalThis.ResizeObserver = RO
-  })
-})
-afterAll(() => restore.forEach((f) => f()))
-
-const W = ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']
 const SERIES: LoadSeries[] = [
   {
     userId: 'cindy',
     name: 'Cindy',
     points: [
-      { week: W[0]!, loadCd: 250, capacityCd: 500, pct: 50, level: 'OK' },
-      { week: W[1]!, loadCd: 650, capacityCd: 500, pct: 130, level: 'OVER' },
-      { week: W[2]!, loadCd: 100, capacityCd: 500, pct: 20, level: 'OK' },
-      { week: W[3]!, loadCd: null, capacityCd: null, pct: null, level: null },
+      { week: W[0], loadCd: 250, capacityCd: 500, pct: 50, level: 'OK' },
+      { week: W[1], loadCd: 650, capacityCd: 500, pct: 130, level: 'OVER' },
+      { week: W[2], loadCd: 100, capacityCd: 500, pct: 20, level: 'OK' },
+      { week: W[3], loadCd: null, capacityCd: null, pct: null, level: null },
     ],
   },
   {
     userId: 'ivy',
     name: 'Ivy',
     points: [
-      { week: W[0]!, loadCd: 250, capacityCd: 500, pct: 50, level: 'RISK' },
-      { week: W[1]!, loadCd: 130, capacityCd: 500, pct: 26, level: 'OK' },
-      { week: W[2]!, loadCd: 0, capacityCd: 500, pct: 0, level: 'OK' },
-      { week: W[3]!, loadCd: null, capacityCd: null, pct: null, level: null },
+      { week: W[0], loadCd: 250, capacityCd: 500, pct: 50, level: 'RISK' },
+      { week: W[1], loadCd: 130, capacityCd: 500, pct: 26, level: 'OK' },
+      { week: W[2], loadCd: 0, capacityCd: 500, pct: 0, level: 'OK' },
+      { week: W[3], loadCd: null, capacityCd: null, pct: null, level: null },
     ],
   },
 ]
@@ -69,15 +43,12 @@ const MARKER: GridMarkerView = {
 
 function renderChart(over: Partial<LoadLineChartProps> = {}) {
   const p: LoadLineChartProps = {
-    weeks: W,
+    layout: testLayout({ markers: [MARKER] }),
     series: SERIES,
     people: chartPeople(SERIES),
     unit: 'DAYS',
-    markers: [MARKER],
     focused: null,
     height: 240,
-    width: 700,
-    skipAnimation: true,
     ...over,
   }
   return render(
@@ -87,36 +58,124 @@ function renderChart(over: Partial<LoadLineChartProps> = {}) {
   )
 }
 
-describe('LoadLineChart (real @mui/x-charts in jsdom, FR-813)', () => {
-  it('draws one line per person with its shape, week labels on x, and the marker reference line', () => {
+const px = (el: Element, prop: 'left' | 'width') => parseFloat((el as HTMLElement).style[prop])
+/** x of a point in content coordinates: the plot's left + the point's translate x */
+function pointX(container: HTMLElement, user: string, week: string): number {
+  const plot = container.querySelector('svg[class*="plot"]') as SVGSVGElement
+  const g = container.querySelector(`[data-chart-point][data-user="${user}"][data-week="${week}"]`)!
+  const tx = Number(/translate\(([-\d.]+)/.exec(g.getAttribute('transform')!)![1])
+  return parseFloat(plot.style.left) + tx
+}
+
+describe('LoadLineChart on the grid’s columns (FR-813, M7.1-D30)', () => {
+  it('one chart column per grid column at the grid’s x (frozen width + offset) and width', () => {
     const { container } = renderChart()
-    expect(container.querySelector('svg')).not.toBeNull()
-    expect(container.querySelectorAll('.MuiLineChart-line[data-series="u:cindy"]').length).toBe(1)
-    expect(container.querySelectorAll('.MuiLineChart-line[data-series="u:ivy"]').length).toBe(1)
-    // 3 loaded weeks each → 3 marks per person; the null week is a gap (no mark)
-    expect(container.querySelectorAll('.MuiLineChart-mark[data-series="u:cindy"]').length).toBe(3)
-    for (const label of ['28/9', '5/10', '12/10', '19/10']) expect(screen.getAllByText(label).length).toBeGreaterThan(0)
-    expect(screen.getByText('UAT sign-off')).toBeInTheDocument()
-    expect(container.querySelector('.MuiChartsReferenceLine-root')).not.toBeNull()
-    expect(screen.getByText(th.loadChart.unitDays)).toBeInTheDocument()
+    const cols = [...container.querySelectorAll('[data-chart-col]')]
+    expect(cols.map((c) => c.getAttribute('data-chart-col'))).toEqual(W.map((w) => `W:${w}`))
+    const cs = container.querySelector('[class*="cols"]') as HTMLElement
+    cols.forEach((c, i) => {
+      expect(parseFloat(cs.style.left) + px(c, 'left')).toBe(FROZEN + i * WEEK_W)
+      expect(px(c, 'width')).toBe(WEEK_W)
+    })
+    expect(container.querySelector('[data-testid="load-line-chart"]')).toHaveStyle({
+      width: `${FROZEN + 4 * WEEK_W + 72}px`,
+    })
   })
 
-  it('OVER / RISK points get a ringed mark (data-alert), the others a plain mark', () => {
+  it('points and x ticks are centred on their week column; a not-loaded week is a gap', () => {
     const { container } = renderChart()
-    const alerts = [...container.querySelectorAll('[data-alert]')]
-    expect(alerts.map((g) => g.getAttribute('data-alert')).sort()).toEqual(['OVER', 'RISK'])
-    const over = container.querySelector('[data-alert="OVER"]')!
-    expect(over.querySelector('circle')).not.toBeNull()
-    expect(over.querySelector('.MuiLineChart-mark')).toHaveAttribute('data-index', '1')
+    W.slice(0, 3).forEach((w, i) => {
+      expect(pointX(container, 'cindy', w)).toBe(FROZEN + i * WEEK_W + WEEK_W / 2)
+      const tick = container.querySelector(`[data-chart-tick="W:${w}"]`)!
+      expect(px(tick, 'left') + px(tick, 'width') / 2).toBe(FROZEN + i * WEEK_W + WEEK_W / 2)
+      expect(tick).toHaveTextContent(['28/9', '5/10', '12/10'][i]!)
+    })
+    expect(container.querySelector(`[data-chart-point][data-week="${W[3]}"]`)).toBeNull()
   })
 
-  it('DAYS + focused person → a dashed capacity series; FRACTION → the 1.0 reference line, no capacity series', () => {
+  it('an expanded week: day columns are chart columns, the point sits on its “รวม” column', () => {
+    const { container } = renderChart({ layout: testLayout({ expanded: [W[1]] }) })
+    const keys = [...container.querySelectorAll('[data-chart-col]')].map((c) =>
+      c.getAttribute('data-chart-col'),
+    )
+    expect(keys).toEqual([
+      'W:2026-09-28',
+      'D:2026-10-05',
+      'D:2026-10-06',
+      'D:2026-10-07',
+      'D:2026-10-08',
+      'D:2026-10-09',
+      'W:2026-10-05',
+      'W:2026-10-12',
+      'W:2026-10-19',
+    ])
+    expect(pointX(container, 'cindy', W[1])).toBe(FROZEN + WEEK_W + 5 * DAY_W + WEEK_TOTAL_W / 2)
+    expect(pointX(container, 'cindy', W[2])).toBe(FROZEN + WEEK_W + 5 * DAY_W + WEEK_TOTAL_W + WEEK_W / 2)
+    expect(container.querySelectorAll('[data-chart-tick]')).toHaveLength(4)
+  })
+
+  it('follows a resized / hidden frozen area', () => {
+    const { container } = renderChart({ layout: testLayout({ frozen: 240 }) })
+    expect(pointX(container, 'cindy', W[0])).toBe(240 + WEEK_W / 2)
+  })
+
+  it('month lines on the grid’s month starts; marker lines at the grid’s marker edge', () => {
+    const { container } = renderChart()
+    expect(
+      [...container.querySelectorAll('[data-chart-col][data-month-start]')].map((c) =>
+        c.getAttribute('data-chart-col'),
+      ),
+    ).toEqual(['W:2026-10-05'])
+    const line = container.querySelector('[data-chart-marker="m1"]')!
+    expect(line).toHaveAttribute('data-tone', 'YELLOW')
+    expect(px(line, 'left')).toBe(FROZEN + 2 * WEEK_W - 1) // right edge of 5/10, like the grid's MarkerLines
+  })
+
+  it('OVER / RISK points get a ring (data-alert); others a plain mark; shapes per person', () => {
+    const { container } = renderChart()
+    expect(container.querySelector(`[data-user="cindy"][data-week="${W[1]}"]`)).toHaveAttribute(
+      'data-alert',
+      'OVER',
+    )
+    expect(container.querySelector(`[data-user="ivy"][data-week="${W[0]}"]`)).toHaveAttribute(
+      'data-alert',
+      'RISK',
+    )
+    expect(container.querySelector(`[data-user="cindy"][data-week="${W[0]}"]`)).not.toHaveAttribute(
+      'data-alert',
+    )
+    expect(container.querySelector(`[data-user="ivy"][data-week="${W[0]}"] path`)).toBeInTheDocument() // square
+  })
+
+  it('DAYS + focused person → their dashed capacity line, others faded; FRACTION → the 1.0 line + label', () => {
     const { container, unmount } = renderChart({ focused: 'ivy' })
-    expect(container.querySelector('.MuiLineChart-line[data-series="cap"]')).not.toBeNull()
+    expect(container.querySelector('[data-series="cap"]')).toBeInTheDocument()
+    expect(container.querySelector('[data-series="u:cindy"]')).toHaveAttribute('opacity', '0.3')
+    expect(container.querySelector('[data-series="u:ivy"]')).toHaveAttribute('opacity', '1')
     unmount()
-    const r = renderChart({ unit: 'FRACTION', focused: 'ivy' })
-    expect(r.container.querySelector('.MuiLineChart-line[data-series="cap"]')).toBeNull()
+    const f = renderChart({ unit: 'FRACTION', focused: 'ivy' })
+    expect(f.container.querySelector('[data-series="cap"]')).toBeNull()
     expect(screen.getByText(th.loadChart.fullCapacity)).toBeInTheDocument()
-    expect(screen.getByText(th.loadChart.unitFraction)).toBeInTheDocument()
+  })
+
+  it('hovering a column shows the week’s values for everyone (tooltip)', () => {
+    const { container } = renderChart()
+    const cols = container.querySelector('[class*="cols"]') as HTMLElement
+    cols.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+    fireEvent.pointerMove(cols, { clientX: WEEK_W + 10 })
+    const tip = screen.getByTestId('load-chart-tooltip')
+    expect(tip).toHaveTextContent(th.loadChart.week('5/10'))
+    expect(tip).toHaveTextContent(`${th.loadChart.daysValue('6.5', '5.0')} · ${th.loadChart.over('1.5')}`)
+    expect(tip).toHaveTextContent(th.loadChart.daysValue('1.3', '5.0'))
   })
 })

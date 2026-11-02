@@ -16,7 +16,12 @@ const m = vi.hoisted(() => ({
   fetchGridChunk: vi.fn(),
   saveAllocations: vi.fn(),
   getJson: vi.fn(),
-  chartProps: null as null | { includeOthers: boolean; onIncludeOthers(on: boolean): void; weeks: string[] },
+  chartProps: null as null | {
+    includeOthers: boolean
+    onIncludeOthers(on: boolean): void
+    weeks: string[]
+    layout: { slots: { key: string }[] }
+  },
 }))
 vi.mock('@/lib/grid/fetch', () => ({ fetchGridChunk: m.fetchGridChunk, gridChunkUrl: vi.fn() }))
 vi.mock('@/server/actions/allocations', () => ({
@@ -60,7 +65,12 @@ vi.mock('@/server/actions/plan-markers', () => ({
 }))
 // S4 owns the chart; this stand-in exposes the shared switch and the x weeks it receives
 vi.mock('@/components/load-chart/LoadChartPanel', () => ({
-  LoadChartPanel: (p: { includeOthers: boolean; onIncludeOthers(on: boolean): void; weeks: string[] }) => {
+  LoadChartPanel: (p: {
+    includeOthers: boolean
+    onIncludeOthers(on: boolean): void
+    weeks: string[]
+    layout: { slots: { key: string }[] }
+  }) => {
     m.chartProps = p
     return (
       <section data-testid="load-chart-panel">
@@ -218,8 +228,12 @@ describe('chart pane (FR-813, S3.7)', () => {
     await user.click(screen.getByRole('checkbox', { name: 'chart-include-others' }))
     await waitFor(() => expect(footer).toBeChecked())
     expect(m.chartProps?.includeOthers).toBe(true)
-    expect(m.chartProps!.weeks.length).toBeGreaterThanOrEqual(4)
-    expect(m.chartProps!.weeks.length).toBeLessThanOrEqual(26)
+    // M7.1-D30: x = exactly the weeks whose column the grid renders (no 4–26 clamp), on the grid's geometry
+    const rendered = [...document.querySelectorAll('[role="columnheader"][data-col-key^="W:"]')].map((h) =>
+      h.getAttribute('data-col-key')!.slice(2),
+    )
+    expect(m.chartProps!.weeks).toEqual(rendered)
+    expect(m.chartProps!.layout.slots.map((s) => s.key)).toEqual(rendered.map((w) => `W:${w}`))
   })
 
   it('initialChartOpen renders the pane at once', async () => {
