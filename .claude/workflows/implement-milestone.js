@@ -333,7 +333,7 @@ Then:
 1. Read PLAN.md §2.5 (gates) and ${kickoff.planFile} sections 6 (integration) and 7 (verification).
 2. pnpm db:up && pnpm db:migrate && pnpm check. Fix every failure at its root cause. Never delete, skip or weaken tests; never add eslint-disable/@ts-ignore without a reason comment; never hand-edit generated migrations.
 3. Run the FULL e2e suite (this milestone and all previous ones): pnpm test:e2e. Fix failures at the root cause.
-4. Repeat until both are green, or until a failure clearly needs a product decision (then explain it).
+4. Iterate efficiently (owner 2026-11-02, time): after the first full run, re-run ONLY the failing Vitest files / Playwright specs (pnpm exec vitest run <files>; pnpm exec playwright test <specs>) until they pass, then do ONE final full pnpm check + full pnpm test:e2e. Repeat until both full runs are green, or until a failure clearly needs a product decision (then explain it).
 Return green=true only if pnpm check AND the full e2e suite passed in your final run. Summarise the final runs (test counts), list fixes applied and anything remaining with a diagnosis.`
 }
 
