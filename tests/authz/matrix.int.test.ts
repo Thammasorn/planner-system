@@ -290,6 +290,50 @@ describe('authz matrix', () => {
       expect(rows.find((r) => r.id === id)?.expect, id).toEqual({ M: 'allow', L: 'allow', Me: '404', W: 'allow' })
   })
 
+  it('M10 meta (plan/m10 §7.2, S4.1): every HM-*, SR-* and EMB-* row exists on the home world; M10 adds no action and no 403', () => {
+    const ids = new Set(rows.map((r) => r.id))
+    const embed = ['P', 'Q', 'A', 'WIKI', 'PROT', 'DEL', 'BAD']
+    const want = [
+      'HM-HOME',
+      'SR-ALL',
+      'SR-INDEX',
+      'SR-LONG',
+      'SR-PAGES',
+      'SR-TITLE-ONLY',
+      'SR-EMPTY',
+      ...embed.map((k) => `EMB-T-${k}`),
+      ...embed.map((k) => `EMB-W-${k}`),
+    ]
+    expect(want.filter((id) => !ids.has(id)), 'missing M10 rows').toEqual([])
+    const m10 = rows.filter((r) => /^(HM|EMB)-/.test(r.id) || ['SR-ALL', 'SR-INDEX', 'SR-LONG'].includes(r.id))
+    for (const perm of ['PERM-04', 'PERM-06', 'PERM-16', 'PERM-17', 'PERM-22'])
+      expect(m10.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M10 row`).toBe(true)
+    // the *-BAD rows answer before any query; every other row runs on the home world (S0.12)
+    for (const r of m10.filter((x) => !x.id.endsWith('-BAD')))
+      expect(r.with ?? [], `${r.id} needs the home world`).toContain('home')
+    // X44 / FR-1201: no new mutating action in M10
+    expect(m10.filter((r) => r.mutates).map((r) => r.id)).toEqual([])
+    // X41: every M10 route is a read — invisible → 404, never 403
+    for (const r of m10) for (const role of ROLES) expect(r.expect[role], `${r.id} ${role}`).not.toBe('403')
+    expect(new Set(m10.map((r) => r.action))).toEqual(
+      new Set([
+        'GET /api/home',
+        'GET /api/search',
+        'GET /api/search/index',
+        'GET /api/pages/[id]/embed/tasks',
+        'GET /api/pages/[id]/embed/workload',
+      ]),
+    )
+    // §3.2 visibility of the embed rows (X41/X42/X63)
+    for (const k of ['T', 'W']) {
+      expect(rows.find((r) => r.id === `EMB-${k}-P`)?.expect).toEqual({ M: 'allow', L: 'allow', Me: 'allow', W: '404' })
+      expect(rows.find((r) => r.id === `EMB-${k}-A`)?.expect).toEqual({ M: 'allow', L: 'allow', Me: 'allow', W: '404' })
+      expect(rows.find((r) => r.id === `EMB-${k}-Q`)?.expect).toEqual({ M: 'allow', L: '404', Me: '404', W: 'allow' })
+      for (const id of ['WIKI', 'PROT'])
+        expect(rows.find((r) => r.id === `EMB-${k}-${id}`)?.expect).toEqual({ M: 'allow', L: 'allow', Me: 'allow', W: 'allow' })
+    }
+  })
+
   describe.each(rows)('$id · $action', (row) => {
     it.each(ROLES)('%s', async (role) => {
       const w: World = await createWorld({ with: row.with ?? [] })

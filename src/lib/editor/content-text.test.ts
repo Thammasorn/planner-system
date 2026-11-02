@@ -122,6 +122,20 @@ describe('extractContentText', () => {
   })
 })
 
+describe('live blocks (M10 S0.9, FR-1307, M4-D30)', () => {
+  it('taskView / projectWorkload add nothing to content_text — no prop value leaks', () => {
+    const doc = [
+      { type: 'paragraph', content: 'ก่อน' },
+      { type: 'taskView', props: { view: 'BOARD', assigneeId: 'u1' } },
+      { type: 'projectWorkload', props: { view: 'ALL' } },
+      { type: 'paragraph', content: 'หลัง' },
+    ]
+    const t = extractContentText(doc)
+    expect(t).toBe('ก่อน หลัง')
+    for (const v of ['BOARD', 'u1', 'ALL']) expect(t).not.toContain(v)
+  })
+})
+
 describe('remapSubpageIds', () => {
   it('replaces mapped subpage ids at any depth, leaves the rest, never mutates the input', () => {
     const input = [

@@ -48,3 +48,56 @@ describe('FR-702 / M8-D18 palette commands', () => {
     expect(projectIdFromPath('/projects/new')).toBeNull()
   })
 })
+
+describe('FR-1103 / M10-D23 quick commands (taken by id)', () => {
+  const byId = (id: string) => {
+    const c = PALETTE_COMMANDS.find((x) => x.id === id)
+    if (!c) throw new Error(`${id} is not registered`)
+    return c
+  }
+  const ids = ['task.create', 'page.create', 'leave.report', 'nav.today'] as const
+
+  it("the four M10 commands are registered after M8's, with the th labels; ids are unique", () => {
+    expect(byId('task.create').label).toBe(th.palette.commands.createTask.label)
+    expect(byId('page.create').label).toBe(th.palette.commands.createPage.label)
+    expect(byId('leave.report').label).toBe(th.palette.commands.reportLeave.label)
+    expect(byId('nav.today').label).toBe(th.palette.commands.goToday.label)
+    const all = PALETTE_COMMANDS.map((c) => c.id)
+    expect(new Set(all).size).toBe(all.length)
+    expect(all.indexOf('milestone.create')).toBeLessThan(all.indexOf('task.create'))
+  })
+
+  it('matchCommand on labels and keywords', () => {
+    expect(matchCommand(byId('task.create'), 'สร้าง')).toBe(true)
+    expect(matchCommand(byId('task.create'), 'new')).toBe(true)
+    expect(matchCommand(byId('task.create'), 'ลา')).toBe(false)
+    expect(matchCommand(byId('leave.report'), 'ลา')).toBe(true)
+    expect(matchCommand(byId('nav.today'), 'today')).toBe(true)
+    expect(matchCommand(byId('page.create'), 'page')).toBe(true)
+    for (const id of ids) expect(matchCommand(byId(id), '')).toBe(true)
+  })
+
+  it('leave.report closes the palette, then opens the leave dialog', () => {
+    const calls: string[] = []
+    byId('leave.report').run(
+      fakeCommandCtx({ close: () => calls.push('close'), openLeaveDialog: () => calls.push('leave') }),
+    )
+    expect(calls).toEqual(['close', 'leave'])
+  })
+
+  it('nav.today closes and navigates to /home', () => {
+    const c = fakeCommandCtx()
+    byId('nav.today').run(c)
+    expect(c.close).toHaveBeenCalled()
+    expect(c.navigate).toHaveBeenCalledWith('/home')
+  })
+
+  it('task.create starts the create-task steps; page.create runs createPageHere', () => {
+    const c = fakeCommandCtx()
+    byId('task.create').run(c)
+    expect(c.beginCreateTask).toHaveBeenCalledTimes(1)
+    expect(c.close).not.toHaveBeenCalled() // the palette stays open for the steps
+    byId('page.create').run(c)
+    expect(c.createPageHere).toHaveBeenCalledTimes(1)
+  })
+})

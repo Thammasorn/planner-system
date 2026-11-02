@@ -27,9 +27,43 @@ export const BLOCK_TYPES = [
   'image',
   'file',
   'subpage',
+  'taskView', // M10 (FR-1301, M10-D4)
+  'projectWorkload', // M10 (FR-1303, M10-D4)
 ] as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
+
+/** M10 live data blocks (X78): view config only in props, data read through authz at render time. */
+export const LIVE_BLOCK_TYPES = ['taskView', 'projectWorkload'] as const
+export type LiveBlockType = (typeof LIVE_BLOCK_TYPES)[number]
+export const TASK_VIEW_LIMITS = [10, 20, 50, 100] as const
+export type TaskViewLimit = (typeof TASK_VIEW_LIMITS)[number]
+export const TASK_VIEW_MAX_STATUS_IDS = 12
+
+export interface TaskViewProps {
+  view: 'LIST' | 'BOARD'
+  /** '' = anyone (Better Auth text ids). */
+  assigneeId: string
+  /** '' = any milestone. */
+  milestoneId: string
+  /** '' = any status; else comma-separated uuids (≤ 12). */
+  statusIds: string
+  showDone: boolean
+  limit: TaskViewLimit
+}
+export interface ProjectWorkloadProps {
+  view: 'ALL' | 'COMMITTED' | 'AT_RISK'
+}
+
+export const TASK_VIEW_DEFAULTS: Readonly<TaskViewProps> = Object.freeze({
+  view: 'BOARD',
+  assigneeId: '',
+  milestoneId: '',
+  statusIds: '',
+  showDone: false,
+  limit: 20,
+})
+export const WORKLOAD_VIEW_DEFAULTS: Readonly<ProjectWorkloadProps> = Object.freeze({ view: 'ALL' })
 
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -117,6 +151,70 @@ export interface BlockInput {
 
 const isTableContent = (c: unknown): boolean => isObj(c) && c.type === 'tableContent'
 
+const isUuid = (s: string): boolean => UUID_RE.test(s)
+const isStatusIdList = (s: string): boolean => {
+  if (s === '') return true
+  const ids = s.split(',')
+  return ids.length <= TASK_VIEW_MAX_STATUS_IDS && ids.every(isUuid)
+}
+
+// FR-1302 / M10-D4: strict — any other key (projectId, tasks, …) is an issue.
+const taskViewPropsSchema = z
+  .object({
+    view: z.enum(['LIST', 'BOARD']).optional(),
+    assigneeId: z.string().max(64).optional(),
+    milestoneId: z
+      .string()
+      .refine((s) => s === '' || isUuid(s))
+      .optional(),
+    statusIds: z
+      .string()
+      .max(TASK_VIEW_MAX_STATUS_IDS * 37)
+      .refine(isStatusIdList)
+      .optional(),
+    showDone: z.boolean().optional(),
+    limit: z.union(TASK_VIEW_LIMITS.map((n) => z.literal(n))).optional(),
+  })
+  .strict()
+const projectWorkloadPropsSchema = z
+  .object({ view: z.enum(['ALL', 'COMMITTED', 'AT_RISK']).optional() })
+  .strict()
+
+const isLiveBlockType = (t: string): t is LiveBlockType => (LIVE_BLOCK_TYPES as readonly string[]).includes(t)
+
+/** Fill defaults and drop junk for rendering (client) — never throws (M10-D4). */
+export function resolveTaskViewProps(p: Record<string, unknown> | undefined): TaskViewProps {
+  const v = p ?? {}
+  const str = (x: unknown): string | undefined => (typeof x === 'string' ? x : undefined)
+  const view = v.view === 'LIST' || v.view === 'BOARD' ? v.view : TASK_VIEW_DEFAULTS.view
+  const assigneeId = str(v.assigneeId)
+  const milestoneId = str(v.milestoneId)
+  const statusIds = (str(v.statusIds) ?? '')
+    .split(',')
+    .filter((x) => isUuid(x))
+    .slice(0, TASK_VIEW_MAX_STATUS_IDS)
+    .join(',')
+  const limit = TASK_VIEW_LIMITS.find((n) => n === v.limit) ?? TASK_VIEW_DEFAULTS.limit
+  return {
+    view,
+    assigneeId:
+      assigneeId !== undefined && assigneeId.length <= 64 ? assigneeId : TASK_VIEW_DEFAULTS.assigneeId,
+    milestoneId:
+      milestoneId !== undefined && isUuid(milestoneId) ? milestoneId : TASK_VIEW_DEFAULTS.milestoneId,
+    statusIds,
+    showDone: typeof v.showDone === 'boolean' ? v.showDone : TASK_VIEW_DEFAULTS.showDone,
+    limit,
+  }
+}
+
+/** Fill the default view for rendering (client) — never throws (M10-D4). */
+export function resolveWorkloadProps(p: Record<string, unknown> | undefined): ProjectWorkloadProps {
+  const view = p?.view
+  return {
+    view: view === 'COMMITTED' || view === 'AT_RISK' || view === 'ALL' ? view : WORKLOAD_VIEW_DEFAULTS.view,
+  }
+}
+
 /**
  * Per-type rules (M4-D9). One `if (block.type === …)` branch per rule so M10 can add a branch without touching
  * M4's (M4-D37). Exported for that reason.
@@ -156,6 +254,14 @@ export function checkBlockProps(block: BlockInput, ctx: z.RefinementCtx): void {
       typeof c === 'string' ||
       (Array.isArray(c) && c.every((ic) => isObj(ic) && ic.type === 'text'))
     if (!plain) fail(['content'])
+  }
+  // M10 (FR-1302, M10-D4): live blocks hold view config only — never data in content, never children.
+  if (isLiveBlockType(block.type)) {
+    const schema = block.type === 'taskView' ? taskViewPropsSchema : projectWorkloadPropsSchema
+    if (!schema.safeParse(props).success) fail(['props'])
+    const c = block.content
+    if (c !== undefined && !(Array.isArray(c) && c.length === 0)) fail(['content'])
+    if (block.children !== undefined && block.children.length > 0) fail(['children'])
   }
 }
 

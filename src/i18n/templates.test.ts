@@ -1,4 +1,4 @@
-// S0.12 — Appendix B templates (TPL-B1…B3). Charter assertions use containment (M4-D37c): M10 adds a live section.
+// S0.12 — Appendix B templates (TPL-B1…B3). Charter assertions use containment (M4-D37c); M10 S0.8 adds the live section.
 import { describe, expect, it } from 'vitest'
 import { extractContentText } from '@/lib/editor/content-text'
 import { BLOCK_TYPES, pageContentSchema, type BlockInput } from '@/lib/schemas/page-content'
@@ -104,10 +104,53 @@ describe('templates', () => {
     }
   })
 
-  // M4-only (X78): M10 S0.8 replaces this case
-  it('charter has no live section and only M4 block types', () => {
+  // M10 S0.8 (FR-1305, TPL-B1 v3.1, M10-D12) — replaces M4's "no live section" case
+  describe('charter live section "งานและภาระของทีม"', () => {
     const t = charterTemplate()
-    expect(headings(t.content, 2)).not.toContain('งานและภาระของทีม')
-    for (const b of walk(t.content)) expect(BLOCK_TYPES).toContain(b.type)
+    const SECTION = 'งานและภาระของทีม'
+
+    it('h2 order ends with the section right after "Milestones สำคัญ"', () => {
+      expect(headings(t.content, 2).slice(-7)).toEqual([
+        'Milestones สำคัญ',
+        SECTION,
+        'ทีมงานและบทบาท',
+        'ผู้มีส่วนได้ส่วนเสีย',
+        'ความเสี่ยงและข้อสมมติฐาน',
+        'เกณฑ์ความสำเร็จ',
+        'การสื่อสาร',
+      ])
+    })
+
+    it('the blocks right after the heading are taskView (BOARD) then projectWorkload, view config only', () => {
+      const i = t.content.findIndex((b) => b.type === 'heading' && b.content === SECTION)
+      expect(i).toBeGreaterThan(0)
+      const [tv, pw, next] = t.content.slice(i + 1, i + 4)
+      expect(tv).toEqual({ type: 'taskView', props: { view: 'BOARD' } })
+      expect(pw).toEqual({ type: 'projectWorkload', props: {} })
+      expect(next).toMatchObject({ type: 'heading', content: 'ทีมงานและบทบาท' })
+      for (const b of [tv!, pw!]) {
+        expect(b).not.toHaveProperty('content')
+        expect(b.props ?? {}).not.toHaveProperty('projectId')
+      }
+    })
+
+    it('still 5 tables, every block type is known, pageContentSchema parses it', () => {
+      expect(t.content.filter((b) => b.type === 'table')).toHaveLength(5)
+      for (const b of walk(t.content)) expect(BLOCK_TYPES).toContain(b.type)
+      expect(pageContentSchema.safeParse(t.content).success).toBe(true)
+    })
+
+    it('content_text gains the heading only — the live blocks add nothing (FR-1307)', () => {
+      const text = extractContentText(t.content)
+      expect(text).toContain(SECTION)
+      const withoutBlocks = t.content.filter((b) => b.type !== 'taskView' && b.type !== 'projectWorkload')
+      expect(text).toBe(extractContentText(withoutBlocks))
+      expect(text).not.toContain('BOARD')
+    })
+
+    it('meeting and SOP templates have no live block', () => {
+      for (const other of [meetingTemplate('30 ก.ย. 2569'), sopTemplate()])
+        for (const b of walk(other.content)) expect(['taskView', 'projectWorkload']).not.toContain(b.type)
+    })
   })
 })

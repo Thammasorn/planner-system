@@ -36,6 +36,9 @@ export const HOTKEYS = {
   palette: { code: 'KeyK', key: 'k', mod: true },
   /** M6.1 (FR-685, X49): Shift+Space on a focused task row opens the task page /t/<id>. */
   openPage: { code: 'Space', key: ' ', shift: true },
+  /** `N` = new task in the current context (§8.6, KEY-05). Page-local bindings (M3 tasks tab, M6 grid) win; M10's
+   *  useFallbackHotkey handles it everywhere else (M10-D25). */
+  newTask: { code: 'KeyN', key: 'n' },
 } as const satisfies Record<string, Hotkey>
 
 type ModKeyEvent = Pick<KeyboardEvent, 'code' | 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>

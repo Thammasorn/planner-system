@@ -51,10 +51,12 @@ export function PreferencesProvider({
   }, [enabled, debounced])
 
   const setPreference = useCallback(
-    <K extends PreferenceKey>(key: K, value: PreferenceValue<K>) => {
+    <K extends PreferenceKey>(key: K, value: PreferenceValue<K>, opts?: { immediate?: boolean }) => {
       setPrefs((p) => ({ ...p, [key]: value }))
+      if (!enabled) return
       // `{ key, value }` is a valid PreferenceInput member for this K; TS cannot correlate the generic pair.
-      if (enabled) debounced.call({ key, value } as PreferenceInput)
+      debounced.call({ key, value } as PreferenceInput)
+      if (opts?.immediate === true) debounced.flush()
     },
     [enabled, debounced],
   )

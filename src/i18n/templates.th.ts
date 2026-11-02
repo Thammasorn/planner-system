@@ -1,7 +1,7 @@
 // src/i18n/templates.th.ts — page templates of SPEC Appendix B (TPL-B1…B3, FR-402/507, M4-D6/D7/D8) as BlockNote
 // PARTIAL blocks (string content, string table cells, no ids); BlockNote assigns ids on first load.
-// M4-D30 / X78: the charter stops after "การสื่อสาร" without the v3.1 section "งานและภาระของทีม" — M10 inserts that
-// section (h2 + two live blocks) after "Milestones สำคัญ".
+// M10 (FR-1305, M10-D12, X78): the v3.1 section "งานและภาระของทีม" (h2 + the taskView / projectWorkload live blocks)
+// follows "Milestones สำคัญ". Charters created before M10 are not migrated (M4-D30).
 import type { TemplateBlock } from '@/lib/contracts/pages'
 import { th } from './th'
 
@@ -72,6 +72,10 @@ export function charterTemplate(fill: CharterFill = {}): TemplateResult {
       ]),
       h2('Milestones สำคัญ'),
       p('(ดูและแก้ที่แท็บภาพรวม — Phase 2 จะฝังรายการสดไว้ตรงนี้)'),
+      // M10 (FR-1305, App. B.1, M10-D12): live blocks bound to the page's project — view config only
+      h2('งานและภาระของทีม'),
+      { type: 'taskView', props: { view: 'BOARD' } },
+      { type: 'projectWorkload', props: {} },
       h2('ทีมงานและบทบาท'),
       tableBlock([
         ['ชื่อ', 'บทบาทในโปรเจค', 'ความรับผิดชอบ'],

@@ -11,8 +11,16 @@ export type PreferenceValue<K extends PreferenceKey> = Extract<PreferenceInput, 
 
 export interface PreferencesApi {
   prefs: Preferences
-  /** Optimistic; saved through the `setPreference` action, debounced 300 ms per key (X05). */
-  setPreference: <K extends PreferenceKey>(key: K, value: PreferenceValue<K>) => void
+  /**
+   * Optimistic; saved through the `setPreference` action, debounced 300 ms per key (X05). `immediate` sends it now
+   * (with any other pending key): for one-off choices that a full navigation may follow at once (M10 palette
+   * `palette.lastProjectId`), where a request started in `pagehide` can be cancelled by the browser.
+   */
+  setPreference: <K extends PreferenceKey>(
+    key: K,
+    value: PreferenceValue<K>,
+    opts?: { immediate?: boolean },
+  ) => void
 }
 
 /** Outside a provider (never in the app) the defaults apply and nothing is saved, like an anonymous page. */

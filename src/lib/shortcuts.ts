@@ -3,7 +3,7 @@
 // the widgets' own key handlers (e.code, X49).
 import { th } from '@/i18n/th'
 
-export type ShortcutScope = 'global' | 'taskList' | 'taskPage' | 'calendar' | 'grid'
+export type ShortcutScope = 'global' | 'taskList' | 'taskPage' | 'calendar' | 'grid' | 'palette'
 export type KeyToken =
   | 'Mod'
   | 'Shift'
@@ -47,6 +47,7 @@ export const SHORTCUT_SCOPES: readonly ShortcutScope[] = [
   'taskPage',
   'calendar',
   'grid',
+  'palette', // M10 (KEY-06)
 ]
 
 /** Section heading of each scope in the `?` help (M5: the calendar heading lives in its own namespace). */
@@ -56,6 +57,7 @@ export const SHORTCUT_SCOPE_LABELS: Readonly<Record<ShortcutScope, string>> = {
   taskPage: th.shortcuts.scopes.taskPage,
   calendar: th.calendar.shortcuts.scope,
   grid: th.shortcuts.scopes.grid,
+  palette: th.shortcuts.scopes.palette,
 }
 
 /** Key caption of every token ('Mod' = Ctrl here; the help shows ⌘ on Apple platforms). */
@@ -230,4 +232,14 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   // M8 (FR-707, M8-D10, X49): Enter on a focused ◆ opens its popover (date field = keyboard move). Shift+F10 on ◆ is
   // M7's grid.cellMenu entry (same CellMenu, other items) — no second entry.
   { id: 'grid.milestoneOpen', scope: 'grid', combos: [['Enter']], label: th.shortcuts.items.gridMilestoneOpen },
+  // M10 palette scope (KEY-06, X07): moving in results, opening the selected hit/command, Backspace on an empty
+  // input leaves a command step. 'palette.open' (Cmd+K) is M4's global entry, so Enter is 'palette.select'.
+  {
+    id: 'palette.move',
+    scope: 'palette',
+    combos: [['ArrowUp'], ['ArrowDown']],
+    label: th.shortcuts.items.paletteMove,
+  },
+  { id: 'palette.select', scope: 'palette', combos: [['Enter']], label: th.shortcuts.items.paletteOpen },
+  { id: 'palette.back', scope: 'palette', combos: [['Backspace']], label: th.shortcuts.items.paletteBack },
 ]

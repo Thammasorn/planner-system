@@ -48,6 +48,8 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('grid.showAssignees'), value: z.boolean() }),
   z.object({ key: z.literal('grid.taskColumnWidth'), value: TASK_COLUMN_WIDTH }),
   z.object({ key: z.literal('grid.chart'), value: z.boolean() }),
+  // M10 (X05/X59, M10-D27): last project picked in the palette's "สร้าง task" flow
+  z.object({ key: z.literal('palette.lastProjectId'), value: z.uuid().nullable() }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -77,6 +79,8 @@ export const preferencesSchema = z.object({
   'grid.showAssignees': z.boolean().optional().catch(undefined),
   'grid.taskColumnWidth': TASK_COLUMN_WIDTH.optional().catch(undefined),
   'grid.chart': z.boolean().optional().catch(undefined),
+  // M10 key (M10-D27): optional like the others (absent or invalid = null); read with paletteLastProjectId(prefs).
+  'palette.lastProjectId': z.uuid().nullable().optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 
@@ -139,4 +143,9 @@ export function planPreference<K extends PlanPreferenceKey>(
   key: K,
 ): NonNullable<Preferences[K]> {
   return prefs[key] ?? PLAN_PREFERENCE_DEFAULTS[key]
+}
+
+/** M10-D27: the project last used by the palette's "สร้าง task" flow, or null. */
+export function paletteLastProjectId(prefs: Preferences): string | null {
+  return prefs['palette.lastProjectId'] ?? null
 }

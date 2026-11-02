@@ -23,10 +23,11 @@ import {
   loginAs,
   projectIdByName,
   resetDb,
+  switchUser,
   test,
+  type GoldenLogin,
   waitForServerAction,
   waitForServerActionWith,
-  type GoldenLogin,
 } from './fixtures'
 import { escapeRe, GridPage } from './pages/grid'
 import { LoadChartPage } from './pages/load-chart'
@@ -517,8 +518,7 @@ test.describe('P6 ⟲ (AC-812 §3.2/§3.3, AC-809 archived) markers are the proj
     expect(body.includes(POS)).toBe(false)
     expect(body.includes(pos)).toBe(false)
 
-    await page.context().clearCookies()
-    await loginAs(page, 'cindy')
+    await switchUser(page, 'cindy')
     const own = await page.request.get(`/api/projects/${pos}/plan-markers`)
     expect(own.status(), 'archived projects stay readable').toBe(200)
     expect(await own.text()).toContain(SIGN_OFF)

@@ -12,6 +12,7 @@ import { DocColumn, DocInset } from '@/components/layout/DocColumn'
 import { useHeaderSlot } from '@/components/layout/HeaderActions'
 import { PageHeaderBar, type Crumb } from '@/components/layout/PageHeaderBar'
 import { useFullWidth } from '@/components/layout/useFullWidth'
+import { usePaletteProjectScope } from '@/components/palette/project-scope'
 import { th } from '@/i18n/th'
 import { getJson } from '@/lib/api'
 import type { PageView } from '@/lib/contracts/pages'
@@ -71,6 +72,12 @@ export function pageCrumbs(
 export function PageScreen({ view }: { view: PageView }) {
   const { page, can } = view
   const qc = useQueryClient()
+  // M10-D24: a PROJECT page makes its project the palette's current project; a wiki page registers nothing
+  usePaletteProjectScope(
+    page.projectId
+      ? { id: page.projectId, name: page.projectName ?? '', archived: page.projectArchived }
+      : null,
+  )
   const [title, setTitle] = useState(page.title)
   const [icon, setIcon] = useState(page.icon)
   const [cover, setCover] = useState(page.cover)

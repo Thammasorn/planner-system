@@ -27,7 +27,7 @@ import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
 import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { PersonOption } from '@/lib/contracts/people'
-import type { ProjectTasksResponse } from '@/lib/contracts/tasks'
+import type { ProjectTasksResponse, TaskDTO } from '@/lib/contracts/tasks'
 import { formatThaiDate } from '@/lib/format'
 import { HOTKEYS, matchesHotkey } from '@/lib/keys'
 import { rememberScroll } from '@/lib/nav/scroll-memory'
@@ -51,8 +51,26 @@ import styles from './TaskRow.module.css'
 import { errorMessage, resolveId, useTaskMutations } from './useTaskMutations'
 import { useProjectTasks } from './useProjectTasks'
 
+/**
+ * M10-D9: options of the list when it is embedded in a page ("มุมมองงาน" live block). The block's `showDone` is folded
+ * into `filter`; completed rows are otherwise kept. Preferences (group / sort / show completed) are ignored, tree ops,
+ * the `N` hotkey, the bulk bar and the archived banner are off; Space and "เปิด" call `onOpenTask`.
+ */
+export interface TaskListEmbedOptions {
+  /** Assignee / milestone / status / showDone of the block props. */
+  filter: (t: TaskDTO) => boolean
+  /** Max matching rows (ancestors shown as context rows do not count). */
+  limit: number
+  /** Replaces ?task= + TaskPanel (the block navigates to the project's tasks tab). */
+  onOpenTask: (taskId: string) => void
+  /** Lets EmbeddedTasks render "ดูทั้งหมด (n)": matches shown and matches in total. */
+  onCount?: ((shown: number, total: number) => void) | undefined
+}
+
 export interface TaskListProps {
   projectId: string
+  /** M10-D9: embedded in a page; absent = the M3 tasks tab. */
+  embed?: TaskListEmbedOptions | undefined
 }
 
 /** Quick-add anchor (M3-D18): null = end of the root list; else a sibling `afterId` (undefined = append). */
@@ -64,7 +82,7 @@ type QuickAnchor = { parentId: string | null; afterId: string | null | undefined
  * Space panel, S status, Shift+F10 / ContextMenu row menu, arrows move focus (Shift extends the selection), ←/→
  * collapse/expand, F2 rename. Tree ops only ungrouped + manual order (X62). Read-only (archived): Tab leaves the list.
  */
-export function TaskList({ projectId }: TaskListProps) {
+export function TaskList({ projectId, embed }: TaskListProps) {
   const q = useProjectTasks(projectId)
   if (q.isPending) {
     return (
@@ -87,27 +105,36 @@ export function TaskList({ projectId }: TaskListProps) {
       </Alert>
     )
   }
-  return <TaskListView projectId={projectId} data={q.data} />
+  return <TaskListView projectId={projectId} data={q.data} embed={embed} />
 }
 
 type OrderItem = { key: string; row: TaskRowModel }
 
-function TaskListView({ projectId, data }: { projectId: string; data: ProjectTasksResponse }) {
+function TaskListView({
+  projectId,
+  data,
+  embed,
+}: {
+  projectId: string
+  data: ProjectTasksResponse
+  embed: TaskListEmbedOptions | undefined
+}) {
   const { prefs } = usePreferences()
-  const groupBy = taskPreference(prefs, 'tasks.groupBy')
-  const sort = taskPreference(prefs, 'tasks.sort')
-  const showCompleted = taskPreference(prefs, 'tasks.showCompleted')
+  // M10-D9: an embedded list ignores the tab's view preferences (no grouping, manual order, completed rows kept)
+  const groupBy = embed ? 'none' : taskPreference(prefs, 'tasks.groupBy')
+  const sort = embed ? 'manual' : taskPreference(prefs, 'tasks.sort')
+  const showCompleted = embed ? true : taskPreference(prefs, 'tasks.showCompleted')
   const m = useTaskMutations(projectId)
   const ms = useMilestoneMutations()
   const router = useRouter()
-  useScrollRestore(true) // FR-686: back from /t lands where ↗ / Shift+Space left the list
+  useScrollRestore(!embed) // FR-686: back from /t lands where ↗ / Shift+Space left the list (the tab only)
   const people = usePeopleOptions()
   const peopleById = useMemo(
     () => new Map<string, PersonOption>((people.data ?? []).map((p) => [p.id, p])),
     [people.data],
   )
   const { canEdit, canManage } = data.viewer
-  const ops = treeOpsEnabled(groupBy, sort, canEdit)
+  const ops = embed ? false : treeOpsEnabled(groupBy, sort, canEdit)
   const memberIds = useMemo(() => new Set(data.members.map((x) => x.userId)), [data.members])
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
@@ -140,9 +167,33 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
     () => new Map<string, MilestoneRef>(data.milestones.map((x) => [x.id, x])),
     [data.milestones],
   )
+  // M10-D9/D6: embedded → the first `limit` matches (DFS order) plus their ancestors as context rows
+  const embedFilter = embed?.filter
+  const embedLimit = embed?.limit
+  const embedCut = useMemo(() => {
+    if (embedFilter === undefined || embedLimit === undefined) return null
+    const matches = allRows.filter((r) => embedFilter(r))
+    const shown = matches.slice(0, Math.max(0, embedLimit))
+    const parentOf = new Map(allRows.map((r) => [r.id, r.parentId]))
+    const matchIds = new Set(shown.map((r) => r.id))
+    const keep = new Set<string>()
+    for (const r of shown)
+      for (let id: string | null = r.id; id !== null && !keep.has(id); id = parentOf.get(id) ?? null)
+        keep.add(id)
+    return {
+      rows: allRows.filter((r) => keep.has(r.id)),
+      matchIds,
+      shown: shown.length,
+      total: matches.length,
+    }
+  }, [allRows, embedFilter, embedLimit])
+  const onCount = embed?.onCount
+  useEffect(() => {
+    if (embedCut) onCount?.(embedCut.shown, embedCut.total)
+  }, [embedCut, onCount])
   const visible = useMemo(
-    () => visibleRows(allRows, { collapsed, showCompleted }),
-    [allRows, collapsed, showCompleted],
+    () => visibleRows(embedCut ? embedCut.rows : allRows, { collapsed, showCompleted }),
+    [allRows, embedCut, collapsed, showCompleted],
   )
   const groups = useMemo<TaskGroup[]>(() => {
     const raw =
@@ -197,7 +248,10 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
   }
 
   // N focuses quick add on the tasks tab (M3-D9); never while typing (X49).
-  useHotkeys([{ hotkey: { code: 'KeyN' }, handler: () => focusQuick(null) }], { enabled: canEdit })
+  // M10-D9: never from a list embedded in a page (no global key capture from inside a document)
+  useHotkeys([{ hotkey: { code: 'KeyN' }, handler: () => focusQuick(null) }], { enabled: canEdit && !embed })
+  /** Space / "เปิด": the tab's panel (?task=), or the embed's navigation (M10-D9). */
+  const openTask = (id: string) => (embed ? embed.onOpenTask(id) : openTaskPanel(id))
 
   // display order, each id once (a multi-assignee leaf appears in several assignee groups)
   const selectedIds = [...new Set(orderIds.filter((x) => selection.has(x)))]
@@ -255,9 +309,10 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
         return
       } else if (e.shiftKey) setSelection(new Set([id]))
       else {
-        // M6.1-D17 (FR-685): a plain row click selects the row and opens the panel; modifiers only select (FR-614)
+        // M6.1-D17 (FR-685): a plain row click selects the row and opens the panel; modifiers only select (FR-614).
+        // Embedded (M10-D9): select only — leaving the document needs Space or "เปิด".
         setSelection(new Set([id]))
-        openTaskPanel(id)
+        if (!embed) openTaskPanel(id)
       }
       setAnchorId(id)
     },
@@ -265,7 +320,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
     toggleDone: (id) => toggleDone([id]),
     rename: (id, name) => m.updateAsync(id, { name }),
     openStatus: (anchor, id) => setStatusMenu({ anchor, ids: targetIds(id) }),
-    openPanel: (id) => openTaskPanel(id),
+    openPanel: (id) => openTask(id),
     openPage: (id) => openPage(id),
     unassign: (assignmentId, label) => m.unassign([assignmentId], label),
     addSubtask: (row) => {
@@ -276,7 +331,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
       })
       // grouped/sorted views have no inline position: the panel's "+ เพิ่มงานย่อย" takes over
       if (ops) focusQuick({ parentId: row.id, afterId: undefined, depth: row.depth + 1 })
-      else openTaskPanel(row.id)
+      else openTask(row.id)
     },
     moveUp: (id) => treeOp(() => m.moveUp(id)),
     moveDown: (id) => treeOp(() => m.moveDown(id)),
@@ -379,7 +434,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
         return
       case ' ':
         e.preventDefault()
-        openTaskPanel(id)
+        openTask(id)
         return
       case 'Escape':
         // no preventDefault: the same Esc also closes the panel (§8.6)
@@ -434,7 +489,19 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
     />
   )
 
-  const renderRow = (row: TaskRowModel, key: string, s?: TreeRowState) => (
+  const renderRow = (row: TaskRowModel, key: string, s?: TreeRowState) => {
+    const context = embedCut !== null && !embedCut.matchIds.has(row.id)
+    const node = renderRowNode(row, key, s)
+    // M10-D9: an ancestor shown only for context is dimmed and marked (it is not one of the block's matches)
+    return context ? (
+      <div data-context-row="" aria-disabled="true" style={{ opacity: 0.6 }}>
+        {node}
+      </div>
+    ) : (
+      node
+    )
+  }
+  const renderRowNode = (row: TaskRowModel, key: string, s?: TreeRowState) => (
     <>
       <TaskRow
         row={row}
@@ -477,7 +544,7 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
 
   return (
     <Box>
-      {!canEdit ? (
+      {!canEdit && !embed ? (
         <Alert severity="info" sx={{ mb: 1 }}>
           {th.tasks.readOnlyArchived}
         </Alert>
@@ -512,9 +579,15 @@ function TaskListView({ projectId, data }: { projectId: string; data: ProjectTas
           </div>
         ))}
       </div>
-      {data.tasks.length === 0 ? <EmptyState title={th.tasks.empty} /> : null}
+      {embedCut ? (
+        embedCut.total === 0 ? (
+          <EmptyState title={th.editor.liveBlocks.empty} />
+        ) : null
+      ) : data.tasks.length === 0 ? (
+        <EmptyState title={th.tasks.empty} />
+      ) : null}
       {canEdit && quickAfterId === null ? quickAdd(false, 0) : null}
-      {selection.size >= 2 ? (
+      {selection.size >= 2 && !embed ? (
         <BulkBar
           count={selectedIds.length}
           statuses={data.statuses}

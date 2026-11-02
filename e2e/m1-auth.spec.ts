@@ -14,6 +14,7 @@ import {
   loginAs,
   openGuardedPage,
   resetDb,
+  switchUser,
   test,
   waitForServerAction,
 } from './fixtures'
@@ -317,8 +318,7 @@ test.describe('m1 auth, employees, positions', () => {
       await emp.filterStatus(th.employees.status.active)
       await expect(emp.rows()).toHaveCount(8)
 
-      await page.context().clearCookies()
-      await loginAs(page, 'mint')
+      await switchUser(page, 'mint')
       expect((await page.goto('/settings/employees'))?.status()).toBe(404)
       expect((await page.goto('/settings/positions'))?.status()).toBe(404)
     })
@@ -364,8 +364,7 @@ test.describe('m1 auth, employees, positions', () => {
     await expect(shell.navLink(th.nav.home)).toBeVisible()
     await expect(settingsLink).toHaveCount(0)
 
-    await page.context().clearCookies()
-    await loginAs(page, 'manager')
+    await switchUser(page, 'manager')
     await shell.goto('/home')
     await settingsLink.click()
     await expect(page).toHaveURL(url('/settings/employees'))

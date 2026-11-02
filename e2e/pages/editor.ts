@@ -53,6 +53,32 @@ export class EditorPage {
     await this.page.keyboard.press('End')
     return false
   }
+  /**
+   * Selects from the start of the block whose text starts with `fromText` to the start of the block whose text starts
+   * with `toText` (a DOM range, like selectText), so every block between them — also non-selectable live blocks
+   * (M10-D8) — is in the selection.
+   */
+  async selectBlocks(fromText: string, toText: string): Promise<void> {
+    await this.content().evaluate(
+      (root, [a, b]) => {
+        const textStart = (text: string): Node => {
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (n.textContent?.startsWith(text) && n.parentElement?.closest('.bn-inline-content')) return n
+          }
+          throw new Error(`selectBlocks: "${text}" not found`)
+        }
+        ;(root as HTMLElement).focus()
+        const range = document.createRange()
+        range.setStart(textStart(a!), 0)
+        range.setEnd(textStart(b!), 0)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      },
+      [fromText, toText],
+    )
+  }
   /** Caret at the end, Enter → a fresh empty paragraph (the trailing-block widget already made one). */
   async newBlock(): Promise<void> {
     if (await this.focusEnd()) return

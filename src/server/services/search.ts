@@ -1,35 +1,36 @@
 // src/server/services/search.ts — page search for Cmd/Ctrl+K and the mention menu (FR-1102…1105, X68, M4-D19), and
 // the tasks group (FR-690, M6.1-D14). Pages are kind = 'DOC' only (FR-682); task bodies are found through their task.
-// M4-D37(b): M10 moves normalizeQuery/escapeLike to src/lib/search/normalize.ts and re-exports them here — import
-// them only from '@/server/services/search'. Both are pure (no DB, no server-only).
+// M4-D37(b) / M10-D26: normalizeQuery/escapeLike live in src/lib/search/normalize.ts and are re-exported here, so
+// M4 code and tests keep importing them from '@/server/services/search'. Both are pure (no DB, no server-only).
 // The route opens a read-only transaction with SET LOCAL statement_timeout = '500ms'; the content query runs inside a
 // savepoint so a timeout (57014) keeps the title hits.
 import { sql, type SQL } from 'drizzle-orm'
 import { th } from '@/i18n/th'
-import type { PageSearchHit, TaskSearchHit } from '@/lib/contracts/search'
+import type {
+  ClientSearchHit,
+  PageSearchHit,
+  PersonSearchHit,
+  ProjectSearchHit,
+  SearchIndexResponse,
+  SearchAllResponse,
+  TaskSearchHit,
+} from '@/lib/contracts/search'
+import { compareThai } from '@/lib/collate'
+import { displayName } from '@/lib/display-name'
+import { escapeLike, normalizeQuery } from '@/lib/search/normalize'
 import * as authz from '../authz'
-import type { Tx } from '../db/types'
+import type { DbOrTx, Tx } from '../db/types'
 import { pgErrorInfo } from '../errors'
 import { uuidArray } from '../repo/pages'
+import * as searchRepo from '../repo/search'
 import type { SessionUser } from '../session'
 
 export const SEARCH_LIMIT = 8
 /** Content matches need at least this many characters (M4-D19). */
 export const CONTENT_MIN_CHARS = 3
 
-/** Escapes % _ \ for ILIKE … ESCAPE '\'. */
-export function escapeLike(q: string): string {
-  return q.replace(/[\\%_]/g, (c) => `\\${c}`)
-}
-
-/** NFC, zero-width removed, whitespace collapsed, trimmed. */
-export function normalizeQuery(q: string): string {
-  return q
-    .normalize('NFC')
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+// M10-D26: the bodies live in the isomorphic src/lib/search/normalize.ts; re-exported for M4 importers.
+export { escapeLike, normalizeQuery } from '@/lib/search/normalize'
 
 type HitRow = {
   id: string
@@ -159,4 +160,112 @@ export async function searchTasks(tx: Tx, user: SessionUser, q: string): Promise
     if (pgErrorInfo(e).code !== '57014') throw e // statement timeout → keep the name hits (M4-D19)
   }
   return hits
+}
+
+// ── M10 (plan/m10 S0.11 signatures, S1.8 bodies; FR-1102…1105, M10-D20/D21, X68) ──────────────────────────────────
+// Every category: ≤ 8, visibility in SQL from authz (FR-1104), escaped ILIKE + word_similarity ranking. The route runs
+// them inside one read-only transaction with SET LOCAL statement_timeout = '500ms'.
+
+const toVis = (v: 'ALL' | ReadonlySet<string>): searchRepo.VisibleIds => (v === 'ALL' ? 'ALL' : [...v])
+
+/** The shared query prep: '' → null (no category is searched with an empty query). */
+function prep(q: string): { q: string; pattern: string; limit: number } | null {
+  const norm = normalizeQuery(q)
+  return norm === '' ? null : { q: norm, pattern: `%${escapeLike(norm)}%`, limit: SEARCH_LIMIT }
+}
+
+/** Visible projects (archived included, chip); href `/projects/<id>` (M10-D20, D35). */
+export async function searchProjects(tx: Tx, user: SessionUser, q: string): Promise<ProjectSearchHit[]> {
+  const vis = await authz.visibleProjectIds(tx, user) // FR-1104: before any query, filter in SQL
+  const p = prep(q)
+  if (p === null || (vis !== 'ALL' && vis.size === 0)) return []
+  const rows = await searchRepo.searchProjects(tx, { vis: toVis(vis), ...p })
+  return rows.map((r) => ({
+    kind: 'project',
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    archived: r.archived,
+    tentative: r.tentative,
+    href: `/projects/${r.id}`,
+  }))
+}
+
+/** Visible people (visibleUserIds), matched on name and nickname; deactivated labelled (M10-D20). */
+export async function searchPeople(tx: Tx, user: SessionUser, q: string): Promise<PersonSearchHit[]> {
+  const users = await authz.visibleUserIds(tx, user)
+  const p = prep(q)
+  if (p === null) return []
+  const rows = await searchRepo.searchPeople(tx, { users: toVis(users), ...p })
+  return rows.map((r) => ({
+    kind: 'person',
+    id: r.id,
+    name: r.name,
+    nickname: r.nickname,
+    positionName: r.position_name,
+    active: r.active,
+    href: `/people/${r.id}`,
+  }))
+}
+
+/** Managers: all clients; others: clients of visible projects (PERM-04, M10-D20). */
+export async function searchClients(tx: Tx, user: SessionUser, q: string): Promise<ClientSearchHit[]> {
+  const vis = await authz.visibleProjectIds(tx, user)
+  const p = prep(q)
+  if (p === null || (vis !== 'ALL' && vis.size === 0)) return []
+  const rows = await searchRepo.searchClients(tx, { vis: toVis(vis), ...p })
+  return rows.map((r) => ({ kind: 'client', id: r.id, name: r.name, archived: r.archived, href: `/clients/${r.id}` }))
+}
+
+/** All five categories (FR-1102 order); `titleOnly` (mention menu) → pages by title only, every other category []. */
+export async function searchAll(
+  tx: Tx,
+  user: SessionUser,
+  q: string,
+  opts: { titleOnly: boolean },
+): Promise<SearchAllResponse> {
+  authz.requireUser(user)
+  if (opts.titleOnly) {
+    return { projects: [], tasks: [], pages: await searchPages(tx, user, q, { titleOnly: true }), people: [], clients: [] }
+  }
+  // Sequential: postgres.js runs one query at a time on a transaction connection.
+  const projects = await searchProjects(tx, user, q)
+  const tasks = await searchTasks(tx, user, q)
+  const pages = await searchPages(tx, user, q, { titleOnly: false })
+  const people = await searchPeople(tx, user, q)
+  const clients = await searchClients(tx, user, q)
+  return { projects, tasks, pages, people, clients }
+}
+
+/** The palette's local index: visible projects (+ role, archived, color), people and clients (M10-D21). */
+export async function searchIndex(tx: DbOrTx, user: SessionUser): Promise<SearchIndexResponse> {
+  const vis = await authz.visibleProjectIds(tx, user) // authz before any data
+  const users = await authz.visibleUserIds(tx, user)
+  const projectRows = await searchRepo.indexProjects(tx, vis === 'ALL' ? null : user.id)
+  const peopleRows = await searchRepo.indexPeople(tx, toVis(users))
+  const clientRows = vis !== 'ALL' && vis.size === 0 ? [] : await searchRepo.indexClients(tx, toVis(vis))
+  const byName = <T extends { name: string; id: string }>(a: T, b: T): number =>
+    compareThai(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  return {
+    projects: projectRows
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        archived: r.archived,
+        tentative: r.tentative,
+        role: r.role,
+      }))
+      .sort(byName),
+    people: peopleRows
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        nickname: r.nickname,
+        positionName: r.position_name,
+        active: r.active,
+      }))
+      .sort((a, b) => compareThai(displayName(a), displayName(b)) || byName(a, b)),
+    clients: clientRows.map((r) => ({ id: r.id, name: r.name, archived: r.archived })).sort(byName),
+  }
 }

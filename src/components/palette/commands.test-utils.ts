@@ -9,6 +9,11 @@ export function fakeCommandCtx(over: Partial<PaletteCommandCtx> = {}): PaletteCo
     pathname: '/',
     currentProjectId: null,
     openMilestoneDialog: vi.fn(),
+    // M10
+    navigate: vi.fn(),
+    openLeaveDialog: vi.fn(),
+    beginCreateTask: vi.fn(),
+    createPageHere: vi.fn(async () => {}),
   }
   return { ...defaults, ...over } as PaletteCommandCtx
 }

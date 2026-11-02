@@ -22,9 +22,10 @@ import {
   loginAs,
   openGuardedPage,
   resetDb,
+  switchUser,
   test,
-  waitForServerAction,
   type GoldenLogin,
+  waitForServerAction,
 } from './fixtures'
 import { ProjectFormDialog, ProjectPage } from './pages/project'
 import { MyTasksPage } from './pages/my-tasks'
@@ -689,8 +690,7 @@ test.describe('E16 ⟲ (AC-612, FR-622, PERM-23 UI) LEAD manages the status set;
     await tasks.reload()
     await tasks.expectColumns(finalOrder)
 
-    await page.context().clearCookies()
-    await loginAs(page, 'ivy')
+    await switchUser(page, 'ivy')
     await project.goto(pos)
     await expect(statuses.readOnlyNote()).toBeVisible()
     await expect(statuses.chips()).toHaveText(finalOrder.map((n) => new RegExp(`^${escapeRegExp(n)}`)))

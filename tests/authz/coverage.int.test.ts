@@ -7,6 +7,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as services from '@/server/services'
 import { rows } from './rows'
+import { M10_ROUTES } from './rows/_m10'
 import { M9_ROUTES, PERSON_HEADER_LOADER } from './rows/_m9'
 
 const API_DIR = path.resolve(process.cwd(), 'src/app/api')
@@ -100,6 +101,15 @@ describe('AZ-2 route coverage', () => {
     expect(covered.has(PERSON_HEADER_LOADER), `${PERSON_HEADER_LOADER} has no authz row`).toBe(true)
     // X09: the picker directory stays a separate route next to the new GET /api/people
     expect(routes).toContain('GET /api/people/options')
+  })
+
+  it('M10 (plan/m10 S4.1, X81): home, search index and the two embed routes are exported and have rows', async () => {
+    const routes = await exportedRoutes()
+    const covered = new Set(rows.map((r) => r.action))
+    for (const name of [...M10_ROUTES, 'GET /api/search']) {
+      expect(routes, `${name} is exported`).toContain(name)
+      expect(covered.has(name), `${name} has no authz row`).toBe(true)
+    }
   })
 
   it('every exported route handler method has an authz row', async () => {

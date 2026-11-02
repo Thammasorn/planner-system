@@ -43,3 +43,6 @@ export * as planMarkers from './plan-markers'
 export * as milestones from './milestones'
 // M9 (plan/m09 S0.6)
 export * as workload from './workload'
+// M10 (X87, plan/m10 S0)
+export * as embed from './embed'
+export * as home from './home'

@@ -12,6 +12,7 @@ import { rows as employees } from './employees'
 import { rows as files } from './files'
 import { rows as gridDay } from './grid-day'
 import { rows as holidays } from './holidays'
+import { rows as home } from './home'
 import { rows as leaveTypes } from './leave-types'
 import { rows as members } from './members'
 import { rows as milestones } from './milestones'
@@ -70,4 +71,6 @@ export const rows: AuthzRow[] = [
   // M9
   ...workload,
   ...people,
+  // M10
+  ...home,
 ]

@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { expect } from 'vitest'
+import type { EmbedTasksResponse, EmbedWorkloadResponse } from '@/lib/contracts/embed'
 import type { LeaseState, PageView } from '@/lib/contracts/pages'
 import {
   applyTemplate,
@@ -25,6 +26,18 @@ import { db } from '@/server/db/client'
 import { pageLocks } from '@/server/db/schema'
 import { makePage } from '../../helpers/factories'
 import { defineRow, type AuthzRow } from '../types'
+import {
+  ALL,
+  check,
+  EMBED_TASKS_ROUTE,
+  EMBED_WEEKS,
+  EMBED_WORKLOAD_ROUTE,
+  embedTasksGet,
+  embedWorkloadGet,
+  M10_WORLD,
+  NOT_W,
+  Q_ONLY,
+} from './_m10'
 import {
   ARCH_WRITE,
   auditPageA,
@@ -558,4 +571,111 @@ export const rows: AuthzRow[] = [
     run: (w) =>
       keepalive(w.pages.pPage.id, { baseVersion: 1, content: para('ปิดแท็บ') }, { origin: FOREIGN_ORIGIN }),
   }),
+  // ── M10 live blocks (plan/m10 §7.2, GAPI-08; FR-1301…1304, M10-D1/D2/D3/D11, X41/X42/X63/X86) ──
+  // The page is resolved with requirePage(view): the outsider never sees P/A pages, lead/member never Q pages (404);
+  // wiki pages (protected or not) answer 200 { kind: 'wiki' }; deleted or malformed ids → 404; never 403 (reads).
+  ...embedRows('T'),
+  ...embedRows('W'),
 ]
+
+type EmbedKind = 'T' | 'W'
+
+/** The seven EMB-<kind>-* rows of one embed route (§7.2 table). */
+function embedRows(kind: EmbedKind): AuthzRow[] {
+  const route = kind === 'T' ? EMBED_TASKS_ROUTE : EMBED_WORKLOAD_ROUTE
+  const get = kind === 'T' ? embedTasksGet : embedWorkloadGet
+  const perm = kind === 'T' ? 'PERM-16 + PERM-06' : 'PERM-16 + PERM-22'
+  const wiki = async (res: Response): Promise<Response> =>
+    check<EmbedTasksResponse | EmbedWorkloadResponse>(res, (b) => expect(b, 'FR-1304 placeholder').toEqual({ kind: 'wiki' }))
+  const project = (id: string, extra?: (b: EmbedTasksResponse | EmbedWorkloadResponse) => void) =>
+    async (res: Response): Promise<Response> =>
+      check<EmbedTasksResponse | EmbedWorkloadResponse>(res, (b) => {
+        expect(b.kind).toBe('project')
+        if (b.kind !== 'project') return
+        expect(b.projectId).toBe(id)
+        if (kind === 'T') expect((b as Extract<EmbedTasksResponse, { kind: 'project' }>).data.project.id).toBe(id)
+        else {
+          const wl = b as Extract<EmbedWorkloadResponse, { kind: 'project' }>
+          expect(wl.weeks, '8 Mondays from this week (FR-1303)').toEqual([...EMBED_WEEKS])
+          for (const p of wl.people) expect(Object.keys(p.cells).sort()).toEqual([...EMBED_WEEKS])
+        }
+        extra?.(b)
+      })
+  return [
+    defineRow({
+      id: `EMB-${kind}-P`,
+      spec: `${perm} + FR-1301/1303 — embed of a P page (P's team; outsider 404)`,
+      action: route,
+      mutates: false,
+      with: M10_WORLD,
+      expect: NOT_W,
+      run: async (w) => project(w.P.id)(await get(w.pages.pEmbed.id)),
+    }),
+    defineRow({
+      id: `EMB-${kind}-Q`,
+      spec: `${perm} + FR-1304 — embed of a Q page (manager and Q's member; lead/member 404)`,
+      action: route,
+      mutates: false,
+      with: M10_WORLD,
+      expect: Q_ONLY,
+      run: async (w) => project(w.Q.id)(await get(w.pages.qEmbed.id)),
+    }),
+    defineRow({
+      id: `EMB-${kind}-A`,
+      spec: `${perm} + X42 — embed of an archived A page is readable (tasks read-only; workload archived, BR-44)`,
+      action: route,
+      mutates: false,
+      with: M10_WORLD,
+      expect: NOT_W,
+      run: async (w) =>
+        project(w.A.id, (b) => {
+          if (kind === 'T') {
+            const t = b as Extract<EmbedTasksResponse, { kind: 'project' }>
+            expect(t.data.viewer.canEdit, 'X42: archived → read-only').toBe(false)
+          } else {
+            const wl = b as Extract<EmbedWorkloadResponse, { kind: 'project' }>
+            expect(wl.archived).toBe(true)
+            // C49 / BR-44: the archived project's own load is not counted — no part and no key with A's id
+            expect(Object.keys(wl.projects)).not.toContain(w.A.id)
+            const parts = wl.people.flatMap((p) => Object.values(p.cells).flatMap((c) => c.byProject))
+            expect(parts.map((x) => x.projectId)).not.toContain(w.A.id)
+          }
+        })(await get(w.pages.aEmbed.id)),
+    }),
+    defineRow({
+      id: `EMB-${kind}-WIKI`,
+      spec: 'PERM-17 + FR-1304 — embed in a wiki page → 200 { kind: "wiki" } for everyone',
+      action: route,
+      mutates: false,
+      with: M10_WORLD,
+      expect: ALL,
+      run: async (w) => wiki(await get(w.pages.wikiEmbed.id)),
+    }),
+    defineRow({
+      id: `EMB-${kind}-PROT`,
+      spec: 'PERM-17 + PERM-19 + FR-1304 — protected wiki page → { kind: "wiki" } (protection limits editing only)',
+      action: route,
+      mutates: false,
+      with: M10_WORLD,
+      expect: ALL,
+      run: async (w) => wiki(await get(w.pages.wikiProtected.id)),
+    }),
+    defineRow({
+      id: `EMB-${kind}-DEL`,
+      spec: 'PERM-16 + X41 — a soft-deleted P page → 404 for everyone',
+      action: route,
+      mutates: false,
+      with: M10_WORLD,
+      expect: each('404'),
+      run: (w) => get(w.deletedPages.pDeleted.id),
+    }),
+    defineRow({
+      id: `EMB-${kind}-BAD`,
+      spec: 'X86, M10-D1 — a malformed page id → 404 before any query',
+      action: route,
+      mutates: false,
+      expect: each('404'),
+      run: () => get('not-a-uuid'),
+    }),
+  ]
+}

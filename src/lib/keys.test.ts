@@ -36,6 +36,18 @@ describe('HOTKEYS.openPage (M6.1, FR-685, X49)', () => {
   })
 })
 
+describe('HOTKEYS.newTask (M10, KEY-05, X49)', () => {
+  it.each([
+    ['N', ev({ code: 'KeyN', key: 'n' }), true],
+    ['N on the Thai Kedmanee layout', ev({ code: 'KeyN', key: 'ื' }), true],
+    ['Shift+N', ev({ code: 'KeyN', key: 'N', shiftKey: true }), false],
+    ['Cmd+N', ev({ code: 'KeyN', key: 'n', metaKey: true }), false],
+    ['other key', ev({ code: 'KeyM', key: 'm' }), false],
+  ] as const)('%s → %s', (_label, e, expected) => {
+    expect(matchesHotkey(e, HOTKEYS.newTask)).toBe(expected)
+  })
+})
+
 describe('isUndoKey / isRedoKey (SPEC §8.6, X49)', () => {
   it('U-KEY-01 Ctrl+Z on the Thai Kedmanee layout is undo', () => {
     const e = ev({ code: 'KeyZ', key: 'ผ', ctrlKey: true })

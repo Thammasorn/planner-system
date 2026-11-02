@@ -10,7 +10,7 @@ async function invalidateAll(qc: QueryClient, keys: readonly (readonly unknown[]
 
 /** Every view that shows load numbers: grid, workload (table, cell, badge, people, project/client load), home,
  *  tasks.my, /tasks (FR-405 certainty changes, allocations, task completion/assignment — X18) and, from M9, the
- *  sidebar (its "งานของฉัน N" counts this week's planned tasks, M9-D17). */
+ *  sidebar (its "งานของฉัน N" counts this week's planned tasks, M9-D17) and, from M10, every projectWorkload block. */
 export function invalidateLoad(qc: QueryClient): Promise<void> {
   return invalidateAll(qc, [
     qkPrefix.grid,
@@ -19,6 +19,7 @@ export function invalidateLoad(qc: QueryClient): Promise<void> {
     qkPrefix.myTasks,
     qkPrefix.teamTasks,
     qk.sidebar(),
+    qk.pageEmbedWorkloadAll(), // M10 (X18, M10-D10): every projectWorkload block
   ])
 }
 
@@ -38,6 +39,8 @@ export function invalidateTasks(qc: QueryClient, projectId: string): Promise<voi
     qk.teamTasksAll(),
     qk.gridAll({ kind: 'project', id: projectId }),
     qk.projectMilestones(projectId), // M8-D22: progress / lateness
+    qk.home(), // M10 (X18): home "my tasks" card
+    qk.pageEmbedTasksAll(), // M10 (X18, M10-D10): every taskView block
   ])
 }
 
@@ -123,5 +126,6 @@ export async function invalidateMilestones(qc: QueryClient, projectId: string): 
     qc.invalidateQueries({ queryKey: qk.projectTasks(projectId) }),
     qc.invalidateQueries({ queryKey: qk.teamTasksAll() }),
     qc.invalidateQueries({ queryKey: qkPrefix.calendar }),
+    qc.invalidateQueries({ queryKey: qk.home() }), // M10: the home milestones card
   ])
 }

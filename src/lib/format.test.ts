@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import {
+  bangkokHour,
+  formatHomeDate,
   formatLeaveRange,
+  formatRelative,
   formatThaiDate,
   formatThaiDateRange,
   formatThaiInstantDate,
@@ -80,5 +83,36 @@ describe('formatThaiDateRange / formatLeaveRange (M5)', () => {
   it('invalid ISO → RangeError', () => {
     expect(() => formatThaiDateRange('2026-02-30', '2026-03-01')).toThrow(RangeError)
     expect(() => formatLeaveRange('2026-10-20', 'x', null)).toThrow(RangeError)
+  })
+})
+
+describe('M10 helpers (bangkokHour, formatHomeDate, formatRelative)', () => {
+  it('bangkokHour is the Asia/Bangkok wall-clock hour', () => {
+    expect(bangkokHour(new Date('2026-09-30T03:00:00Z'))).toBe(10)
+    expect(bangkokHour(new Date('2026-09-30T16:59:00Z'))).toBe(23)
+    expect(bangkokHour(new Date('2026-09-30T17:00:00Z'))).toBe(0)
+  })
+
+  it('formatHomeDate = short Thai weekday + medium date', () => {
+    expect(formatHomeDate('2026-09-30')).toBe('พุธ 30 ก.ย. 2569')
+    const weekdayShort = new Intl.DateTimeFormat('th-TH', { weekday: 'short', timeZone: 'UTC' }).format(
+      new Date('2027-01-01T00:00:00Z'),
+    )
+    expect(formatHomeDate('2027-01-01')).toBe(`${weekdayShort} ${formatThaiDate('2027-01-01', 'medium')}`)
+    expect(() => formatHomeDate('2026-02-30')).toThrow(RangeError)
+  })
+
+  it('formatRelative: minutes, hours, days, then a date', () => {
+    const now = '2026-09-30T10:00:00+07:00'
+    const two = formatRelative('2026-09-30T08:00:00+07:00', now)
+    expect(two).toContain('2')
+    expect(two).toContain('ชม.')
+    expect(formatRelative('2026-09-30T09:55:00+07:00', now)).toContain('5')
+    expect(formatRelative('2026-09-28T10:00:00+07:00', now)).not.toBe(two)
+    expect(formatRelative('2026-08-01T10:00:00+07:00', now)).toBe(
+      formatThaiInstantDate(new Date('2026-08-01T10:00:00+07:00'), 'medium'),
+    )
+    // a future instant (clock skew) never shows a negative distance
+    expect(formatRelative('2026-09-30T10:00:30+07:00', now)).toBe(formatRelative(now, now))
   })
 })

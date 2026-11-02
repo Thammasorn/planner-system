@@ -5,6 +5,7 @@ import {
   invalidateLeaveTypes,
   invalidateLoad,
   invalidateMilestones,
+  invalidatePages,
   invalidatePlanMarkers,
   invalidateProjects,
   invalidateStatuses,
@@ -70,7 +71,7 @@ describe('invalidate (X18)', () => {
     expect(invalidated(qc, ['home'])).toBe(false)
   })
 
-  it('invalidateTasks invalidates projectTasks(id), myTasks, sidebar, teamTasksAll and the project’s grid only', async () => {
+  it('invalidateTasks invalidates projectTasks(id), myTasks, sidebar, teamTasksAll, the project’s grid and (M10) home only', async () => {
     const qc = seeded()
     const chunk: GridChunk = { from: '2026-08-31', includeOthers: false, expand: [], zoom: 'WEEK' }
     qc.setQueryData(qk.gridChunk({ kind: 'project', id: 'p1' }, chunk), {})
@@ -84,7 +85,7 @@ describe('invalidate (X18)', () => {
     expect(invalidated(qc, qk.projectStatuses('p1'))).toBe(false)
     expect(invalidated(qc, qk.peopleOptions())).toBe(false)
     expect(invalidated(qc, qk.clientOptions(null))).toBe(false)
-    expect(invalidated(qc, ['home'])).toBe(false)
+    expect(invalidated(qc, ['home'])).toBe(true) // M10 (X18, M10-D10): the home "my tasks" card
     expect(invalidated(qc, ['grid', 'project', 'x', {}])).toBe(false)
   })
 
@@ -95,7 +96,7 @@ describe('invalidate (X18)', () => {
     expect(invalidated(qc, qk.projectStatuses('p1'))).toBe(true)
     expect(invalidated(qc, qk.projectStatuses('p2'))).toBe(false)
     expect(invalidated(qc, qk.projectTasks('p2'))).toBe(false)
-    expect(invalidated(qc, ['home'])).toBe(false)
+    expect(invalidated(qc, ['home'])).toBe(true) // through invalidateTasks (M10)
   })
 
   it('invalidateCalendar (M5) invalidates every calendar range only', async () => {
@@ -331,5 +332,61 @@ describe('workload / people keys (M9 S0.7, M9-D17/D22, X82)', () => {
     await invalidateCalendar(qc)
     expect(invalidated(qc, qk.personTimeOff('u'))).toBe(true)
     expect(invalidated(qc, qk.workloadBadge())).toBe(false)
+  })
+})
+
+describe('home, search index and live-block keys (M10 S0.5, X18, X82, M10-D10)', () => {
+  const keys = {
+    home: qk.home(),
+    embedTasks: qk.pageEmbedTasks('pg1'),
+    embedWorkload: qk.pageEmbedWorkload('pg1'),
+    searchIndex: qk.searchIndex(),
+    search: qk.search('ลูกค้า', 'all'),
+    tasksP1: qk.projectTasks('p1'),
+  }
+  function seededM10(): QueryClient {
+    const qc = new QueryClient()
+    for (const key of Object.values(keys)) qc.setQueryData(key, 1)
+    return qc
+  }
+
+  it('key shapes', () => {
+    expect(qk.home()).toEqual(['home'])
+    expect(qk.searchIndex()).toEqual(['search', 'index'])
+    expect(qk.pageEmbedTasks('pg1')).toEqual(['embed', 'tasks', 'pg1'])
+    expect(qk.pageEmbedTasksAll()).toEqual(['embed', 'tasks'])
+    expect(qk.pageEmbedWorkload('pg1')).toEqual(['embed', 'workload', 'pg1'])
+    expect(qk.pageEmbedWorkloadAll()).toEqual(['embed', 'workload'])
+    expect(qk.search('x', 'all')).toEqual(['search', 'x', 'all'])
+  })
+
+  it('invalidateTasks → home, embed tasks and the project list; not embed workload', async () => {
+    const qc = seededM10()
+    await invalidateTasks(qc, 'p1')
+    for (const k of ['home', 'embedTasks', 'tasksP1'] as const) expect(invalidated(qc, keys[k]), k).toBe(true)
+    for (const k of ['embedWorkload', 'searchIndex'] as const) expect(invalidated(qc, keys[k]), k).toBe(false)
+  })
+
+  it('invalidateLoad → embed workload and home; not embed tasks', async () => {
+    const qc = seededM10()
+    await invalidateLoad(qc)
+    for (const k of ['home', 'embedWorkload'] as const) expect(invalidated(qc, keys[k]), k).toBe(true)
+    for (const k of ['embedTasks', 'tasksP1', 'searchIndex'] as const)
+      expect(invalidated(qc, keys[k]), k).toBe(false)
+  })
+
+  it('invalidateMilestones → home (milestones card)', async () => {
+    const qc = seededM10()
+    await invalidateMilestones(qc, 'p1')
+    expect(invalidated(qc, keys.home)).toBe(true)
+    expect(invalidated(qc, keys.embedWorkload)).toBe(false)
+  })
+
+  it('invalidatePages → the search index and every search query', async () => {
+    const qc = seededM10()
+    await invalidatePages(qc)
+    expect(invalidated(qc, keys.searchIndex)).toBe(true)
+    expect(invalidated(qc, keys.search)).toBe(true)
+    expect(invalidated(qc, keys.home)).toBe(false)
   })
 })

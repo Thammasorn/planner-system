@@ -131,3 +131,54 @@ describe('getSlashMenuItems › TASK (FR-680, M6.1-D9)', () => {
     expect(rankSuggestionItems(items, slash.table.title)[0]?.title).toBe(slash.table.title)
   })
 })
+
+describe('getSlashMenuItems › live blocks (FR-1301/1303, M10-D5)', () => {
+  const live = th.editor.slash
+  const project = (over: Partial<SlashCtx> = {}) => ctx({ space: 'PROJECT', canEdit: true, ...over })
+
+  it('a PROJECT page offers มุมมองงาน and ภาระทีม, right after หน้า', () => {
+    const t = titles(makeEditor(), project())
+    const at = t.indexOf(live.subpage.title)
+    expect(t.slice(at, at + 3)).toEqual([live.subpage.title, live.taskView.title, live.projectWorkload.title])
+  })
+
+  it('ranks Thai titles and English aliases first', () => {
+    const items = getSlashMenuItems(makeEditor(), project())
+    const first = (q: string) => rankSuggestionItems(items, q)[0]?.title
+    expect(first(live.taskView.title)).toBe(live.taskView.title)
+    expect(first('board')).toBe(live.taskView.title)
+    expect(first('tasks')).toBe(live.taskView.title)
+    expect(first('ภาระ')).toBe(live.projectWorkload.title)
+    expect(first('workload')).toBe(live.projectWorkload.title)
+    expect(first(live.subpage.title)).toBe(live.subpage.title) // M4 "/หน้า" unchanged
+  })
+
+  it('a WORKSPACE page, a read-only viewer and a TASK body get neither item', () => {
+    for (const c of [
+      ctx({ space: 'WORKSPACE', canEdit: true }),
+      project({ canEdit: false }),
+      project({ kind: 'TASK' }),
+    ]) {
+      const t = titles(makeEditor(), c)
+      expect(t).not.toContain(live.taskView.title)
+      expect(t).not.toContain(live.projectWorkload.title)
+    }
+  })
+
+  it('still offered when the sub-page item is not (depth limit)', () => {
+    expect(titles(makeEditor(), project({ canCreateSubpage: false }))).toEqual(
+      expect.arrayContaining([live.taskView.title, live.projectWorkload.title]),
+    )
+  })
+
+  it('มุมมองงาน inserts a taskView in BOARD view; ภาระทีม a projectWorkload in view ALL', () => {
+    const editor = makeEditor()
+    const items = getSlashMenuItems(editor, project())
+    items.find((i) => i.title === live.taskView.title)!.onItemClick()
+    const tv = editor.document.find((b) => b.type === 'taskView')
+    expect(tv?.props).toMatchObject({ view: 'BOARD' })
+    items.find((i) => i.title === live.projectWorkload.title)!.onItemClick()
+    const pw = editor.document.find((b) => b.type === 'projectWorkload')
+    expect(pw?.props).toEqual({ view: 'ALL' })
+  })
+})

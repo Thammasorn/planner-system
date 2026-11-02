@@ -4,6 +4,8 @@
 // dictionary, English aliases stay searchable), `/ตาราง` → 3×3, custom `/หน้า` (create a child page, insert its
 // card) when allowed (never in a TASK body, M6.1-D9), ranked filter, word-start guard, stable getItems (r3 G23).
 import { insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
+import GroupsOutlined from '@mui/icons-material/GroupsOutlined'
+import ViewKanbanOutlined from '@mui/icons-material/ViewKanbanOutlined'
 import {
   type DefaultReactSuggestionItem,
   getDefaultReactSlashMenuItems,
@@ -11,7 +13,7 @@ import {
 } from '@blocknote/react'
 import { type JSX, useCallback } from 'react'
 import { th } from '@/i18n/th'
-import type { PageKind } from '@/lib/contracts/pages'
+import type { PageKind, PageSpace } from '@/lib/contracts/pages'
 import { rankSuggestionItems, slashShouldOpen } from '@/lib/editor/suggest'
 import type { AppEditor } from './schema'
 
@@ -22,6 +24,10 @@ export interface SlashCtx {
   canCreateSubpage: boolean
   /** M6.1-D9 (FR-680): a TASK body has no page tree → never the sub-page item. Default 'DOC'. */
   kind?: PageKind
+  /** M10-D5: the live blocks are offered on PROJECT pages only. Default 'WORKSPACE'. */
+  space?: PageSpace
+  /** M10-D5: the viewer may edit the page (the live items are offered only then). Default false. */
+  canEdit?: boolean
 }
 
 const EMPTY_ROW = (): { cells: string[] } => ({ cells: ['', '', ''] })
@@ -49,6 +55,34 @@ function subpageItem(editor: AppEditor, ctx: SlashCtx): DefaultReactSuggestionIt
   }
 }
 
+/** M10 (FR-1301/1303, M10-D5): "มุมมองงาน" and "ภาระทีม" — PROJECT documents the viewer may edit. */
+function liveItems(editor: AppEditor, ctx: SlashCtx): DefaultReactSuggestionItem[] {
+  if (ctx.space !== 'PROJECT' || ctx.canEdit !== true || (ctx.kind ?? 'DOC') !== 'DOC') return []
+  const s = th.editor.slash
+  return [
+    {
+      title: s.taskView.title,
+      subtext: s.taskView.subtext,
+      aliases: [...s.taskView.aliases],
+      group: s.taskView.group,
+      icon: <ViewKanbanOutlined fontSize="small" />,
+      onItemClick: () => {
+        insertOrUpdateBlockForSlashMenu(editor, { type: 'taskView', props: { view: 'BOARD' } })
+      },
+    },
+    {
+      title: s.projectWorkload.title,
+      subtext: s.projectWorkload.subtext,
+      aliases: [...s.projectWorkload.aliases],
+      group: s.projectWorkload.group,
+      icon: <GroupsOutlined fontSize="small" />,
+      onItemClick: () => {
+        insertOrUpdateBlockForSlashMenu(editor, { type: 'projectWorkload' })
+      },
+    },
+  ]
+}
+
 export function getSlashMenuItems(editor: AppEditor, ctx: SlashCtx): DefaultReactSuggestionItem[] {
   const out: DefaultReactSuggestionItem[] = []
   for (const item of getDefaultReactSlashMenuItems(editor)) {
@@ -65,6 +99,7 @@ export function getSlashMenuItems(editor: AppEditor, ctx: SlashCtx): DefaultReac
       })
       // Right after the table so the "ขั้นสูง" group stays contiguous.
       if (ctx.canCreateSubpage && (ctx.kind ?? 'DOC') === 'DOC') out.push(subpageItem(editor, ctx))
+      out.push(...liveItems(editor, ctx)) // M10-D5: right after หน้า (their own "ข้อมูลสด" group)
       continue
     }
     out.push(item)

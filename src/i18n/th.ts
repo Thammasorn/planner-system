@@ -357,12 +357,71 @@ export const th = {
     // M7 (BR-24, HTTP 409)
     NEEDS_CHOICE: 'สัปดาห์นี้มีแผนรายวัน — เลือกวิธีปรับยอดรวม',
   },
+  // M10 (plan/m10 S0.7): the home dashboard. Build-time owner after S0: S2.
   home: {
     title: 'หน้าหลัก',
-    greeting: 'สวัสดี',
-    today: (date: string) => `วันนี้ ${date}`,
-    placeholderTitle: 'กำลังเตรียมพื้นที่ทำงานของทีม',
-    placeholderBody: 'เมนูต่าง ๆ จะปรากฏในแถบด้านข้างเมื่อแต่ละส่วนพร้อมใช้งาน',
+    greetingFor: {
+      morning: (name: string) => `สวัสดีตอนเช้า ${name}`,
+      afternoon: (name: string) => `สวัสดีตอนบ่าย ${name}`,
+      evening: (name: string) => `สวัสดีตอนเย็น ${name}`,
+    },
+    loadError: 'โหลดข้อมูลหน้าหลักไม่สำเร็จ',
+    retry: 'ลองใหม่',
+    myTasks: {
+      title: 'งานของฉันสัปดาห์นี้',
+      empty: 'สัปดาห์นี้ยังไม่มีงานที่วางแผนหรือครบกำหนด',
+      hint: 'สร้างงานใหม่ได้จาก ⌘K › สร้าง task',
+      planned: (days: string) => `${days} วัน`,
+      due: (date: string) => `ครบกำหนด ${date}`,
+      more: (n: number) => `และอีก ${n} งาน`,
+      seeAll: 'ดูงานทั้งหมดของฉัน',
+      complete: (name: string) => `ติ๊กเสร็จ ${name}`,
+    },
+    myLoad: {
+      title: 'ภาระของฉัน 8 สัปดาห์',
+      barLabel: (week: string, load: string, cap: string) => `สัปดาห์ ${week}: ภาระ ${load} จาก ${cap} วัน`,
+      over: 'ล้น',
+      risk: 'เสี่ยงล้น',
+      noCapacity: 'ไม่มีวันทำงาน',
+      legend: 'สีตามสัดส่วนภาระต่อวันทำงานที่มี',
+    },
+    // status / late texts come from M8's MilestoneStatusChip / MilestoneLateBadge
+    milestones: {
+      title: 'Milestone 14 วันข้างหน้า',
+      empty: 'ไม่มี milestone ใน 14 วันข้างหน้า',
+    },
+    leave: {
+      title: 'ใครลา',
+      today: 'วันนี้',
+      thisWeek: 'สัปดาห์นี้',
+      nextWeek: 'สัปดาห์หน้า',
+      none: '—',
+      entry: (name: string, range: string) => `${name} (${range})`,
+    },
+    recentPages: {
+      title: 'เอกสารที่แก้ล่าสุด',
+      empty: 'ยังไม่มีเอกสาร',
+      editedBy: (name: string, when: string) => `${name} แก้ ${when}`,
+    },
+    // level / excess / cause texts reuse th.overload.level, th.overload.excess, th.overload.cause
+    manager: {
+      overloadedTitle: 'คนที่ล้นสัปดาห์นี้และสัปดาห์หน้า',
+      overloadedEmpty: 'ไม่มีใครล้น',
+      week: (w: string) => `สัปดาห์ ${w}`,
+      utilisationTitle: '% ใช้กำลังคนทีม 4 สัปดาห์',
+      utilisationTotal: 'รวม 4 สัปดาห์',
+      committed: (pct: string) => `แน่นอน ${pct}`,
+      noCapacity: '—',
+      openWorkload: 'เปิด Workload ทีม',
+    },
+  },
+  // M10 (plan/m10 S0.7): chips of palette search hits (FR-1102). Build-time owner after S0: S1/S2.
+  search: {
+    archived: 'archive แล้ว',
+    completed: 'เสร็จแล้ว',
+    deactivated: '(ปิดใช้งาน)',
+    tentative: 'อาจไม่ทำ',
+    inProject: (project: string) => `ใน ${project}`,
   },
   auth: {
     loginTitle: 'เข้าสู่ระบบ',
@@ -932,7 +991,7 @@ export const th = {
   shortcuts: {
     title: 'คีย์ลัด',
     close: 'ปิด',
-    scopes: { global: 'ทั่วไป', taskList: 'ลิสต์งาน', grid: 'กริดวางแผน', taskPage: 'หน้างาน' },
+    scopes: { global: 'ทั่วไป', taskList: 'ลิสต์งาน', grid: 'กริดวางแผน', taskPage: 'หน้างาน', palette: 'ช่องค้นหา' },
     keys: {
       Mod: 'Ctrl',
       ModMac: '⌘',
@@ -1005,6 +1064,10 @@ export const th = {
       gridAddMarker: 'เพิ่มเส้นกำกับ (บนหัวคอลัมน์)',
       // M8 (FR-707, M8-D10)
       gridMilestoneOpen: 'เปิด milestone ที่เลือก (เปลี่ยนวันที่ได้)',
+      // M10 (KEY-06, palette scope)
+      paletteMove: 'เลื่อนในผลค้นหา',
+      paletteOpen: 'เปิดรายการหรือคำสั่งที่เลือก',
+      paletteBack: 'ย้อนกลับจากขั้นตอนคำสั่ง',
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
@@ -1128,6 +1191,55 @@ export const th = {
         aliases: ['page', 'subpage', 'หน้าย่อย'],
         group: 'ขั้นสูง',
       },
+      // M10 (FR-1301, FR-1303, M10-D5) — offered on PROJECT pages only
+      taskView: {
+        title: 'มุมมองงาน',
+        subtext: 'ลิสต์หรือบอร์ดงานของโปรเจคนี้ แบบข้อมูลสด',
+        aliases: ['tasks', 'board', 'list', 'task view', 'งาน', 'บอร์ด', 'มุมมอง'],
+        group: 'ข้อมูลสด',
+      },
+      projectWorkload: {
+        title: 'ภาระทีม',
+        subtext: 'ภาระของสมาชิกโปรเจค 8 สัปดาห์ แบบข้อมูลสด',
+        aliases: ['workload', 'team', 'load', 'ภาระ', 'ภาระทีมโปรเจค'],
+        group: 'ข้อมูลสด',
+      },
+    },
+    // M10 live data blocks (FR-1301…1307). Build-time owner after S0: S3.
+    liveBlocks: {
+      taskViewTitle: 'มุมมองงาน',
+      workloadTitle: 'ภาระทีมโปรเจค',
+      regionLabel: (title: string, project: string) => `${title} ของ ${project} (ข้อมูลสด)`,
+      wikiOnly: 'ใช้ได้เฉพาะหน้าในโปรเจค',
+      loading: 'กำลังโหลดข้อมูลสด…',
+      error: 'โหลดข้อมูลสดไม่สำเร็จ',
+      retry: 'ลองใหม่',
+      empty: 'ไม่มีงานตรงตัวกรอง',
+      readOnlyArchived: 'โปรเจคนี้ถูก archive แล้ว — ดูได้อย่างเดียว',
+      workloadArchived: 'โปรเจคนี้ถูก archive แล้ว — ไม่นับภาระของโปรเจคนี้ แสดงเฉพาะภาระจากโปรเจคอื่นของสมาชิก',
+      seeAll: (n: number) => `ดูทั้งหมด (${n})`,
+      openTasksTab: 'เปิดแท็บงาน',
+      openWorkload: 'เปิด Workload ทีม',
+      view: { label: 'มุมมอง', LIST: 'ลิสต์', BOARD: 'บอร์ด' },
+      filters: {
+        button: 'ตัวกรอง',
+        assignee: 'ผู้รับผิดชอบ',
+        anyone: 'ทุกคน',
+        milestone: 'Milestone',
+        anyMilestone: 'ทุก milestone',
+        status: 'สถานะ',
+        anyStatus: 'ทุกสถานะ',
+        showDone: 'แสดงงานที่เสร็จแล้ว',
+        limit: 'จำนวนสูงสุด',
+        limitOption: (n: number) => `${n} งาน`,
+      },
+      workload: {
+        range: '8 สัปดาห์จากสัปดาห์นี้',
+        view: { ALL: 'ทั้งหมด', COMMITTED: 'แน่นอน', AT_RISK: 'ยังไม่แน่นอน' },
+        cell: (load: string, cap: string) => `${load}/${cap}`,
+        noMembers: 'ยังไม่มีสมาชิกในโปรเจคนี้',
+        person: 'สมาชิก',
+      },
     },
     subpage: {
       untitled: UNTITLED,
@@ -1190,18 +1302,39 @@ export const th = {
     dialogLabel: 'ค้นหา',
     open: 'ค้นหา…',
     shortcut: '⌘K',
-    placeholder: 'ค้นหางานหรือหน้าเอกสาร…',
-    hint: 'พิมพ์เพื่อค้นหางานและหน้าเอกสาร จากชื่อหรือเนื้อหา',
+    // M10 (FR-1102/1103): all categories + quick commands
+    placeholder: 'ค้นหาโปรเจค งาน เอกสาร คน ลูกค้า หรือพิมพ์คำสั่ง…',
+    hint: 'พิมพ์เพื่อค้นหา หรือเลือกคำสั่งด่วน',
     loading: 'กำลังค้นหา…',
     empty: 'ไม่พบผลลัพธ์',
     error: 'ค้นหาไม่สำเร็จ',
     retry: 'ลองค้นหาอีกครั้ง',
-    groups: { tasks: 'งาน', pages: 'หน้าเอกสาร' },
+    // the commands heading stays M8's th.milestones.palette.group
+    groups: { projects: 'โปรเจค', tasks: 'งาน', pages: 'หน้าเอกสาร', people: 'พนักงาน', clients: 'ลูกค้า' },
     wiki: 'Wiki ทีม',
     matchedInContent: 'พบในเนื้อหา',
     /** M6.1 (FR-690) chips of a task hit */
     taskDone: 'เสร็จแล้ว',
     archived: 'archive แล้ว',
+    // M10 quick commands (FR-1103, M10-D23); `keywords` is a string (M8 PaletteCommand.keywords)
+    commands: {
+      createTask: { label: 'สร้าง task', keywords: 'new task สร้างงาน งานใหม่' },
+      createPage: { label: 'สร้างหน้า', keywords: 'new page หน้าใหม่ เอกสารใหม่' },
+      reportLeave: { label: 'แจ้งลา', keywords: 'leave time off วันลา' },
+      goToday: { label: 'ไปหน้าวันนี้', keywords: 'today home หน้าหลัก' },
+    },
+    createTask: {
+      pickProject: 'เลือกโปรเจคที่จะสร้างงาน',
+      projectPlaceholder: 'ค้นหาโปรเจค…',
+      namePlaceholder: (project: string) => `ชื่องานใหม่ใน ${project}…`,
+      lastUsed: 'ใช้ล่าสุด',
+      noProjects: 'ไม่มีโปรเจคที่คุณสร้างงานได้',
+      created: (name: string, project: string) => `สร้างงาน "${name}" ใน ${project} แล้ว`,
+      open: 'เปิด',
+      failed: 'สร้างงานไม่สำเร็จ',
+      back: 'ย้อนกลับ',
+    },
+    createPage: { failed: 'สร้างหน้าไม่สำเร็จ' },
   },
   // M5 (plan/m05 S0.10): calendar, timeOff, capacity, holidays, leaveTypes
   calendar: {

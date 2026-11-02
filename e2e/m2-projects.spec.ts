@@ -12,7 +12,7 @@ import type { Page } from '@playwright/test'
 import { th } from '../src/i18n/th'
 import { sortByThai } from '../src/lib/collate'
 import { user } from '../src/server/db/schema'
-import { expect, idOf, loginAs, openGuardedPage, resetDb, test, waitForServerAction } from './fixtures'
+import { expect, idOf, loginAs, openGuardedPage, resetDb, switchUser, test, waitForServerAction } from './fixtures'
 import { ClientsPage } from './pages/clients'
 import { ProjectFormDialog, ProjectPage } from './pages/project'
 import { ShellPage } from './pages/shell'
@@ -197,8 +197,7 @@ test.describe('E3 (FR-301, FR-302, FR-303 part) clients', () => {
     await expect(project.header()).toContainText('Bluebird') // FR-302: existing projects unaffected
     await expect(project.header().getByText(th.clients.archivedChip, { exact: true })).toBeVisible()
 
-    await page.context().clearCookies()
-    await loginAs(page, 'cindy')
+    await switchUser(page, 'cindy')
     await clients.goto()
     await expect(clients.nameLinks()).toHaveText(byThai(['Coral', 'Sunrise']))
     await expect(clients.addButton()).toHaveCount(0)
@@ -278,8 +277,7 @@ test.describe('E4 (FR-403, FR-404 part, BR-62, AC-203 M2) members on POS as Cind
     await expect(project.memberRow(mint)).toBeVisible()
     await project.expectRole(mint, 'MEMBER')
 
-    await page.context().clearCookies()
-    await loginAs(page, 'ivy')
+    await switchUser(page, 'ivy')
     await project.goto(pos)
     await expect(project.memberRows()).toHaveCount(4) // Cindy, Ivy, Mint, Jack
     await expect(project.membersPanel().getByRole('combobox')).toHaveCount(0)
@@ -391,8 +389,7 @@ test.describe('E7 (FR-407) permanent delete — the only confirm dialog', () => 
     await expect(project.archiveButton()).toBeVisible()
     await expect(project.deleteButton()).toHaveCount(0)
 
-    await page.context().clearCookies()
-    await loginAs(page, 'manager')
+    await switchUser(page, 'manager')
     await project.goto(store)
     await project.deleteButton().click()
     await expect(project.deleteDialog()).toBeVisible()

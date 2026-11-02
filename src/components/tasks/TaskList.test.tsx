@@ -482,3 +482,131 @@ describe('TaskList (FR-603/606/607/614, §8.6)', () => {
     await waitFor(() => expect(row('งาน D')).toHaveFocus())
   })
 })
+
+// M10-D9 (S3.2): the embed option used by the "มุมมองงาน" live block — additive; without it M3 behaviour is unchanged.
+describe('TaskList embed option (M10-D9)', () => {
+  /** ย่อย B (child of ออกแบบ) and งาน C are Ivy's; งาน D nobody's. */
+  const ivyData = () => {
+    const base = response()
+    return response({
+      tasks: base.tasks.map((t) =>
+        t.id === T.b
+          ? { ...t, assignees: [{ assignmentId: '00000000-0000-4000-8000-000000000502', userId: 'ivy' }] }
+          : t,
+      ),
+    })
+  }
+  const isIvy = (t: { assignees: readonly { userId: string }[] }) =>
+    t.assignees.some((x) => x.userId === 'ivy')
+
+  it('filter keeps the matching rows plus their ancestors as context rows', () => {
+    renderTasks(<TaskList projectId={PID} embed={{ filter: isIvy, limit: 20, onOpenTask: vi.fn() }} />, {
+      data: ivyData(),
+    })
+    expect(row('ย่อย B')).toBeInTheDocument()
+    expect(row('งาน C')).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: 'งาน D' })).toBeNull()
+    // the parent is shown as a context row (not a match)
+    expect(row('ออกแบบ').closest('[data-context-row]')).toHaveAttribute('aria-disabled', 'true')
+    expect(row('งาน C').closest('[data-context-row]')).toBeNull()
+  })
+
+  it('limit cuts after n matches (context rows do not count) and reports onCount(shown, total)', async () => {
+    const onCount = vi.fn()
+    renderTasks(
+      <TaskList projectId={PID} embed={{ filter: isIvy, limit: 1, onOpenTask: vi.fn(), onCount }} />,
+      { data: ivyData() },
+    )
+    expect(row('ย่อย B')).toBeInTheDocument()
+    expect(row('ออกแบบ')).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: 'งาน C' })).toBeNull()
+    await waitFor(() => expect(onCount).toHaveBeenLastCalledWith(1, 2))
+  })
+
+  it('ignores the grouping / completed preferences (no group headers, completed rows kept)', () => {
+    const data = response({
+      tasks: response().tasks.map((t) =>
+        t.id === T.d ? { ...t, completedOn: '2026-09-29', statusId: S.done } : t,
+      ),
+    })
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask: vi.fn() }} />, {
+      data,
+      prefs: { 'tasks.groupBy': 'assignee', 'tasks.showCompleted': false },
+    })
+    expect(row('งาน D')).toBeInTheDocument()
+    expect(document.querySelector('[data-group]')).toBeNull()
+  })
+
+  it('N on the page does not focus the embedded quick add (it still does without embed)', async () => {
+    const user = userEvent.setup()
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask: vi.fn() }} />, {
+      data: response(),
+    })
+    await user.keyboard('n')
+    expect(screen.getByRole('textbox', { name: th.tasks.quickAdd.label })).not.toHaveFocus()
+  })
+
+  it('Space on a row calls onOpenTask and leaves the URL alone', async () => {
+    const user = userEvent.setup()
+    const onOpenTask = vi.fn()
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask }} />, {
+      data: response(),
+    })
+    act(() => row('งาน C').focus())
+    await user.keyboard(' ')
+    expect(onOpenTask).toHaveBeenCalledWith(T.c)
+    expect(new URLSearchParams(window.location.search).get('task')).toBeNull()
+  })
+
+  it('a plain row click selects without opening anything', async () => {
+    const user = userEvent.setup()
+    const onOpenTask = vi.fn()
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask }} />, {
+      data: response(),
+    })
+    await user.click(row('งาน C'))
+    expect(row('งาน C')).toHaveAttribute('aria-selected', 'true')
+    expect(onOpenTask).not.toHaveBeenCalled()
+    expect(new URLSearchParams(window.location.search).get('task')).toBeNull()
+  })
+
+  it('Tab on a row makes no tree call (tree ops are off)', async () => {
+    const user = userEvent.setup()
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask: vi.fn() }} />, {
+      data: response(),
+    })
+    act(() => row('งาน C').focus())
+    await user.keyboard('{Tab}')
+    expect(a.indentTask).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: th.tasks.dragHandle })).toBeNull()
+  })
+
+  it('the checkbox still completes through M3 (completeTask)', async () => {
+    const user = userEvent.setup()
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask: vi.fn() }} />, {
+      data: response(),
+    })
+    await user.click(screen.getByRole('checkbox', { name: th.tasks.completeCheckbox('งาน C') }))
+    await waitFor(() => expect(a.completeTask).toHaveBeenCalledWith({ taskIds: [T.c], withChildren: false }))
+  })
+
+  it('archived: no archived banner of its own (the block shows it), no quick add', () => {
+    const data = response({ viewer: { role: 'LEAD', canEdit: false, canManage: false } })
+    renderTasks(<TaskList projectId={PID} embed={{ filter: () => true, limit: 20, onOpenTask: vi.fn() }} />, {
+      data,
+    })
+    expect(screen.queryByText(th.tasks.readOnlyArchived)).toBeNull()
+    expect(screen.queryByRole('textbox', { name: th.tasks.quickAdd.label })).toBeNull()
+  })
+
+  it('nothing matches → the live-block empty text', () => {
+    renderTasks(
+      <TaskList projectId={PID} embed={{ filter: () => false, limit: 20, onOpenTask: vi.fn() }} />,
+      {
+        data: response(),
+      },
+    )
+    expect(screen.getByText(th.editor.liveBlocks.empty)).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: 'งาน C' })).toBeNull()
+  })
+})

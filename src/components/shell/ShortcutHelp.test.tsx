@@ -31,6 +31,19 @@ describe('ShortcutHelp (X07, §8.6)', () => {
     await waitForElementToBeRemoved(() => screen.queryByRole('dialog'))
   })
 
+  it('M10 (KEY-06): the palette scope lists move, open and back', async () => {
+    renderHelp()
+    fireEvent.keyDown(document.body, { code: 'Slash', key: '?', shiftKey: true })
+    const dialog = await screen.findByRole('dialog', { name: th.shortcuts.title })
+    const section = within(dialog).getByRole('region', { name: th.shortcuts.scopes.palette })
+    for (const label of [
+      th.shortcuts.items.paletteMove,
+      th.shortcuts.items.paletteOpen,
+      th.shortcuts.items.paletteBack,
+    ])
+      expect(within(section).getByText(label)).toBeInTheDocument()
+  })
+
   it('ignores ? while typing', () => {
     renderHelp()
     const input = screen.getByRole('textbox', { name: 'typing' })

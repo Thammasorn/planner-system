@@ -46,6 +46,7 @@ import { EditorBanners } from './EditorBanners'
 import { LeaseBadge } from './lease/LeaseBadge'
 import { useEditLease } from './lease/useEditLease'
 import { MentionMenu } from './mention-menu'
+import { PageEditorContext, type PageEditorContextValue } from './PageEditorContext'
 import { SaveStatus } from './SaveStatus'
 import { type AppEditor, schema } from './schema'
 import { SlashMenu, type SlashCtx } from './slash-menu'
@@ -203,9 +204,14 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
     }
   }, [])
 
+  // M10: the live blocks read the page id and the editable flag from here (they never store the id).
+  const liveCtx = useMemo<PageEditorContextValue>(() => ({ pageId, editable }), [pageId, editable])
+
   const slashCtx = useMemo<SlashCtx>(
     () => ({
       kind,
+      space,
+      canEdit,
       canCreateSubpage: kind === 'DOC' && canEdit && props.depth <= MAX_PARENT_DEPTH,
       createSubpage: async () => {
         if (pageId === null) return null
@@ -249,35 +255,37 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
         <SaveStatus state={save.status} pending={save.pending} />
       )}
       <div ref={surface} className="app-editor-surface">
-        <BlockNoteView
-          editor={editor}
-          editable={editable}
-          theme={scheme}
-          aria-label={th.editor.label}
-          slashMenu={false}
-          emojiPicker={false}
-          filePanel={false}
-          comments={false}
-          onChange={() => {
-            if (editor.isEditable) {
-              fixForeignMedia(editor)
-              if (kind === 'TASK') replaceSubpagesWithMentions(editor) // dropped / moved cards too (FR-680)
-            }
-            save.schedule()
-            props.onBlankChange?.(isBlankPage({ title: '', content: editor.document }))
-            props.onDocumentChange?.(editor.document)
-          }}
-        >
-          <SlashMenu editor={editor} ctx={slashCtx} />
-          <GridSuggestionMenuController
-            triggerCharacter=":"
-            columns={10}
-            minQueryLength={2}
-            shouldOpen={atWordStart}
-          />
-          <MentionMenu editor={editor} />
-          <FilePanelController filePanel={UploadOnlyFilePanel} />
-        </BlockNoteView>
+        <PageEditorContext value={liveCtx}>
+          <BlockNoteView
+            editor={editor}
+            editable={editable}
+            theme={scheme}
+            aria-label={th.editor.label}
+            slashMenu={false}
+            emojiPicker={false}
+            filePanel={false}
+            comments={false}
+            onChange={() => {
+              if (editor.isEditable) {
+                fixForeignMedia(editor)
+                if (kind === 'TASK') replaceSubpagesWithMentions(editor) // dropped / moved cards too (FR-680)
+              }
+              save.schedule()
+              props.onBlankChange?.(isBlankPage({ title: '', content: editor.document }))
+              props.onDocumentChange?.(editor.document)
+            }}
+          >
+            <SlashMenu editor={editor} ctx={slashCtx} />
+            <GridSuggestionMenuController
+              triggerCharacter=":"
+              columns={10}
+              minQueryLength={2}
+              shouldOpen={atWordStart}
+            />
+            <MentionMenu editor={editor} />
+            <FilePanelController filePanel={UploadOnlyFilePanel} />
+          </BlockNoteView>
+        </PageEditorContext>
       </div>
     </Box>
   )

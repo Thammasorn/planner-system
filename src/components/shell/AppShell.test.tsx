@@ -165,6 +165,21 @@ describe('AppShell', () => {
     expect(await within(nav).findByText(th.pages.tree.empty)).toBeInTheDocument()
   })
 
+  it('M10: N outside inputs opens the palette at "สร้าง task" (KEY-05, M10-D25); N in an input does not', async () => {
+    renderWithProviders(
+      <AppShell>
+        <input aria-label="field" />
+      </AppShell>,
+    )
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'field' }), { code: 'KeyN', key: 'n' })
+    await act(() => new Promise((r) => setTimeout(r, 10)))
+    expect(screen.queryByRole('dialog', { name: th.palette.dialogLabel })).toBeNull()
+    fireEvent.keyDown(document.body, { code: 'KeyN', key: 'ื' }) // Thai layout: matched by e.code
+    const dialog = await screen.findByRole('dialog', { name: th.palette.dialogLabel })
+    expect(within(dialog).getByText(th.palette.createTask.pickProject)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: th.palette.createTask.back })).toBeInTheDocument()
+  })
+
   it('focuses the skip link first', async () => {
     const user = userEvent.setup()
     renderWithProviders(<AppShell>x</AppShell>)

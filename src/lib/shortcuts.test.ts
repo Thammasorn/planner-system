@@ -134,3 +134,16 @@ describe('M8 grid ◆ entry (plan/m08 S0.7, M8-D10)', () => {
     expect(SHORTCUTS.filter((s) => /milestone/i.test(s.id)).map((s) => s.id)).toEqual(['grid.milestoneOpen'])
   })
 })
+
+describe('palette scope (M10, KEY-06)', () => {
+  it('registers move / select / back after the global Cmd+K entry', () => {
+    expect(SHORTCUT_SCOPES).toContain('palette')
+    expect(SHORTCUT_SCOPE_LABELS.palette).toBe(th.shortcuts.scopes.palette)
+    expect(SHORTCUTS.filter((s) => s.scope === 'palette').map((s) => [s.id, s.combos])).toEqual([
+      ['palette.move', [['ArrowUp'], ['ArrowDown']]],
+      ['palette.select', [['Enter']]],
+      ['palette.back', [['Backspace']]],
+    ])
+    expect(SHORTCUTS.find((s) => s.id === 'palette.open')?.combos).toEqual([['Mod', 'K']])
+  })
+})

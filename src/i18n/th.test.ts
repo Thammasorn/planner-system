@@ -73,7 +73,18 @@ describe('th', () => {
   })
 
   it('builds parameterised strings', () => {
-    expect(th.home.today('30 ก.ย. 2569')).toBe('วันนี้ 30 ก.ย. 2569')
+    expect(th.home.greetingFor.afternoon('Cindy')).toBe('สวัสดีตอนบ่าย Cindy')
     expect(th.nav.toggleHint(th.nav.collapseSidebar)).toBe('ย่อแถบด้านข้าง (⌘ \\ หรือ Ctrl + \\)')
+  })
+
+  it('M10 namespaces and parameterised strings (M10-D28)', () => {
+    expect(Object.keys(th)).toEqual(
+      expect.arrayContaining(['home', 'search', 'palette', 'editor', 'shortcuts']),
+    )
+    expect(th.home.greetingFor.morning('Cindy')).toBe('สวัสดีตอนเช้า Cindy')
+    expect(th.home.myTasks.more(3)).toBe('และอีก 3 งาน')
+    expect(th.editor.liveBlocks.seeAll(42)).toBe('ดูทั้งหมด (42)')
+    expect(th.palette.createTask.created('ก', 'POS')).toBe('สร้างงาน "ก" ใน POS แล้ว')
+    expect(Object.keys(th.palette.groups)).toEqual(['projects', 'tasks', 'pages', 'people', 'clients'])
   })
 })

@@ -1,0 +1,91 @@
+/* "ภาระของฉัน 8 สัปดาห์" (FR-1101b, BR-45, M10-D14): eight small bars. Colour is never alone — every bar has its
+   number above, the week under it, the 🔴/⚠ glyph for OVER/RISK and an aria-label (SPEC §8.9). Token colours
+   only (X51 contrast); the bar height comes from an inline CSS variable. */
+
+.bars {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.week {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 32px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  overflow: hidden;
+}
+
+.bar {
+  width: 100%;
+  height: var(--bar-height, 0%);
+  background: var(--load-light-bg);
+  box-shadow: inset 0 0 0 1px var(--load-light-fg);
+}
+
+.bar[data-tone='empty'] {
+  box-shadow: none;
+}
+
+.bar[data-tone='light'] {
+  background: var(--load-light-bg);
+  box-shadow: inset 0 0 0 1px var(--load-light-fg);
+}
+
+.bar[data-tone='full'] {
+  background: var(--load-full-bg);
+  box-shadow: inset 0 0 0 1px var(--load-full-fg);
+}
+
+.bar[data-tone='over'] {
+  background: var(--load-over-bg);
+  box-shadow: inset 0 0 0 1px var(--load-over-fg);
+}
+
+/* capacity 0 → a full-height striped track (the "no working days" pattern, like the workload cell) */
+.track[data-no-capacity='true'] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--nonworking) 0,
+    var(--nonworking) 4px,
+    var(--border-subtle) 4px,
+    var(--border-subtle) 8px
+  );
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.legend {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}

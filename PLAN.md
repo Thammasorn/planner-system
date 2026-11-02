@@ -952,13 +952,20 @@ export const qk = {
   workloadBadge: () => ['workload', 'badge'] as const,
   calendar: (from: ISODate, to: ISODate) => ['calendar', from, to] as const,
   search: (q: string, scope: 'all' | 'title' = 'all') => ['search', q, scope] as const, // X82, M4-D36
-  home: () => ['home'] as const,
+  home: () => ['home'] as const,                                     // M10 (M10-D34)
+  searchIndex: () => ['search', 'index'] as const,                   // M10 (M10-D21), under the search prefix
+  pageEmbedTasks: (pageId: string) => ['embed', 'tasks', pageId] as const,       // M10 taskView block
+  pageEmbedTasksAll: () => ['embed', 'tasks'] as const,                          // M10 prefix
+  pageEmbedWorkload: (pageId: string) => ['embed', 'workload', pageId] as const, // M10 projectWorkload block
+  pageEmbedWorkloadAll: () => ['embed', 'workload'] as const,                    // M10 prefix
 }
 ```
 
 - `src/lib/invalidate.ts` groups invalidations so features don't forget views: `invalidateLoad(qc)` →
   `grid`, `workload`, `home`, `tasks.my`; `invalidateTasks(qc, projectId)`; `invalidatePages(qc, …)`;
-  `invalidateCalendar(qc)`. Each milestone that adds a query registers it here.
+  `invalidateCalendar(qc)`. Each milestone that adds a query registers it here. M10 (G42): `invalidateLoad` also
+  invalidates `qk.home()` and `qk.pageEmbedWorkloadAll()`; `invalidateTasks` also `qk.home()` and
+  `qk.pageEmbedTasksAll()`; `invalidateMilestones` also `qk.home()`.
 
 ### 3.6 Units, dates and "today"
 
@@ -1121,6 +1128,12 @@ export const qk = {
   and a depth cap. It sanitises file and image urls (`^/api/files/<uuid>$`, else a link), bumps `version`, recomputes
   `content_text` with `src/lib/editor/content-text.ts` (a pure walker, NFC, capped at 200 k characters) and writes an audit row
   without content.
+- Live blocks (M10, G47; M10-D8 as revised by the S3.1 spike): `taskView` / `projectWorkload` set `meta.selectable: false` on
+  their BlockNote spec, so ProseMirror's `stopEvent()` ignores every event from inside the node view (keys, beforeinput,
+  paste, mousedown, drag, drop). **No native `stopPropagation` inside React node views** — it also cuts React's root
+  listener and kills React handlers. The shared `LiveBlockFrame` is `contentEditable={false}` and only adds a React-level
+  key handler that routes `Mod+Z` / `Mod+Shift+Z` outside form fields to `useUndo()` (M1's window listener skips
+  `.bn-editor` targets); `Mod+K` passes through to the palette. `PageEditorContext` gives blocks `{ pageId, editable }`.
 - Theme: `editor-theme.css` bridges `--bn-colors-*` to `--mui-palette-*`, overrides the content font with the
   Thai stack and sets `--bn-ui-base-z-index: 1150`. `theme` is passed as a string from the resolved preference.
   An error boundary wraps the editor.

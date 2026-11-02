@@ -25,6 +25,7 @@ import {
 import { clients, milestones, pages, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import { E2E } from './env'
+import { insertPage } from './support/seed-pages'
 
 export type GuardLog = { csp: string[]; external: string[]; errors: string[] }
 export const newGuardLog = (): GuardLog => ({ csp: [], external: [], errors: [] })
@@ -115,7 +116,13 @@ export type ResetDbOptions = {
   alsoFixtures?: FixtureId[]
   /** M9 (M9-D23): addSyntheticWorkload 95 people × 20 projects × 12 weeks from 2026-09-28 (100 workers on /workload). */
   syntheticWorkload?: boolean
+  /** M10 (plan/m10 S4.3): two empty pages to paste live blocks into — `LIVE_PAGES.dw` (Data Warehouse, by Peter) and
+   *  `LIVE_PAGES.wiki` (team wiki, by Manager). Golden charters already hold the template's live blocks (M10-D12). */
+  livePages?: boolean
 }
+
+/** M10: titles of the `livePages` pages (test data, not UI strings). */
+export const LIVE_PAGES = { dw: 'หน้า DW ทดสอบ', wiki: 'หน้า wiki ทดสอบ' } as const
 
 /**
  * Truncate every table + `seedGolden` (+ `applyFixture` for F2/F3/F4, M5) + extras in ONE transaction against `planner_e2e`, then empty
@@ -135,6 +142,16 @@ export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): P
       if (opts.milestones) await addMilestones(tx) // M8
       if (opts.syntheticWorkload)
         await addSyntheticWorkload(tx, { people: 95, projects: 20, weeks: 12, from: '2026-09-28' }) // M9
+      if (opts.livePages) {
+        // M10: empty pages (the paste targets of B2 / the wiki slash check of B6)
+        await insertPage(tx, {
+          space: 'PROJECT',
+          projectName: 'Data Warehouse',
+          title: LIVE_PAGES.dw,
+          byNickname: 'Peter',
+        })
+        await insertPage(tx, { space: 'WORKSPACE', title: LIVE_PAGES.wiki, byNickname: 'Manager' })
+      }
       await opts.extras?.(tx)
     })
   } finally {
@@ -155,6 +172,17 @@ export async function loginAs(page: Page, who: GoldenLogin): Promise<void> {
     headers: { origin: E2E.baseUrl },
   })
   expect(res.ok(), `loginAs(${who}) → HTTP ${res.status()}`).toBe(true)
+}
+
+/**
+ * Signs `page` in as another user in the same context. The current document is left first (about:blank), so work the
+ * old page scheduled for later (M10's idle search-index prefetch, focus refetches) never runs without a session and
+ * logs a 401 — a session the test killed by clearing cookies, not a product error.
+ */
+export async function switchUser(page: Page, who: GoldenLogin): Promise<void> {
+  await page.goto('about:blank')
+  await page.context().clearCookies()
+  await loginAs(page, who)
 }
 
 export interface GuardedPage {

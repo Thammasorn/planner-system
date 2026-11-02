@@ -5,6 +5,7 @@ import {
   preferencesSchema,
   GRID_PREFERENCE_DEFAULTS,
   gridPreference,
+  paletteLastProjectId,
   PLAN_PREFERENCE_DEFAULTS,
   planPreference,
   TASK_PREFERENCE_DEFAULTS,
@@ -164,5 +165,19 @@ describe('M7.1 preference keys (FR-810/813/814/816, X59)', () => {
     expect(gridPreference(p, 'grid.showAssignees')).toBe(false)
     expect(gridPreference(p, 'grid.taskColumnWidth')).toBe(320)
     expect(gridPreference(p, 'grid.chart')).toBe(true)
+  })
+})
+
+describe('palette.lastProjectId (M10-D27, X05/X59)', () => {
+  const V4 = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
+  it('setPreference input accepts a uuid or null; rejects anything else', () => {
+    expect(preferenceInput.safeParse({ key: 'palette.lastProjectId', value: V4 }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'palette.lastProjectId', value: null }).success).toBe(true)
+    expect(preferenceInput.safeParse({ key: 'palette.lastProjectId', value: 'p1' }).success).toBe(false)
+  })
+  it('absent or bad stored values read as null; a stored uuid is kept', () => {
+    expect(paletteLastProjectId(DEFAULT_PREFERENCES)).toBeNull()
+    expect(paletteLastProjectId(preferencesSchema.parse({ 'palette.lastProjectId': 42 }))).toBeNull()
+    expect(paletteLastProjectId(preferencesSchema.parse({ 'palette.lastProjectId': V4 }))).toBe(V4)
   })
 })

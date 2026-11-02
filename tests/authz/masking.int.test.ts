@@ -12,6 +12,8 @@
 // /api/tasks milestonesByProject + milestoneId filter, the grid ◆ row, a cross-project link error body, golden Cindy/Ivy/Peter.
 // M6.1 (plan/m06.1 S6.3): task bodies — task search group, page trees/titles without TASK pages, body/page/lease/file
 // 404 bodies, hasBody without body text, /my statusesByProject of the viewer's projects only.
+// M10 (plan/m10 S4.2, K1–K10 + golden): GET /api/search (all categories), /api/search/index, /api/home and the two
+// live-block embeds /api/pages/{id}/embed/{tasks,workload} (MASK-1/2/3/5/6/7, TST-2, AC-1303).
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -22,7 +24,7 @@ import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
 import { GET as getTeamTasks } from '@/app/api/tasks/route'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { weekRange } from '@/domain/dates'
 import { th } from '@/i18n/th'
 import type {
@@ -51,7 +53,9 @@ import type { MilestoneTargetsResponse } from '@/lib/contracts/milestones'
 import type { PlanMarkersResponse } from '@/lib/contracts/plan-markers'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
-import type { SearchResponse } from '@/lib/contracts/search'
+import type { EmbedTasksResponse, EmbedWorkloadResponse } from '@/lib/contracts/embed'
+import type { HomeLeaveEntry, HomeResponse } from '@/lib/contracts/home'
+import type { SearchAllResponse, SearchIndexResponse, SearchResponse } from '@/lib/contracts/search'
 import type {
   MyBucketTask,
   MyTaskBucketsResponse,
@@ -63,6 +67,7 @@ import { addTaskBlocker } from '@/server/actions/task-blockers'
 import { db } from '@/server/db/client'
 import {
   pageLocks,
+  pages as pagesTable,
   taskAssignments,
   tasks as tasksTable,
   timeOff,
@@ -100,6 +105,7 @@ import { calendarGet } from './rows/_m5'
 import { GRID_RANGE, gridGet, save, weekItem } from './rows/_m6'
 import { bodyGet } from './rows/_m6_1'
 import { markersGet } from './rows/_m7_1'
+import { embedTasksGet, embedWorkloadGet, homeGet, searchIndexGet, searchQ } from './rows/_m10'
 import {
   milestonesGet,
   ms,
@@ -1843,4 +1849,311 @@ describe('masking — golden person grid (M9, r8 §4.3/§6.4)', () => {
       expect(containsAny(cell.body, [t.id, t.name])).toEqual([])
     },
   )
+})
+
+// =============================================================================================================
+// M10 — home, search, embeds (plan/m10 S4.2, K1–K10; SPEC §3.3, §11.2, FR-1101/1104, FR-1303/1304, AC-1303)
+// =============================================================================================================
+describe('masking — home, search, embeds (M10)', () => {
+  const M10W = ['home'] as const
+  const W1005 = '2026-10-05'
+
+  /** Everything of P (and archived A, P's team) a Q-only viewer must never receive. */
+  const forbiddenP = (w: World): string[] => [
+    w.P.name,
+    w.P.id,
+    w.A.name,
+    w.A.id,
+    w.C1.name, // C1 is the client of P and A only
+    w.C1.id,
+    'งานแม่ P-ลับ01',
+    'งานร่วม P-ลับ03',
+    'สถานะลับ P-03',
+    'Charter P-ลับ04',
+    'หน้า P-ลับ05',
+    'Milestone P-ลับ06',
+    'ส่งมอบรอบแรก P',
+    'Milestone P-ลับ13',
+    'งานกำหนดส่ง P-ลับ17',
+    'หน้าฝังบล็อก P-ลับ19',
+    'หน้าฝังบล็อก A-ลับ21',
+    w.tasks.pParent.id,
+    w.tasks.pLeaf.id,
+    w.tasks.pCoworker.id,
+    w.tasks.pDueThisWeek.id,
+    w.pages.pEmbed.id,
+    w.pages.aEmbed.id,
+    w.milestones.pLate.id,
+    w.assignments.pCoworker.id,
+  ]
+  /** Everything of Q that P's team (lead, member) must never receive. */
+  const forbiddenQ = (w: World): string[] => [
+    w.Q.name,
+    w.Q.id,
+    w.C2.name, // C2 is Q's client only
+    w.C2.id,
+    'งาน Q-ลับ02',
+    'สถานะลับ Q-04',
+    'Milestone Q-ลับ05',
+    'Milestone Q-ลับ15',
+    'หน้าล่าสุด Q-ลับ18',
+    'หน้าฝังบล็อก Q-ลับ20',
+    w.tasks.qTask.id,
+    w.pages.qEmbed.id,
+    w.pages.qRecent.id,
+    w.milestones.qSoon.id,
+    w.assignments.qTaskCoworker.id,
+  ]
+  /** Leave details only a manager (or the person) may receive (MASK-5, X60b). */
+  const forbiddenLeave = (w: World): string[] => [
+    'โน้ตลับ-โลก-03',
+    'โน้ตลับ-โลก-04',
+    w.leaveTypes.vacation.name,
+    w.leaveTypes.sick.name,
+    w.timeOff.coworkerToday.id,
+    w.timeOff.pOnlyNextWeek.id,
+    w.leaveTypes.vacation.id,
+    w.leaveTypes.sick.id,
+    w.leaveTypes.vacation.color,
+    w.leaveTypes.sick.color,
+  ]
+  /** Every project / task name and id of the world (K9: a wiki embed carries none). */
+  const allProjectContent = (w: World): string[] => [
+    ...forbiddenP(w),
+    ...forbiddenQ(w).filter((s) => s !== w.C2.name && s !== w.C2.id),
+  ]
+
+  const allLeave = (b: HomeResponse): HomeLeaveEntry[] => [...b.leave.today, ...b.leave.thisWeek, ...b.leave.nextWeek]
+  type ProjectWorkload = Extract<EmbedWorkloadResponse, { kind: 'project' }>
+  const personOf = (b: ProjectWorkload, userId: string) => b.people.find((p) => p.userId === userId)
+
+  it('fixture sanity: the M10 secrets are the distinctive names S0.12 promised', async () => {
+    const w = await createWorld({ with: M10W })
+    expect(w.tasks.pParent.name).toBe('งานแม่ P-ลับ01')
+    expect(w.tasks.qTask.name).toBe('งาน Q-ลับ02')
+    expect(w.tasks.pDueThisWeek.name).toBe('งานกำหนดส่ง P-ลับ17')
+    expect(w.pages.qRecent.title).toBe('หน้าล่าสุด Q-ลับ18')
+    expect(w.pages.pEmbed.title).toBe('หน้าฝังบล็อก P-ลับ19')
+    expect(w.milestones.pOverdue.name).toBe('Milestone P-ลับ13')
+    expect(w.milestones.qSoon.name).toBe('Milestone Q-ลับ15')
+    expect(w.timeOff.coworkerToday.note).toBe('โน้ตลับ-โลก-03')
+    expect(w.timeOff.pOnlyNextWeek.note).toBe('โน้ตลับ-โลก-04')
+  })
+
+  it('K1 outsider: GET /api/search?q=ลับ (all categories, content path) → Q task and Q page hits, nothing of P or A', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.outsider)
+    const body = await okJson<SearchAllResponse>(await searchQ('ลับ'))
+    assertNoLeak(body, forbiddenP(w))
+    expect(body.tasks.map((t) => t.name), 'MASK-7: the Q task is found').toContain('งาน Q-ลับ02')
+    expect(body.pages.map((p) => p.title), 'the Q page is found').toContain(w.pages.qPage.title)
+    for (const t of body.tasks) expect(t.projectId).toBe(w.Q.id)
+    for (const p of body.projects) expect(p.id).toBe(w.Q.id)
+  })
+
+  it('K2 member: GET /api/search?q=ลับ and ?q=Q- → P hits incl. archived A (projectArchived), nothing of Q', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.member)
+    const secret = await okJson<SearchAllResponse>(await searchQ('ลับ'))
+    assertNoLeak(secret, forbiddenQ(w))
+    const names = secret.tasks.map((t) => t.name)
+    expect(names).toContain('งานแม่ P-ลับ01')
+    const archived = secret.tasks.find((t) => t.projectId === w.A.id)
+    expect(archived, 'X42/X43: the archived A task is searchable').toBeDefined()
+    expect(archived?.projectArchived).toBe(true)
+    const qDash = await okJson<SearchAllResponse>(await searchQ('Q-'))
+    assertNoLeak(qDash, forbiddenQ(w))
+  })
+
+  it('K3 outsider: GET /api/search/index → exactly projects [Q], people { outsider, coworker }, clients [C2]', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.outsider)
+    const body = await okJson<SearchIndexResponse>(await searchIndexGet())
+    assertNoLeak(body, [
+      ...forbiddenP(w),
+      w.lead.id,
+      w.lead.name,
+      w.member.id,
+      w.member.name,
+      w.users.pOnly!.id,
+      w.users.pOnly!.name,
+    ])
+    expect(body.projects.map((p) => p.id)).toEqual([w.Q.id])
+    expect(body.people.map((p) => p.id).sort()).toEqual([w.outsider.id, w.users.coworker!.id].sort())
+    expect(body.clients.map((c) => c.id)).toEqual([w.C2.id])
+  })
+
+  it('K4 outsider: GET /api/home → manager null, coworker leave masked, Q milestone and Q page; nothing of P or leave details', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.outsider)
+    const body = await okJson<HomeResponse>(await homeGet())
+    assertNoLeak(body, [...forbiddenP(w), ...forbiddenLeave(w)])
+    expect(body.manager, 'FR-1101f: no manager cards for a worker').toBeNull()
+    const today = body.leave.today.find((e) => e.userId === w.users.coworker!.id)
+    expect(today?.entry, 'MASK-5: masked label only').toEqual({
+      kind: 'masked',
+      userId: w.users.coworker!.id,
+      startDate: '2026-09-30',
+      endDate: '2026-09-30',
+      half: null,
+      label: th.masking.leave,
+    })
+    // pOnly is invisible to the outsider (no shared project): not even masked
+    expect(allLeave(body).map((e) => e.userId)).not.toContain(w.users.pOnly!.id)
+    expect(body.milestones.map((m) => m.id), 'the Q milestone due soon').toContain(w.milestones.qSoon.id)
+    expect(body.recentPages.map((p) => p.title), 'the newest visible page').toContain('หน้าล่าสุด Q-ลับ18')
+    expect(body.myTasks.items.map((t) => t.name), 'own Q task planned this week').toContain('งาน Q-ลับ02')
+    expect(allNumbersInteger(body), 'BR-03 integer cd').toBe(true)
+  })
+
+  it('K5 member: GET /api/home → late P milestone, pOnly next week masked; nothing of Q or leave details', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.member)
+    const body = await okJson<HomeResponse>(await homeGet())
+    assertNoLeak(body, [...forbiddenQ(w), ...forbiddenLeave(w)])
+    expect(body.manager).toBeNull()
+    expect(body.milestones.find((m) => m.id === w.milestones.pLate.id), 'BR-71 late flag').toMatchObject({
+      name: 'ส่งมอบรอบแรก P',
+      late: true,
+    })
+    const next = body.leave.nextWeek.find((e) => e.userId === w.users.pOnly!.id)
+    expect(next?.entry).toMatchObject({ kind: 'masked', label: th.masking.leave })
+    for (const e of allLeave(body).filter((x) => x.userId !== w.member.id))
+      expect(e.entry.kind, `${e.name}: masked for a worker`).toBe('masked')
+  })
+
+  it('K6 member: GET /api/pages/{pEmbed}/embed/workload → coworker 10-05 = P 1.00 + one masked 3.00; nothing of Q', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.member)
+    const body = await okJson<EmbedWorkloadResponse>(await embedWorkloadGet(w.pages.pEmbed.id))
+    assertNoLeak(body, [...forbiddenQ(w), w.outsider.id, w.outsider.name])
+    if (body.kind !== 'project') throw new Error('expected a project embed')
+    const cell = personOf(body, w.users.coworker!.id)?.cells[W1005]
+    expect(cell).toMatchObject({ total: 400, committed: 400 })
+    expect(cell?.byProject).toEqual([
+      { projectId: w.P.id, total: 100, committed: 100 },
+      { projectId: null, total: 300, committed: 300 },
+    ])
+    expect(Object.keys(body.projects)).not.toContain(w.Q.id)
+    expect(allNumbersInteger(body), 'BR-03 integer cd').toBe(true)
+  })
+
+  it('K7 outsider: GET /api/pages/{pEmbed}/embed/{tasks,workload} → 404 with an error body only', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.outsider)
+    for (const res of [await embedTasksGet(w.pages.pEmbed.id), await embedWorkloadGet(w.pages.pEmbed.id)]) {
+      const { status, body } = await bodyOf(res)
+      expect(status).toBe(404)
+      assertNoLeak(body, [...forbiddenP(w), w.pages.pEmbed.title])
+    }
+  })
+
+  it('K8 outsider: GET /api/pages/{qEmbed}/embed/workload → coworker’s P load (1.00) is one masked part; nothing of P', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.outsider)
+    const body = await okJson<EmbedWorkloadResponse>(await embedWorkloadGet(w.pages.qEmbed.id))
+    assertNoLeak(body, [...forbiddenP(w), w.lead.id, w.member.id, w.users.pOnly!.id])
+    if (body.kind !== 'project') throw new Error('expected a project embed')
+    expect(body.people.map((p) => p.userId).sort()).toEqual([w.outsider.id, w.users.coworker!.id].sort())
+    expect(personOf(body, w.users.coworker!.id)?.cells[W1005]?.byProject).toEqual([
+      { projectId: w.Q.id, total: 300, committed: 300 },
+      { projectId: null, total: 100, committed: 100 },
+    ])
+  })
+
+  it('K9 member: GET /api/pages/{wikiEmbed}/embed/{tasks,workload} → exactly { kind: "wiki" }', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.member)
+    const tasks = await okJson<EmbedTasksResponse>(await embedTasksGet(w.pages.wikiEmbed.id))
+    const load = await okJson<EmbedWorkloadResponse>(await embedWorkloadGet(w.pages.wikiEmbed.id))
+    for (const body of [tasks, load]) {
+      expect(body).toEqual({ kind: 'wiki' })
+      assertNoLeak(body, allProjectContent(w))
+    }
+  })
+
+  it('K10 manager: GET /api/home → manager cards present; leave entries in full with type names', async () => {
+    const w = await createWorld({ with: M10W })
+    asUser(w.manager)
+    const body = await okJson<HomeResponse>(await homeGet())
+    expect(body.manager).not.toBeNull()
+    expect(Array.isArray(body.manager?.overloaded)).toBe(true)
+    expect(body.manager?.utilisation.weeks).toHaveLength(4)
+    expect(body.manager?.utilisation.total.week).toBe('2026-09-28')
+    const today = body.leave.today.find((e) => e.userId === w.users.coworker!.id)
+    expect(today?.entry).toMatchObject({ kind: 'full', leaveTypeName: w.leaveTypes.vacation.name })
+    const next = body.leave.nextWeek.find((e) => e.userId === w.users.pOnly!.id)
+    expect(next?.entry).toMatchObject({ kind: 'full', leaveTypeName: w.leaveTypes.sick.name })
+    expect(allNumbersInteger(body), 'BR-03 integer cd').toBe(true)
+  })
+})
+
+describe('masking — home, search, embeds golden (M10, r8 §4.3, AC-1303, FR-1105)', () => {
+  const MILESTONES_HIDDEN_FROM_CINDY = ['Pipeline พร้อมใช้งาน', 'Design freeze', 'Beta release', 'Dashboard v1 review']
+
+  async function golden(): Promise<void> {
+    await seedGolden(db)
+    await applyFixture(db, 'F3')
+    await addMilestones(db)
+  }
+
+  async function charterOf(project: GoldenProject): Promise<string> {
+    const projectId = await goldenProjectId(project)
+    const [row] = await db
+      .select({ id: pagesTable.id })
+      .from(pagesTable)
+      .where(and(eq(pagesTable.projectId, projectId), eq(pagesTable.isCharter, true), isNull(pagesTable.deletedAt)))
+    if (!row) throw new Error(`no charter in ${project}`)
+    return row.id
+  }
+
+  it('Ivy: GET /api/search?q=a — people never contain Peter, Jack or the manager', async () => {
+    await golden()
+    const hidden = await Promise.all((['Peter', 'Jack', 'Manager'] as const).map(goldenUser))
+    asUser(await goldenUser('Ivy'))
+    const body = await okJson<SearchAllResponse>(await searchQ('a'))
+    expect(containsAny(body.people, hidden.map((u) => u.id))).toEqual([])
+    expect(containsAny(body, hidden.map((u) => u.id)), 'no hidden person id anywhere').toEqual([])
+  })
+
+  it('AC-1303 Ivy: the POS charter embed/workload — rows Cindy, Ivy, Mint; no "Mobile App Revamp" / "พัฒนา front-end"', async () => {
+    await golden()
+    const charter = await charterOf('POS Upgrade')
+    asUser(await goldenUser('Ivy'))
+    const res = await embedWorkloadGet(charter)
+    const text = await res.clone().text()
+    expect(res.status).toBe(200)
+    for (const s of ['Mobile App Revamp', 'พัฒนา front-end', await goldenProjectId('Mobile App Revamp')])
+      expect(text.includes(s), `response leaks ${s}`).toBe(false)
+    const body = (await res.json()) as EmbedWorkloadResponse
+    if (body.kind !== 'project') throw new Error('expected a project embed')
+    expect(body.people.map((p) => p.name).sort()).toEqual(['Cindy', 'Ivy', 'Mint'])
+    const mint = body.people.find((p) => p.name === 'Mint')!
+    const masked = Object.values(mint.cells).flatMap((c) => c.byProject).filter((x) => x.projectId === null)
+    expect(masked.length, 'Mint’s Mobile load reaches Ivy as a masked part').toBeGreaterThan(0)
+  })
+
+  it('Cindy: GET /api/home — none of the four hidden milestones; Peter’s leave masked as "ลา"', async () => {
+    await golden()
+    const peter = await goldenUser('Peter')
+    asUser(await goldenUser('Cindy'))
+    const body = await okJson<HomeResponse>(await homeGet())
+    expect(containsAny(body, MILESTONES_HIDDEN_FROM_CINDY), 'M8-D23 / MASK-6').toEqual([])
+    expect(containsAny(body, [th.leaveTypes.defaults[0].name]), 'no leave type for a worker').toEqual([])
+    const leave = [...body.leave.today, ...body.leave.thisWeek, ...body.leave.nextWeek].filter(
+      (e) => e.userId === peter.id,
+    )
+    expect(leave.length, 'F3: Peter on leave 5–6 ต.ค. (next week)').toBeGreaterThan(0)
+    for (const e of leave) expect(e.entry).toMatchObject({ kind: 'masked', label: th.masking.leave })
+  })
+
+  it('FR-1105: "ลูกค้า" finds "ย้ายข้อมูลลูกค้า" for Cindy but never for Jack (not in CRM Migration)', async () => {
+    await golden()
+    asUser(await goldenUser('Cindy'))
+    const cindy = await okJson<SearchAllResponse>(await searchQ('ลูกค้า'))
+    expect(cindy.tasks.map((t) => t.name)).toContain('ย้ายข้อมูลลูกค้า')
+    asUser(await goldenUser('Jack'))
+    const jack = await okJson<SearchAllResponse>(await searchQ('ลูกค้า'))
+    expect(containsAny(jack, ['ย้ายข้อมูลลูกค้า', 'CRM Migration', await goldenProjectId('CRM Migration')])).toEqual([])
+  })
 })

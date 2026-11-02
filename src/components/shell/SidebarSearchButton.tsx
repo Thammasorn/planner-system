@@ -16,7 +16,7 @@ export function SidebarSearchButton({ collapsed }: { collapsed: boolean }) {
       aria-label={th.palette.open}
       aria-keyshortcuts="Control+K Meta+K"
       aria-haspopup="dialog"
-      onClick={open}
+      onClick={() => open()}
     >
       <SearchOutlined className={styles.searchIcon} fontSize="inherit" />
       {collapsed ? null : (

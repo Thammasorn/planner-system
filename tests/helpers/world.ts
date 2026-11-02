@@ -3,7 +3,7 @@
 // MEMBER of Q only; A = archived, P's team; Q has no LEAD; C3 archived without projects). Always built.
 // The four role users stay top-level; extra users added by later parts live under `w.users.<name>`.
 import { randomUUID } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { eq, gt } from 'drizzle-orm'
 import type { ISODate } from '@/domain/types'
 import { extractContentText } from '@/lib/editor/content-text'
 import type { RemovedMemberSnapshot } from '@/lib/contracts/tasks'
@@ -53,7 +53,7 @@ import {
 
 /** Pinned part list (X91); each milestone adds the builder for its part(s).
  *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations · M7.1 planMarkers ·
- *  M8 milestones */
+ *  M8 milestones · M10 home */
 export type WorldPart =
   | 'tasks'
   | 'pages'
@@ -64,6 +64,7 @@ export type WorldPart =
   | 'dayAllocations'
   | 'planMarkers'
   | 'milestones'
+  | 'home'
 
 /** Fixed build order of the parts. */
 export const WORLD_PART_ORDER: readonly WorldPart[] = [
@@ -76,6 +77,7 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
   'dayAllocations',
   'planMarkers', // M7.1: needs only P / Q / A
   'milestones',
+  'home', // M10: last — adds keys to the tasks / pages / timeOff / milestones objects of the earlier parts
 ]
 
 /** Implications; the owning milestone adds its entry (M6 allocations → tasks + timeOff, M7 dayAllocations →
@@ -86,6 +88,7 @@ export const WORLD_PART_IMPLIES: Partial<Record<WorldPart, readonly WorldPart[]>
   taskBodies: ['tasks', 'pages'], // M6.1: bodies of M3 tasks; tree tests compare with the M4 pages
   dayAllocations: ['allocations'], // M7: day plans on M6's assignments (plan/m07 S0.9, G17 — no new users/tasks)
   milestones: ['tasks', 'allocations'], // M8: bound M3 tasks; lateness reads M6's plans (plan/m08 S0.10, X91)
+  home: ['tasks', 'pages', 'timeOff', 'allocations', 'milestones'], // M10: every home card (plan/m10 S0.12)
 }
 
 /** A status-delete batch as `restoreTaskStatusBatch` takes it (X72, M3-D29) + the deleted status id. */
@@ -117,6 +120,9 @@ export interface WorldTasks {
     aTask2: TaskRow
     /** M6 (with 'allocations'): P root 'งานร่วม P-ลับ03' after pDone, assigned coworker. */
     pCoworker: TaskRow
+    /** M10 (with 'home'): P root 'งานกำหนดส่ง P-ลับ17', assigned member, due 2026-10-02, no allocation (M9 bucket
+     *  UNPLANNED → not on home). */
+    pDueThisWeek: TaskRow
   }
   /** Soft-deleted roots (1 day ago) whose batches are w.batches.pDeletedTask / aDeletedTask. */
   deletedTasks: { pDeleted: TaskRow; aDeleted: TaskRow }
@@ -179,6 +185,17 @@ export interface WorldPages {
     wikiFolder: PageRow
     /** Locked child of wikiFolder 'ล็อกในแฟ้ม W-06'. */
     wikiFolderLocked: PageRow
+    /** M10 (with 'home'): Q root 'หน้าล่าสุด Q-ลับ18', updated_at 2026-09-30T09:00+07:00 — the newest page (every other
+     *  world page is backdated to 2026-09-29T09:00+07:00 when it was newer). */
+    qRecent: PageRow
+    /** M10 (with 'home'): P root 'หน้าฝังบล็อก P-ลับ19', content = [taskView {view:'BOARD'}, projectWorkload {}]. */
+    pEmbed: PageRow
+    /** M10 (with 'home'): same content in Q 'หน้าฝังบล็อก Q-ลับ20'. */
+    qEmbed: PageRow
+    /** M10 (with 'home'): same content in archived A 'หน้าฝังบล็อก A-ลับ21'. */
+    aEmbed: PageRow
+    /** M10 (with 'home'): same content in the wiki 'หน้าฝังบล็อก W-07' (→ placeholder, FR-1304). */
+    wikiEmbed: PageRow
   }
   /** Soft-deleted roots under the w.batches.*Page batches. */
   deletedPages: { pDeleted: PageRow; aDeleted: PageRow; wikiDeleted: PageRow; pOldDeleted: PageRow }
@@ -234,6 +251,10 @@ export interface WorldTimeOff {
     pOnly: TimeOffRow
     /** member · training · 2026-11-02 · note 'โน้ตของ member'. */
     member: TimeOffRow
+    /** M10 (with 'home'): coworker · vacation · 2026-09-30 · note 'โน้ตลับ-โลก-03' (home "วันนี้" line). */
+    coworkerToday: TimeOffRow
+    /** M10 (with 'home'): pOnly · sick · 2026-10-06..2026-10-07 · note 'โน้ตลับ-โลก-04' (home "สัปดาห์หน้า" line). */
+    pOnlyNextWeek: TimeOffRow
   }
   holidays: {
     /** 2026-11-20 'วันหยุดโลก'. */
@@ -306,6 +327,12 @@ export interface WorldMilestones {
     q: MilestoneDbRow
     /** A (archived) 'Milestone A' · 2026-10-30 · bound aTask. */
     a: MilestoneDbRow
+    /** M10 (with 'home'): P 'Milestone P-ลับ13' · 2026-09-25 · not done (OVERDUE on 2026-09-30). */
+    pOverdue: MilestoneDbRow
+    /** M10 (with 'home'): Q 'Milestone Q-ลับ15' · 2026-10-05 (DUE_SOON on 2026-09-30). */
+    qSoon: MilestoneDbRow
+    /** M10 (with 'home'): P 'Milestone P-ลับ16' · 2026-08-31 · not done (beyond the 4-week look-back, M10-D15). */
+    pAncient: MilestoneDbRow
   }
   deletedMilestones: {
     /** P 'Milestone ที่ลบแล้ว P' · 2026-10-16 · soft-deleted 1 day ago; pParent.milestone_id still points at it. */
@@ -616,6 +643,7 @@ async function buildPages(w: World): Promise<void> {
     ...by,
   })
 
+  // M10's 'home' part adds qRecent and the four *Embed pages
   w.pages = {
     pCharter,
     pPage,
@@ -628,7 +656,7 @@ async function buildPages(w: World): Promise<void> {
     wikiProtectedChild,
     wikiFolder,
     wikiFolderLocked,
-  }
+  } as World['pages']
   w.deletedPages = { pDeleted, aDeleted, wikiDeleted, pOldDeleted }
   Object.assign(w.batches, { pDeletedPage, aDeletedPage, wikiDeletedPage, pOldDeletedPage })
 }
@@ -721,7 +749,8 @@ async function buildTimeOff(w: World): Promise<void> {
   w.users.coworker = coworker
   w.users.pOnly = pOnly
   w.leaveTypes = { vacation, sick, training, archived }
-  w.timeOff = { coworker: coworkerEntry, pOnly: pOnlyEntry, member: memberEntry }
+  // M10's 'home' part adds coworkerToday / pOnlyNextWeek (withPendingKeys in createWorld otherwise)
+  w.timeOff = { coworker: coworkerEntry, pOnly: pOnlyEntry, member: memberEntry } as World['timeOff']
   w.holidays = { h1 }
   Object.assign(w.batches, { coworkerDeletedTimeOff })
 }
@@ -863,9 +892,83 @@ async function buildMilestones(w: World): Promise<void> {
   })
   await bind(t.pParent, pDeleted) // reads as unbound until restored (M8-D5)
 
-  w.milestones = { p, pLate, pDone, q, a }
+  // M10's 'home' part adds pOverdue / qSoon / pAncient
+  w.milestones = { p, pLate, pDone, q, a } as World['milestones']
   w.deletedMilestones = { pDeleted, pExpired, aDeleted }
   Object.assign(w.batches, batches)
+}
+
+/** Live-block content of the M10 embed pages (FR-1302: view config only). */
+const LIVE_BLOCKS: unknown[] = [
+  { type: 'taskView', props: { view: 'BOARD' } },
+  { type: 'projectWorkload', props: {} },
+]
+const HOME_RECENT_AT = new Date('2026-09-30T09:00:00+07:00')
+const HOME_OLDER_AT = new Date('2026-09-29T09:00:00+07:00')
+
+/** M10 'home' part (plan/m10 S0.12): data for every home card and the embed pages; keys are added to the objects of
+ *  the earlier parts (w.milestones, w.timeOff, w.tasks, w.pages). */
+async function buildHome(w: World): Promise<void> {
+  const { manager, lead, member, P, Q, A } = w
+  const coworker = w.users.coworker!
+  const pOnly = w.users.pOnly!
+
+  Object.assign(w.milestones, {
+    pOverdue: await makeMilestone({ project: P, name: 'Milestone P-ลับ13', date: '2026-09-25', createdBy: lead }),
+    qSoon: await makeMilestone({ project: Q, name: 'Milestone Q-ลับ15', date: '2026-10-05', createdBy: manager }),
+    pAncient: await makeMilestone({ project: P, name: 'Milestone P-ลับ16', date: '2026-08-31', createdBy: lead }),
+  })
+
+  Object.assign(w.timeOff, {
+    coworkerToday: await makeTimeOff({
+      user: coworker,
+      leaveType: w.leaveTypes.vacation,
+      startDate: '2026-09-30',
+      note: 'โน้ตลับ-โลก-03',
+    }),
+    pOnlyNextWeek: await makeTimeOff({
+      user: pOnly,
+      leaveType: w.leaveTypes.sick,
+      startDate: '2026-10-06',
+      endDate: '2026-10-07',
+      note: 'โน้ตลับ-โลก-04',
+    }),
+  })
+
+  const pDueThisWeek = await makeTask({
+    project: P,
+    name: 'งานกำหนดส่ง P-ลับ17',
+    dueDate: '2026-10-02',
+    createdBy: manager,
+  })
+  await makeAssignment({ task: pDueThisWeek, user: member })
+  Object.assign(w.tasks, { pDueThisWeek })
+
+  const by = { createdBy: manager }
+  const embeds = {
+    pEmbed: await makePage({ project: P, title: 'หน้าฝังบล็อก P-ลับ19', content: LIVE_BLOCKS, ...by }),
+    qEmbed: await makePage({ project: Q, title: 'หน้าฝังบล็อก Q-ลับ20', content: LIVE_BLOCKS, ...by }),
+    aEmbed: await makePage({ project: A, title: 'หน้าฝังบล็อก A-ลับ21', content: LIVE_BLOCKS, ...by }),
+    wikiEmbed: await makePage({ title: 'หน้าฝังบล็อก W-07', content: LIVE_BLOCKS, ...by }),
+  }
+  const qRecent = await makePage({ project: Q, title: 'หน้าล่าสุด Q-ลับ18', ...by })
+  // qRecent is the newest page: backdate every newer page, then stamp qRecent (X45: APP_NOW is 2026-09-30T10:00).
+  await db.update(pages).set({ updatedAt: HOME_OLDER_AT }).where(gt(pages.updatedAt, HOME_OLDER_AT))
+  await db.update(pages).set({ updatedAt: HOME_RECENT_AT }).where(eq(pages.id, qRecent.id))
+  const stamps = new Map(
+    (await db.select({ id: pages.id, updatedAt: pages.updatedAt }).from(pages)).map((r) => [r.id, r.updatedAt]),
+  )
+  const added = { ...embeds, qRecent }
+  for (const row of [
+    ...Object.values(w.pages),
+    ...Object.values(w.deletedPages),
+    ...Object.values(w.taskBodies),
+    ...Object.values(added),
+  ] as { id?: unknown; updatedAt?: Date }[]) {
+    const at = typeof row.id === 'string' ? stamps.get(row.id) : undefined
+    if (at) row.updatedAt = at
+  }
+  Object.assign(w.pages, added)
 }
 
 /** Builders by part; each milestone adds its own. */
@@ -879,6 +982,7 @@ const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   dayAllocations: buildDayAllocations,
   planMarkers: buildPlanMarkers,
   milestones: buildMilestones,
+  home: buildHome,
 }
 
 /** Transitive closure over WORLD_PART_IMPLIES. */
@@ -947,5 +1051,12 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     deletedMilestones: notBuilt('milestones', 'deletedMilestones'),
   }
   for (const p of WORLD_PART_ORDER) if (parts.has(p)) await BUILDERS[p]!(w)
+  // M10: keys the 'home' part adds to earlier parts' objects throw clearly without it.
+  if (!parts.has('home')) {
+    w.tasks = withPendingKeys(w.tasks, 'home', 'tasks', ['pDueThisWeek'])
+    w.pages = withPendingKeys(w.pages, 'home', 'pages', ['qRecent', 'pEmbed', 'qEmbed', 'aEmbed', 'wikiEmbed'])
+    w.timeOff = withPendingKeys(w.timeOff, 'home', 'timeOff', ['coworkerToday', 'pOnlyNextWeek'])
+    w.milestones = withPendingKeys(w.milestones, 'home', 'milestones', ['pOverdue', 'qSoon', 'pAncient'])
+  }
   return w
 }

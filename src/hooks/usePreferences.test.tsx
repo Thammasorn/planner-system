@@ -19,6 +19,7 @@ function Probe() {
       <button onClick={() => setPreference('theme', 'dark')}>dark</button>
       <button onClick={() => setPreference('theme', 'light')}>light</button>
       <button onClick={() => setPreference('sidebar.collapsed', true)}>collapse</button>
+      <button onClick={() => setPreference('theme', 'dark', { immediate: true })}>dark now</button>
     </>
   )
 }
@@ -70,6 +71,17 @@ describe('usePreferences', () => {
     })
     expect(mocks.setPreference).toHaveBeenCalledTimes(2)
     expect(mocks.setPreference).toHaveBeenCalledWith({ key: 'sidebar.collapsed', value: true })
+  })
+
+  it('immediate sends the save at once, without waiting for the debounce', async () => {
+    setup()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'dark now' }))
+      await Promise.resolve()
+    })
+    expect(screen.getByTestId('theme')).toHaveTextContent('dark')
+    expect(mocks.setPreference).toHaveBeenCalledTimes(1)
+    expect(mocks.setPreference).toHaveBeenCalledWith({ key: 'theme', value: 'dark' })
   })
 
   it('flushes pending saves on pagehide', async () => {

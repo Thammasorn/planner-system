@@ -71,6 +71,19 @@ export const qk = {
   clientLoad: (clientId: string) => ['workload', 'client', clientId] as const,
   /** GET /api/people/[userId]/time-off — person page วันลา tab (M9-D16); under ['calendar']. */
   personTimeOff: (userId: string) => ['calendar', 'person', userId] as const,
+  // ── M10 (PLAN §3.5, X82, M10-D10/D21) ──
+  /** GET /api/home — the whole dashboard (M10-D34); invalidated by invalidateTasks / invalidateLoad / invalidateMilestones. */
+  home: () => ['home'] as const,
+  /** GET /api/search/index — the palette's local index (M10-D21); under ['search'] so invalidatePages refreshes it. */
+  searchIndex: () => ['search', 'index'] as const,
+  /** GET /api/pages/[id]/embed/tasks — a taskView block (M10-D2). */
+  pageEmbedTasks: (pageId: string) => ['embed', 'tasks', pageId] as const,
+  /** Prefix of every taskView block query (invalidateTasks). */
+  pageEmbedTasksAll: () => ['embed', 'tasks'] as const,
+  /** GET /api/pages/[id]/embed/workload — a projectWorkload block (M10-D11). */
+  pageEmbedWorkload: (pageId: string) => ['embed', 'workload', pageId] as const,
+  /** Prefix of every projectWorkload block query (invalidateLoad). */
+  pageEmbedWorkloadAll: () => ['embed', 'workload'] as const,
 }
 
 /** Prefixes for load views (M6 grid = qk.gridAll(…) under ['grid'], M9 workload, M10 home). Invalidating an unused prefix is a no-op,
@@ -78,7 +91,7 @@ export const qk = {
 export const qkPrefix = {
   grid: ['grid'] as const,
   workload: ['workload'] as const,
-  home: ['home'] as const,
+  home: qk.home(),
   myTasks: qk.myTasks(),
   teamTasks: qk.teamTasksAll(),
   clientOptions: ['clients', 'options'] as const,

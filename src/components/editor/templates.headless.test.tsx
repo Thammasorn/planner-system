@@ -45,3 +45,32 @@ describe.each(cases)('%s in a headless editor', (_name, content) => {
     expect(r.success, r.success ? '' : JSON.stringify(r.error.issues.slice(0, 3))).toBe(true)
   })
 })
+
+// M10 S3.7 (FR-1301/1303, TPL-B1): the charter's live blocks load with ids and every default prop, and their
+// serialised props satisfy the server's strict per-type rules.
+describe('charter live blocks', () => {
+  const editor = BlockNoteEditor.create({
+    schema,
+    initialContent: prepareInitialContent(charterTemplate().content),
+  })
+  const doc = JSON.parse(JSON.stringify(editor.document)) as { id: string; type: string; props: object }[]
+
+  it('has one taskView and one projectWorkload, each with an id and full default props', () => {
+    const tv = doc.filter((b) => b.type === 'taskView')
+    const pw = doc.filter((b) => b.type === 'projectWorkload')
+    expect(tv).toHaveLength(1)
+    expect(pw).toHaveLength(1)
+    expect(tv[0]?.id).toBeTruthy()
+    expect(pw[0]?.id).toBeTruthy()
+    expect(Object.keys(tv[0]?.props ?? {}).sort()).toEqual(
+      ['assigneeId', 'limit', 'milestoneId', 'showDone', 'statusIds', 'view'].sort(),
+    )
+    expect(pw[0]?.props).toEqual({ view: 'ALL' })
+  })
+
+  it('a document with only the live blocks passes the server schema (strict props)', () => {
+    const live = doc.filter((b) => b.type === 'taskView' || b.type === 'projectWorkload')
+    const r = pageContentSchema.safeParse(live)
+    expect(r.success, r.success ? '' : JSON.stringify(r.error.issues.slice(0, 3))).toBe(true)
+  })
+})

@@ -4,11 +4,17 @@ import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import { charterTemplate } from '@/i18n/templates.th'
 import {
+  BLOCK_TYPES,
   isSafeHref,
+  LIVE_BLOCK_TYPES,
   PAGE_CONTENT_MAX_BYTES,
   pageContentSchema,
   precheckContent,
+  resolveTaskViewProps,
+  resolveWorkloadProps,
   sanitizeContent,
+  TASK_VIEW_DEFAULTS,
+  WORKLOAD_VIEW_DEFAULTS,
   type PageContent,
 } from './page-content'
 
@@ -165,5 +171,92 @@ describe('sanitizeContent', () => {
       content: [{ type: 'link', href: 'http://evil/x.pdf', content: 'x.pdf' }],
     })
     expect(doc).toEqual(before)
+  })
+})
+
+// M10 S0.4 (FR-1302, M10-D4): live blocks carry view config only — no project id, no task data, no content/children.
+describe('live blocks (taskView / projectWorkload)', () => {
+  const V4B = '6ba7b810-9dad-41d1-80b4-00c04fd430c8'
+  const ok = (v: unknown): boolean => pageContentSchema.safeParse(v).success
+
+  it('parses the template form and a full taskView', () => {
+    expect(ok([{ type: 'taskView', props: { view: 'BOARD' } }])).toBe(true)
+    expect(
+      ok([
+        {
+          type: 'taskView',
+          props: {
+            view: 'LIST',
+            assigneeId: 'u1',
+            milestoneId: '',
+            statusIds: `${V4},${V4B}`,
+            showDone: true,
+            limit: 50,
+          },
+          children: [],
+        },
+      ]),
+    ).toBe(true)
+    expect(ok([{ type: 'taskView', props: { milestoneId: V4 }, content: [] }])).toBe(true)
+  })
+
+  it.each<[string, Record<string, unknown>]>([
+    ['projectId prop', { props: { projectId: V4 } }],
+    ['tasks prop', { props: { tasks: '[{"name":"x"}]' } }],
+    ['limit 7', { props: { limit: 7 } }],
+    ['view TABLE', { props: { view: 'TABLE' } }],
+    ['statusIds not uuids', { props: { statusIds: 'x' } }],
+    ['13 status ids', { props: { statusIds: Array.from({ length: 13 }, () => V4).join(',') } }],
+    ['milestoneId not uuid', { props: { milestoneId: 'abc' } }],
+    ['showDone string', { props: { showDone: 'yes' } }],
+    ['inline content', { content: [{ type: 'text', text: 'ลับ' }] }],
+    ['string content', { content: 'ลับ' }],
+    ['children', { children: [{ type: 'paragraph', content: 'x' }] }],
+  ])('taskView rejects %s', (_name, extra) => {
+    expect(messages([{ type: 'taskView', ...extra }])).toContain(th.pages.errors.contentInvalid)
+  })
+
+  it('projectWorkload: empty or a known view parses; anything else fails', () => {
+    expect(ok([{ type: 'projectWorkload' }])).toBe(true)
+    expect(ok([{ type: 'projectWorkload', props: {} }])).toBe(true)
+    expect(ok([{ type: 'projectWorkload', props: { view: 'AT_RISK' } }])).toBe(true)
+    expect(ok([{ type: 'projectWorkload', props: { weeks: 12 } }])).toBe(false)
+    expect(ok([{ type: 'projectWorkload', props: { view: 'TOTAL' } }])).toBe(false)
+    expect(ok([{ type: 'projectWorkload', props: { projectId: V4 } }])).toBe(false)
+    expect(ok([{ type: 'projectWorkload', content: 'x' }])).toBe(false)
+    expect(ok([{ type: 'projectWorkload', children: [{ type: 'paragraph' }] }])).toBe(false)
+  })
+
+  it('LIVE_BLOCK_TYPES are part of BLOCK_TYPES', () => {
+    for (const t of LIVE_BLOCK_TYPES) expect(BLOCK_TYPES).toContain(t)
+  })
+
+  it('resolveTaskViewProps fills defaults and drops junk', () => {
+    expect(resolveTaskViewProps({ view: 'NOPE', limit: 7 })).toEqual(TASK_VIEW_DEFAULTS)
+    expect(resolveTaskViewProps(undefined)).toEqual(TASK_VIEW_DEFAULTS)
+    expect(
+      resolveTaskViewProps({
+        view: 'LIST',
+        assigneeId: 'u1',
+        statusIds: `${V4},bad`,
+        showDone: true,
+        limit: 50,
+      }),
+    ).toEqual({
+      ...TASK_VIEW_DEFAULTS,
+      view: 'LIST',
+      assigneeId: 'u1',
+      statusIds: V4,
+      showDone: true,
+      limit: 50,
+    })
+    expect(resolveTaskViewProps({ milestoneId: 'x', assigneeId: 5 })).toEqual(TASK_VIEW_DEFAULTS)
+    expect(resolveTaskViewProps({ milestoneId: V4 }).milestoneId).toBe(V4)
+  })
+
+  it('resolveWorkloadProps fills the default view', () => {
+    expect(resolveWorkloadProps(undefined)).toEqual(WORKLOAD_VIEW_DEFAULTS)
+    expect(resolveWorkloadProps({ view: 'COMMITTED' })).toEqual({ view: 'COMMITTED' })
+    expect(resolveWorkloadProps({ view: 'TOTAL' })).toEqual({ view: 'ALL' })
   })
 })

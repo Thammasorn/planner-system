@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import type { PageCan, PageView } from '@/lib/contracts/pages'
 import { DEFAULT_UPLOAD_LIMITS } from '@/lib/files/upload-rules'
+import { PaletteProjectScopeProvider, usePaletteScope } from '@/components/palette/project-scope'
 import { PageScreen } from './PageScreen'
 import { okResult, renderPages, uuid } from './render.test.helper'
 
@@ -313,5 +314,43 @@ describe('PageScreen (FR-504, FR-507, FR-510)', () => {
       await userEvent.click(within(header()).getByRole('button', { name: th.pages.menu('นโยบาย') }))
       expect(screen.queryByRole('menuitemcheckbox', { name: th.layout.fullWidth })).toBeNull()
     })
+  })
+})
+
+describe('M10-D24: the palette project scope', () => {
+  function Scope() {
+    const s = usePaletteScope()
+    return (
+      <output data-testid="palette-scope">{s ? `${s.id}:${s.name}:${String(s.archived)}` : 'none'}</output>
+    )
+  }
+  const scope = () => screen.getByTestId('palette-scope').textContent
+
+  it('a PROJECT page registers its project', () => {
+    renderPages(
+      <PaletteProjectScopeProvider>
+        <PageScreen
+          view={view({
+            space: 'PROJECT',
+            projectId: uuid(5),
+            projectName: 'POS Upgrade',
+            title: 'ก',
+            isBlank: false,
+          })}
+        />
+        <Scope />
+      </PaletteProjectScopeProvider>,
+    )
+    expect(scope()).toBe(`${uuid(5)}:POS Upgrade:false`)
+  })
+
+  it('a wiki page registers nothing', () => {
+    renderPages(
+      <PaletteProjectScopeProvider>
+        <PageScreen view={view({ title: 'ก', isBlank: false })} />
+        <Scope />
+      </PaletteProjectScopeProvider>,
+    )
+    expect(scope()).toBe('none')
   })
 })

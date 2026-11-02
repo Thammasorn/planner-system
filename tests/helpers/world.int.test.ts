@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { and, asc, count, eq, isNull } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { th } from '@/i18n/th'
 import { db } from '@/server/db/client'
@@ -493,6 +493,83 @@ describe('world fixture (X91)', () => {
     expect(n?.n).toBe(8)
 
     // X70: every world task keeps a status of its own project; completion invariant holds
+    const statusProjects = await db
+      .select({ taskProject: tasks.projectId, statusProject: taskStatuses.projectId })
+      .from(tasks)
+      .innerJoin(taskStatuses, eq(taskStatuses.id, tasks.statusId))
+    expect(statusProjects.every((r) => r.taskProject === r.statusProject)).toBe(true)
+    await assertCompletionInvariant()
+  })
+
+  it('M10 without home: the keys home adds throw clearly', async () => {
+    const plain = await createWorld({ with: ['milestones', 'pages'] })
+    expect(() => plain.milestones.pOverdue).toThrow("needs createWorld({ with: ['home'] })")
+    expect(() => plain.pages.pEmbed).toThrow("needs createWorld({ with: ['home'] })")
+    expect(() => plain.tasks.pDueThisWeek).toThrow("needs createWorld({ with: ['home'] })")
+    expect(() => plain.timeOff.coworkerToday).toThrow("needs createWorld({ with: ['home'] })")
+    expect(plain.milestones.p.name).toBe('Milestone P-ลับ06')
+    expect(plain.pages.pPage.title).toBe('หน้า P-ลับ05')
+  })
+
+  it('M10 with home: implies every card part; milestones, leave, due task, recent and embed pages (plan/m10 S0.12)', async () => {
+    expect([...expandParts(['home'])].sort()).toEqual(['allocations', 'home', 'milestones', 'pages', 'tasks', 'timeOff'])
+    expect(WORLD_PART_ORDER.at(-1)).toBe('home')
+    const w = await createWorld({ with: ['home'] })
+    const m = w.milestones
+    expect(m.pOverdue).toMatchObject({ projectId: w.P.id, name: 'Milestone P-ลับ13', date: '2026-09-25', completedOn: null })
+    expect(m.qSoon).toMatchObject({ projectId: w.Q.id, name: 'Milestone Q-ลับ15', date: '2026-10-05', completedOn: null })
+    expect(m.pAncient).toMatchObject({ projectId: w.P.id, name: 'Milestone P-ลับ16', date: '2026-08-31', completedOn: null })
+    expect(m.pLate.name).toBe('ส่งมอบรอบแรก P')
+
+    expect(w.timeOff.coworkerToday).toMatchObject({
+      userId: w.users.coworker!.id,
+      leaveTypeId: w.leaveTypes.vacation.id,
+      startDate: '2026-09-30',
+      endDate: '2026-09-30',
+      note: 'โน้ตลับ-โลก-03',
+    })
+    expect(w.timeOff.pOnlyNextWeek).toMatchObject({
+      userId: w.users.pOnly!.id,
+      leaveTypeId: w.leaveTypes.sick.id,
+      startDate: '2026-10-06',
+      endDate: '2026-10-07',
+      note: 'โน้ตลับ-โลก-04',
+    })
+
+    expect(w.tasks.pDueThisWeek).toMatchObject({ projectId: w.P.id, name: 'งานกำหนดส่ง P-ลับ17', dueDate: '2026-10-02' })
+    const assigned = await db
+      .select({ id: taskAssignments.id, userId: taskAssignments.userId })
+      .from(taskAssignments)
+      .where(and(eq(taskAssignments.taskId, w.tasks.pDueThisWeek.id), isNull(taskAssignments.deletedAt)))
+    expect(assigned.map((a) => a.userId)).toEqual([w.member.id])
+    expect(await allocationRows(assigned[0]!.id, '2026-09-28')).toEqual([]) // no plan → UNPLANNED (not on home)
+
+    const pg = w.pages
+    for (const [page, project] of [
+      [pg.pEmbed, w.P.id],
+      [pg.qEmbed, w.Q.id],
+      [pg.aEmbed, w.A.id],
+      [pg.wikiEmbed, null],
+    ] as const) {
+      expect(page.projectId).toBe(project)
+      expect(page.content).toEqual([
+        { type: 'taskView', props: { view: 'BOARD' } },
+        { type: 'projectWorkload', props: {} },
+      ])
+      expect(page.contentText).toBe('')
+    }
+    expect(pg.qRecent).toMatchObject({ projectId: w.Q.id, title: 'หน้าล่าสุด Q-ลับ18' })
+    const newest = await db
+      .select({ id: pages.id, updatedAt: pages.updatedAt })
+      .from(pages)
+      .orderBy(desc(pages.updatedAt), asc(pages.id))
+      .limit(2)
+    expect(newest[0]).toEqual({ id: pg.qRecent.id, updatedAt: new Date('2026-09-30T09:00:00+07:00') })
+    expect(newest[1]!.updatedAt.getTime()).toBeLessThan(newest[0]!.updatedAt.getTime())
+    expect(pg.qRecent.updatedAt).toEqual(new Date('2026-09-30T09:00:00+07:00'))
+    expect(pg.pPage.updatedAt.getTime()).toBeLessThanOrEqual(new Date('2026-09-29T09:00:00+07:00').getTime())
+
+    // X70: every task keeps a status of its own project
     const statusProjects = await db
       .select({ taskProject: tasks.projectId, statusProject: taskStatuses.projectId })
       .from(tasks)
