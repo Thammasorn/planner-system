@@ -15,11 +15,14 @@ import AddOutlined from '@mui/icons-material/AddOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import EditOutlined from '@mui/icons-material/EditOutlined'
 import { MilestoneForm } from '@/components/milestones/MilestoneForm'
-import { MilestoneLateBadge, MilestoneStatusChip } from '@/components/milestones/MilestoneStatusChip'
+import {
+  MilestoneLateBadge,
+  MilestoneStatusChip,
+  diamondSx,
+} from '@/components/milestones/MilestoneStatusChip'
 import { useMilestoneMutations } from '@/components/milestones/useMilestoneMutations'
 import { useProjectMilestones } from '@/components/milestones/useProjectMilestones'
 import { compareMilestones } from '@/domain/milestone'
-import { milestoneColorVar } from '@/lib/theme/tokens'
 import { th } from '@/i18n/th'
 import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import { formatThaiDate } from '@/lib/format'
@@ -42,39 +45,52 @@ function MilestoneRow({ m, canManage, onEdit }: { m: MilestoneDTO; canManage: bo
       spacing={1}
       data-milestone-id={m.id}
       data-status={m.status}
-      sx={{ alignItems: 'flex-start', py: 1, borderBottom: '1px solid var(--border-subtle)' }}
+      sx={{ alignItems: 'center', py: 1, borderBottom: '1px solid var(--border-subtle)' }}
     >
-      {canManage ? (
-        <Checkbox
-          size="small"
-          checked={done}
-          onChange={() => void ms.update(m, { completed: !done })}
-          slotProps={{ input: { 'aria-label': th.milestones.overview.completeToggle(m.name) } }}
-          sx={{ p: 0.5 }}
-        />
-      ) : null}
-      <Box
-        aria-hidden="true"
-        data-color={m.color}
-        title={th.milestones.color.named(th.milestones.color.name[m.color])}
-        sx={{ color: milestoneColorVar(m.color), pt: 0.5 }}
-      >
-        {th.milestones.diamond}
-      </Box>
       <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+        {/* One flex line (centre-aligned, wraps at 390 px with the same centre line per row): checkbox flush with the
+            row's left edge (no MUI padding), ◆ in a line-height-1 box so the glyph sits on the text's centre line. */}
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+        >
+          {canManage ? (
+            <Checkbox
+              size="small"
+              checked={done}
+              onChange={() => void ms.update(m, { completed: !done })}
+              slotProps={{ input: { 'aria-label': th.milestones.overview.completeToggle(m.name) } }}
+              sx={{ p: 0 }}
+            />
+          ) : null}
+          <Box
+            component="span"
+            aria-hidden="true"
+            data-color={m.color}
+            title={th.milestones.color.named(th.milestones.color.name[m.color])}
+            sx={diamondSx(m.color)}
+          >
+            {th.milestones.diamond}
+          </Box>
           <Typography
             data-testid="milestone-name"
             variant="body2"
-            sx={{ fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}
+            sx={{
+              fontWeight: 600,
+              textDecoration: done ? 'line-through' : 'none',
+              minWidth: 0,
+              overflowWrap: 'anywhere',
+            }}
           >
             {m.name}
           </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
             {formatThaiDate(m.date, 'medium')}
           </Typography>
           <MilestoneStatusChip status={m.status} />
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
             {th.milestones.progress(m.progress.done, m.progress.total)}
           </Typography>
           {m.late ? (

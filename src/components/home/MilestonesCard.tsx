@@ -5,8 +5,11 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Link from '@/components/Link'
 import { ColorSquare } from '@/components/common/ProjectChip'
-import { MilestoneLateBadge, MilestoneStatusChip } from '@/components/milestones/MilestoneStatusChip'
-import { milestoneColorVar } from '@/lib/theme/tokens'
+import {
+  MilestoneLateBadge,
+  MilestoneStatusChip,
+  diamondSx,
+} from '@/components/milestones/MilestoneStatusChip'
 import { th } from '@/i18n/th'
 import type { HomeMilestone } from '@/lib/contracts/home'
 import { formatThaiDate } from '@/lib/format'
@@ -30,7 +33,8 @@ export function MilestonesCard({ milestones }: { milestones: HomeMilestone[] }) 
                 display: 'flex',
                 flexWrap: 'wrap',
                 alignItems: 'center',
-                gap: 1,
+                columnGap: 1,
+                rowGap: 0.5,
                 py: 1,
                 minWidth: 0,
                 borderBottom: '1px solid var(--border-subtle)',
@@ -38,12 +42,7 @@ export function MilestonesCard({ milestones }: { milestones: HomeMilestone[] }) 
               }}
             >
               {/* M11.1 (FR-709): the ◆ in the milestone's line colour (decorative; the name and date carry the meaning) */}
-              <Box
-                component="span"
-                aria-hidden="true"
-                data-color={m.color}
-                sx={{ color: milestoneColorVar(m.color) }}
-              >
+              <Box component="span" aria-hidden="true" data-color={m.color} sx={diamondSx(m.color)}>
                 ◆
               </Box>
               <Box component="span" sx={{ fontSize: 'var(--font-sm)', whiteSpace: 'nowrap' }}>

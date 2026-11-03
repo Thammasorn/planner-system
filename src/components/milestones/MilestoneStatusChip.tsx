@@ -9,6 +9,7 @@ import EventOutlined from '@mui/icons-material/EventOutlined'
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined'
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import type { MilestoneStatus } from '@/domain/types'
+import { milestoneColorVar } from '@/lib/theme/tokens'
 import { th } from '@/i18n/th'
 
 export const MILESTONE_STATUS_ICONS: Record<MilestoneStatus, typeof CheckCircleOutlined> = {
@@ -16,6 +17,30 @@ export const MILESTONE_STATUS_ICONS: Record<MilestoneStatus, typeof CheckCircleO
   OVERDUE: ErrorOutline,
   DUE_SOON: ScheduleOutlined,
   UPCOMING: EventOutlined,
+}
+
+/**
+ * Compact chip: the label box is one `--leading-ui` line of `--font-xs` (+ the 1 px outline) so the chip is no taller
+ * than a body2 text line and shares its centre line inside `alignItems: center` rows (home card, project overview).
+ */
+const COMPACT_SX = {
+  height: 'auto',
+  verticalAlign: 'middle',
+  '& .MuiChip-label': { py: 0, lineHeight: 'var(--leading-ui)' },
+  '& .MuiChip-icon': { fontSize: 'var(--font-sm)' },
+} as const
+
+/** ◆ glyph box: line-height 1 inline-flex so the glyph sits on the row's centre line, not low on a text baseline. */
+export function diamondSx(color: Parameters<typeof milestoneColorVar>[0]) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 1,
+    fontSize: 'var(--font-sm)',
+    flexShrink: 0,
+    color: milestoneColorVar(color),
+  } as const
 }
 
 const STATUS_COLOR = {
@@ -35,6 +60,7 @@ export function MilestoneStatusChip({ status }: { status: MilestoneStatus }) {
       icon={<Icon aria-hidden="true" />}
       label={th.milestones.status[status]}
       data-status={status}
+      sx={COMPACT_SX}
     />
   )
 }
@@ -49,6 +75,7 @@ export function MilestoneLateBadge({ count, hint }: { count?: number; hint?: str
       icon={<WarningAmberOutlined aria-hidden="true" />}
       label={count !== undefined ? th.milestones.lateTasks(count) : th.milestones.late}
       data-late="true"
+      sx={COMPACT_SX}
     />
   )
   return hint ? <Tooltip title={hint}>{chip}</Tooltip> : chip
