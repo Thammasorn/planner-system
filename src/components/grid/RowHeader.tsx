@@ -16,7 +16,7 @@
 // M9 (plan/m09 S3.4, M9-D28): in the person grid a merged row also shows the task's parent path (muted breadcrumb) and a
 // second action "เปิดในแผนงานโปรเจค" (onOpenInProject → /projects/<pid>/plan?task=) next to the ↗ task-page link
 // (SPEC v3.2 M6.1-D17 keeps ↗ = /t/<id>); PlanGrid passes no drag, no "+ คน" and no assignee column there.
-import { memo, useCallback, useId, type MouseEvent, type PointerEvent } from 'react'
+import { memo, useCallback, useEffect, useId, useRef, type MouseEvent, type PointerEvent } from 'react'
 import Tooltip from '@mui/material/Tooltip'
 import ViewTimelineOutlined from '@mui/icons-material/ViewTimelineOutlined'
 import Link from '@/components/Link'
@@ -67,6 +67,14 @@ export interface RowHeaderProps {
   onUnassign: (taskAssignmentId: string, name: string) => void
   /** M7.1 (FR-816): false = no assignee cell (the task cell spans both frozen columns) */
   showAssignees?: boolean
+  /** v3.9: a plain click also opens the task panel (project grid) */
+  openOnClick?: boolean
+  /** v3.9 inline rename (FR-823): the draft while this row's name is being edited, null otherwise */
+  renameDraft?: string | null
+  /** v3.9: start renaming (double-click on the task cell; draft null = the current name) — absent = not renamable */
+  onStartRename?: (r: number, draft: string | null) => void
+  /** v3.9: the rename ended — the new trimmed name, or null = cancelled / unchanged / empty */
+  onRenameEnd?: (taskId: string, next: string | null) => void
   /** v3.9: ☐ multi-select checkbox in the lead (project grid, editable) */
   selectable?: boolean
   /** M7.1 (FR-815): ⠿ on task / merged / sum rows when the task may be moved (editable, not archived) */
@@ -141,7 +149,9 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const stop = (e: MouseEvent) => e.stopPropagation()
   const descId = useId()
   // keep keyboard focus inside the grid when the row goes away under it (delete, unassign — like GridCell)
+  const headerEl = useRef<HTMLDivElement | null>(null)
   const setRef = useCallback((el: HTMLDivElement | null) => {
+    headerEl.current = el
     if (!el) return
     const grid = el.closest<HTMLElement>('[role="grid"]')
     return () => {
@@ -152,6 +162,8 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const late = ms !== null && task.lateForMilestone
   const states = rowStateTexts(row, p.personActive, ms)
   const ownsTask = row.kind !== 'assignee'
+  const canRename = ownsTask && p.canEdit && p.onStartRename !== undefined
+  const renameDraft = canRename ? (p.renameDraft ?? null) : null
   // v3.9: an unassigned leaf shows "รอมอบหมาย" + "+ คน" in the ผู้รับผิดชอบ column (next to the name when it is hidden)
   const unassigned = (row.kind === 'task' || row.kind === 'sum') && isLeaf && task.assigneeCount === 0
   const canAddHere = isLeaf && p.canEdit && p.canAddPerson
@@ -189,6 +201,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       style={{ width: FROZEN_COL_W, height: p.height }}
       data-row-header=""
       data-row-key={row.key}
+      data-task-id={ownsTask ? task.id : undefined}
       data-r={p.r}
       data-dragging={p.dragging ? 'true' : undefined}
       data-late-for-milestone={late ? 'true' : undefined}
@@ -196,16 +209,28 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
         const how = e.metaKey || e.ctrlKey ? 'toggle' : e.shiftKey ? 'range' : undefined
         if (how === 'range') window.getSelection()?.removeAllRanges()
         if (how) p.onSelectRow(p.r, how)
-        else p.onSelectRow(p.r)
+        else {
+          p.onSelectRow(p.r)
+          // v3.9: a plain click opens (or switches) the task panel
+          if (p.openOnClick && e.detail <= 1) p.onOpenTask(task.id)
+        }
       }}
-      onDoubleClick={() => p.onOpenTask(task.id)}
+      onDoubleClick={p.onStartRename ? undefined : () => p.onOpenTask(task.id)}
     >
       {states.length > 0 ? (
         <span id={descId} className={styles.srOnly}>
           {th.grid.row.states(states.join(' · '))}
         </span>
       ) : null}
-      <div className={styles.taskCell} style={{ width: TASK_COL_W }} data-task-cell="">
+      <div
+        className={styles.taskCell}
+        style={{ width: TASK_COL_W }}
+        data-task-cell=""
+        onDoubleClick={
+          // v3.9: double-click on the task cell renames in place (FR-823); read-only grids keep "open"
+          canRename && renameDraft === null ? () => p.onStartRename?.(p.r, null) : undefined
+        }
+      >
         {ownsTask ? (
           // v3.9 lead (src/lib/grid/row-layout.ts): [⠿ gutter][depth indent][caret slot] — the indent sits after the
           // gutter, the caret slot is narrow, so a top-level leaf name sits right after ⠿ + one empty caret slot
@@ -262,6 +287,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
                   stop(e)
                   p.onToggle(task.id)
                 }}
+                onDoubleClick={stop}
               >
                 {collapsed ? '▸' : '▾'}
               </button>
@@ -271,8 +297,18 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
             )}
           </span>
         ) : null}
-        {ownsTask ? (
-          <span className={styles.name} title={task.name}>
+        {ownsTask && renameDraft !== null ? (
+          <RenameInput
+            name={task.name}
+            draft={renameDraft}
+            onEnd={(next, how) => {
+              p.onRenameEnd?.(task.id, next)
+              // Enter / Esc keep the keyboard on the row (blur went elsewhere on purpose)
+              if (how !== 'blur') headerEl.current?.focus({ preventScroll: true })
+            }}
+          />
+        ) : ownsTask ? (
+          <span className={styles.name} title={task.name} data-task-name="">
             {task.name}
           </span>
         ) : null}
@@ -437,3 +473,64 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
     </div>
   )
 })
+
+/** Longest task name (same bound as the task list's InlineEditText, M3). */
+export const TASK_NAME_MAX = 500
+
+/** The trimmed new name, or null when the edit is a no-op (empty → revert, unchanged). Pure, unit-tested. */
+export function renameResult(name: string, value: string): string | null {
+  const next = value.trim().slice(0, TASK_NAME_MAX)
+  return next === '' || next === name ? null : next
+}
+
+/**
+ * v3.9 inline rename (FR-823): Enter or blur saves, Esc cancels, an empty value reverts. Keys stay inside the input
+ * (the grid's keyboard handler must not move the selection while typing).
+ */
+function RenameInput(p: {
+  name: string
+  draft: string
+  onEnd: (next: string | null, how: 'enter' | 'escape' | 'blur') => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const done = useRef(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.focus({ preventScroll: true })
+    const end = el.value.length
+    // F2 / Enter / double-click keep the name with the caret at the end; a typed character replaces it (Excel)
+    el.setSelectionRange(end, end)
+  }, [])
+  const finish = (how: 'enter' | 'escape' | 'blur') => {
+    if (done.current) return
+    done.current = true
+    p.onEnd(how === 'escape' ? null : renameResult(p.name, ref.current?.value ?? ''), how)
+  }
+  const stopMouse = (e: MouseEvent) => e.stopPropagation()
+  return (
+    <input
+      ref={ref}
+      className={styles.nameInput}
+      defaultValue={p.draft}
+      maxLength={TASK_NAME_MAX}
+      aria-label={th.grid.row.renameLabel(p.name)}
+      data-testid="grid-rename-input"
+      onClick={stopMouse}
+      onDoubleClick={stopMouse}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.nativeEvent.isComposing) return
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          finish('enter')
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          finish('escape')
+        }
+      }}
+      onBlur={() => finish('blur')}
+    />
+  )
+}

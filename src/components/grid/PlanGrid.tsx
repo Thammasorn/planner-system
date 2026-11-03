@@ -47,6 +47,7 @@ import type { Cd, ISODate, LoadPair, PeriodKey } from '@/domain/types'
 import { QuickAdd } from '@/components/tasks/QuickAdd'
 import { useProjectTasks } from '@/components/tasks/useProjectTasks'
 import { useTaskMutations } from '@/components/tasks/useTaskMutations'
+import { useUndo } from '@/components/undo/useUndo'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { usePreferences } from '@/hooks/usePreferences'
 import { useToday } from '@/hooks/useToday'
@@ -920,6 +921,53 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     },
     [taskMut],
   )
+  // ── v3.9 inline rename (FR-823): M3's updateTask through useTaskMutations (validation, error toast, cache refresh);
+  // the grid's name is patched optimistically and the edit is one entry of the shared undo stack ──
+  const undoApi = useUndo()
+  const [renaming, setRenaming] = useState<{ key: string; draft: string } | null>(null)
+  const patchGridName = useCallback(
+    (taskId: string, name: string) =>
+      qc.setQueriesData<GridResponse>({ queryKey: qk.gridAll(context) }, (d) =>
+        d
+          ? {
+              ...d,
+              rows: d.rows.map((r) => (r.kind === 'task' && r.id === taskId ? { ...r, name } : r)),
+            }
+          : d,
+      ),
+    [qc, context],
+  )
+  const onStartRename = useCallback(
+    (r: number, draft: string | null) => {
+      const row = viewRows[r]
+      if (!canAddTask || !row || !isTaskViewRow(row) || row.kind === 'assignee') return
+      setRenaming({ key: row.key, draft: draft ?? row.task.name })
+    },
+    [viewRows, canAddTask],
+  )
+  const onRenameEnd = useCallback(
+    (taskId: string, next: string | null) => {
+      setRenaming(null)
+      if (next === null) return
+      const prev = modelRef.current?.rows.find((x) => x.kind === 'task' && x.id === taskId)
+      const old = prev && prev.kind === 'task' ? prev.name : null
+      if (old === null) return
+      const rename = async (name: string) => {
+        patchGridName(taskId, name)
+        await taskMut.updateAsync(taskId, { name })
+      }
+      rename(next).then(
+        () =>
+          undoApi.push({
+            label: th.grid.row.renameUndo,
+            undo: () => rename(old),
+            redo: () => rename(next),
+          }),
+        () => patchGridName(taskId, old), // useTaskMutations toasts the error; the settle refetch also restores it
+      )
+    },
+    [patchGridName, taskMut, undoApi],
+  )
   const rowMenu = useRowMenu({
     store,
     viewRows,
@@ -966,6 +1014,12 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       openRow: () => {
         const row = selectedRow()
         if (row && isTaskViewRow(row)) openTask(row.task.id)
+      },
+      renameRow: (draft) => {
+        const row = selectedRow()
+        if (!canAddTask || !row || !isTaskViewRow(row) || row.kind === 'assignee') return false
+        onStartRename(viewRows.indexOf(row), draft)
+        return true
       },
       selectRow: () => {
         const f = store.get().focus
@@ -1375,6 +1429,10 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           onRowMenu={onRowMenu}
           showAssignees={showAssignees}
           selectable={canAddTask}
+          openOnClick={!isPerson}
+          {...(canAddTask
+            ? { onStartRename, onRenameEnd, renameDraft: renaming?.key === vrow.key ? renaming.draft : null }
+            : {})}
           draggable={canReorder && treeItems !== null}
           onDragHandle={drag.onHandlePointerDown}
           dragging={drag.state?.taskId === row.task.id}

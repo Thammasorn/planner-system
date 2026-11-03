@@ -34,9 +34,12 @@ function write(id: string | null, mode: 'push' | 'replace'): void {
   window.dispatchEvent(new Event(EVENT))
 }
 
-export function openTaskPanel(id: string): void {
-  if (read() === id) return
-  write(id, 'push')
+/** `o.switchInPlace` (v3.9, plan grid click-to-open): switching an already open panel replaces the history entry, so
+ *  clicking through rows does not stack one entry per row. */
+export function openTaskPanel(id: string, o?: { switchInPlace?: boolean }): void {
+  const current = read()
+  if (current === id) return
+  write(id, o?.switchInPlace && current !== null ? 'replace' : 'push')
 }
 
 export function closeTaskPanel(): void {

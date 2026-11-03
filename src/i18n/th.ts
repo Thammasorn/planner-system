@@ -1729,6 +1729,9 @@ export const th = {
       selBarCount: (n: number) => `เลือก ${n} งาน`,
       selBarDelete: 'ลบ',
       selBarClear: 'ยกเลิก',
+      /** v3.9 inline rename in the grid (FR-823) */
+      renameLabel: (name: string) => `ชื่องาน ${name}`,
+      renameUndo: 'เปลี่ยนชื่องาน',
     },
     cell: {
       label: (row: string, week: string, value: string) => `${row} สัปดาห์ ${week}: ${value}`,

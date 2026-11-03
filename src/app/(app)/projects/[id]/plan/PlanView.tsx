@@ -103,7 +103,7 @@ export function PlanView({
               projectName={projectName}
               archived={archived}
               canEdit={canEdit}
-              onOpenTask={(taskId) => openTaskPanel(taskId)}
+              onOpenTask={(taskId) => openTaskPanel(taskId, { switchInPlace: true })}
               {...(initialZoom ? { initialZoom } : {})}
               {...(initialTaskColumnWidth !== undefined ? { initialTaskColumnWidth } : {})}
               {...(initialShowAssignees !== undefined ? { initialShowAssignees } : {})}

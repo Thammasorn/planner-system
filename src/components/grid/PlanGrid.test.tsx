@@ -351,7 +351,7 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(screen.getByRole('button', { name: th.grid.reload })).toBeInTheDocument()
   })
 
-  it('Shift+Space → Tab reaches ⠿, ↗ (page link), + คน and ×; Enter on the row header opens the panel (§8.9, M6.1-D17, M7.1)', async () => {
+  it('Shift+Space → Tab reaches ⠿, ↗ (page link), + คน and ×; Enter renames, Space opens the panel (§8.9, M6.1-D17, M7.1, v3.9)', async () => {
     const onOpenTask = vi.fn()
     const user = userEvent.setup()
     renderPos({ onOpenTask })
@@ -365,7 +365,14 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     await user.click(cell)
     await user.keyboard('{Shift>} {/Shift}')
     expect(header).toHaveFocus()
+    // v3.9 (FR-823): Enter renames in place (Esc cancels, focus back on the row); Space opens the panel
     await user.keyboard('{Enter}')
+    expect(screen.getByTestId('grid-rename-input')).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByTestId('grid-rename-input')).toBeNull()
+    expect(header).toHaveFocus()
+    expect(onOpenTask).not.toHaveBeenCalled()
+    await user.keyboard(' ')
     expect(onOpenTask).toHaveBeenCalledWith('t-rollout')
     await user.tab()
     // v3.9: the ☐ multi-select checkbox comes first, then the drag handle (M7.1, FR-815)

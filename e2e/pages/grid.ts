@@ -124,9 +124,9 @@ export class GridPage {
     await this.openTaskPageLink(taskName, personName).click()
     await this.page.waitForURL(/\/t\/[0-9a-f-]{36}$/)
   }
-  /** Double-click on the row header (not on ↗) keeps opening the task panel (M6-D18, M6.1-D17). */
-  async openPanelByDoubleClick(taskName: string, personName?: string): Promise<void> {
-    await this.rowHeader(taskName, personName).getByText(taskName, { exact: true }).first().dblclick()
+  /** v3.9 (FR-823): a plain click on the name opens the panel (double-click renames in place). */
+  async openPanelByClick(taskName: string, personName?: string): Promise<void> {
+    await this.rowHeader(taskName, personName).getByText(taskName, { exact: true }).first().click()
     await this.page.waitForURL((u) => u.searchParams.has('task'))
   }
 

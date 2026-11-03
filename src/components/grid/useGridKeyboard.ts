@@ -18,8 +18,11 @@ export interface GridKeyHandlers {
   deleteRow: () => void
   /** Shift+Space: select the focused row */
   selectRow: () => void
-  /** Enter on a selected row header: open the task panel (same as double-click; ↗ is the page link, M6.1-D17) */
+  /** Space on a selected row header: open the task panel (same as a click; ↗ is the page link, M6.1-D17) */
   openRow: () => void
+  /** v3.9 (FR-823): Enter / F2 (draft null = the name) or a typed character on a selected row header → inline
+   *  rename; false = the row cannot be renamed (read-only, assignee row) */
+  renameRow: (draft: string | null) => boolean
   rowDeletable: () => boolean
   /** M7: Mod+↓ on a week cell; Mod+↑ on a day / รวม cell (view only) */
   expandWeek: () => void
@@ -47,7 +50,8 @@ export function useGridKeyboard(
     const inEditor = target.closest('[data-cell-editor]') !== null
     const inCell = target.closest('[data-cell]') !== null
     // the row header's own controls (▸/▾, ↗ link, ×, + คน) keep their native keys: Enter on ↗ follows the link
-    const inRowHeader = target.closest('[data-row-header]') !== null && target.closest('button, a[href]') === null
+    const inRowHeader =
+      target.closest('[data-row-header]') !== null && target.closest('button, a[href]') === null
     const onRoot = target === e.currentTarget
     if (!inEditor && !inCell && !inRowHeader && !onRoot) return
     const s = a.store.get()
@@ -55,14 +59,30 @@ export function useGridKeyboard(
       const plain = !e.metaKey && !e.ctrlKey && !e.altKey
       // Tab / Shift+Tab stay native on the row header: they reach its ▸/▾, ↗, × and + คน buttons (§8.9, S3.15)
       if (e.code === 'Tab' && plain) return
+      if (plain && !e.shiftKey && s.rowSelection !== null) {
+        // v3.9 (FR-823): Enter / F2 rename in place; Space opens the panel (Enter falls back to it when read-only)
+        const f2 = e.code === 'F2' || e.key === 'F2'
+        if (e.code === 'Enter' || e.code === 'NumpadEnter' || f2) {
+          e.preventDefault()
+          if (!handlers.renameRow(null) && !f2) handlers.openRow()
+          return
+        }
+        if (e.code === 'Space') {
+          e.preventDefault()
+          handlers.openRow()
+          return
+        }
+      }
+      // v3.9: typing on a selected row header starts the rename with that character (Excel-like)
       if (
-        (e.code === 'Enter' || e.code === 'NumpadEnter') &&
         plain &&
-        !e.shiftKey &&
-        s.rowSelection !== null
+        s.rowSelection !== null &&
+        e.key.length === 1 &&
+        e.key !== ' ' &&
+        !e.nativeEvent.isComposing &&
+        handlers.renameRow(e.key)
       ) {
         e.preventDefault()
-        handlers.openRow()
         return
       }
     }
@@ -81,7 +101,9 @@ export function useGridKeyboard(
     // the row header only takes row-level keys
     if (
       inRowHeader &&
-      !['deleteRow', 'cancel', 'undo', 'redo', 'flush', 'newTask', 'move', 'clear', 'moveRow'].includes(action.kind)
+      !['deleteRow', 'cancel', 'undo', 'redo', 'flush', 'newTask', 'move', 'clear', 'moveRow'].includes(
+        action.kind,
+      )
     )
       return
     // nothing left to cancel (no edit, no row / cell selection): this Esc is not the grid's — it bubbles unhandled

@@ -539,6 +539,20 @@
   min-width: 0;
 }
 
+/* v3.9 inline rename (FR-823): the input takes the name's place */
+.nameInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--brand-blue);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
 .row[data-completed='true'] .name {
   text-decoration: line-through;
   color: var(--faded-fg);

@@ -35,7 +35,9 @@ const PANEL_SELECTOR = '[data-testid="task-panel"]'
 function focusTask(taskId: string): void {
   const id = CSS.escape(taskId)
   const el =
-    document.querySelector<HTMLElement>(`[role="row"][data-task-id="${id}"], [data-board-card="${id}"]`) ??
+    document.querySelector<HTMLElement>(
+      `[role="row"][data-task-id="${id}"], [data-board-card="${id}"], [data-row-header][data-task-id="${id}"]`,
+    ) ??
     document.querySelector<HTMLElement>(
       '[role="treegrid"] [role="row"][tabindex="0"], [data-board-card][tabindex="0"]',
     )

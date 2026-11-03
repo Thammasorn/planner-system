@@ -8,7 +8,7 @@ import type { GridAssigneeRow, GridTaskRow } from '@/lib/contracts/grid'
 import type { ViewRow } from '@/lib/grid/rows'
 import { createGridStore } from './gridStore'
 import { renderGrid } from './render.test.helper'
-import { RowHeader, type RowHeaderProps } from './RowHeader'
+import { renameResult, RowHeader, TASK_NAME_MAX, type RowHeaderProps } from './RowHeader'
 
 const task = (o: Partial<GridTaskRow> = {}): GridTaskRow => ({
   kind: 'task',
@@ -263,5 +263,14 @@ describe('RowHeader unassigned hint (v3.9): in the ผู้รับผิด�
     const { header } = renderRow(merged)
     expect(header.querySelector('[data-assignee-cell] [data-add-person]')).toBeNull()
     expect(header.querySelector('[data-task-cell] [data-add-person]')).not.toBeNull()
+  })
+})
+
+describe('renameResult (v3.9 inline rename)', () => {
+  it('trims; empty or unchanged = no save; capped at the task-name maximum', () => {
+    expect(renameResult('A', '  B  ')).toBe('B')
+    expect(renameResult('A', '   ')).toBeNull()
+    expect(renameResult('A', ' A ')).toBeNull()
+    expect(renameResult('A', 'x'.repeat(TASK_NAME_MAX + 5))).toHaveLength(TASK_NAME_MAX)
   })
 })

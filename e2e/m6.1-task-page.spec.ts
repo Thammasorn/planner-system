@@ -407,7 +407,7 @@ test.describe('T3 ⟲ (AC-623, FR-685, FR-686) opening rules, back / Esc with th
     await expect
       .poll(() => grid.root().evaluate((el) => ({ top: el.scrollTop, left: el.scrollLeft })))
       .toEqual(gridAt)
-    await grid.openPanelByDoubleClick(ROLLOUT, 'Mint')
+    await grid.openPanelByClick(ROLLOUT, 'Mint')
     await expect(tasks.panelTitle(ROLLOUT)).toBeVisible()
   })
 })
