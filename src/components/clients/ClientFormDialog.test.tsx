@@ -92,9 +92,9 @@ describe('ClientFormDialog', () => {
       'aria-checked',
       'true',
     )
-    await user.type(screen.getByRole('textbox', { name: th.clients.fields.code }), 'BN')
+    await user.type(screen.getByRole('textbox', { name: th.clients.fields.code }), 'BB')
     await user.click(screen.getByRole('button', { name: th.projects.save }))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
-    expect(mocks.updateClient).toHaveBeenCalledWith({ clientId: CID, code: 'BN' })
+    expect(mocks.updateClient).toHaveBeenCalledWith({ clientId: CID, code: 'BB' })
   })
 })

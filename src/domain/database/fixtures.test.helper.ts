@@ -5,7 +5,7 @@ import type { DbColumnModel, DbCtx, DbPersonRef, DbRowModel, SelectOption } from
 export const TODAY = '2026-11-02'
 export const CINDY = 'u-cindy'
 export const IVY = 'u-ivy'
-export const MINT = 'u-mix'
+export const MINT = 'u-mint'
 export const OLD = 'u-old'
 
 export const PEOPLE = new Map<string, DbPersonRef>([

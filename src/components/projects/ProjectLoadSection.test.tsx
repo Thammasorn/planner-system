@@ -34,7 +34,7 @@ const POS: ProjectLoadResponse = {
       sum: { total: 375, committed: 375 },
     },
     {
-      userId: 'u-mix',
+      userId: 'u-mint',
       name: 'Mint',
       role: 'MEMBER',
       active: true,
@@ -63,7 +63,7 @@ describe('ProjectLoadSection (FR-409 load part, M9-D19)', () => {
   it('member sums in days, 12 bars, the 14/12 bar labelled committed 0.00', () => {
     renderSection(POS)
     expect(screen.getByRole('heading', { name: th.workload.projectLoad.heading })).toBeInTheDocument()
-    const mint = document.querySelector('tr[data-user-id="u-mix"]') as HTMLElement
+    const mint = document.querySelector('tr[data-user-id="u-mint"]') as HTMLElement
     expect(within(mint).getByTestId('member-sum')).toHaveTextContent('11.25')
     const cindy = document.querySelector('tr[data-user-id="u-cindy"]') as HTMLElement
     expect(within(cindy).getByTestId('member-sum')).toHaveTextContent('2.50')

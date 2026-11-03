@@ -521,7 +521,7 @@ test.describe('E4/E5/E14 ⟲ (AC-503, AC-504, FR-529) screenshots, sub-pages, me
     const editor = new PageScreen(page).editor
 
     await editor.focusEnd()
-    await page.keyboard.type('@Ic')
+    await page.keyboard.type('@Iv')
     await expect(editor.suggestionMenu()).toBeVisible()
     await expect(editor.suggestionGroup(th.editor.mention.groupPeople)).toBeVisible()
     await expect(editor.slashItems().first()).toContainText('Ivy')

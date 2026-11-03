@@ -241,7 +241,7 @@ test.describe('E4 (FR-403, FR-404 part, BR-62, AC-203 M2) members on POS as Cind
     await expect(toastWith(page, th.members.errors.lastLead)).toBeVisible()
     await project.expectRole(cindy, 'LEAD')
 
-    await project.addMember('Jack', 'Jo')
+    await project.addMember('Jack', 'Ja')
     await expect(project.memberRow(jack)).toBeVisible()
     await project.expectRole(jack, 'MEMBER')
 

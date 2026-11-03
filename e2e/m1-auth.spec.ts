@@ -299,7 +299,7 @@ test.describe('m1 auth, employees, positions', () => {
       await emp.goto()
       await expect(emp.rows()).toHaveCount(8) // 6 golden + Nok + Ploy
 
-      await emp.search('pat')
+      await emp.search('pet')
       await expect(emp.rows()).toHaveCount(1)
       await expect(emp.row('Peter')).toBeVisible()
       await emp.search('')

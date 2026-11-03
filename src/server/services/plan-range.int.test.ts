@@ -200,7 +200,7 @@ describe('planAssignmentRange — golden', () => {
     const [jack, mint, manager] = await Promise.all([goldenUser('Jack'), goldenUser('Mint'), goldenUser('Manager')])
     const t = await makeTask({ project: { id: mobileId }, name: 'งาน AC604', createdBy: manager })
     const aj = await makeAssignment({ task: t, user: jack })
-    const am = await makeAssignment({ task: t, user: mix })
+    const am = await makeAssignment({ task: t, user: mint })
     asUser(jack)
     ok(await plan(aj.id, 300, '2026-11-16', '2026-11-20'))
     ok(await plan(am.id, 200, '2026-11-16', '2026-11-20'))

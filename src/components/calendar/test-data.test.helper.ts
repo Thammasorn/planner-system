@@ -16,7 +16,7 @@ export const IDS = {
   ivy: 'u-ivy',
   cindy: 'u-cindy',
   jack: 'u-jack',
-  mint: 'u-mix',
+  mint: 'u-mint',
   manager: 'u-manager',
 } as const
 

@@ -338,7 +338,7 @@ describe('M10 palette categories, local index and debounce', () => {
   const CINDY = '00000000-0000-4000-8000-0000000000b1'
   const IVY = '00000000-0000-4000-8000-0000000000b2'
   const MINT = '00000000-0000-4000-8000-0000000000b3'
-  const PAT = '00000000-0000-4000-8000-0000000000b4'
+  const PERSON = '00000000-0000-4000-8000-0000000000b4'
   const CORAL = '00000000-0000-4000-8000-0000000000c1'
   const T1 = '00000000-0000-4000-8000-0000000000d1'
   const INDEX: SearchIndexResponse = {
@@ -410,24 +410,24 @@ describe('M10 palette categories, local index and debounce', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('people come from the index only: "pat" finds nobody even if the server would answer Peter', async () => {
+  it('people come from the index only: "pet" finds nobody even if the server would answer Peter', async () => {
     api.getJson.mockResolvedValue({
       ...serverTask,
       tasks: [],
       people: [
         {
           kind: 'person',
-          id: PAT,
+          id: PERSON,
           name: 'Peter',
           nickname: null,
           positionName: null,
           active: true,
-          href: `/people/${PAT}`,
+          href: `/people/${PERSON}`,
         },
       ],
     } satisfies SearchAllResponse)
     const input = await openWithIndex()
-    type(input, 'pat')
+    type(input, 'pet')
     await waitFor(() => expect(searchCalls()).toHaveLength(1))
     await within(dialog()).findByText(th.palette.empty)
     expect(within(dialog()).queryByRole('group', { name: th.palette.groups.people })).toBeNull()
@@ -464,10 +464,10 @@ describe('M10 palette categories, local index and debounce', () => {
     api.getJson.mockResolvedValue({ ...serverTask, pages: hits.pages } satisfies SearchAllResponse)
     const input = await openWithIndex({
       projects: INDEX.projects,
-      people: [{ id: PAT, name: 'Jack', nickname: null, positionName: null, active: true }],
+      people: [{ id: PERSON, name: 'Tom', nickname: null, positionName: null, active: true }],
       clients: [{ id: CORAL, name: 'Coral', archived: true }],
     })
-    type(input, 'o') // matches "ไปหน้าวันนี้" (keyword today/home), POS, Jack, Coral
+    type(input, 'o') // matches "ไปหน้าวันนี้" (keyword today/home), POS, Tom, Coral
     await within(dialog()).findByRole('group', { name: th.palette.groups.tasks })
     const headings = within(dialog())
       .getAllByRole('group')

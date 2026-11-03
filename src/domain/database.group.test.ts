@@ -80,7 +80,7 @@ describe('groupRows (BR-96)', () => {
     expect(summary(out)).toEqual([
       ['person:u-old', ['old']],
       ['person:u-cindy', ['cindy-ivy']],
-      ['person:u-mix', ['mint']],
+      ['person:u-mint', ['mint']],
       ['person:u-ivy', ['cindy-ivy']],
       ['none', ['nobody']],
     ])

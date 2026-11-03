@@ -22,7 +22,7 @@ describe('mergeChunks (PLAN §3.10, C87)', () => {
     expect(m.loadedWeeks.size).toBe(16)
     const cindy = m.cells.get('a:a-cindy-pos')!
     expect(cindy.get('W:2026-08-31')?.cd).toBe(500)
-    const mint = m.cells.get('a:a-mix-rollout')!
+    const mint = m.cells.get('a:a-mint-rollout')!
     expect(mint.get('W:2026-12-14')?.cd).toBe(500)
     expect(m.people.cindy?.capacity['W:2026-08-31']).toBe(500)
     expect(m.people.cindy?.capacity['W:2026-12-14']).toBe(500)
@@ -47,7 +47,7 @@ describe('mergeChunks (PLAN §3.10, C87)', () => {
     const ids = m.rows.map((r) =>
       r.kind === 'task' ? r.id : r.kind === 'assignee' ? r.taskAssignmentId : r.kind,
     )
-    expect(ids).toEqual(['t-pos', 'a-cindy-pos', 't-new', 't-uat', 'a-ivy-uat', 't-rollout', 'a-mix-rollout'])
+    expect(ids).toEqual(['t-pos', 'a-cindy-pos', 't-new', 't-uat', 'a-ivy-uat', 't-rollout', 'a-mint-rollout'])
   })
 
   it('maps holidays by date', () => {

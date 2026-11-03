@@ -82,7 +82,7 @@ describe('MembersPanel', () => {
     expect(rows.map((r) => r.dataset.testid)).toEqual([
       'member-row-cindy',
       'member-row-ivy',
-      'member-row-mix',
+      'member-row-mint',
       'member-row-nok',
     ])
     expect(within(rows[0]!).getByText(th.members.you)).toBeInTheDocument()
@@ -249,7 +249,7 @@ describe('MembersPanel', () => {
     await user.type(picker, 'Ivy')
     expect(await screen.findByText(th.members.pickerEmpty)).toBeInTheDocument()
     await user.clear(picker)
-    await user.type(picker, 'Jo')
+    await user.type(picker, 'Ja')
     await user.click(await screen.findByRole('option', { name: /Jack/ }))
     await waitFor(() => expect(mocks.addMember).toHaveBeenCalledWith({ projectId: PID, userId: 'jack' }))
     expect(await screen.findByText(th.members.toasts.added('Jack'))).toBeInTheDocument()
@@ -290,7 +290,7 @@ describe('MembersPanel', () => {
     expect(await screen.findByText(th.members.pickerLoadError)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: th.common.retry }))
     await waitFor(() => expect(screen.queryByText(th.members.pickerLoadError)).not.toBeInTheDocument())
-    await user.type(screen.getByRole('combobox', { name: th.members.add }), 'Jo')
+    await user.type(screen.getByRole('combobox', { name: th.members.add }), 'Ja')
     expect(await screen.findByRole('option', { name: /Jack/ })).toBeInTheDocument()
   })
 })

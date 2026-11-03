@@ -29,7 +29,7 @@ describe('matchLocal', () => {
 
   it('matches any key, folded', () => {
     const people = [item('p1', 'Peter', 'Peter', 'Data'), item('p2', 'Cindy', 'Cindy', 'PM')]
-    expect(names('pat', people)).toEqual(['Peter'])
+    expect(names('pet', people)).toEqual(['Peter'])
     expect(names('DATA', people)).toEqual(['Peter'])
   })
 

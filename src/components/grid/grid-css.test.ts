@@ -65,10 +65,10 @@ function mintHex(a: string, b: string, p: number): string {
 
 describe('grid.module.css (§8.9)', () => {
   it('--faded-fg text on the selection / fill tint is ≥ 4.5:1 in light and dark', () => {
-    const mint = /^color-mix\(in srgb, var\(--([a-z-]+)\) (\d+)%, var\(--([a-z-]+)\)\)$/.exec(
+    const mix = /^color-mix\(in srgb, var\(--([a-z-]+)\) (\d+)%, var\(--([a-z-]+)\)\)$/.exec(
       decl(find('.root'), '--grid-select-bg') ?? '',
     )
-    expect(mint, '--grid-select-bg is a color-mix of two tokens').not.toBeNull()
+    expect(mix, '--grid-select-bg is a color-mix of two tokens').not.toBeNull()
     const [, a = '', pct = '', b = ''] = mix!
     for (const [scheme, t] of Object.entries<TokenSet>(tokens)) {
       const bg = mintHex(t[a]!, t[b]!, Number(pct) / 100)

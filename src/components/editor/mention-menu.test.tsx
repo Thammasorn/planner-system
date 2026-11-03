@@ -22,9 +22,9 @@ const person = (id: string, name: string, over: Partial<PersonOption> = {}): Per
 })
 const PEOPLE = [
   person('u1', 'Cindy', { positionName: 'Dev' }),
-  person('u2', 'Mice'),
+  person('u2', 'Kiva'),
   person('u3', 'Ivy', { positionName: 'QA' }),
-  person('u4', 'Icarus', { active: false }),
+  person('u4', 'Ivan', { active: false }),
 ]
 const PAGE = '0c4d6a0e-7f3b-4c2a-9d1e-5b6a7c8d9e01'
 const SEARCH: SearchResponse = {
@@ -32,7 +32,7 @@ const SEARCH: SearchResponse = {
     {
       kind: 'page',
       id: PAGE,
-      title: 'Icon guide',
+      title: 'Ivory guide',
       icon: null,
       href: `/p/${PAGE}`,
       subtitle: 'Wiki',
@@ -64,17 +64,17 @@ describe('getMentionItems', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('"Ic" → Ivy first, inactive people excluded, then page hits', async () => {
-    const items = await getMentionItems(editor, makeTestQueryClient(), 'Ic')
+  it('"Iv" → Ivy first, inactive people excluded, then page hits', async () => {
+    const items = await getMentionItems(editor, makeTestQueryClient(), 'Iv')
     expect(items[0]?.title).toBe('Ivy')
-    expect(items.map((i) => i.title)).not.toContain('Icarus')
-    expect(items.map((i) => i.title)).toEqual(['Ivy', 'Mice', 'Icon guide'])
+    expect(items.map((i) => i.title)).not.toContain('Ivan')
+    expect(items.map((i) => i.title)).toEqual(['Ivy', 'Kiva', 'Ivory guide'])
     expect(items.map((i) => i.group)).toEqual([
       th.editor.mention.groupPeople,
       th.editor.mention.groupPeople,
       th.editor.mention.groupPages,
     ])
-    expect(fetchMock.mock.calls.some(([u]) => urlOf(u) === '/api/search?q=Ic&titleOnly=1')).toBe(true)
+    expect(fetchMock.mock.calls.some(([u]) => urlOf(u) === '/api/search?q=Iv&titleOnly=1')).toBe(true)
   })
 
   it('matches positions too', async () => {
@@ -84,12 +84,12 @@ describe('getMentionItems', () => {
 
   it('empty query → active people only, no search request', async () => {
     const items = await getMentionItems(editor, makeTestQueryClient(), '')
-    expect(items.map((i) => i.title).sort()).toEqual(['Cindy', 'Ivy', 'Mice'])
+    expect(items.map((i) => i.title).sort()).toEqual(['Cindy', 'Ivy', 'Kiva'])
     expect(fetchMock.mock.calls.some(([u]) => urlOf(u).startsWith('/api/search'))).toBe(false)
   })
 
   it('clicking inserts a mention chip with the id only, plus a space', async () => {
-    const items = await getMentionItems(editor, makeTestQueryClient(), 'Ic')
+    const items = await getMentionItems(editor, makeTestQueryClient(), 'Iv')
     items[0]!.onItemClick()
     expect(editor.insertInlineContent).toHaveBeenCalledWith([
       { type: 'mention', props: { kind: 'user', id: 'u3' } },
@@ -104,6 +104,6 @@ describe('getMentionItems', () => {
 
   it('fetch failure → [] (never rejects)', async () => {
     fetchMock.mockRejectedValue(new TypeError('offline'))
-    await expect(getMentionItems(editor, makeTestQueryClient(), 'Ic')).resolves.toEqual([])
+    await expect(getMentionItems(editor, makeTestQueryClient(), 'Iv')).resolves.toEqual([])
   })
 })

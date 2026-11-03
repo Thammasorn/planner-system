@@ -174,7 +174,7 @@ describe('applyRowMove (M7.1-D18)', () => {
   it('moves "Rollout สาขา" (with its assignee row) to the top', () => {
     const r = gridResponse({ from: '2026-08-31', tasks: POS_JACK, people })
     const out = applyRowMove(r, { taskId: 't-rollout', parentId: null, afterId: null })
-    expect(ids(out.rows)).toEqual(['t:t-rollout', 'a:a-mix-rollout', 't:t-pos', 'a:a-cindy-pos', 't:t-uat', 'a:a-ivy-uat', 'a:a-jack-uat'])
+    expect(ids(out.rows)).toEqual(['t:t-rollout', 'a:a-mint-rollout', 't:t-pos', 'a:a-cindy-pos', 't:t-uat', 'a:a-ivy-uat', 'a:a-jack-uat'])
     expect(ids(r.rows)[0]).toBe('t:t-pos') // input untouched
   })
   it('re-parents a leaf under another task: parentId, depth, hasChildren and totals rewritten', () => {

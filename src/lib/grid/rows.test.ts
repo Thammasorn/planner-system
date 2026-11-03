@@ -41,7 +41,7 @@ const TREE: FxTask[] = [
     assignees: [
       { taId: 'a-jack', userId: 'jack', cells: { '2026-09-28': 300 } },
       {
-        taId: 'a-mix',
+        taId: 'a-mint',
         userId: 'mint',
         cells: { '2026-10-12': { days: { '2026-10-12': 50, '2026-10-13': 50 } } },
       },
@@ -71,7 +71,7 @@ describe('buildViewRows (FR-805, §8.3)', () => {
     expect(rows.map((r) => [r.kind, r.key])).toEqual([
       ['merged', 'a:a-cindy-pos'],
       ['merged', 'a:a-ivy-uat'],
-      ['merged', 'a:a-mix-rollout'],
+      ['merged', 'a:a-mint-rollout'],
     ])
   })
 
@@ -83,7 +83,7 @@ describe('buildViewRows (FR-805, §8.3)', () => {
       'task:t:child-b:1',
       'task:t:pair:0',
       'assignee:a:a-jack:1',
-      'assignee:a:a-mix:1',
+      'assignee:a:a-mint:1',
       'merged:a:a-done:0',
     ])
   })
@@ -130,7 +130,7 @@ describe('cellEditability (M6-D11)', () => {
     expect(cellEditability(byKey('t:child-b'), undefined, m)).toBe('unassigned')
   })
   it('DAY week → ok (M7, X27: DAY weeks are editable)', () => {
-    expect(cellEditability(byKey('a:a-mix'), cellOf('a:a-mix', 'W:2026-10-12'), m)).toBe('ok')
+    expect(cellEditability(byKey('a:a-mint'), cellOf('a:a-mint', 'W:2026-10-12'), m)).toBe('ok')
   })
   it('archived project → archived; canEdit false → noEdit', () => {
     const am = model({ archived: true })
@@ -189,7 +189,7 @@ describe('buildViewRows showAssignees (FR-816)', () => {
     const pair = rows[1]!
     expect(parent.kind === 'sum' && parent.collapsed).toBe(true)
     expect(parent.kind === 'sum' && parent.assignees).toEqual([])
-    expect(pair.kind === 'sum' && pair.assignees.map((a) => a.taskAssignmentId)).toEqual(['a-jack', 'a-mix'])
+    expect(pair.kind === 'sum' && pair.assignees.map((a) => a.taskAssignmentId)).toEqual(['a-jack', 'a-mint'])
   })
   it('hidden still respects showCompleted', () => {
     const rows = buildViewRows(model(), { ...hidden, showCompleted: false })

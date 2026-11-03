@@ -38,7 +38,7 @@ describe('filterPeople', () => {
   })
 
   it('is case-insensitive on names', () => {
-    expect(filterPeople(options, 'PATH')).toEqual([peter])
+    expect(filterPeople(options, 'PETE')).toEqual([peter])
   })
 
   it('normalises to NFC on both sides', () => {

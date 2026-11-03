@@ -152,13 +152,13 @@ describe('KanbanView — moving cards (FR-1433, AC-1404)', () => {
       views: [{ ...KANBAN, config: { groupByColumnId: C.people } }],
       rows: [
         row('r1', 'ลูกค้าส่ง spec ช้า', 'a0', { [C.people]: ['u-cindy', 'u-ivy'] }),
-        row('r2', 'API ERP', 'a1', { [C.people]: ['u-mix'] }),
+        row('r2', 'API ERP', 'a1', { [C.people]: ['u-mint'] }),
         row('r3', 'งบเกิน', 'a2'),
       ],
       people: {
         'u-cindy': { name: 'Cindy', nickname: null, color: null, deactivated: false },
         'u-ivy': { name: 'Ivy', nickname: null, color: null, deactivated: false },
-        'u-mix': { name: 'Mint', nickname: null, color: null, deactivated: false },
+        'u-mint': { name: 'Mint', nickname: null, color: null, deactivated: false },
       },
     })
     const k = th.database.kanban
@@ -171,11 +171,11 @@ describe('KanbanView — moving cards (FR-1433, AC-1404)', () => {
     await moveVia(cardOf('Cindy', 'r1'), 'Mint')
     expect(callsOf(api, 'updateRow')[0]!.slice(0, 2)).toEqual([
       'r1',
-      { cells: { [C.people]: ['u-mix', 'u-ivy'] } },
+      { cells: { [C.people]: ['u-mint', 'u-ivy'] } },
     ])
     expect(cards('Mint')).toEqual(['r1', 'r2'])
     await moveVia(cardOf('Ivy', 'r1'), k.noValue)
-    expect(callsOf(api, 'updateRow')[1]!.slice(0, 2)).toEqual(['r1', { cells: { [C.people]: ['u-mix'] } }])
+    expect(callsOf(api, 'updateRow')[1]!.slice(0, 2)).toEqual(['r1', { cells: { [C.people]: ['u-mint'] } }])
   })
 
   it('a dnd-kit keyboard drag (Space, →, Space) moves the card to the next group', async () => {

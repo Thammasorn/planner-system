@@ -198,7 +198,7 @@ describe('LeaveDialog (FR-903/905/906, M5-D6/D14)', () => {
     const employee = within(dialog).getByRole('combobox', { name: th.timeOff.dialog.employee })
     expect(employee).toHaveValue('Manager')
     await user.clear(employee)
-    await user.type(employee, 'Path')
+    await user.type(employee, 'Pete')
     await user.click(await screen.findByRole('option', { name: /Peter/ }))
     await user.click(within(dialog).getByRole('button', { name: th.timeOff.dialog.save }))
     expect(a.createTimeOff).toHaveBeenCalledWith(expect.objectContaining({ userId: IDS.peter }))

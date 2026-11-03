@@ -50,19 +50,19 @@ describe('searchAll — golden visibility (FR-1104, r6b §5 M10)', () => {
     expect((await all(await golden('Peter'), 'POS')).projects).toEqual([])
   })
 
-  it("people 'Pat': Ivy → [], Cindy (LEAD → everyone) → [Peter]", async () => {
-    expect((await all(await golden('Ivy'), 'Pat')).people).toEqual([])
-    const cindy = (await all(await golden('Cindy'), 'Pat')).people
+  it("people 'Pet': Ivy → [], Cindy (LEAD → everyone) → [Peter]", async () => {
+    expect((await all(await golden('Ivy'), 'Pet')).people).toEqual([])
+    const cindy = (await all(await golden('Cindy'), 'Pet')).people
     expect(cindy.map((p) => p.nickname)).toEqual(['Peter'])
     expect(cindy[0]).toMatchObject({ kind: 'person', active: true, href: `/people/${cindy[0]!.id}` })
   })
 
-  it("clients 'Com': Peter → [Coral], Jack → []; 'Studio' as Ivy → [Sunrise]", async () => {
-    const p = (await all(await golden('Peter'), 'Com')).clients
+  it("clients 'Cor': Peter → [Coral], Jack → []; 'Sun' as Ivy → [Sunrise]", async () => {
+    const p = (await all(await golden('Peter'), 'Cor')).clients
     expect(p.map((c) => c.name)).toEqual(['Coral'])
     expect(p[0]).toMatchObject({ kind: 'client', archived: false, href: `/clients/${p[0]!.id}` })
-    expect((await all(await golden('Jack'), 'Com')).clients).toEqual([])
-    expect((await all(await golden('Ivy'), 'Studio')).clients.map((c) => c.name)).toEqual(['Sunrise'])
+    expect((await all(await golden('Jack'), 'Cor')).clients).toEqual([])
+    expect((await all(await golden('Ivy'), 'Sun')).clients.map((c) => c.name)).toEqual(['Sunrise'])
   })
 
   it('timing: searchAll for ลูกค้า on the golden DB < 500 ms (M10-D30; full scale is M12)', async () => {

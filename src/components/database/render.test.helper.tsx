@@ -35,7 +35,7 @@ export const PEOPLE: PersonOption[] = [
     active: true,
   },
   {
-    id: 'u-mix',
+    id: 'u-mint',
     name: 'Mint',
     nickname: null,
     positionId: null,

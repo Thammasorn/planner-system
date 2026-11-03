@@ -575,7 +575,7 @@ test.describe('P8 ⟲ (AC-807, FR-813, BR-104, §3.3) กราฟภาระ �
     await expect(grid.chartToggle()).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('mix (not in CRM): sees Cindy’s other-project number, no response carries a CRM name', async ({
+  test('mint (not in CRM): sees Cindy’s other-project number, no response carries a CRM name', async ({
     page,
   }) => {
     const bodies: Promise<string>[] = []

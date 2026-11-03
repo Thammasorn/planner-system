@@ -54,7 +54,7 @@ function answer(
         },
       },
       {
-        userId: 'u-mix',
+        userId: 'u-mint',
         name: 'Mint',
         deactivated: false,
         cells: {

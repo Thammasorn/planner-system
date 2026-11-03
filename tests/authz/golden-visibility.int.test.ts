@@ -103,7 +103,7 @@ describe('golden visibility (r8 §4.3)', () => {
     expect([...(ivy as Set<string>)].sort()).toEqual([await ids('Cindy'), await ids('Ivy'), await ids('Mint')].sort())
     const mint = await visibleUserIds(db, asUser(await goldenUser('Mint')))
     expect(mint).not.toBe('ALL')
-    expect([...(mix as Set<string>)].sort()).toEqual(
+    expect([...(mint as Set<string>)].sort()).toEqual(
       [await ids('Cindy'), await ids('Ivy'), await ids('Jack'), await ids('Mint')].sort(),
     )
   })

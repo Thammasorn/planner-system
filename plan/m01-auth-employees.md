@@ -676,7 +676,7 @@ export type UserColor = (typeof USER_COLORS)[number]`.
 Tests first (`unit`): `src/lib/schemas/account.test.ts` —
 `U-SCH-01 passwordPolicy('short', {email:'a@x.co'})=['TOO_SHORT']`; `U-SCH-02 'x'.repeat(129)` → `['TOO_LONG']`;
 `U-SCH-03 ' Cindy@Example.com '` with email `'cindy@example.com'` → `['EQUALS_EMAIL']`;
-`U-SCH-04 'Cindy12345'` with email `'cindy12345@example.com'` (local part) → `['EQUALS_EMAIL']`; email `''` → no email check;
+`U-SCH-04 'Cindy123'` with email `'cindy123@example.com'` (local part) → `['EQUALS_EMAIL']`; email `''` → no email check;
 `U-SCH-05 'demo1234'` vs `cindy@example.com` → `[]`;
 `U-SCH-06 same as current` → `['SAME_AS_CURRENT']`; `U-SCH-07 changePasswordInput confirm mismatch` → issue on `confirmPassword`;
 `U-SCH-08 loginInput.parse({ email: '  Cindy@Example.COM ', password: 'x' }).email === 'cindy@example.com'`;

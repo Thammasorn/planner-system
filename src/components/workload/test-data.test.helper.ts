@@ -15,7 +15,7 @@ export const U = {
   ivy: 'u-ivy',
   peter: 'u-peter',
   jack: 'u-jack',
-  mint: 'u-mix',
+  mint: 'u-mint',
 } as const
 
 export const P = {

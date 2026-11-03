@@ -277,7 +277,7 @@ export const POS_TASKS: FxTask[] = [
     blockers: { open: 1, total: 1 },
     assignees: [
       {
-        taId: 'a-mix-rollout',
+        taId: 'a-mint-rollout',
         userId: 'mint',
         cells: {
           '2026-11-30': 250,

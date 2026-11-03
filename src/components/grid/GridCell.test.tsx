@@ -45,11 +45,11 @@ const TASKS: FxTask[] = [
     ],
   },
   {
-    id: 't-mix',
+    id: 't-mint',
     name: 'งาน Mint',
     certainty: 'TENTATIVE',
     certaintySource: 'task',
-    assignees: [{ taId: 'a-mix', userId: 'mint', cells: { '2026-09-14': 100 } }],
+    assignees: [{ taId: 'a-mint', userId: 'mint', cells: { '2026-09-14': 100 } }],
   },
 ]
 const PEOPLE: Record<string, FxPerson> = {
@@ -97,7 +97,7 @@ describe('GridCell (FR-804/807/808, BR-20a)', () => {
 
   it('tentative rows: data-tentative on cells and ◐ (+ hidden text) in the row header', async () => {
     render()
-    const cell = await screen.findByTestId('cell-a:a-mix-W:2026-09-14')
+    const cell = await screen.findByTestId('cell-a:a-mint-W:2026-09-14')
     expect(cell).toHaveAttribute('data-tentative', 'true')
     const header = screen.getByRole('rowheader', { name: 'งาน Mint · Mint' })
     expect(within(header).getByText(th.grid.glyph.tentative)).toBeInTheDocument()

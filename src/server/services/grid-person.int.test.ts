@@ -196,7 +196,7 @@ describe('buildPersonChunk', () => {
     const jack = await goldenUser('Jack')
     const mint = await goldenUser('Mint')
     await makeAllocation({ assignment: await makeAssignment({ task: t, user: jack }), period: '2026-11-16', cd: 300 })
-    await makeAllocation({ assignment: await makeAssignment({ task: t, user: mix }), period: '2026-11-16', cd: 200 })
+    await makeAllocation({ assignment: await makeAssignment({ task: t, user: mint }), period: '2026-11-16', cd: 200 })
     const p = chunk('2026-11-16', '2026-11-23')
     for (const [who, cd] of [['Jack', 300], ['Mint', 200]] as const) {
       const g = await person('Manager', who, p)

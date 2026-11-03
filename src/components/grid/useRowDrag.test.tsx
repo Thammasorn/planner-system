@@ -87,8 +87,8 @@ const yOf = (i: number) => HEADER_TOTAL_H + i * ROW_H + ROW_H / 2
 describe('useRowDrag (FR-815, M7.1-D16)', () => {
   it('drag "Rollout สาขา" (row 3) to the top → moveTask(parentId null, afterId null) and the grid order at once', async () => {
     renderPos()
-    await waitFor(() => expect(handleOf('a:a-mix-rollout')).not.toBeNull())
-    const handle = handleOf('a:a-mix-rollout')!
+    await waitFor(() => expect(handleOf('a:a-mint-rollout')).not.toBeNull())
+    const handle = handleOf('a:a-mint-rollout')!
     expect(handle).toHaveAccessibleName(th.grid.reorder.handle)
     fireEvent.pointerDown(handle, {
       button: 0,
@@ -106,13 +106,13 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
       expect(m.moveTask).toHaveBeenCalledWith({ taskId: 't-rollout', parentId: null, afterId: null }),
     )
     expect(screen.queryByTestId('drop-indicator')).toBeNull()
-    await waitFor(() => expect(keys()).toEqual(['a:a-mix-rollout', 'a:a-cindy-pos', 'a:a-ivy-uat']))
+    await waitFor(() => expect(keys()).toEqual(['a:a-mint-rollout', 'a:a-cindy-pos', 'a:a-ivy-uat']))
   })
 
   it('Esc cancels the drag: no move, no indicator', async () => {
     renderPos()
-    await waitFor(() => expect(handleOf('a:a-mix-rollout')).not.toBeNull())
-    fireEvent.pointerDown(handleOf('a:a-mix-rollout')!, {
+    await waitFor(() => expect(handleOf('a:a-mint-rollout')).not.toBeNull())
+    fireEvent.pointerDown(handleOf('a:a-mint-rollout')!, {
       button: 0,
       pointerId: 3,
       clientX: 20,
@@ -124,7 +124,7 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
     expect(screen.queryByTestId('drop-indicator')).toBeNull()
     fireEvent.pointerUp(window, { pointerId: 3, clientX: 20, clientY: yOf(0) - 8 })
     expect(m.moveTask).not.toHaveBeenCalled()
-    expect(keys()).toEqual(['a:a-cindy-pos', 'a:a-ivy-uat', 'a:a-mix-rollout'])
+    expect(keys()).toEqual(['a:a-cindy-pos', 'a:a-ivy-uat', 'a:a-mint-rollout'])
   })
 
   it('Alt+↑ on the selected "ทำ UAT" row moves it above "ปรับปรุงระบบ POS" (X49: by e.code)', async () => {
@@ -136,7 +136,7 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
     await waitFor(() =>
       expect(m.moveTask).toHaveBeenCalledWith({ taskId: 't-uat', parentId: null, afterId: null }),
     )
-    await waitFor(() => expect(keys()).toEqual(['a:a-ivy-uat', 'a:a-cindy-pos', 'a:a-mix-rollout']))
+    await waitFor(() => expect(keys()).toEqual(['a:a-ivy-uat', 'a:a-cindy-pos', 'a:a-mint-rollout']))
   })
 
   it('archived: no ⠿ and Alt+↑ does nothing', async () => {

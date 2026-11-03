@@ -38,7 +38,7 @@ describe('UserChip', () => {
   it('shows @displayName (nickname first)', () => {
     renderWithClient(
       <UserChip id="u1" />,
-      withPeople([person({ id: 'u1', name: 'Cindarat S.', nickname: 'Cindy' })]),
+      withPeople([person({ id: 'u1', name: 'Cinderella S.', nickname: 'Cindy' })]),
     )
     expect(screen.getByTestId('mention-user')).toHaveTextContent('@Cindy')
   })

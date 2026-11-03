@@ -41,7 +41,7 @@ const ids = (r: EmployeeRow[]) => r.map((x) => x.id)
 
 describe('filterEmployees', () => {
   it('U-FILT-01 matches name and nickname, case-insensitively', () => {
-    expect(ids(filterEmployees(rows, { ...DEFAULT_FILTER, q: 'pat' }))).toEqual(['p'])
+    expect(ids(filterEmployees(rows, { ...DEFAULT_FILTER, q: 'pet' }))).toEqual(['p'])
     expect(ids(filterEmployees(rows, { ...DEFAULT_FILTER, q: 'MAN' }))).toEqual(['m'])
     expect(ids(filterEmployees(rows, { ...DEFAULT_FILTER, q: '  jack j ' }))).toEqual(['j'])
   })

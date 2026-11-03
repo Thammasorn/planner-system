@@ -10,7 +10,7 @@ const f2 = gridResponse({
   expand: ['2026-10-19'],
   tasks: [
     { id: 't-j', name: 'J', assignees: [{ taId: 'a-jack', userId: 'jack', cells: { '2026-10-19': 500 } }] },
-    { id: 't-m', name: 'M', assignees: [{ taId: 'a-mix', userId: 'mint', cells: { '2026-10-19': 500 } }] },
+    { id: 't-m', name: 'M', assignees: [{ taId: 'a-mint', userId: 'mint', cells: { '2026-10-19': 500 } }] },
   ],
   people: {
     jack: { name: 'Jack', capacity: { '2026-10-19': 400 }, dayCaps: { '2026-10-23': 0 } },

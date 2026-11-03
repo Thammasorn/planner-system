@@ -146,7 +146,7 @@ describe('hide assignees → summed rows (FR-816/817, AC-810, BR-100/101)', () =
         't:t-uat',
         'a:a-ivy-uat',
         'a:a-jack-uat',
-        'a:a-mix-rollout',
+        'a:a-mint-rollout',
       ]),
     )
     await user.click(screen.getByRole('switch', { name: th.grid.columns.show }))

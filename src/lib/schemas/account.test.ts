@@ -23,10 +23,10 @@ describe('passwordPolicy (X60)', () => {
     expect(passwordPolicy(' Cindy@Example.com ', { email: 'cindy@example.com' })).toEqual(['EQUALS_EMAIL'])
   })
 
-  it("U-SCH-04 'Cindy12345' with email 'cindy12345@example.com' (local part) → ['EQUALS_EMAIL']; email '' → no email check", () => {
-    expect(passwordPolicy('Cindy12345', { email: 'cindy12345@example.com' })).toEqual(['EQUALS_EMAIL'])
-    expect(passwordPolicy('Cindy12345', { email: ' CHI12345@Example.com ' })).toEqual(['EQUALS_EMAIL'])
-    expect(passwordPolicy('Cindy12345', { email: '' })).toEqual([])
+  it("U-SCH-04 'Cindy123' with email 'cindy123@example.com' (local part) → ['EQUALS_EMAIL']; email '' → no email check", () => {
+    expect(passwordPolicy('Cindy123', { email: 'cindy123@example.com' })).toEqual(['EQUALS_EMAIL'])
+    expect(passwordPolicy('Cindy123', { email: ' CINDY123@Example.com ' })).toEqual(['EQUALS_EMAIL'])
+    expect(passwordPolicy('Cindy123', { email: '' })).toEqual([])
   })
 
   it("U-SCH-05 'demo1234' vs cindy@example.com → []", () => {

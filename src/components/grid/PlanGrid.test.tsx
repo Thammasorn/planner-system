@@ -169,7 +169,7 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(grid).toHaveAttribute('data-save-state', 'idle')
     await waitFor(() => expect(grid.querySelectorAll('[data-row-header]')).toHaveLength(3))
     const keys = [...grid.querySelectorAll('[data-row-header]')].map((e) => e.getAttribute('data-row-key'))
-    expect(keys).toEqual(['a:a-cindy-pos', 'a:a-ivy-uat', 'a:a-mix-rollout'])
+    expect(keys).toEqual(['a:a-cindy-pos', 'a:a-ivy-uat', 'a:a-mint-rollout'])
   })
 
   it('shows the ⛔ badge on a task with open blockers', async () => {
@@ -203,7 +203,7 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     await user.click(header)
     await user.keyboard('{/Shift}')
     expect(screen.getByTestId('cell-a:a-cindy-pos-W:2026-09-28')).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByTestId('cell-a:a-mix-rollout-W:2026-09-28')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('cell-a:a-mint-rollout-W:2026-09-28')).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('cell-a:a-cindy-pos-W:2026-10-05')).toHaveAttribute('aria-selected', 'false')
     const toggle = screen.getByTestId('expand-week-2026-09-28')
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -355,8 +355,8 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     const onOpenTask = vi.fn()
     const user = userEvent.setup()
     renderPos({ onOpenTask })
-    const cell = await screen.findByTestId('cell-a:a-mix-rollout-W:2026-09-28')
-    const header = document.querySelector<HTMLElement>('[data-row-header][data-row-key="a:a-mix-rollout"]')!
+    const cell = await screen.findByTestId('cell-a:a-mint-rollout-W:2026-09-28')
+    const header = document.querySelector<HTMLElement>('[data-row-header][data-row-key="a:a-mint-rollout"]')!
     await waitFor(() =>
       expect(
         within(header).getByRole('button', { name: th.grid.row.addPersonLabel('Rollout สาขา') }),
@@ -412,10 +412,10 @@ describe('PlanGrid (S3.9, S3.15)', () => {
   it('Esc in the quick-add row focuses the last body row', async () => {
     const user = userEvent.setup()
     renderPos()
-    await screen.findByTestId('cell-a:a-mix-rollout-W:2026-09-28')
+    await screen.findByTestId('cell-a:a-mint-rollout-W:2026-09-28')
     await user.click(screen.getByRole('textbox', { name: th.grid.row.addTaskLabel }))
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.getByTestId('cell-a:a-mix-rollout-W:2026-09-28')).toHaveFocus())
+    await waitFor(() => expect(screen.getByTestId('cell-a:a-mint-rollout-W:2026-09-28')).toHaveFocus())
   })
 
   it('▶ (past the rendered window) then Tab from the toolbar lands on a body cell of the visible weeks (§8.9, S3.15)', async () => {
