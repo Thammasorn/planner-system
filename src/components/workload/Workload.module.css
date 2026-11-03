@@ -2,6 +2,9 @@
    number, 🔴/⚠ glyph and a visually hidden status — A11Y-1, §8.9). BR-45 tones per view (M9-D6, X51/X67). */
 
 .scroller {
+  /* the containing block of the cells' visually hidden texts (position: absolute) — without it they escape the
+     scroller's clip and widen the page on phones (M11.2) */
+  position: relative;
   overflow-x: auto;
   max-width: 100%;
   border: 1px solid var(--border-subtle);
@@ -50,6 +53,79 @@
   color: var(--text-secondary);
   white-space: nowrap;
   text-align: center;
+}
+
+/* M11.2 (FR-1001 v3.5): the month-year row above the week row (FR-818's grouping and labels). The label sticks to
+   the right edge of the sticky "คน" column while its month is in view; its max-width is the span's measured width, so
+   it never widens the columns (the text is already chosen to fit: long "พฤศจิกายน 2569" / short "พ.ย. 69"). */
+.monthHeader {
+  height: 24px;
+  padding: 0 var(--space-2);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.monthLabel {
+  position: sticky;
+  left: calc(var(--wl-person-w, 180px) + var(--space-2));
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* month boundary lines (the grid's --border-month, 2 px on the left edge of a month's first week) through the month
+   row, the week row and every body row; the chart under the table draws the same line on the same x */
+.monthHeader[data-month-start],
+.weekHeader[data-month-start],
+.cellTd[data-month-start] {
+  position: relative;
+}
+
+.monthHeader[data-month-start]::after,
+.weekHeader[data-month-start]::after,
+.cellTd[data-month-start]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--border-month);
+  pointer-events: none;
+}
+
+.corner {
+  vertical-align: bottom;
+}
+
+/* M11.2: the load chart's frame under the table — the same border and inner left edge as .scroller, so its
+   AlignedScroller (same clientWidth) starts at the table's x */
+.chartFrame {
+  max-width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.chartFrame > section {
+  border-top: 0;
+}
+
+.chartBlock {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-top: var(--space-3);
+}
+
+.chartBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 /* this week: a bar under the header (the text says it too, visually hidden) */

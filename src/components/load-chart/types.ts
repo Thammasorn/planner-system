@@ -43,6 +43,8 @@ export interface ChartLayout {
   markerEdges: readonly MarkerEdge[]
   /** ref callback of the pane's horizontal scroller, kept in lockstep with the grid (VirtualGrid `follow`) */
   follow: (el: HTMLElement | null) => (() => void) | undefined
+  /** M11.2 (/workload): the scroller's accessible name; absent = th.loadChart.scroller (the plan grid's) */
+  scrollerLabel?: string
 }
 
 export interface LoadChartProps {
@@ -53,9 +55,10 @@ export interface LoadChartProps {
   /** M11.1 (FR-813/FR-1010): `load.display` — PERCENT (default) or DAYS; no longer the grid unit */
   display: LoadDisplay
   view: LoadView
-  /** Shared with the footer's switch (FR-806, X29). */
-  includeOthers: boolean
-  onIncludeOthers(on: boolean): void
+  /** Shared with the footer's switch (FR-806, X29). M11.2: absent (/workload — its cells already count every project,
+   *  masked) → no "รวมงานโปรเจคอื่น" switch. */
+  includeOthers?: boolean
+  onIncludeOthers?: (on: boolean) => void
   today: ISODate
   loading: boolean
 }

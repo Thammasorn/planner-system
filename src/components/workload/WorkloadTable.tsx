@@ -2,7 +2,19 @@
 // src/components/workload/WorkloadTable.tsx — people × weeks, grouped by position (FR-1001/1002, §8.5, M9-D3/D4/D6).
 // A plain <table> (dense, PLAN §3.9) scrolling horizontally inside its own container; roving focus: one tab stop,
 // arrows move between cells (e.code), Enter / Space open the side panel (native button). The person column sticks.
-import { useCallback, useMemo, useState, type KeyboardEvent } from 'react'
+// M11.2 (FR-1001 v3.5, M11.2-D1/D2): a month-year row above the week row (FR-818's grouping: a week belongs to the
+// month of its Monday — src/lib/grid/months.ts) with month boundary lines through the header and body; the table
+// reports its measured header geometry (`onGeometry`) so the load chart under it sits on the same columns.
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type Ref,
+} from 'react'
 import Link from '@/components/Link'
 import { VisuallyHidden } from '@/components/common/VisuallyHidden'
 import { weekStart } from '@/domain/dates'
@@ -10,6 +22,7 @@ import type { ISODate, LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { WorkloadPerson, WorkloadResponse } from '@/lib/contracts/workload'
 import { formatWeekHeader } from '@/lib/format'
+import { monthHeaderCells, sameGeometry, workloadMonthStarts, type TableGeometry } from '@/lib/workload/chart'
 import { WorkloadCell, isDeactivatedWeek } from './WorkloadCell'
 import { WorkloadTooltipHost, type WorkloadTooltipTarget } from './WorkloadTooltip'
 import styles from './Workload.module.css'
@@ -20,6 +33,29 @@ export interface WorkloadTableProps {
   /** The cell whose panel is open. */
   selected: { userId: string; week: ISODate } | null
   onOpen: (person: WorkloadPerson, week: ISODate) => void
+  /** M11.2: the horizontal scroller (the load chart follows it) */
+  scrollerRef?: Ref<HTMLDivElement>
+  /** M11.2: the measured header geometry, on every change (resize, data, fonts) */
+  onGeometry?: (g: TableGeometry) => void
+}
+
+/** .monthHeader's horizontal padding (2 × --space-2): the label never outgrows its span. */
+const MONTH_PAD_X = 16
+
+/** The table's header geometry in its own content coordinates (px from the table's left edge). */
+function measure(table: HTMLTableElement, scroller: HTMLElement | null): TableGeometry {
+  const t = table.getBoundingClientRect()
+  const corner = table.querySelector<HTMLElement>('thead th[data-corner]')
+  const cols = [...table.querySelectorAll<HTMLElement>('thead th[data-week]')].map((h) => {
+    const r = h.getBoundingClientRect()
+    return { left: r.left - t.left, width: r.width }
+  })
+  return {
+    personW: corner?.getBoundingClientRect().width ?? 0,
+    contentW: t.width,
+    viewW: scroller?.clientWidth ?? 0,
+    cols,
+  }
 }
 
 const MOVES: Readonly<Record<string, readonly [number, number]>> = {
@@ -29,12 +65,38 @@ const MOVES: Readonly<Record<string, readonly [number, number]>> = {
   ArrowRight: [0, 1],
 }
 
-export function WorkloadTable({ data, view, selected, onOpen }: WorkloadTableProps) {
+export function WorkloadTable({ data, view, selected, onOpen, scrollerRef, onGeometry }: WorkloadTableProps) {
   const people = useMemo(() => data.groups.flatMap((g) => g.people), [data.groups])
   const byId = useMemo(() => new Map(people.map((p) => [p.userId, p])), [people])
   const rowOf = useMemo(() => new Map(people.map((p, i) => [p.userId, i])), [people])
   const thisWeek = weekStart(data.today)
   const [active, setActive] = useState<{ r: number; c: number }>({ r: 0, c: 0 })
+  const monthStarts = useMemo(() => workloadMonthStarts(data.weeks), [data.weeks])
+  const tableRef = useRef<HTMLTableElement>(null)
+  const [geometry, setGeometry] = useState<TableGeometry | null>(null)
+  const months = useMemo(() => monthHeaderCells(data.weeks, geometry), [data.weeks, geometry])
+  useLayoutEffect(() => {
+    const table = tableRef.current
+    if (!table) return
+    const scroller = table.parentElement
+    let last: TableGeometry | null = null
+    const update = () => {
+      const g = measure(table, scroller)
+      // jsdom / hidden: nothing laid out → keep the nominal geometry
+      if (g.contentW <= 0) return
+      if (sameGeometry(last, g)) return
+      last = g
+      setGeometry(g)
+      onGeometry?.(g)
+    }
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(update)
+    ro.observe(table)
+    if (scroller) ro.observe(scroller)
+    for (const h of table.querySelectorAll('thead th')) ro.observe(h)
+    return () => ro.disconnect()
+  }, [data, onGeometry])
   const r0 = Math.min(active.r, Math.max(0, people.length - 1))
   const c0 = Math.min(active.c, Math.max(0, data.weeks.length - 1))
 
@@ -71,13 +133,42 @@ export function WorkloadTable({ data, view, selected, onOpen }: WorkloadTablePro
   }
 
   return (
-    <WorkloadTooltipHost resolve={resolve} className={styles.scroller}>
-      <table className={styles.table} aria-label={th.workload.tableLabel} data-testid="workload-table">
+    <WorkloadTooltipHost resolve={resolve} className={styles.scroller} ref={scrollerRef}>
+      <table
+        ref={tableRef}
+        className={styles.table}
+        aria-label={th.workload.tableLabel}
+        data-testid="workload-table"
+        style={geometry ? ({ '--wl-person-w': `${geometry.personW}px` } as CSSProperties) : undefined}
+      >
         <thead>
-          <tr>
-            <th scope="col" className={styles.corner}>
+          <tr data-month-row="">
+            <th scope="col" rowSpan={2} className={styles.corner} data-corner="">
               {th.workload.personHeader}
             </th>
+            {months.map((m) => (
+              <th
+                key={m.key}
+                scope="colgroup"
+                colSpan={m.span}
+                className={styles.monthHeader}
+                data-month={m.key}
+                data-month-start={m.monthStart ? '' : undefined}
+                aria-label={m.label.full}
+                title={m.label.text === m.label.full ? undefined : m.label.full}
+              >
+                <span
+                  className={styles.monthLabel}
+                  aria-hidden="true"
+                  style={{ maxWidth: Math.max(0, m.width - MONTH_PAD_X) }}
+                  data-testid={`month-label-${m.key}`}
+                >
+                  {m.label.text}
+                </span>
+              </th>
+            ))}
+          </tr>
+          <tr>
             {data.weeks.map((w) => (
               <th
                 key={w}
@@ -85,6 +176,7 @@ export function WorkloadTable({ data, view, selected, onOpen }: WorkloadTablePro
                 className={styles.weekHeader}
                 data-week={w}
                 data-today={w === thisWeek ? 'true' : undefined}
+                data-month-start={monthStarts.has(`W:${w}`) ? '' : undefined}
               >
                 {formatWeekHeader(w)}
                 {w === thisWeek ? <VisuallyHidden>{` ${th.workload.window.thisWeek}`}</VisuallyHidden> : null}
@@ -114,7 +206,11 @@ export function WorkloadTable({ data, view, selected, onOpen }: WorkloadTablePro
                   {data.weeks.map((w, c) => {
                     const cell = p.cells[w]
                     return (
-                      <td key={w} className={styles.cellTd}>
+                      <td
+                        key={w}
+                        className={styles.cellTd}
+                        data-month-start={monthStarts.has(`W:${w}`) ? '' : undefined}
+                      >
                         {cell ? (
                           <WorkloadCell
                             name={p.name}

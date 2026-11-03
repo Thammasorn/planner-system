@@ -34,6 +34,7 @@ export function LoadChartPanel(p: LoadChartProps) {
   const pinnedLive = people.some((x) => x.userId === pinned) ? pinned : null
   const focused = preview ?? pinnedLive
   const hasData = p.series.length > 0 && p.weeks.length > 0
+  const { onIncludeOthers } = p
 
   return (
     <section data-testid="load-chart-panel" aria-label={th.loadChart.title} className={styles.panel}>
@@ -45,18 +46,20 @@ export function LoadChartPanel(p: LoadChartProps) {
         <span className={styles.spacer} />
         {/* M11.1 (FR-813/FR-1010): % of capacity (default) or days — the shared load.display preference */}
         <LoadDisplayToggle />
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={p.includeOthers}
-              onChange={(_e, on) => p.onIncludeOthers(on)}
-              data-testid="load-chart-include-others"
-            />
-          }
-          label={th.loadChart.includeOthers}
-          slotProps={{ typography: { sx: { fontSize: 'var(--font-sm)' } } }}
-        />
+        {onIncludeOthers ? (
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={p.includeOthers ?? false}
+                onChange={(_e, on) => onIncludeOthers(on)}
+                data-testid="load-chart-include-others"
+              />
+            }
+            label={th.loadChart.includeOthers}
+            slotProps={{ typography: { sx: { fontSize: 'var(--font-sm)' } } }}
+          />
+        ) : null}
         <Button
           size="small"
           variant="outlined"

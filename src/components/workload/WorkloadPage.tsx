@@ -1,7 +1,8 @@
 'use client'
 // src/components/workload/WorkloadPage.tsx — Workload ทีม (SPEC §8.5, FR-1001…1006, M9-D2…D6/D10). One payload serves
 // table, tooltip, list tab and tab count; the view is a preference (`load.view`, M6-D21) applied on the client, so
-// switching it never refetches (M9-D2). Filters + window live in the URL (M9-D5).
+// switching it never refetches (M9-D2). Filters + window live in the URL (M9-D5). M11.2: the per-person load chart
+// under the table (FR-1011) is computed from the same payload, on the table's measured columns.
 import { useCallback, useMemo, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -32,12 +33,15 @@ import { WORKLOAD_STEP, WORKLOAD_WEEKS, useWorkloadTable, useWorkloadUrlState } 
 import { th } from '@/i18n/th'
 import { compareThai } from '@/lib/collate'
 import type { WorkloadPerson } from '@/lib/contracts/workload'
+import type { TableGeometry } from '@/lib/workload/chart'
 import { formatThaiDate } from '@/lib/format'
 import { gridPreference } from '@/lib/schemas/preferences'
 import { OverloadList } from './OverloadList'
 import { isDeactivatedWeek } from './WorkloadCell'
 import { WorkloadCellPanel } from './WorkloadCellPanel'
+import { WorkloadLoadChart } from './WorkloadLoadChart'
 import { WorkloadTable } from './WorkloadTable'
+import { useScrollFollow } from './useScrollFollow'
 
 const VIEWS: readonly LoadView[] = ['ALL', 'COMMITTED', 'AT_RISK']
 const SELECT_SX = { minWidth: { xs: 140, sm: 180 }, flex: { xs: '1 1 140px', sm: '0 0 auto' } } as const
@@ -53,6 +57,9 @@ export function WorkloadPage({ initialView }: { initialView: LoadView }) {
   const sidebar = useSidebar()
   const [tab, setTab] = useState<'table' | 'overloads'>('table')
   const [panel, setPanel] = useState<PanelTarget | null>(null)
+  // M11.2: the load chart under the table sits on its measured columns and follows its horizontal scroll
+  const [geometry, setGeometry] = useState<TableGeometry | null>(null)
+  const { lead, follow, sync } = useScrollFollow()
 
   const projects = useMemo(
     () => [...(sidebar.data?.projects ?? [])].sort((a, b) => compareThai(a.name, b.name)),
@@ -217,7 +224,10 @@ export function WorkloadPage({ initialView }: { initialView: LoadView }) {
               view={view}
               selected={panel ? { userId: panel.userId, week: panel.week } : null}
               onOpen={openPanel}
+              scrollerRef={lead}
+              onGeometry={setGeometry}
             />
+            <WorkloadLoadChart data={q.data} view={view} geometry={geometry} follow={follow} sync={sync} />
           </Box>
           <WorkloadCellPanel target={panel} onClose={closePanel} />
         </Box>

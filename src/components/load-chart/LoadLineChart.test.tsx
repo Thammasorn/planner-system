@@ -7,7 +7,7 @@ import type { GridMarkerView } from '@/lib/grid/markers'
 import { theme } from '@/lib/theme/theme'
 import { chartPeople } from './chart-model'
 import { FROZEN, testLayout, W } from './layout.test.data'
-import { LoadLineChart, type LoadLineChartProps } from './LoadLineChart'
+import { AXIS_TITLE_H, LoadLineChart, PLOT_TOP, type LoadLineChartProps } from './LoadLineChart'
 import type { LoadSeries } from './types'
 
 const SERIES: LoadSeries[] = [
@@ -232,5 +232,42 @@ describe('LoadLineChart on the grid’s columns (FR-813, M7.1-D30)', () => {
     expect(screen.getByTestId('load-chart-tooltip')).toHaveTextContent(
       `130% (${th.loadChart.daysValue('6.5', '5.0')})`,
     )
+  })
+})
+
+describe('y-axis title vs the 100 % label (owner feedback 2026-11-03: they overlapped at the top-left)', () => {
+  /** jsdom has no layout: boxes from the inline geometry (title = [0, AXIS_TITLE_H), label = [top, top + 12) — one
+   *  xs line, line-height 1 — in the frozen area; both left-aligned, so only the vertical bands matter). */
+  const XS_LINE = 12
+  const capped = (pct: number): LoadSeries[] => [
+    {
+      userId: 'a',
+      name: 'A',
+      points: [{ week: W[0], loadCd: pct * 5, capacityCd: 500, pct, level: pct > 100 ? 'OVER' : 'OK' }],
+    },
+  ]
+  for (const top of [40, 100, 130, 260])
+    it(`PERCENT, highest point ${top} %: the boxes do not intersect and the label sits below its line`, () => {
+      const { container } = renderChart({
+        series: capped(top),
+        people: chartPeople(capped(top)),
+        display: 'PERCENT',
+      })
+      const title = container.querySelector<HTMLElement>('[data-axis-title]')!
+      const label = container.querySelector<HTMLElement>('[data-ref-label]')!
+      const line = container.querySelector('[data-ref-line="100"]')!
+      expect(parseFloat(title.style.height)).toBe(AXIS_TITLE_H)
+      const labelTop = parseFloat(label.style.top)
+      expect(labelTop).toBeGreaterThanOrEqual(AXIS_TITLE_H) // title [0, 16) ∩ label [top, top + 12) = ∅
+      expect(labelTop).toBeGreaterThan(Number(line.getAttribute('y1')))
+      expect(labelTop + XS_LINE).toBeLessThanOrEqual(240 - 22) // inside the plot, above the x labels
+      expect(Number(line.getAttribute('y1'))).toBeGreaterThanOrEqual(PLOT_TOP)
+    })
+
+  it('DAYS: the title only; the highest y tick (centred on PLOT_TOP) stays below the title band', () => {
+    const { container } = renderChart({ display: 'DAYS' })
+    expect(container.querySelector('[data-ref-label]')).toBeNull()
+    expect(container.querySelector('[data-axis-title]')).toHaveTextContent(th.loadChart.unitDays)
+    expect(PLOT_TOP - XS_LINE / 2).toBeGreaterThanOrEqual(AXIS_TITLE_H)
   })
 })

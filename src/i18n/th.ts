@@ -1928,6 +1928,10 @@ export const th = {
       empty: 'ไม่มีรายการที่ล้นในช่วงนี้',
     },
     badge: { label: (n: number) => `ล้น ${n} ช่องใน 4 สัปดาห์ข้างหน้า` },
+    /** M11.2 (FR-1011): the per-person load chart under the table (the plan chart's th.loadChart texts otherwise) */
+    chart: {
+      scroller: 'ภาระรายคนตามคอลัมน์สัปดาห์ของตาราง Workload',
+    },
     projectLoad: {
       heading: 'ภาระงาน 12 สัปดาห์',
       member: 'สมาชิก',

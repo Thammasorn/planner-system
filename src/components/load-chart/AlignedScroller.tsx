@@ -18,7 +18,7 @@ export function AlignedScroller({
   children: ReactNode
 }) {
   // a plain local (not `layout.follow`): the React compiler treats a member used as `ref` as a ref object
-  const { follow, viewWidth, frozenWidth, totalColWidth } = layout
+  const { follow, viewWidth, frozenWidth, totalColWidth, scrollerLabel } = layout
   return (
     <div
       ref={follow}
@@ -31,9 +31,10 @@ export function AlignedScroller({
         } as CSSProperties
       }
       role="region"
-      aria-label={th.loadChart.scroller}
+      aria-label={scrollerLabel ?? th.loadChart.scroller}
       tabIndex={0}
       data-chart-follow=""
+      data-no-total={totalColWidth > 0 ? undefined : ''}
     >
       {children}
     </div>

@@ -48,8 +48,13 @@ export interface LoadLineChartProps {
 }
 
 /** Plot box inside the chart height: a top margin for the highest point, the x tick labels at the bottom. */
-export const PLOT_TOP = 12
 export const AXIS_H = 22
+/** The y-axis title band at the top of the frozen area (one xs line); the plot starts below it (owner feedback
+ *  2026-11-03: the title overlapped the "100%" label when the scale tops out at 100 %). */
+export const AXIS_TITLE_H = 16
+export const PLOT_TOP = AXIS_TITLE_H + 8
+/** The "100% (เต็ม capacity)" label sits just below its line (never on the title band, never on the tick column). */
+export const REF_LABEL_GAP = 4
 
 function fmtTick(v: number): string {
   return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100)
@@ -122,7 +127,7 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
           onPointerLeave={() => setHoverKey(null)}
         >
           <div className={styles.frozen} aria-hidden="true">
-            <span className={styles.axisUnit}>
+            <span className={styles.axisUnit} style={{ height: AXIS_TITLE_H }} data-axis-title="">
               {display === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitPercent}
             </span>
             {scale.ticks.map((t) => (
@@ -131,7 +136,7 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
               </span>
             ))}
             {display === 'PERCENT' ? (
-              <span className={styles.yRefLabel} style={{ top: y(100) }}>
+              <span className={styles.yRefLabel} style={{ top: y(100) + REF_LABEL_GAP }} data-ref-label="">
                 {th.loadChart.fullCapacityPercent}
               </span>
             ) : null}

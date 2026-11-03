@@ -2,7 +2,7 @@
 // src/components/workload/WorkloadTooltip.tsx — the hover / focus breakdown of workload cells (FR-1002, §3.3, M9-D8,
 // M9-D25). One shared MUI Popper for a whole table, driven by delegated pointerover / focusin on `[data-wl-cell]`
 // buttons (no per-cell MUI Tooltip — dense surface, PLAN §3.9). Esc hides it. Never names a leave type or holiday.
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode, type Ref } from 'react'
 import Popper from '@mui/material/Popper'
 import type { ISODate } from '@/domain/types'
 import type { WorkloadCell, WorkloadResponse } from '@/lib/contracts/workload'
@@ -47,10 +47,13 @@ export function WorkloadTooltipHost({
   resolve,
   children,
   className,
+  ref,
 }: {
   resolve: (cellButton: HTMLElement) => WorkloadTooltipTarget | null
   children: ReactNode
   className?: string
+  /** M11.2: the workload table's scroller (the load chart follows its horizontal scroll) */
+  ref?: Ref<HTMLDivElement>
 }) {
   const [state, setState] = useState<{ anchor: HTMLElement; target: WorkloadTooltipTarget } | null>(null)
   const show = useCallback(
@@ -76,6 +79,7 @@ export function WorkloadTooltipHost({
   }, [state])
   return (
     <div
+      ref={ref}
       className={className}
       onPointerOver={(e) => show(e.target)}
       onPointerOut={(e) => hide(e.target)}
