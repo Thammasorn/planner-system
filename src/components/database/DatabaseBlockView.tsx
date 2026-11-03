@@ -17,7 +17,13 @@ import { th } from '@/i18n/th'
 import { findById } from '@/lib/database/optimistic'
 import { sideMenuAnchor } from '@/lib/editor/side-menu-offset'
 import { consumeDatabaseJustCreated } from '@/lib/editor/database-block-state'
-import { closeRowPanel, openRowPanel, rowPageHref, useRowParam } from '@/lib/database/row-param'
+import {
+  closeRowPanel,
+  isOwnRowParam,
+  openRowPanel,
+  rowPageHref,
+  useRowParam,
+} from '@/lib/database/row-param'
 import { useDbApi } from './data/contract'
 import { DbApiProvider } from './data/DbApiProvider'
 import { DatabaseHeader } from './DatabaseHeader'
@@ -147,7 +153,9 @@ export function DatabaseBlockContent({
     rootRef.current?.querySelector<HTMLElement>('[data-testid="db-title"]')?.focus()
   }, [blockId])
   useEffect(() => {
-    if (!mine) return
+    // only a deep link that arrived scrolls here; opening / moving / closing the panel from this tab keeps the page
+    // exactly where it is (owner bug 2026-11-03)
+    if (!mine || isOwnRowParam()) return
     const el = rootRef.current
     if (!el) return
     el.scrollIntoView({ block: 'start' })

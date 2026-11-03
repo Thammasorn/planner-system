@@ -36,6 +36,8 @@ export const rowPageHref = (rowId: string): string => `/r/${rowId}`
 // ── browser store ──
 
 let cache: { search: string; value: RowParam } = { search: '', value: NONE }
+/** The query this tab wrote last (open / prev-next / close) — not a deep link that arrived (owner bug 2026-11-03). */
+let ownSearch: string | null = null
 
 function read(): RowParam {
   const search = window.location.search
@@ -68,9 +70,19 @@ function write(db: string | null, row: string | null, mode: 'push' | 'replace'):
     else url.searchParams.set('row', row)
   }
   const next = `${url.pathname}${url.search}${url.hash}`
+  ownSearch = url.search
   if (mode === 'push') window.history.pushState(null, '', next)
   else window.history.replaceState(null, '', next)
   window.dispatchEvent(new Event(EVENT))
+}
+
+/**
+ * True when the current `?db=&row=` is the one this tab just wrote (a click, Space, the row menu, ˄/˅): the block must
+ * not scroll to itself then — only a deep link that ARRIVED (page load, a pasted link, back / forward) scrolls the
+ * block into view (FR-1452). Owner bug 2026-11-03: every panel open jumped the page to the block.
+ */
+export function isOwnRowParam(): boolean {
+  return ownSearch !== null && window.location.search === ownSearch
 }
 
 /** Opens the row panel of `rowId` in the block of `databaseId` (another row of the same panel → replace). */

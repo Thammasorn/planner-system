@@ -100,7 +100,7 @@ export function useRowMenu(o: {
     // after MUI's own focus restore: the opener when it is still on the page, else the fallback
     window.setTimeout(() => {
       const el = back && back.isConnected ? back : (o.fallbackFocus?.() ?? null)
-      el?.focus()
+      el?.focus({ preventScroll: true })
     }, 0)
   }
 

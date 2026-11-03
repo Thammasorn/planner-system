@@ -314,6 +314,47 @@ test.describe('D2c the column menu opens under its header, also for a just-creat
   })
 })
 
+test.describe('D2d the row panel never scrolls the page (owner bug 2026-11-03)', () => {
+  test.beforeAll(async () => {
+    await seedPosDatabase()
+  })
+
+  test('⤢, Space, ˅/˄ and Esc keep the database block where it was on screen', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 560 }) // short window: the page scrolls
+    await loginAs(page, 'cindy')
+    const { db } = await openSeeded(page)
+    // the block mid-screen
+    await db.root.evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      window.scrollBy(0, r.top - window.innerHeight / 3)
+    })
+    const top = () => db.root.evaluate((el) => el.getBoundingClientRect().top)
+    const start = await top()
+    const stays = async (what: string) =>
+      expect.poll(async () => Math.abs((await top()) - start), { message: what }).toBeLessThan(2)
+    await db
+      .row('ทีมไม่พอ')
+      .getByRole('button', { name: `${T.table.openRow} ทีมไม่พอ`, exact: true })
+      .click({ force: true })
+    await expect(rowPanel(page)).toBeVisible()
+    await stays('open with ⤢')
+    await rowPanel(page).getByRole('button', { name: T.panel.next, exact: true }).click()
+    await stays('˅ next row')
+    await rowPanel(page).getByRole('button', { name: T.panel.prev, exact: true }).click()
+    await stays('˄ previous row')
+    await page.keyboard.press('Escape')
+    await expect(rowPanel(page)).toHaveCount(0)
+    await stays('Esc closes')
+    const titleCell = db.row('งบเกิน').locator('[data-type="TITLE"]')
+    await titleCell.focus()
+    await page.keyboard.press('Space')
+    await expect(rowPanel(page)).toBeVisible()
+    await stays('Space opens')
+    await page.keyboard.press('Escape')
+    await stays('Esc closes again')
+  })
+})
+
 test.describe('D4 kanban moves with undo (AC-1404)', () => {
   test.beforeAll(async () => {
     await seedPosDatabase({ extraViews: [{ type: 'KANBAN', name: BY_PERSON, by: 'คน' }] })
