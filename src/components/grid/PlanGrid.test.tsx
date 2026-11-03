@@ -368,7 +368,9 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     await user.keyboard('{Enter}')
     expect(onOpenTask).toHaveBeenCalledWith('t-rollout')
     await user.tab()
-    // M7.1 (FR-815): the drag handle comes first in the task cell
+    // v3.9: the ☐ multi-select checkbox comes first, then the drag handle (M7.1, FR-815)
+    expect(within(header).getByRole('checkbox', { name: th.grid.row.selectLabel('Rollout สาขา') })).toHaveFocus()
+    await user.tab()
     expect(within(header).getByRole('button', { name: th.grid.reorder.handle })).toHaveFocus()
     await user.tab()
     const link = within(header).getByRole('link', { name: th.grid.row.openTaskPage('Rollout สาขา') })

@@ -46,7 +46,8 @@ vi.mock('@/server/actions/assignments', () => ({
 vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
 
 const ctx = { kind: 'project', id: PID } as const
-const header = (key: string) => document.querySelector<HTMLElement>(`[data-row-header][data-row-key="${key}"]`)!
+const header = (key: string) =>
+  document.querySelector<HTMLElement>(`[data-row-header][data-row-key="${key}"]`)!
 
 function renderPos(o: { archived?: boolean; onOpenTask?: (id: string) => void } = {}) {
   return renderGrid(
@@ -150,7 +151,9 @@ describe('plan grid task-row multi-select delete (v3.8)', () => {
         transfer: null,
       }),
     )
-    vi.mocked(restoreTaskBatch).mockImplementation(() => ok({ projectId: PID, restoredIds: [], transfer: null }))
+    vi.mocked(restoreTaskBatch).mockImplementation(() =>
+      ok({ projectId: PID, restoredIds: [], transfer: null }),
+    )
     const user = userEvent.setup()
     renderPos()
     await screen.findByTestId('cell-a:a-cindy-pos-W:2026-09-28')
@@ -180,7 +183,9 @@ describe('plan grid task-row multi-select delete (v3.8)', () => {
     expect(new Set(ids)).toEqual(new Set(['t-uat', 't-rollout']))
     expect(await screen.findByText(th.tasks.toast.deletedMany(2))).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: th.undo.undo }))
-    await waitFor(() => expect(restoreTaskBatch).toHaveBeenCalledWith({ batch: '11111111-1111-4111-8111-111111111111' }))
+    await waitFor(() =>
+      expect(restoreTaskBatch).toHaveBeenCalledWith({ batch: '11111111-1111-4111-8111-111111111111' }),
+    )
   })
 
   it('Esc clears the multi-selection', async () => {
@@ -193,5 +198,37 @@ describe('plan grid task-row multi-select delete (v3.8)', () => {
     await user.keyboard('{/Shift}{Escape}')
     expect(header('a:a-cindy-pos')).toHaveAttribute('aria-selected', 'false')
     expect(header('a:a-ivy-uat')).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('v3.9 ☐: checkboxes select without opening the panel; the bar counts, ลบ deletes, ยกเลิก clears', async () => {
+    vi.mocked(deleteTaskTree).mockImplementation((v: { taskIds: string[] }) =>
+      ok({
+        projectId: PID,
+        batch: '22222222-2222-4222-8222-222222222222',
+        rootIds: v.taskIds,
+        deletedIds: v.taskIds,
+        transfer: null,
+      }),
+    )
+    const onOpenTask = vi.fn()
+    const user = userEvent.setup()
+    renderPos({ onOpenTask })
+    await screen.findByTestId('cell-a:a-cindy-pos-W:2026-09-28')
+    expect(screen.queryByTestId('grid-selection-bar')).toBeNull()
+    const box = (k: string) => header(k).querySelector<HTMLInputElement>('[data-row-checkbox]')!
+    await user.click(box('a:a-cindy-pos'))
+    expect(screen.getByTestId('grid-selection-bar')).toHaveTextContent(th.grid.row.selBarCount(1))
+    expect(box('a:a-ivy-uat')).toHaveAttribute('data-visible', 'true')
+    await user.click(box('a:a-ivy-uat'))
+    expect(box('a:a-cindy-pos')).toBeChecked()
+    expect(box('a:a-ivy-uat')).toBeChecked()
+    expect(screen.getByTestId('grid-selection-bar')).toHaveTextContent(th.grid.row.selBarCount(2))
+    expect(onOpenTask).not.toHaveBeenCalled()
+    await user.click(screen.getByTestId('grid-selection-clear'))
+    expect(screen.queryByTestId('grid-selection-bar')).toBeNull()
+    expect(box('a:a-cindy-pos')).not.toBeChecked()
+    await user.click(box('a:a-ivy-uat'))
+    await user.click(screen.getByTestId('grid-selection-delete'))
+    await waitFor(() => expect(deleteTaskTree).toHaveBeenCalledWith({ taskIds: ['t-uat'] }))
   })
 })

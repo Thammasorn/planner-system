@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   EMPTY_ROW_KEYS,
+  inCheckMode,
   isRowSelected,
   rangeRows,
   selectedRowKeys,
@@ -71,5 +72,17 @@ describe('row multi-select', () => {
     const s = rangeRows(selectOne('t:d'), ROWS, ROWS[0]!)
     expect(selectedTaskIds(s, ROWS)).toEqual(['a', 'b', 'c', 'd'])
     expect(selectedTaskIds(selectOne('a:a1'), ROWS)).toEqual([])
+  })
+
+  it('check mode (v3.9): ☐ / Mod / Shift selections, not a plain click; ends with the last unchecked row', () => {
+    expect(inCheckMode(selectOne('t:a'))).toBe(false)
+    expect(inCheckMode(none)).toBe(false)
+    let s = toggleRow(none, ROWS[0]!)
+    expect(selectedRowKeys(s)).toEqual(['t:a'])
+    expect(inCheckMode(s)).toBe(true)
+    expect(inCheckMode(rangeRows(selectOne('t:a'), ROWS, ROWS[3]!))).toBe(true)
+    s = toggleRow(s, ROWS[0]!)
+    expect(inCheckMode(s)).toBe(false)
+    expect(inCheckMode(selectOne('t:d'))).toBe(false)
   })
 })

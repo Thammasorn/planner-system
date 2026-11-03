@@ -152,6 +152,7 @@ import { Br24Dialog } from './Br24Dialog'
 import { CellMenu, type CellMenuItem } from './CellMenu'
 import { createGridStore } from './gridStore'
 import { RowHeader } from './RowHeader'
+import { SelectionBar } from './SelectionBar'
 import { useRowMenu } from './useRowMenu'
 import { useFillHandle } from './useFillHandle'
 import { useGridChunks } from './useGridChunks'
@@ -1373,6 +1374,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           onUnassign={onUnassign}
           onRowMenu={onRowMenu}
           showAssignees={showAssignees}
+          selectable={canAddTask}
           draggable={canReorder && treeItems !== null}
           onDragHandle={drag.onHandlePointerDown}
           dragging={drag.state?.taskId === row.task.id}
@@ -1689,6 +1691,17 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         >
           {th.grid.loadError}
         </Alert>
+      ) : null}
+      {canAddTask ? (
+        <SelectionBar
+          store={store}
+          viewRows={viewRows}
+          onDelete={() => {
+            const ids = rowMenu.deletableTaskIds()
+            if (ids.length > 0) removeTasks(ids)
+          }}
+          onClear={() => store.set({ rowSelection: null })}
+        />
       ) : null}
       <VirtualGrid
         ref={gridRef}

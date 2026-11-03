@@ -447,12 +447,69 @@
   background: var(--surface);
 }
 
-/* v3.8: ✓ on each row of a multi-selection (with aria-selected; the ring alone is not enough, §8.9) */
-.rowCheck {
+/* v3.9 ☐ multi-select (row-layout CHECK_W slot): on hover / focus within the row, always in check mode */
+.rowCheckbox {
   flex: none;
-  color: var(--brand-blue);
-  font-weight: var(--weight-bold);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--brand-blue);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.row:hover .rowCheckbox,
+.row:focus-within .rowCheckbox,
+.rowCheckbox[data-visible='true'],
+.rowCheckbox:checked {
+  opacity: 1;
+}
+
+.rowCheckbox:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
+@media (pointer: coarse) {
+  .rowCheckbox {
+    opacity: 1;
+  }
+}
+
+/* v3.9: "เลือก N งาน · ลบ · ยกเลิก" floats over the top of the grid (no layout shift under the pointer) */
+.selBarAnchor {
+  position: relative;
+  height: 0;
+  z-index: 6;
+}
+
+.selBar {
+  position: absolute;
+  top: var(--space-1);
+  left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--brand-blue);
   font-size: var(--font-sm);
+}
+
+.selBarCount {
+  font-weight: var(--weight-bold);
+  color: var(--brand-blue);
+}
+
+.selBarButton {
+  composes: iconButton;
+  color: inherit;
+}
+
+.selBarDelete {
+  composes: iconButton;
+  color: var(--load-over-fg);
 }
 
 .rowHeader[aria-selected='true'] {

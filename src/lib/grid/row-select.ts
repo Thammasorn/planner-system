@@ -8,6 +8,8 @@ export interface RowSelectState {
   rowSelection: RowKey | null
   rowKeys: ReadonlySet<RowKey>
   rowAnchor: RowKey | null
+  /** v3.9: the selection was made with the ☐ checkboxes / Mod / Shift (check mode: every ☐ shows, the bar shows) */
+  rowChecked?: boolean
 }
 
 export interface RowLike {
@@ -36,10 +38,15 @@ export function selectedRowKeys(s: RowSelectState): RowKey[] {
 
 /** Plain click / Shift+Space: one row. */
 export function selectOne(key: RowKey): RowSelectState {
-  return { rowSelection: key, rowKeys: new Set([key]), rowAnchor: key }
+  return { rowSelection: key, rowKeys: new Set([key]), rowAnchor: key, rowChecked: false }
 }
 
-/** Mod+click: toggle a task row in or out of the selection (assignee rows fall back to a plain click). */
+/** v3.9 check mode: a ☐ / Mod / Shift selection holds ≥ 1 row (every ☐ visible, the selection bar shows). */
+export function inCheckMode(s: RowSelectState): boolean {
+  return s.rowChecked === true && selectedRowKeys(s).length > 0
+}
+
+/** Mod+click / ☐: toggle a task row in or out of the selection (assignee rows fall back to a plain click). */
 export function toggleRow(s: RowSelectState, row: RowLike): RowSelectState {
   if (!ownsTask(row)) return selectOne(row.key)
   const current = new Set(selectedRowKeys(s))
@@ -47,10 +54,10 @@ export function toggleRow(s: RowSelectState, row: RowLike): RowSelectState {
     current.delete(row.key)
     const rest = [...current]
     const last = rest[rest.length - 1] ?? null
-    return { rowSelection: last, rowKeys: current, rowAnchor: last }
+    return { rowSelection: last, rowKeys: current, rowAnchor: last, rowChecked: true }
   }
   current.add(row.key)
-  return { rowSelection: row.key, rowKeys: current, rowAnchor: row.key }
+  return { rowSelection: row.key, rowKeys: current, rowAnchor: row.key, rowChecked: true }
 }
 
 /** Shift+click: the task rows between the anchor and `row` (inclusive, view order); the anchor stays. */
@@ -65,7 +72,7 @@ export function rangeRows(s: RowSelectState, rows: readonly RowLike[], row: RowL
     const x = rows[i]
     if (x && ownsTask(x)) keys.add(x.key)
   }
-  return { rowSelection: row.key, rowKeys: keys, rowAnchor: anchor }
+  return { rowSelection: row.key, rowKeys: keys, rowAnchor: anchor, rowChecked: true }
 }
 
 /** The distinct task ids of the selected task rows, in view order (assignee rows are ignored). */

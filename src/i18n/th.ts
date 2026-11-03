@@ -1723,6 +1723,12 @@ export const th = {
       menuUnassign: (name: string) => `นำ ${name} ออกจากงาน`,
       addSubtaskLabel: (name: string) => `เพิ่มงานย่อยของ ${name}`,
       selectedMark: 'เลือกแล้ว',
+      /** v3.9: the ☐ in the row header and the selection bar above the grid */
+      selectLabel: (name: string) => `เลือก ${name}`,
+      selBarLabel: 'งานที่เลือก',
+      selBarCount: (n: number) => `เลือก ${n} งาน`,
+      selBarDelete: 'ลบ',
+      selBarClear: 'ยกเลิก',
     },
     cell: {
       label: (row: string, week: string, value: string) => `${row} สัปดาห์ ${week}: ${value}`,

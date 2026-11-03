@@ -20,6 +20,8 @@ export interface GridSelState {
   rowKeys: ReadonlySet<RowKey>
   /** Shift+click range anchor */
   rowAnchor: RowKey | null
+  /** v3.9: check mode (☐ / Mod / Shift selection; row-select.ts inCheckMode) */
+  rowChecked?: boolean
   /** fill-handle preview rect (excludes the source) */
   fill: Rect | null
   /** the user interacted with the grid: focused cells may take DOM focus */

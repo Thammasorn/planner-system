@@ -31,7 +31,7 @@ import { formatThaiDate } from '@/lib/format'
 import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick } from '@/lib/nav/task-href'
 import { taskLeadLayout } from '@/lib/grid/row-layout'
-import { isRowSelected } from '@/lib/grid/row-select'
+import { inCheckMode, isRowSelected } from '@/lib/grid/row-select'
 import { sumPeopleCount, type GridViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
 import styles from './grid.module.css'
@@ -67,6 +67,8 @@ export interface RowHeaderProps {
   onUnassign: (taskAssignmentId: string, name: string) => void
   /** M7.1 (FR-816): false = no assignee cell (the task cell spans both frozen columns) */
   showAssignees?: boolean
+  /** v3.9: ☐ multi-select checkbox in the lead (project grid, editable) */
+  selectable?: boolean
   /** M7.1 (FR-815): ⠿ on task / merged / sum rows when the task may be moved (editable, not archived) */
   draggable?: boolean
   onDragHandle?: (e: PointerEvent<HTMLElement>, taskId: string) => void
@@ -125,11 +127,10 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
     (s) => s.rowSelection === row.key || (s.hasSelection && s.focus?.r === p.r),
   )
   const selected = useGridSel(p.store, (s) => isRowSelected(s, row.key))
-  // v3.8: a ✓ marks every row of a multi-selection (not by colour alone, §8.9)
-  const multi = useGridSel(
-    p.store,
-    (s) => s.rowSelection !== null && s.rowKeys.size > 1 && s.rowKeys.has(s.rowSelection),
-  )
+  // v3.9: in check mode (☐ / Mod / Shift selection) every ☐ shows and the selected rows are checked (§8.9: a checkbox,
+  // not colour alone); a plain click selects without checking
+  const checkMode = useGridSel(p.store, inCheckMode)
+  const checked = selected && checkMode
   const tab = active ? 0 : -1
   const isLeaf = !task.hasChildren
   const assignee = row.kind === 'merged' || row.kind === 'assignee' ? row.assignee : null
@@ -172,7 +173,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       {th.grid.row.addPerson}
     </button>
   ) : null
-  const lead = taskLeadLayout(row.depth, { check: false, handle: Boolean(p.draggable) })
+  const lead = taskLeadLayout(row.depth, { check: Boolean(p.selectable), handle: Boolean(p.draggable) })
 
   return (
     <div
@@ -205,16 +206,25 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
         </span>
       ) : null}
       <div className={styles.taskCell} style={{ width: TASK_COL_W }} data-task-cell="">
-        {selected && multi ? (
-          <span className={styles.rowCheck} title={th.grid.row.selectedMark} data-row-check="">
-            <span aria-hidden="true">✓</span>
-            <span className={styles.srOnly}>{th.grid.row.selectedMark}</span>
-          </span>
-        ) : null}
         {ownsTask ? (
           // v3.9 lead (src/lib/grid/row-layout.ts): [⠿ gutter][depth indent][caret slot] — the indent sits after the
           // gutter, the caret slot is narrow, so a top-level leaf name sits right after ⠿ + one empty caret slot
           <span className={styles.lead} style={{ width: lead.leadW }} data-lead="">
+            {p.selectable ? (
+              <input
+                type="checkbox"
+                className={styles.rowCheckbox}
+                tabIndex={tab}
+                checked={checked}
+                aria-label={th.grid.row.selectLabel(task.name)}
+                data-row-checkbox=""
+                data-row-check={checked ? '' : undefined}
+                data-visible={checkMode ? 'true' : undefined}
+                onClick={stop}
+                onDoubleClick={stop}
+                onChange={() => p.onSelectRow(p.r, 'toggle')}
+              />
+            ) : null}
             {p.draggable ? (
               // the keyboard path is Alt+↑/↓/→/← on the selected row (M7.1-D17); the button names the gesture
               <button
