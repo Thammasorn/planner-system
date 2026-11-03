@@ -628,10 +628,13 @@ test.describe('E6 ⟲ (AC-505, FR-540, FR-541, FR-542) one editor at a time: ban
     await ivy.focusEnd()
     await ivy.type('ต่อโดย Ivy')
     await ivy.waitSaved()
-    await ivyCtx.page.close() // pagehide → DELETE lease (keepalive)
+    // ivy leaves the page: pagehide → DELETE lease (keepalive). A full navigation instead of page.close(): a renderer
+    // torn down by close() could drop the keepalive request (the lease then lives until its TTL and cindy never
+    // re-acquires within the test — the old flake); a navigation keeps the tab and its network stack alive.
+    // (Playwright does not report keepalive requests sent during unload, so the release is observed through cindy.)
+    await ivyCtx.page.goto('/home')
 
-    // cindy re-acquires (retrying the "tab visible again" POST until the released lease is seen — no sleeps). Ivy's
-    // context stays open until then: closing it right away can cancel the in-flight keepalive DELETE under load.
+    // cindy re-acquires (retrying the "tab visible again" POST until the released lease is seen — no sleeps)
     await expect(async () => {
       await cindy.pokeLease()
       await expect(cindy.leaseBanner()).toHaveCount(0, { timeout: 1_000 })
