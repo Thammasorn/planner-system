@@ -398,3 +398,17 @@ function layoutBoard(): () => void {
     HTMLElement.prototype.getBoundingClientRect = original
   }
 }
+
+describe('KanbanView — row context menu (FR-1424a)', () => {
+  it('right-click a card opens the app menu; เปิด opens the row; ลบแถว deletes it', async () => {
+    const { api, openRow } = show()
+    const card = within(board()).getAllByTestId('db-card')[0]!
+    const id = card.getAttribute('data-row-id')!
+    expect(fireEvent.contextMenu(card, { clientX: 20, clientY: 20 })).toBe(false)
+    await userEvent.click(screen.getByRole('menuitem', { name: th.database.rowMenu.open }))
+    expect(openRow).toHaveBeenCalledWith(id)
+    fireEvent.keyDown(within(card).getAllByRole('button')[0]!, { key: 'F10', shiftKey: true })
+    await userEvent.click(screen.getByRole('menuitem', { name: th.database.rowMenu.delete }))
+    expect(callsOf(api, 'deleteRows')).toEqual([[[id]]])
+  })
+})

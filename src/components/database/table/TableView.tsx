@@ -55,6 +55,7 @@ import { useDbApi } from '../data/contract'
 import { dndAccessibility, useDbSensors } from '../dnd'
 import { AddColumnMenu } from '../menus/AddColumnMenu'
 import { ColumnMenu } from '../menus/ColumnMenu'
+import { useRowMenu } from '../menus/RowMenu'
 import type { DatabaseViewProps } from '../view-registry'
 import s from './TableView.module.css'
 import { type CellPos, useTableKeyboard } from './useTableKeyboard'
@@ -218,6 +219,14 @@ export function TableView(p: TableViewProps): JSX.Element {
     api.deleteRows(ids)
   }
 
+  // ── row context menu (FR-1424a): right-click, the row handle's click, Shift+F10 / ContextMenu on a cell ──
+  const rowMenu = useRowMenu({
+    openRow: p.openRow,
+    selection: selection.selected,
+    onDeleted: () => selection.clear(),
+    fallbackFocus: () => gridRef.current?.querySelector<HTMLElement>('[data-cell][tabindex="0"]') ?? null,
+  })
+
   const onEditorDone = (pos: CellPos, colType: string, reason: EditorDone) => {
     setEditing(null)
     if (reason === 'blur') return
@@ -369,6 +378,8 @@ export function TableView(p: TableViewProps): JSX.Element {
           onKeyDown={(e) => {
             // only keys on a cell / "+ แถวใหม่" drive the grid (not the header buttons, not an open editor)
             if (editing || !(e.target instanceof HTMLElement) || !e.target.closest('[data-cell]')) return
+            const rowId = e.target.closest<HTMLElement>('[data-row-id]')?.dataset.rowId
+            if (rowId !== undefined && rowMenu.onKeyDown(e, rowId)) return
             onKeyDown(e)
           }}
         >
@@ -471,6 +482,8 @@ export function TableView(p: TableViewProps): JSX.Element {
                     onDone={(c, reason) => onEditorDone({ row: index, col: c }, cols[c]!.type, reason)}
                     createOption={(colId, name) => api.addOption(colId, name)}
                     onOpen={() => p.openRow(row.id)}
+                    onContextMenu={(e) => rowMenu.onContextMenu(e, row.id)}
+                    onHandleClick={(el) => rowMenu.openAt(el, row.id)}
                   />
                 ))}
                 {padBottom > 0 ? (
@@ -522,6 +535,7 @@ export function TableView(p: TableViewProps): JSX.Element {
           onInserted={(id) => openMenu(id, true)}
         />
       ) : null}
+      {rowMenu.menu}
       <AddColumnMenu
         anchorEl={addAnchor}
         onClose={() => setAddAnchor(null)}
@@ -638,6 +652,9 @@ interface RowViewProps {
   onDone: (col: number, reason: EditorDone) => void
   createOption: (colId: string, name: string) => Promise<string>
   onOpen: () => void
+  onContextMenu: (e: MouseEvent<HTMLElement>) => void
+  /** A click (not a drag) on the ⠿ handle opens the row menu under it. */
+  onHandleClick: (el: HTMLElement) => void
 }
 
 function RowView(p: RowViewProps): JSX.Element {
@@ -658,6 +675,7 @@ function RowView(p: RowViewProps): JSX.Element {
       data-row-id={row.id}
       data-dragging={isDragging || undefined}
       style={{ transform: CSS.Translate.toString(transform), transition }}
+      onContextMenu={p.onContextMenu}
     >
       <div className={s.lead} role="presentation">
         {p.canEdit ? (
@@ -668,10 +686,12 @@ function RowView(p: RowViewProps): JSX.Element {
               className={`${s.iconBtn} ${s.handle}`}
               aria-label={t.dragRow}
               title={t.dragRow}
-              disabled={!p.rowDrag}
+              aria-haspopup="menu"
+              data-drag={p.rowDrag || undefined}
               {...attributes}
               {...listeners}
               tabIndex={-1}
+              onClick={(e) => p.onHandleClick(e.currentTarget)}
             >
               <DragIndicator fontSize="inherit" />
             </button>

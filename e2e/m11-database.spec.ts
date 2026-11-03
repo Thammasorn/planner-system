@@ -364,6 +364,30 @@ test.describe('D6/D7 type change, deletes and undo without dialogs (AC-1406, AC-
     expect(await db.rowTitles()).toEqual(['ลูกค้าส่ง spec ช้า', 'ทีมไม่พอ', 'งบเกิน', 'เซิร์ฟเวอร์ล่ม', 'ไม่มีวันที่'])
   })
 
+  test('right-click a row → ลบแถว deletes it without a dialog; เลิกทำ brings it back (FR-1424a)', async ({ page }) => {
+    await loginAs(page, 'cindy')
+    const { db } = await openSeeded(page)
+    await db.row('งบเกิน').locator('[data-type="NUMBER"]').click({ button: 'right' })
+    const menu = page.getByRole('menu')
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      T.rowMenu.open,
+      T.rowMenu.openAsPage,
+      T.rowMenu.duplicate,
+      T.rowMenu.delete,
+    ])
+    const deleted = waitForServerAction(page)
+    await menu.getByRole('menuitem', { name: T.rowMenu.delete, exact: true }).click()
+    await deleted
+    await expect(db.rows()).toHaveCount(4)
+    await expect(db.row('งบเกิน')).toHaveCount(0)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    const restored = waitForServerAction(page)
+    await undoButtonOf(page, T.toasts.rowsDeleted(1)).click()
+    await restored
+    await expect(db.rows()).toHaveCount(5)
+    await expect(db.row('งบเกิน')).toHaveCount(1)
+  })
+
   test('deleting สถานะ makes คัมบัง ask for a group column; เลิกทำ regroups; views delete + undo; the last view cannot go', async ({
     page,
   }) => {

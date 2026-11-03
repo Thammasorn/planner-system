@@ -2338,14 +2338,24 @@ export const th = {
       openRow: 'เปิด',
       openAsPage: 'เปิดเป็นหน้า',
       addColumn: 'เพิ่มคอลัมน์',
-      dragRow: 'ลากเพื่อย้ายแถว',
+      dragRow: 'ลากเพื่อย้ายแถว / คลิกเพื่อเปิดเมนู',
       dragColumn: 'ลากเพื่อย้ายคอลัมน์',
       resizeColumn: 'ปรับความกว้างคอลัมน์',
       empty: 'ยังไม่มีแถว',
       noMatch: 'ไม่มีแถวตรงตัวกรอง',
     },
+    /** Row context menu (FR-1424a): right-click a row / card / entry, click the row handle, or Shift+F10. */
+    rowMenu: {
+      label: (title: string) => `เมนูแถว ${title}`,
+      open: 'เปิด',
+      openAsPage: 'เปิดเป็นหน้า',
+      duplicate: 'ทำสำเนาแถว',
+      delete: 'ลบแถว',
+      deleteMany: (n: number) => `ลบ ${n} แถว`,
+    },
     columnMenu: {
       label: (name: string) => `เมนูคอลัมน์ ${name}`,
+
       rename: 'เปลี่ยนชื่อ',
       changeType: 'เปลี่ยนชนิด',
       config: 'ตั้งค่า',

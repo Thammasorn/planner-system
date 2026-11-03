@@ -295,6 +295,11 @@
   visibility: hidden;
 }
 
+/* a sorted view cannot be reordered: the row handle only opens the row menu (FR-1424a) */
+.lead .handle:not([data-drag]) {
+  cursor: pointer;
+}
+
 .lead .handle,
 .lead .select {
   opacity: 0;

@@ -45,6 +45,7 @@ import { CheckMark } from '../cells/CellDisplay'
 import { OptionChip, PersonChip } from '../cells/Chips'
 import { type PersonLookup, usePersonLookup } from '../cells/people'
 import { useDbApi } from '../data/contract'
+import { useRowMenu } from '../menus/RowMenu'
 import { dndAccessibility, useDbSensors } from '../dnd'
 import type { DatabaseViewMenuProps, DatabaseViewProps } from '../view-registry'
 import { CardContent, CardPropertyItems, useDbCtx } from './card'
@@ -350,6 +351,8 @@ function KanbanCard(p: {
   const title = row.title || th.database.table.untitledRow
   const { setNodeRef, setActivatorNodeRef, attributes, listeners, transform, transition, isDragging } =
     useSortable({ id: cardDndId(p.gid, row.id), disabled: !p.canDrag })
+  // FR-1424a: right-click / Shift+F10 opens the row menu instead of the browser's
+  const rowMenu = useRowMenu({ openRow: p.onOpen })
   const [menu, setMenu] = useState<HTMLElement | null>(null)
   const style = { transform: CSS.Translate.toString(transform), transition }
   return (
@@ -361,12 +364,14 @@ function KanbanCard(p: {
       data-row-id={row.id}
       data-dragging={isDragging || undefined}
       onPointerDown={p.canDrag ? (listeners?.onPointerDown as PointerEventHandler | undefined) : undefined}
+      onContextMenu={(e) => rowMenu.onContextMenu(e, row.id)}
     >
       <button
         type="button"
         className={s.cardMain}
         aria-label={th.database.kanban.openCard(title)}
         onClick={() => p.onOpen(row.id)}
+        onKeyDown={(e) => void rowMenu.onKeyDown(e, row.id)}
       >
         <CardContent row={row} view={p.view} />
       </button>
@@ -417,6 +422,7 @@ function KanbanCard(p: {
           </Menu>
         </div>
       ) : null}
+      {rowMenu.menu}
     </div>
   )
 }

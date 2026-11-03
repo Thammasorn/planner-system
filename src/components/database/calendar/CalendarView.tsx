@@ -44,6 +44,7 @@ import { th } from '@/i18n/th'
 import type { CellValue, DbColumnDTO, DbRowDTO, DbViewDTO } from '@/lib/contracts/databases'
 import { formatThaiDate, formatThaiMonthYear } from '@/lib/format'
 import { useDbApi } from '../data/contract'
+import { useRowMenu } from '../menus/RowMenu'
 import { dndAccessibility, useDbSensors } from '../dnd'
 import { CardContent, CardPropertyItems, useDbCtx } from '../kanban/card'
 import type { DatabaseViewMenuProps, DatabaseViewProps } from '../view-registry'
@@ -403,6 +404,8 @@ function CalendarCard(p: CardProps & { row: DbRowDTO }): JSX.Element {
     id: `c|${row.id}`,
     disabled: !p.canDrag,
   })
+  // FR-1424a: right-click / Shift+F10 opens the row menu instead of the browser's
+  const rowMenu = useRowMenu({ openRow: p.onOpen })
   const [menu, setMenu] = useState<HTMLElement | null>(null)
   const [picker, setPicker] = useState<HTMLElement | null>(null)
   const current = p.dateOf(row)
@@ -414,12 +417,14 @@ function CalendarCard(p: CardProps & { row: DbRowDTO }): JSX.Element {
       data-row-id={row.id}
       data-dragging={isDragging || undefined}
       onPointerDown={p.canDrag ? (listeners?.onPointerDown as PointerEventHandler | undefined) : undefined}
+      onContextMenu={(e) => rowMenu.onContextMenu(e, row.id)}
     >
       <button
         type="button"
         className={s.cardMain}
         aria-label={t.openCard(title)}
         onClick={() => p.onOpen(row.id)}
+        onKeyDown={(e) => void rowMenu.onKeyDown(e, row.id)}
       >
         <CardContent row={row} view={p.view} />
       </button>
@@ -485,6 +490,7 @@ function CalendarCard(p: CardProps & { row: DbRowDTO }): JSX.Element {
           </Popover>
         </div>
       ) : null}
+      {rowMenu.menu}
     </div>
   )
 }
