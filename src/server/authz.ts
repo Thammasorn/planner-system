@@ -4,6 +4,7 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { th } from '@/i18n/th'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import type { ProjectAccessRole } from '@/lib/contracts/projects'
 import { z } from '@/lib/z'
 import type { PageKind, PageSpace } from '@/lib/contracts/pages'
@@ -366,7 +367,7 @@ export interface PageAccess {
   isManager: boolean
   /** M11-D6: for a DB_ROW page — its live row, the database and the owner page's access (role/archived/protection
    *  above are copied from `owner`). null for DOC and TASK pages. */
-  dbRow: { row: DbRowRow; database: DatabaseRow; owner: PageAccess } | null
+  dbRow: { row: DbRowRow; database: DatabaseRow; owner: PageAccess; level: number } | null
 }
 
 /** Live page → PROJECT: requireProject(view|edit) · WORKSPACE: any user; edit blocked by effective protection for
@@ -385,20 +386,32 @@ export async function requirePage(
 }
 
 /** requirePage's rules for a row the caller already loaded (restore checks a soft-deleted batch root this way). */
-export async function accessForPage(
+export function accessForPage(
   tx: DbOrTx,
   user: SessionUser,
   page: PageRow,
   need: PageNeed,
 ): Promise<PageAccess> {
+  return pageAccess(tx, user, page, need, 0)
+}
+
+/** accessForPage with the number of database levels already walked (nested databases, FR-1453 rev. 2026-11-03). */
+async function pageAccess(
+  tx: DbOrTx,
+  user: SessionUser,
+  page: PageRow,
+  need: PageNeed,
+  hops: number,
+): Promise<PageAccess> {
   requireUser(user)
   const manager = isManager(user)
   if (page.kind === 'DB_ROW') {
-    // M11-D6: page → live row → database → owner access with `need` (protect → 404). Rights = the owner page's.
+    // M11-D6: page → live row → database → owner access with `need` (protect → 404). Rights = the owner page's —
+    // recursively for nested databases (the owner may itself be a row page, up to DB_LIMITS.nestingLevels).
     if (need === 'protect' || page.databaseRowId === null) throw new NotFoundError()
     const row = await databasesRepo.getRow(tx, page.databaseRowId)
     if (!row) throw new NotFoundError()
-    const d = await requireDatabase(tx, user, row.databaseId, need)
+    const d = await databaseAccess(tx, user, row.databaseId, need, undefined, hops)
     return {
       page,
       kind: 'DB_ROW',
@@ -407,7 +420,7 @@ export async function accessForPage(
       archived: d.owner.archived,
       effectiveProtected: d.owner.effectiveProtected,
       isManager: manager,
-      dbRow: { row, database: d.database, owner: d.owner },
+      dbRow: { row, database: d.database, owner: d.owner, level: d.level },
     }
   }
   if (page.kind === 'TASK') {
@@ -544,10 +557,18 @@ export type DatabaseNeed = 'view' | 'edit'
 
 export interface DatabaseAccess {
   database: DatabaseRow
-  /** Access to the owner page (DOC or TASK, never DB_ROW). */
+  /** Access to the owner page: DOC or TASK, or — for a nested database — the DB_ROW body of the outer row (its
+   *  role / archived / protection are the outermost owner's). */
   owner: PageAccess
   /** canEditDatabase(owner). */
   canEdit: boolean
+  /** Nesting level: 1 = owned by a DOC / TASK page; n + 1 = owned by a row body of a level-n database (≤ 3). */
+  level: number
+}
+
+/** The level a new database on `owner` would get (1 on DOC / TASK pages; the row's database level + 1 in a row body). */
+export function databaseLevelOn(owner: PageAccess): number {
+  return owner.dbRow ? owner.dbRow.level + 1 : 1
 }
 
 /** M11-D6: may the viewer change the database data of a page (rows, columns, views, title)? Not archived, and not
@@ -559,24 +580,38 @@ export function canEditDatabase(a: PageAccess): boolean {
 /** Loads the database (`FOR UPDATE` when `lock`); `pageId` given and ≠ database.page_id → 404; owner via
  *  getLivePageOrNotFound → accessForPage(owner, need); edit without canEditDatabase → 403. Every "invisible" case is
  *  the same NotFoundError (FR-1464); only `databases.page_id` is read before the owner check (M11-D7). */
-export async function requireDatabase(
+export function requireDatabase(
   tx: DbOrTx,
   user: SessionUser,
   databaseId: string,
   need: DatabaseNeed,
   opts?: { pageId?: string; lock?: boolean },
 ): Promise<DatabaseAccess> {
+  return databaseAccess(tx, user, databaseId, need, opts, 0)
+}
+
+/** requireDatabase walking up nested databases: a DB_ROW owner resolves through its row's database (FR-1453 rev.
+ *  2026-11-03). More than DB_LIMITS.nestingLevels levels (never created by the services) → NotFoundError. */
+async function databaseAccess(
+  tx: DbOrTx,
+  user: SessionUser,
+  databaseId: string,
+  need: DatabaseNeed,
+  opts: { pageId?: string; lock?: boolean } | undefined,
+  hops: number,
+): Promise<DatabaseAccess> {
   requireUser(user)
+  if (hops >= DB_LIMITS.nestingLevels) throw new NotFoundError() // defensive: deeper than the limit / a cycle
   const ownerId = await databasesRepo.getDatabasePageId(tx, databaseId)
   if (ownerId === null) throw new NotFoundError()
   if (opts?.pageId !== undefined && opts.pageId !== ownerId) throw new NotFoundError()
   const page = await pagesRepo.getLivePageOrNotFound(tx, ownerId)
-  if (page.kind === 'DB_ROW') throw new NotFoundError() // never happens (services refuse it); defensive
-  const owner = await accessForPage(tx, user, page, need) // W → 404; archived / locked wiki (workers) edit → 403
+  // W → 404; archived / locked wiki (workers) edit → 403 — for a row-body owner: the outer database's rules
+  const owner = await pageAccess(tx, user, page, need, hops + 1)
   if (need === 'edit' && !canEditDatabase(owner)) throw new ForbiddenError()
   const database = await databasesRepo.getDatabase(tx, databaseId, { lock: opts?.lock })
   if (!database) throw new NotFoundError()
-  return { database, owner, canEdit: canEditDatabase(owner) }
+  return { database, owner, canEdit: canEditDatabase(owner), level: databaseLevelOn(owner) }
 }
 
 /** Live row (or any row with `includeDeleted`, for restores) → requireDatabase(row.database_id, need). */

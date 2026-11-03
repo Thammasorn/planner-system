@@ -9,7 +9,8 @@
 //   `onHasBodyChange` is told.
 // - Variants: `page` (/r: document font, save status + lease badge portalled into the header bar) and `compact` (the
 //   row side panel: UI font, banners inline).
-// - Kind DB_ROW: no sub-page and no database blocks (slash menu, paste, drop — M11-D38); its own placeholder.
+// - Kind DB_ROW: no sub-page; database blocks (slash menu, paste, drop) only below the nesting limit
+//   (`view.canNestDatabase`, FR-1475 rev. 2026-11-03); its own placeholder.
 // - Read-only and blank: the placeholder as plain muted text (BlockNote shows placeholders only while editable).
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -159,6 +160,7 @@ export function RowBody(p: RowBodyProps): JSX.Element {
         <EditorClient
           pageId={page?.id ?? null}
           kind="DB_ROW"
+          canNestDatabase={view.canNestDatabase}
           editorKey={`row:${rowId}`}
           space={view.space}
           projectId={view.projectId}

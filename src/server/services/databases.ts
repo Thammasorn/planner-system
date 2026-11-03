@@ -220,9 +220,13 @@ export async function getDatabase(
 
 // ── database ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Owner page must be DOC or TASK (M11-D38); `edit` authorised by the caller. */
-function assertOwnerKind(owner: authz.PageAccess): void {
-  if (owner.kind === 'DB_ROW') throw invalid(E.nesting, 'pageId')
+/**
+ * FR-1475 (rev. 2026-11-03): a database of `height` levels (1 = no nested databases) placed on `owner` must stay within
+ * DB_LIMITS.nestingLevels — DOC / TASK owners start at level 1, a row body at its database's level + 1. `edit` on the
+ * owner is authorised by the caller.
+ */
+export function assertNestingAllowed(owner: authz.PageAccess, height: number, field = 'pageId'): void {
+  if (authz.databaseLevelOn(owner) + height - 1 > L.nestingLevels) throw invalid(E.nesting(L.nestingLevels), field)
 }
 
 /** Lock the owner page row and check the FR-1475 attached-database limit. */
@@ -248,14 +252,15 @@ function defaultConfig(type: DbColumnType): Record<string, unknown> {
   return {}
 }
 
-/** M11-D10: owner DOC/TASK, page locked, ≤ 20 attached, default columns + first view; audit `database · create`. */
+/** M11-D10: owner DOC/TASK or a row body under the nesting limit (FR-1475), page locked, ≤ 20 attached, default
+ *  columns + first view; audit `database · create`. */
 export async function createDatabase(
   tx: Tx,
   user: SessionUser,
   input: CreateDatabaseInput,
 ): Promise<CreateDatabaseResult> {
   const owner = await authz.requirePage(tx, user, input.pageId, 'edit') // W → 404, archived / locked → 403
-  assertOwnerKind(owner)
+  assertNestingAllowed(owner, 1)
   await lockOwnerForNewDatabase(tx, owner.page.id)
   const [database] = await tx
     .insert(databases)

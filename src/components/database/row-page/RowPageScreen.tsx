@@ -64,7 +64,11 @@ export function RowPageScreen({ view }: { view: RowPageView }): JSX.Element {
 /** Header crumbs: owner page › database › row (M11-D27). */
 function crumbsOf(view: RowPageView, dbTitle: string, rowTitle: string): Crumb[] {
   return [
-    { label: view.owner.title, href: view.owner.href },
+    {
+      // a nested database's owner is an outer row (FR-1453 rev. 2026-11-03), whose title may be empty
+      label: view.owner.title || (view.owner.kind === 'DB_ROW' ? th.database.table.untitledRow : ''),
+      href: view.owner.href,
+    },
     {
       label: dbTitle || th.database.untitled,
       href: rowParamHref(view.owner.href, view.database.id, null),

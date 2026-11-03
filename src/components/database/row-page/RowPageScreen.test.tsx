@@ -50,6 +50,8 @@ const view = (edit = true): RowPageView => ({
     page: null,
     can: { edit },
     uploadLimits: DEFAULT_UPLOAD_LIMITS,
+    databaseLevel: 1,
+    canNestDatabase: true,
   },
 })
 

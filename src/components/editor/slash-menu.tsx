@@ -4,7 +4,8 @@
 // dictionary, English aliases stay searchable), `/ตาราง` → 3×3, custom `/หน้า` (create a child page, insert its
 // card) when allowed (never in a TASK body, M6.1-D9), ranked filter, word-start guard, stable getItems (r3 G23).
 // M11 (FR-1403/1404, FR-1501/1502, M11-D10/D29/D38): the "ฐานข้อมูล" group (ตารางข้อมูล · คัมบัง · ปฏิทิน) in DOC and
-// TASK bodies — never in a row body (no nesting) — and the two equation items (group "ขั้นสูง") everywhere.
+// TASK bodies, and in row bodies below the nesting limit (nested databases, FR-1475 rev. 2026-11-03) — and the two
+// equation items (group "ขั้นสูง") everywhere.
 import { insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
 import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
 import Functions from '@mui/icons-material/Functions'
@@ -103,11 +104,11 @@ const DATABASE_ITEMS = [
   { view: 'CALENDAR', key: 'databaseCalendar', icon: <CalendarMonthOutlined fontSize="small" /> },
 ] as const
 
-/** M11 (FR-1403/1404): the "ฐานข้อมูล" group — DOC and TASK bodies only (M11-D38), when creation is wired. */
+/** M11 (FR-1403/1404): the "ฐานข้อมูล" group — whenever creation is wired: DOC and TASK bodies, and row bodies below
+ *  the nesting limit (PageEditor wires `createDatabase` there only then, FR-1475 rev. 2026-11-03). */
 function databaseItems(editor: AppEditor, ctx: SlashCtx): DefaultReactSuggestionItem[] {
-  const kind = ctx.kind ?? 'DOC'
   const create = ctx.createDatabase
-  if ((kind !== 'DOC' && kind !== 'TASK') || !create) return []
+  if (!create) return []
   return DATABASE_ITEMS.map(({ view, key, icon }) => {
     const s = th.editor.slash[key]
     return {

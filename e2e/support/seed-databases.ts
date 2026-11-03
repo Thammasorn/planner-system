@@ -203,3 +203,31 @@ export function pageContentJson(pageId: string): Promise<string> {
     return JSON.stringify(p?.content ?? null)
   })
 }
+
+/** The DB_ROW body page of a row (nested databases, FR-1453 rev. 2026-11-03): space / project of the owner page. */
+export async function insertRowBody(db: DbOrTx, rowId: string, text = ''): Promise<string> {
+  const [owner] = await db
+    .select({ space: pages.space, projectId: pages.projectId, by: databaseRows.createdBy })
+    .from(databaseRows)
+    .innerJoin(databases, eq(databases.id, databaseRows.databaseId))
+    .innerJoin(pages, eq(pages.id, databases.pageId))
+    .where(eq(databaseRows.id, rowId))
+  if (!owner) throw new Error(`insertRowBody: no row ${rowId}`)
+  const content = text === '' ? [] : [{ type: 'paragraph', content: text }]
+  const [p] = await db
+    .insert(pages)
+    .values({
+      space: owner.space,
+      projectId: owner.projectId,
+      kind: 'DB_ROW',
+      databaseRowId: rowId,
+      title: '',
+      content,
+      contentText: extractContentText(content),
+      position: 'a0',
+      createdBy: owner.by,
+      updatedBy: owner.by,
+    })
+    .returning({ id: pages.id })
+  return p!.id
+}

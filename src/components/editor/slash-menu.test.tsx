@@ -217,8 +217,17 @@ describe('getSlashMenuItems › database group + equations + ranking (FR-1403/14
     }
   })
 
-  it('a row body (DB_ROW) has no database items, no หน้า — but keeps the equations and the table', () => {
-    const items = getSlashMenuItems(makeEditor(), withDb({ kind: 'DB_ROW' }))
+  it('a row body (DB_ROW) below the nesting limit (createDatabase wired) offers the database items, never หน้า', () => {
+    const items = getSlashMenuItems(makeEditor(), withDb({ kind: 'DB_ROW', canCreateSubpage: true }))
+    const t = items.map((i) => i.title)
+    const at = t.indexOf(sl.databaseTable.title)
+    expect(t.slice(at, at + 3)).toEqual(DB_ITEMS)
+    expect(t).not.toContain(sl.subpage.title)
+    expect(first(items, 'kanban')).toBe(sl.databaseKanban.title)
+  })
+
+  it('a row body at the nesting limit (no createDatabase) has no database items — but keeps equations and the table', () => {
+    const items = getSlashMenuItems(makeEditor(), ctx({ kind: 'DB_ROW', canEdit: true }))
     const t = items.map((i) => i.title)
     for (const x of [...DB_ITEMS, sl.subpage.title]) expect(t).not.toContain(x)
     expect(t).toEqual(expect.arrayContaining([sl.equation.title, sl.inlineEquation.title, slash.table.title]))

@@ -24,7 +24,7 @@ import {
 import { ensureRowBody } from '@/server/actions/row-pages'
 import { db } from '@/server/db/client'
 import * as services from '@/server/services'
-import { makeRowBody } from '../../helpers/factories'
+import { makeDatabase, makeRowBody } from '../../helpers/factories'
 import { PNG_1X1 } from '../../helpers/files'
 import { loaderOutcome } from '../_support/loader'
 import { defineRow, type AuthzRow } from '../types'
@@ -46,6 +46,7 @@ import {
   PROJ,
   PROJ_400,
   ROW_BODY_ROUTE,
+  makeNestedChain,
   ROW_PAGE_LOADER,
   rowBodiesOf,
   rowBodyGet,
@@ -419,22 +420,76 @@ export const rows: AuthzRow[] = [
   }),
   defineRow({
     id: 'RB-SAVE-DB',
-    spec: 'M11-D8 / M11-D38 — a database block in DB_ROW content → 400 (after authz: W 404)',
+    spec: 'FR-1453 rev. 2026-11-03 — a level-1 row body may hold a database block (nested database)',
+    action: 'savePageContent',
+    mutates: true,
+    audit: auditPageP,
+    with: DBS,
+    expect: PROJ,
+    setup: (w) => makeDatabase({ page: w.databases.pRowBody, createdBy: w.manager, title: 'ซ้อนใหม่' }),
+    run: async (w, made) => {
+      const before = await pageRow(w.databases.pRowBody.id)
+      const r = await savePageContent({
+        pageId: w.databases.pRowBody.id,
+        baseVersion: before.version,
+        content: [...para('ก่อน'), databaseBlock(made.database.id)],
+      })
+      if (r.ok) expect((await pageRow(w.databases.pRowBody.id)).version).toBe(before.version + 1)
+      return r
+    },
+  }),
+  defineRow({
+    id: 'RB-SAVE-DB-DEPTH',
+    spec: 'FR-1475 rev. — a database block in a level-3 row body (deepest) → 400 (after authz through 2 hops: W 404)',
     action: 'savePageContent',
     mutates: true,
     audit: auditPageP,
     with: DBS,
     expect: PROJ_400,
-    run: async (w) => {
-      const before = await pageRow(w.databases.pRowBody.id)
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (_w, c) => {
+      const before = await pageRow(c.body3.id)
       const r = await savePageContent({
-        pageId: w.databases.pRowBody.id,
+        pageId: c.body3.id,
         baseVersion: before.version,
-        content: [...para('ก่อน'), databaseBlock(w.databases.dbP.id)],
+        content: [...para('ก่อน'), databaseBlock(c.db2.id)],
       })
-      expect((await pageRow(w.databases.pRowBody.id)).version).toBe(before.version)
+      expect((await pageRow(c.body3.id)).version).toBe(before.version)
       return r
     },
+  }),
+  defineRow({
+    id: 'RB-GET-NESTED',
+    spec: 'PERM-24 through nesting — GET /api/database-rows/{level-3 row}/body: the root page’s view right',
+    action: ROW_BODY_ROUTE,
+    mutates: false,
+    with: DBS,
+    expect: PROJ,
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (_w, c) =>
+      checkedBody(await rowBodyGet(c.row3.id), {
+        rowId: c.row3.id,
+        databaseId: c.db3.id,
+        ownerPageId: c.body2.id,
+        pageId: c.body3.id,
+        canEdit: true,
+      }),
+  }),
+  defineRow({
+    id: 'RP-LOADER-NESTED',
+    spec: 'PERM-24 through nesting — /r/{level-3 row} loader: owner = the outer row (DB_ROW, /r/<row2>)',
+    action: ROW_PAGE_LOADER,
+    mutates: false,
+    with: DBS,
+    expect: PROJ,
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: (_w, c) =>
+      loaderOutcome(async (user) => {
+        const v = await services.rowPages.getRowPageView(db, user, c.row3.id)
+        expect(v.owner).toMatchObject({ kind: 'DB_ROW', pageId: c.body2.id, href: `/r/${c.row2.id}` })
+        expect(v.body.canNestDatabase).toBe(false)
+        return v
+      }),
   }),
   defineRow({
     id: 'RB-SAVE-SUBPAGE',
@@ -495,16 +550,17 @@ export const rows: AuthzRow[] = [
   }),
   defineRow({
     id: 'RB-KEEPALIVE-DB',
-    spec: 'M11-D8 — the keepalive PUT also rejects database blocks in DB_ROW content',
+    spec: 'FR-1475 rev. 2026-11-03 — the keepalive PUT also rejects database blocks in a level-3 (deepest) row body',
     action: 'PUT /api/pages/[id]/content',
     mutates: true,
     audit: auditPageP,
     with: DBS,
     expect: PROJ_400,
-    run: async (w) =>
-      keepalive(w.databases.pRowBody.id, {
-        baseVersion: await currentVersion(w.databases.pRowBody.id),
-        content: [databaseBlock(w.databases.dbP.id)],
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (_w, c) =>
+      keepalive(c.body3.id, {
+        baseVersion: await currentVersion(c.body3.id),
+        content: [databaseBlock(c.db2.id)],
       }),
   }),
   defineRow({

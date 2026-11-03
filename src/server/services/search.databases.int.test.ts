@@ -41,6 +41,7 @@ describe('searchDatabases (M11-D28)', () => {
         rowTitle: null,
         databaseTitle: d.dbP.title,
         pageTitle: P.title,
+        trail: [],
         matchedIn: 'database',
         href: `/p/${P.id}?db=${d.dbP.id}`,
       },

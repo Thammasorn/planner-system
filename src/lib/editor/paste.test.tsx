@@ -162,7 +162,7 @@ describe('makePasteHandler › database blocks (FR-1453, FR-1471, M11-D13/D38)',
     [DATABASE_MIME]: encodeDatabaseClip({ v: 1, sourcePageId: SOURCE, cut: false, ids: [DB] }),
   })
 
-  it('DB_ROW: a pasted database becomes a paragraph with its title + toast', () => {
+  it('DB_ROW at the nesting limit: a pasted database becomes a paragraph with its title + toast', () => {
     const e = realEditor()
     const notify = vi.fn()
     const onDatabaseBlocksPasted = vi.fn()
@@ -177,8 +177,29 @@ describe('makePasteHandler › database blocks (FR-1453, FR-1471, M11-D13/D38)',
     expect(e.document.some((b) => b.type === 'database')).toBe(false)
     expect(e.document[1]?.type).toBe('paragraph')
     expect(e.document[1]?.content).toEqual([{ type: 'text', text: 'ลูกค้าใหม่', styles: {} }])
-    expect(notify).toHaveBeenCalledWith(th.editor.errors.databaseNotAllowed)
+    expect(notify).toHaveBeenCalledWith(th.editor.errors.databaseNotAllowed(3))
     expect(onDatabaseBlocksPasted).not.toHaveBeenCalled()
+  })
+
+  it('DB_ROW below the nesting limit (allowDatabases): pasted database blocks stay and go to the copy hook', () => {
+    const e = realEditor()
+    const notify = vi.fn()
+    const onDatabaseBlocksPasted = vi.fn()
+    const handler = makePasteHandler({
+      notify,
+      limits: DEFAULT_UPLOAD_LIMITS,
+      kind: 'DB_ROW',
+      allowDatabases: true,
+      onDatabaseBlocksPasted,
+    })
+    expect(handler({ event: internalCopy, editor: e, defaultPasteHandler: pastesDatabase(e) })).toBe(true)
+    expect(e.document.some((b) => b.type === 'database')).toBe(true)
+    expect(notify).not.toHaveBeenCalled()
+    expect(onDatabaseBlocksPasted).toHaveBeenCalledOnce()
+    expect(onDatabaseBlocksPasted.mock.calls[0]![0]).toMatchObject({
+      inserted: [{ databaseId: DB }],
+      clip: { sourcePageId: SOURCE, ids: [DB] },
+    })
   })
 
   it('DB_ROW: sub-page cards become mentions too, and nothing to convert → no toast', () => {

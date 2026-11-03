@@ -47,6 +47,8 @@ const view = (over: Partial<RowBodyView> = {}): RowBodyView => ({
   page: null,
   can: { edit: true },
   uploadLimits: DEFAULT_UPLOAD_LIMITS,
+  databaseLevel: 1,
+  canNestDatabase: true,
   ...over,
 })
 const withPage = (content: unknown[], isBlank = false): RowBodyView =>
@@ -98,6 +100,13 @@ describe('RowBody', () => {
     expect(qc.getQueryData<RowBodyView>(qk.rowBody(ROW))?.page).toMatchObject({ id: PAGE, version: 1 })
     await waitFor(() => expect(last().pageId).toBe(PAGE))
     expect(last().editorKey).toBe(`row:${ROW}`)
+  })
+
+  it('nested databases (FR-1475 rev.): canNestDatabase of the view reaches the editor (true below the limit, false at it)', () => {
+    renderWithClient(<RowBody view={view({ databaseLevel: 2, canNestDatabase: true })} variant="page" canEdit />)
+    expect(last().canNestDatabase).toBe(true)
+    renderWithClient(<RowBody view={view({ rowId: 'deep', databaseLevel: 3, canNestDatabase: false })} variant="page" canEdit />)
+    expect(last().canNestDatabase).toBe(false)
   })
 
   it('a failed ensure rejects with the server message (the editor toasts it)', async () => {

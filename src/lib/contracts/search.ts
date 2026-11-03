@@ -89,6 +89,10 @@ export interface DatabaseSearchHit {
   rowTitle: string | null
   databaseTitle: string
   pageTitle: string
+  /** Nested databases (FR-1453 rev. 2026-11-03): the outer databases and rows between the root page and this
+   *  database, outermost first (empty at level 1). `pageId` is the immediate owner (a row body when nested),
+   *  `pageTitle` the root page's; `href` is `/r/<outer row>?db=&row=` when nested. */
+  trail: { kind: 'database' | 'row'; title: string }[]
   matchedIn: 'database' | 'row' | 'content'
   href: string
 }

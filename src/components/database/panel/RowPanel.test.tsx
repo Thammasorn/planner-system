@@ -27,6 +27,8 @@ const body = (rowId: string): RowBodyView => ({
   page: null,
   can: { edit: true },
   uploadLimits: {} as RowBodyView['uploadLimits'],
+  databaseLevel: 1,
+  canNestDatabase: true,
 })
 
 function setup(search: string, variant: 'page' | 'compact' = 'page', over = {}) {

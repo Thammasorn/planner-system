@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { expect } from 'vitest'
+import { th } from '@/i18n/th'
 import type { ActionResult } from '@/lib/action-result'
 import type { DatabaseResponse } from '@/lib/contracts/databases'
 import type { SearchAllResponse } from '@/lib/contracts/search'
@@ -33,7 +34,7 @@ import {
 import { duplicatePage, savePageContent } from '@/server/actions/pages'
 import { db } from '@/server/db/client'
 import { databaseColumns, databaseRows, pageLocks, pages } from '@/server/db/schema'
-import { deactivateUser, makeDatabase, makeUser, type TestUser } from '../../helpers/factories'
+import { deactivateUser, makeDatabase, makeRowBody, makeUser, type TestUser } from '../../helpers/factories'
 import type { World } from '../../helpers/world'
 import { assertNoLeak } from '../_support/leak'
 import { defineRow, type AuthzRow } from '../types'
@@ -65,7 +66,9 @@ import {
   liveColumns,
   liveRows,
   liveViews,
+  makeNestedChain,
   MGR,
+  nestedSecrets,
   pDbSecrets,
   PROJ,
   PROJ_400,
@@ -169,6 +172,20 @@ export const rows: AuthzRow[] = [
             expect(Object.keys(p).sort()).toEqual(['color', 'deactivated', 'name', 'nickname'])
         },
       })
+    },
+  }),
+  defineRow({
+    id: 'DB-GET-NESTED',
+    spec: 'PERM-24 through nesting — GET … {level-2 row body}/databases/{level-3 db}: the root page’s view right',
+    action: DB_ROUTE,
+    mutates: false,
+    with: DBS,
+    expect: PROJ,
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (w, c, actor) => {
+      const res = await dbGet(c.body2.id, c.db3.id)
+      if (res.status !== 200) assertNoLeak(await res.clone().json(), nestedSecrets(c, 'P'))
+      return checkedDb(res, { id: c.db3.id, pageId: c.body2.id, canEdit: !isOutsider(w, actor) })
     },
   }),
   defineRow({
@@ -357,17 +374,73 @@ export const rows: AuthzRow[] = [
   }),
   defineRow({
     id: 'DB-CREATE-ROWBODY',
-    spec: 'M11-D38 / FR-1453 — no database inside a row body (pRowBody, kind DB_ROW) → 400 after authz (W 404)',
+    spec: 'FR-1453 rev. 2026-11-03 — a nested database in a level-1 row body (pRowBody, kind DB_ROW) = edit the owner',
+    action: 'createDatabase',
+    mutates: true,
+    audit: auditDbP,
+    with: DBS,
+    expect: PROJ,
+    run: async (w) => {
+      const r = await createDatabase({ pageId: w.databases.pRowBody.id, view: 'KANBAN' })
+      if (r.ok) expect((await attachedOf(w.databases.pRowBody.id)).map((d) => d.id)).toEqual([r.databaseId])
+      return r
+    },
+  }),
+  defineRow({
+    id: 'DB-CREATE-NESTED-L3',
+    spec: 'FR-1475 rev. — level 3 (a level-2 row body two hops below pPage) = edit pPage; W 404 through both levels',
+    action: 'createDatabase',
+    mutates: true,
+    audit: auditDbP,
+    with: DBS,
+    expect: PROJ,
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (w, c, actor) => {
+      const r = await createDatabase({ pageId: c.body2.id, view: 'TABLE' })
+      if (!r.ok && isOutsider(w, actor)) assertNoLeak(r, nestedSecrets(c, 'P'))
+      return r
+    },
+  }),
+  defineRow({
+    id: 'DB-CREATE-NESTED-DEPTH',
+    spec: 'FR-1475 rev. — a level-3 row body (deepest) → 400 nesting after authz (W 404)',
     action: 'createDatabase',
     mutates: true,
     audit: auditDbP,
     with: DBS,
     expect: PROJ_400,
-    run: async (w) => {
-      const r = await createDatabase({ pageId: w.databases.pRowBody.id, view: 'TABLE' })
-      expect(await attachedOf(w.databases.pRowBody.id)).toEqual([])
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (_w, c) => {
+      const r = await createDatabase({ pageId: c.body3.id, view: 'TABLE' })
+      if (!r.ok && r.code === 'VALIDATION') expect(r.message).toBe(th.database.errors.nesting(DB_LIMITS.nestingLevels))
+      expect(await attachedOf(c.body3.id)).toEqual([])
       return r
     },
+  }),
+  defineRow({
+    id: 'DB-CREATE-NESTED-ARCH',
+    spec: 'X42 through nesting — a level-2 row body under archived A → 403 for the team (W 404)',
+    action: 'createDatabase',
+    mutates: true,
+    audit: auditDbA,
+    with: DBS,
+    expect: ARCH_WRITE,
+    setup: (w) => makeNestedChain({ body: w.databases.aRowBody, by: w.manager, tag: 'A' }),
+    run: (_w, c) => createDatabase({ pageId: c.body2.id, view: 'TABLE' }),
+  }),
+  defineRow({
+    id: 'DB-ROWS-NESTED-WIKIPROT',
+    spec: 'FR-510 through nesting — rows of a level-3 database under the locked wiki: manager only, workers 403',
+    action: 'createDatabaseRows',
+    mutates: true,
+    audit: auditDbWiki,
+    with: DBS,
+    expect: MGR,
+    setup: async (w) => {
+      const body = await makeRowBody({ row: w.databases.wikiProtRow, createdBy: w.manager })
+      return makeNestedChain({ body, by: w.manager, tag: 'L' })
+    },
+    run: (_w, c) => createDatabaseRows({ databaseId: c.db3.id, rows: [{ title: 'ใหม่' }] }),
   }),
   defineRow({
     id: 'DB-CREATE-LIMIT',
@@ -529,18 +602,48 @@ export const rows: AuthzRow[] = [
   }),
   defineRow({
     id: 'DB-COPY-TO-ROWBODY',
-    spec: 'M11-D38 — target pRowBody (kind DB_ROW) → 400 after authz (W 404)',
+    spec: 'FR-1453 rev. 2026-11-03 — paste dbP (height 1) into pRowBody (level 1 row body → new level 2)',
     action: 'copyDatabase',
     mutates: true,
     audit: auditDbP,
     with: DBS,
-    expect: PROJ_400,
+    expect: PROJ,
     run: (w) =>
       copyDatabase({
         sourcePageId: w.pages.pPage.id,
         sourceDatabaseId: w.databases.dbP.id,
         targetPageId: w.databases.pRowBody.id,
       }),
+  }),
+  defineRow({
+    id: 'DB-COPY-NESTED-DEPTH',
+    spec: 'FR-1475 rev. — paste dbP (height 3 with its chain) into a level-2 row body → 400 nesting (W 404)',
+    action: 'copyDatabase',
+    mutates: true,
+    audit: auditDbP,
+    with: DBS,
+    expect: PROJ_400,
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: async (w, c) => {
+      const r = await copyDatabase({
+        sourcePageId: w.pages.pPage.id,
+        sourceDatabaseId: w.databases.dbP.id,
+        targetPageId: c.body2.id,
+      })
+      expect((await attachedOf(c.body2.id)).map((d) => d.id)).toEqual([c.db3.id])
+      return r
+    },
+  }),
+  defineRow({
+    id: 'DB-COPY-FROM-NESTED',
+    spec: 'PERM-26 through nesting — copy the level-3 database (view source via 2 hops) to pChild (edit target)',
+    action: 'copyDatabase',
+    mutates: true,
+    audit: auditDbP,
+    with: DBS,
+    expect: PROJ,
+    setup: (w) => makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' }),
+    run: (w, c) => copyDatabase({ sourcePageId: c.body2.id, sourceDatabaseId: c.db3.id, targetPageId: w.pages.pChild.id }),
   }),
 
   // ── renameDatabase (PERM-25, FR-1463) ─────────────────────────────────────────────────────────────────────────
@@ -1455,6 +1558,7 @@ export const rows: AuthzRow[] = [
               rowTitle: 'แถว P-ลับ21',
               databaseTitle: 'ฐานข้อมูล P-ลับ20',
               pageTitle: w.pages.pPage.title,
+              trail: [],
               matchedIn: 'row',
               href: `/p/${w.pages.pPage.id}?db=${d.dbP.id}&row=${d.pRow1.id}`,
             },

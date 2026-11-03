@@ -9,6 +9,9 @@ export const DB_LIMITS = {
   views: 10,
   /** Attached databases per owner page. */
   databasesPerPage: 20,
+  /** Database levels (owner decision 2026-11-03, FR-1475): doc → db → row → db → row → db. A database owned by a
+   *  DOC / TASK page is level 1; one inside the body of a level-n row is level n + 1. */
+  nestingLevels: 3,
   optionsPerColumn: 100,
   /** MULTI_SELECT values per cell. */
   multi: 20,

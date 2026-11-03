@@ -1,5 +1,6 @@
 // M11 S5.3–S5.5 — PageEditor wiring of databases and row bodies: the slash context's createDatabase (row of a task
-// body first, seeds qk.database, failure → toast + null; absent in DB_ROW bodies and for read-only viewers), the
+// body first, seeds qk.database, failure → toast + null; absent in DB_ROW bodies at the nesting limit and for read-only
+// viewers — present below it, FR-1475 rev. 2026-11-03), the
 // copy/cut listener that adds the database clipboard type after BlockNote wrote its own (bubble phase), and DB_ROW
 // documents turning dropped database blocks into their title. BlockNoteView / SlashMenu are stand-ins (jsdom has no
 // layout); the editor is the real headless BlockNote instance.
@@ -131,11 +132,46 @@ describe('PageEditor — databases', () => {
     spy.mockRestore()
   })
 
-  it('no createDatabase in a row body (DB_ROW) or for a read-only viewer', () => {
+  it('no createDatabase in a row body at the nesting limit (DB_ROW without canNestDatabase) or for a read-only viewer', () => {
     renderWithClient(<PageEditor {...props({ kind: 'DB_ROW', editorKey: 'row:r' })} />)
+    expect(lastCtx().createDatabase).toBeUndefined()
+    renderWithClient(<PageEditor {...props({ kind: 'DB_ROW', editorKey: 'row:r2', canNestDatabase: false })} />)
     expect(lastCtx().createDatabase).toBeUndefined()
     renderWithClient(<PageEditor {...props({ canEdit: false })} />)
     expect(lastCtx().createDatabase).toBeUndefined()
+  })
+
+  it('a row body below the nesting limit (canNestDatabase) creates nested databases on its own page', async () => {
+    const database = { id: DB, title: '' } as DatabaseResponse
+    vi.mocked(createDatabase).mockResolvedValue({ ok: true, databaseId: DB, database })
+    const ensurePageId = vi.fn(() => Promise.resolve(PAGE))
+    renderWithClient(
+      <PageEditor
+        {...props({ pageId: null, kind: 'DB_ROW', editorKey: 'row:r', ensurePageId, canNestDatabase: true })}
+      />,
+    )
+    expect(lastCtx().createDatabase).toBeDefined()
+    expect(lastCtx().canCreateSubpage).toBe(false) // /หน้า stays out of row bodies
+    let id: string | null = null
+    await act(async () => {
+      id = await lastCtx().createDatabase!('KANBAN')
+    })
+    expect(ensurePageId).toHaveBeenCalledOnce()
+    expect(createDatabase).toHaveBeenCalledWith({ pageId: PAGE, view: 'KANBAN' })
+    expect(id).toBe(DB)
+  })
+
+  it('DB_ROW below the limit: a dropped database block stays (no toast)', () => {
+    const spy = vi.spyOn(toast, 'error')
+    renderWithClient(<PageEditor {...props({ kind: 'DB_ROW', editorKey: 'row:n', canNestDatabase: true })} />)
+    const editor = lastView().editor
+    act(() => {
+      editor.replaceBlocks([editor.document[0]!.id], [{ type: 'database', props: { databaseId: DB } }])
+      lastView().onChange()
+    })
+    expect(editor.document.some((b) => b.type === 'database')).toBe(true)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('copy / cut on the surface adds the database type (after BlockNote wrote blocknote/html) + the registry', () => {
@@ -168,7 +204,7 @@ describe('PageEditor — databases', () => {
       lastView().onChange()
     })
     expect(editor.document.some((b) => b.type === 'database')).toBe(false)
-    expect(spy).toHaveBeenCalledWith(th.editor.errors.databaseNotAllowed)
+    expect(spy).toHaveBeenCalledWith(th.editor.errors.databaseNotAllowed(3))
     spy.mockRestore()
   })
 })

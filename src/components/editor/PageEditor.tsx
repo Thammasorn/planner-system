@@ -6,7 +6,8 @@
 // `ensurePageId` once (memoised); then the lease is requested (`leaseAcquire 'focus'`) and autosave sends what was
 // typed meanwhile. The BlockNote instance is keyed by `editorKey` (never re-created when the id arrives). TASK bodies:
 // no sub-page item / cards (FR-680), their own empty-document placeholder, `variant` page | compact.
-// M11: DB_ROW bodies (row pages, FR-1453) — no sub-page and no database blocks (M11-D38); the slash "ฐานข้อมูล" group
+// M11: DB_ROW bodies (row pages, FR-1453) — no sub-page; database blocks only below the nesting limit
+// (`canNestDatabase`, FR-1475 rev. 2026-11-03); the slash "ฐานข้อมูล" group
 // creates databases (FR-1404); copy/cut adds the database clipboard type and a paste deep-copies database blocks
 // (M11-D13); the formatting toolbar gains "สมการ" (FR-1502); custom blocks read the page context (kind, getPageId,
 // canEdit, variant).
@@ -53,6 +54,7 @@ import { makeUploadFile, registerUploadEditor } from '@/lib/editor/upload'
 import { invalidatePages } from '@/lib/invalidate'
 import { qk } from '@/lib/query-keys'
 import { isBlankPage } from '@/lib/pages/blank'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import { isSafeHref } from '@/lib/schemas/page-content'
 import { copyDatabase, createDatabase } from '@/server/actions/databases'
 import { createPage } from '@/server/actions/pages'
@@ -112,6 +114,8 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
   const { space, projectId, canEdit, uploadLimits } = props
   // M6.1-D8 contract with DOC defaults (M4 behaviour) until every call site passes them (PageScreen: S4).
   const kind = props.kind ?? 'DOC'
+  // DOC / TASK owners always; a row body only below the nesting limit (nested databases)
+  const databasesAllowed = kind !== 'DB_ROW' || props.canNestDatabase === true
   const leaseAcquire = props.leaseAcquire ?? 'mount'
   const variant = props.variant ?? 'page'
   const editorKey = props.editorKey ?? props.pageId ?? ''
@@ -137,6 +141,7 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
         notify,
         limits: uploadLimits,
         kind,
+        allowDatabases: databasesAllowed,
         databaseTitle: databaseTitleOf,
         // M11-D13: database blocks a paste inserted → copy or keep (getPageId: a task body creates its row first)
         onDatabaseBlocksPasted: makeDatabasePasteHook({
@@ -293,9 +298,9 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
           return null
         }
       },
-      ...(canEdit && (kind === 'DOC' || kind === 'TASK') ? { createDatabase: createDatabaseFor } : {}),
+      ...(canEdit && databasesAllowed ? { createDatabase: createDatabaseFor } : {}),
     }),
-    [kind, canEdit, props.depth, space, projectId, pageId, qc, createDatabaseFor],
+    [kind, canEdit, databasesAllowed, props.depth, space, projectId, pageId, qc, createDatabaseFor],
   )
 
   return (
@@ -341,9 +346,9 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
               if (editor.isEditable) {
                 fixForeignMedia(editor)
                 if (kind !== 'DOC') replaceSubpagesWithMentions(editor) // dropped / moved cards too (FR-680)
-                // M11-D38: a database dropped into a row body becomes its title
-                if (kind === 'DB_ROW' && replaceDatabasesWithParagraphs(editor, databaseTitleOf))
-                  notify(th.editor.errors.databaseNotAllowed)
+                // M11-D38: a database dropped into a row body at the nesting limit becomes its title
+                if (!databasesAllowed && replaceDatabasesWithParagraphs(editor, databaseTitleOf))
+                  notify(th.editor.errors.databaseNotAllowed(DB_LIMITS.nestingLevels))
               }
               save.schedule()
               props.onBlankChange?.(isBlankPage({ title: '', content: editor.document }))

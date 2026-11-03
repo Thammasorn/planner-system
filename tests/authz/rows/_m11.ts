@@ -10,6 +10,7 @@ import { generateNKeysBetween } from 'fractional-indexing'
 import { GET as GET_ROW_BODY } from '@/app/api/database-rows/[id]/body/route'
 import { GET as GET_DATABASE } from '@/app/api/pages/[id]/databases/[databaseId]/route'
 import { DB_LIMITS } from '@/lib/schemas/db-limits'
+import { extractContentText } from '@/lib/editor/content-text'
 import { db } from '@/server/db/client'
 import {
   databaseColumns,
@@ -23,6 +24,7 @@ import {
   type DbViewRow,
   type PageRow,
 } from '@/server/db/schema'
+import { makeDatabase, makeDbRow, makeRowBody } from '../../helpers/factories'
 import type { World, WorldPart } from '../../helpers/world'
 import { callRoute } from '../_support/http'
 import type { Outcome, Role } from '../types'
@@ -245,3 +247,52 @@ export const databaseBlock = (databaseId: string): { type: 'database'; props: { 
   type: 'database',
   props: { databaseId },
 })
+
+// ── nested databases (FR-1453 / FR-1475 rev. 2026-11-03) ──
+
+/** dbX (level 1) › rowX body › db2 (level 2) › row2 body › db3 (level 3) › row3 body (deepest: no database inside). */
+export interface NestedChain {
+  db2: DatabaseRow
+  row2: DbRowRow
+  body2: PageRow
+  db3: DatabaseRow
+  row3: DbRowRow
+  body3: PageRow
+}
+
+/** Appends a database block to a page's content (plain Drizzle; keeps content_text in step). */
+export async function appendDatabaseBlock(page: { id: string }, databaseId: string): Promise<void> {
+  const [cur] = await db.select().from(pages).where(eq(pages.id, page.id))
+  if (!cur) throw new Error(`appendDatabaseBlock: no page ${page.id}`)
+  const content = [...cur.content, databaseBlock(databaseId)]
+  await db.update(pages).set({ content, contentText: extractContentText(content) }).where(eq(pages.id, page.id))
+}
+
+/**
+ * Two nested levels under the row body `body` (a DB_ROW page of a level-1 database): titles carry `${tag}-ลับ4x`
+ * secrets (db2 40, row2 41, body2 42, db3 43, row3 44, body3 45). Each database block sits in its owner's content.
+ */
+export async function makeNestedChain(o: { body: PageRow; by: { id: string }; tag: string }): Promise<NestedChain> {
+  const by = { createdBy: o.by }
+  const db2 = (await makeDatabase({ page: o.body, title: `ฐานข้อมูลซ้อน ${o.tag}-ลับ40`, ...by })).database
+  await appendDatabaseBlock(o.body, db2.id)
+  const row2 = await makeDbRow({ database: db2, title: `แถวซ้อน ${o.tag}-ลับ41`, ...by })
+  const body2 = await makeRowBody({ row: row2, content: `เนื้อหาซ้อน ${o.tag}-ลับ42`, ...by })
+  const db3 = (await makeDatabase({ page: body2, title: `ฐานข้อมูลชั้นสาม ${o.tag}-ลับ43`, ...by })).database
+  await appendDatabaseBlock(body2, db3.id)
+  const row3 = await makeDbRow({ database: db3, title: `แถวชั้นสาม ${o.tag}-ลับ44`, ...by })
+  const body3 = await makeRowBody({ row: row3, content: `เนื้อหาชั้นสาม ${o.tag}-ลับ45`, ...by })
+  const [fresh2] = await db.select().from(pages).where(eq(pages.id, body2.id))
+  return { db2, row2, body2: fresh2!, db3, row3, body3 }
+}
+
+/** Every name / id of a chain an outsider must never receive. */
+export const nestedSecrets = (c: NestedChain, tag: string): string[] => [
+  `${tag}-ลับ4`,
+  c.db2.id,
+  c.row2.id,
+  c.body2.id,
+  c.db3.id,
+  c.row3.id,
+  c.body3.id,
+]

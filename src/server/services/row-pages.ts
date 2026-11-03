@@ -6,6 +6,7 @@ import { th } from '@/i18n/th'
 import type { SetPageFullWidthResult } from '@/lib/contracts/pages'
 import type { EnsureRowBodyResult, RowBodyView, RowPageView } from '@/lib/contracts/row-pages'
 import { isBlankPage } from '@/lib/pages/blank'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import * as audit from '../audit'
 import * as authz from '../authz'
 import type { DatabaseAccess } from '../authz'
@@ -106,6 +107,8 @@ async function bodyViewOf(tx: DbOrTx, a: DatabaseAccess & { row: DbRowRow }): Pr
     page,
     can: { edit: a.canEdit },
     uploadLimits: uploadLimits(),
+    databaseLevel: a.level,
+    canNestDatabase: a.level < DB_LIMITS.nestingLevels,
   }
 }
 
@@ -121,14 +124,15 @@ export async function getRowPageView(tx: DbOrTx, user: SessionUser, rowId: strin
   const ownerPage = a.owner.page
   const project = ownerPage.projectId ? await repo.projects.getProject(tx, ownerPage.projectId) : null
   const task = a.owner.task
+  const outerRow = a.owner.dbRow?.row ?? null // nested database: the owner is the body of this outer row
   return {
     row: { id: a.row.id, title: a.row.title, databaseId: a.database.id },
     database: { id: a.database.id, title: a.database.title, ownerPageId: ownerPage.id },
     owner: {
-      kind: task ? 'TASK' : 'DOC',
+      kind: outerRow ? 'DB_ROW' : task ? 'TASK' : 'DOC',
       pageId: ownerPage.id,
-      title: task ? task.name : ownerPage.title,
-      href: task ? `/t/${task.id}` : `/p/${ownerPage.id}`,
+      title: outerRow ? outerRow.title : task ? task.name : ownerPage.title,
+      href: outerRow ? `/r/${outerRow.id}` : task ? `/t/${task.id}` : `/p/${ownerPage.id}`,
       projectId: ownerPage.projectId,
       projectName: project?.name ?? null,
       archived: a.owner.archived,

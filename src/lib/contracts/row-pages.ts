@@ -24,6 +24,10 @@ export interface RowBodyView {
   /** edit = canEditDatabase(owner access) (archived → false, X42; locked wiki for workers → false). */
   can: { edit: boolean }
   uploadLimits: UploadLimits
+  /** Nesting level of the row's database (1 = on a DOC / TASK page; FR-1453 / FR-1475 rev. 2026-11-03). */
+  databaseLevel: number
+  /** databaseLevel < DB_LIMITS.nestingLevels: the body may hold database blocks (slash items, paste). */
+  canNestDatabase: boolean
 }
 
 /** Everything `/r/[rowId]` needs for its first paint (RSC loader `getRowPageView`, M11-D27). */
@@ -31,11 +35,12 @@ export interface RowPageView {
   row: { id: string; title: string; databaseId: string }
   database: { id: string; title: string; ownerPageId: string }
   owner: {
-    kind: 'DOC' | 'TASK'
+    /** DB_ROW: a nested database — its owner is the body of an outer row. */
+    kind: 'DOC' | 'TASK' | 'DB_ROW'
     pageId: string
-    /** DOC: page title; TASK: task name. */
+    /** DOC: page title; TASK: task name; DB_ROW: the outer row's title. */
     title: string
-    /** DOC: `/p/<pageId>`; TASK: `/t/<taskId>`. */
+    /** DOC: `/p/<pageId>`; TASK: `/t/<taskId>`; DB_ROW: `/r/<outerRowId>`. */
     href: string
     projectId: string | null
     projectName: string | null

@@ -140,6 +140,26 @@ export function listAttached(tx: DbOrTx, pageId: string): Promise<DatabaseRow[]>
     .orderBy(asc(databases.createdAt), asc(databases.id))
 }
 
+/**
+ * Levels of the attached-database tree under `databaseId` (FR-1475 rev. 2026-11-03): 1 = no nested database; else 1 +
+ * the deepest attached database inside a live body of a live row. What copyInto would copy. Walk capped at 10.
+ */
+export async function subtreeHeight(tx: DbOrTx, databaseId: string): Promise<number> {
+  const rows = await tx.execute<{ h: number | null }>(sql`
+    with recursive t(id, lvl) as (
+      select ${databaseId}::uuid, 1
+      union
+      select d.id, t.lvl + 1
+      from t
+      join database_rows r on r.database_id = t.id and r.deleted_at is null
+      join pages b on b.database_row_id = r.id and b.deleted_at is null
+      join databases d on d.page_id = b.id and d.detached_at is null
+      where t.lvl < 10
+    )
+    select max(lvl)::int as h from t`)
+  return rows[0]?.h ?? 1
+}
+
 /** One row (live unless `includeDeleted`); null when missing. */
 export async function getRow(
   tx: DbOrTx,

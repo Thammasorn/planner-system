@@ -13,11 +13,13 @@ import type { Locator, Page, TestInfo } from '@playwright/test'
 import { th } from '../src/i18n/th'
 import { expect, loginAs, openGuardedPage, resetDb, switchUser, test, waitForServerAction } from './fixtures'
 import { DatabaseBlock, rowPanel } from './pages/database'
+import { EditorPage } from './pages/editor'
 import { PageScreen } from './pages/page-screen'
 import { toastWith, undoButtonOf } from './pages/toast'
 import {
   databasesOfPage,
   insertDatabase,
+  insertRowBody,
   insertSyntheticDatabase,
   liveRowsOf,
   type SeedView,
@@ -792,6 +794,108 @@ test.describe('D14 row page /r/<id> (AC-1414)', () => {
     await loginAs(page, 'peter')
     const res = await page.goto(rowUrl)
     expect(res?.status()).toBe(404)
+  })
+})
+
+test.describe('D15 nested databases in row pages (owner decision 2026-11-03, FR-1453 / FR-1475 rev.)', () => {
+  test.use({ allowedConsoleErrors: [/status of 404/] })
+  const NESTED = 'ขั้นตอนย่อย'
+  let level1Row = ''
+  let level3Row = ''
+  let level2Db = ''
+  test.beforeAll(async () => {
+    await resetDb(undefined, {
+      extras: async (tx) => {
+        const top = await insertDatabase(tx, {
+          pageTitle: 'Project Charter',
+          projectName: POS,
+          title: SEEDED,
+          byNickname: 'Cindy',
+          rows: [{ title: 'ลูกค้าส่ง spec ช้า' }, { title: 'ทางลึก' }],
+        })
+        level1Row = top.rows['ลูกค้าส่ง spec ช้า']!
+        // ทางลึก › ชั้นสอง › ชั้นสาม: the deepest row body (level 3) takes no database
+        const body1 = await insertRowBody(tx, top.rows['ทางลึก']!)
+        const two = await insertDatabase(tx, { pageId: body1, title: 'ชั้นสอง', byNickname: 'Cindy', rows: [{ title: 'แถวชั้นสอง' }] })
+        level2Db = two.databaseId
+        const body2 = await insertRowBody(tx, two.rows['แถวชั้นสอง']!)
+        const three = await insertDatabase(tx, { pageId: body2, title: 'ชั้นสาม', byNickname: 'Cindy', rows: [{ title: 'แถวชั้นสาม' }] })
+        level3Row = three.rows['แถวชั้นสาม']!
+      },
+    })
+  })
+
+  test('cindy adds a Kanban inside a row page, adds a card, reloads; peter gets 404 on the nested row', async ({ page }) => {
+    await loginAs(page, 'cindy')
+    await page.goto(`/r/${level1Row}`)
+    const editor = new EditorPage(page)
+    await editor.waitReady()
+    await editor.content().click()
+    const ensured = waitForServerAction(page)
+    await page.keyboard.type('งานย่อย')
+    await ensured
+    await editor.expectEditable()
+    await page.keyboard.press('Enter')
+    const created = waitForServerAction(page)
+    await editor.slash('kanban')
+    expect(await editor.slashTitles()).not.toContain(th.editor.slash.subpage.title)
+    await editor.pickSlash(th.editor.slash.databaseKanban.title)
+    await created
+    const db = DatabaseBlock.first(page)
+    await expect(db.kanban()).toBeVisible()
+    const renamed = waitForServerAction(page)
+    await page.keyboard.type(NESTED)
+    await page.keyboard.press('Enter')
+    await renamed
+    await db.kanbanGroup(STATUS[0]).getByRole('button', { name: T.kanban.add, exact: true }).click()
+    const added = waitForServerAction(page)
+    await page.getByRole('textbox', { name: T.kanban.quickAddLabel(STATUS[0]) }).fill('การ์ดซ้อน')
+    await page.keyboard.press('Enter')
+    await added
+    await expect(db.card('การ์ดซ้อน')).toBeVisible()
+    await expect(page.locator('[data-testid="save-status"][data-save-state="saved"][data-dirty="false"]')).toHaveCount(1)
+    await page.reload()
+    const again = DatabaseBlock.first(page)
+    await expect(again.kanban()).toBeVisible()
+    await expect(again.card('การ์ดซ้อน')).toBeVisible()
+    const nestedId = await again.id()
+    const nestedRow = (await liveRowsOf(nestedId))[0]!.id
+    await page.context().clearCookies()
+    await loginAs(page, 'peter')
+    const res = await page.goto(`/r/${nestedRow}`)
+    expect(res?.status()).toBe(404)
+    await expect(page.locator('body')).not.toContainText('การ์ดซ้อน')
+    await expect(page.locator('body')).not.toContainText(NESTED)
+  })
+
+  test('the deepest row page (level 3) offers no database items; a pasted database block becomes text + the limit toast', async ({
+    page,
+  }) => {
+    await loginAs(page, 'cindy')
+    await page.goto(`/r/${level3Row}`)
+    const editor = new EditorPage(page)
+    await editor.waitReady()
+    await editor.content().click()
+    const ensured = waitForServerAction(page)
+    await page.keyboard.type('ลึกสุด')
+    await ensured
+    await editor.expectEditable()
+    await page.keyboard.press('Enter')
+    await editor.slash('kanban')
+    const titles = await editor.slashTitles()
+    for (const t of [th.editor.slash.databaseTable.title, th.editor.slash.databaseKanban.title, th.editor.slash.databaseCalendar.title])
+      expect(titles).not.toContain(t)
+    await page.keyboard.press('Escape')
+    // an internal copy of a database block (what BlockNote writes on copy) pasted here
+    await editor.content().evaluate((el, id) => {
+      const dt = new DataTransfer()
+      const html = `<div data-content-type="database" data-database-id="${id}"></div>`
+      dt.setData('blocknote/html', html)
+      dt.setData('text/html', html)
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+    }, level2Db)
+    await expect(toastWith(page, th.editor.errors.databaseNotAllowed(3))).toBeVisible()
+    await expect(page.getByTestId('row-body').getByTestId('db-block')).toHaveCount(0)
   })
 })
 

@@ -6,6 +6,7 @@ import type { AppEditor } from '@/components/editor/schema'
 import { th } from '@/i18n/th'
 import type { PageKind } from '@/lib/contracts/pages'
 import type { UploadLimits } from '@/lib/files/upload-rules'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import { type DatabaseBlockRef, type DatabaseClip, findDatabaseBlocks, readDatabaseClip } from './database-clipboard'
 import { replaceDatabasesWithParagraphs, replaceSubpagesWithMentions } from './task-body'
 import { gridToHtmlTable, parseTsvGrid } from './tsv'
@@ -67,9 +68,10 @@ export function htmlHasText(html: string, doc: Document = document): boolean {
  *   6 everything else → default, preferring HTML over markdown-sniffed text (M4-D13).
  * TASK bodies (M6.1-D9, FR-680): whatever was pasted, sub-page cards become paragraphs with a page mention right
  * after the (synchronous) insertion — a task body has no page tree and the server rejects `subpage` there.
- * M11 (FR-1471, M11-D13/D38): the database blocks of the document are diffed around the insertion. In a row body
- * (DB_ROW) every database block becomes a paragraph with its title + toast; elsewhere the inserted ones go to
- * `onDatabaseBlocksPasted` (the editor decides copy vs keep and runs copyDatabase).
+ * M11 (FR-1471, M11-D13/D38): the database blocks of the document are diffed around the insertion. In a row body at
+ * the deepest database level (DB_ROW without `allowDatabases`, FR-1475 rev. 2026-11-03) every database block becomes a
+ * paragraph with its title + toast; elsewhere the inserted ones go to `onDatabaseBlocksPasted` (the editor decides copy
+ * vs keep and runs copyDatabase).
  */
 /** M11-D13: database blocks a paste inserted (new block ids), the document before it and the clipboard payload. */
 export type PasteDatabaseHook = (o: {
@@ -84,6 +86,8 @@ export interface PasteHandlerOptions {
   limits: UploadLimits
   kind?: PageKind
   onDatabaseBlocksPasted?: PasteDatabaseHook
+  /** DB_ROW: the row's database is below DB_LIMITS.nestingLevels, so database blocks may stay (nested databases). */
+  allowDatabases?: boolean
   /** M11-D38: the last known title of a database (row bodies turn database blocks into this text). */
   databaseTitle?: (databaseId: string) => string | undefined
 }
@@ -96,9 +100,9 @@ export function makePasteHandler(o: PasteHandlerOptions): PasteHandler {
     const had = new Set(findDatabaseBlocks(before).map((b) => b.blockId))
     const handled = route(ctx)
     if (kind !== 'DOC') replaceSubpagesWithMentions(ctx.editor)
-    if (kind === 'DB_ROW') {
+    if (kind === 'DB_ROW' && !o.allowDatabases) {
       if (replaceDatabasesWithParagraphs(ctx.editor, o.databaseTitle ?? (() => undefined)))
-        o.notify(th.editor.errors.databaseNotAllowed)
+        o.notify(th.editor.errors.databaseNotAllowed(DB_LIMITS.nestingLevels))
       return handled
     }
     if (o.onDatabaseBlocksPasted) {

@@ -18,6 +18,7 @@ import type {
 } from '@/lib/contracts/search'
 import { compareThai } from '@/lib/collate'
 import { displayName } from '@/lib/display-name'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import { escapeLike, normalizeQuery } from '@/lib/search/normalize'
 import * as authz from '../authz'
 import type { DbOrTx, Tx } from '../db/types'
@@ -226,11 +227,19 @@ type DbHitRow = {
   row_title: string | null
   database_title: string
   page_title: string
+  /** Nested databases: the outer row whose body owns the database (null at level 1). */
+  via_row_id: string | null
+  /** Nested databases: [outer database title, outer row title, …] from the root page down (empty at level 1). */
+  trail: string[]
 }
 
 const toDbHit = (r: DbHitRow, matchedIn: DatabaseSearchHit['matchedIn']): DatabaseSearchHit => {
-  const base = r.task_id ? `/t/${r.task_id}` : `/p/${r.page_id}`
+  const base = r.via_row_id ? `/r/${r.via_row_id}` : r.task_id ? `/t/${r.task_id}` : `/p/${r.page_id}`
   const query = r.row_id ? `?db=${r.database_id}&row=${r.row_id}` : `?db=${r.database_id}`
+  const trail: DatabaseSearchHit['trail'] = []
+  for (let i = 0; i + 1 < r.trail.length; i += 2) {
+    trail.push({ kind: 'database', title: r.trail[i]! }, { kind: 'row', title: r.trail[i + 1]! })
+  }
   return {
     kind: 'database',
     rowId: r.row_id,
@@ -239,6 +248,7 @@ const toDbHit = (r: DbHitRow, matchedIn: DatabaseSearchHit['matchedIn']): Databa
     rowTitle: r.row_title,
     databaseTitle: r.database_title,
     pageTitle: r.page_title,
+    trail,
     matchedIn,
     href: base + query,
   }
@@ -248,6 +258,9 @@ const toDbHit = (r: DbHitRow, matchedIn: DatabaseSearchHit['matchedIn']): Databa
  * M11-D28 / FR-1474: database titles, row titles, then row bodies (q ≥ 3, savepoint + statement timeout like pages)
  * of attached databases whose owner page is live and visible (TASK owners: while their task is live); ≤ 8. Cell values
  * are never searched. Visibility is in SQL (FR-1104).
+ * Nested databases (FR-1453 rev. 2026-11-03): the CTE `up` walks each attached database up through live row bodies
+ * of live rows of attached outer databases (≤ DB_LIMITS.nestingLevels) to its root DOC / TASK page; visibility is the
+ * root's. A broken chain (outer row / body deleted, outer database detached) hides the nested database.
  */
 export async function searchDatabases(tx: Tx, user: SessionUser, q: string): Promise<DatabaseSearchHit[]> {
   const vis = await authz.visibleProjectIds(tx, user)
@@ -257,22 +270,34 @@ export async function searchDatabases(tx: Tx, user: SessionUser, q: string): Pro
     vis === 'ALL'
       ? sql`(o.space = 'WORKSPACE' or pr.id is not null)`
       : sql`(o.space = 'WORKSPACE' or (pr.id is not null and o.project_id = any(${uuidArray([...vis])})))`
+  const up = sql`with recursive up(database_id, owner_page_id, cur_page_id, lvl, via_row_id, trail) as (
+      select d.id, d.page_id, d.page_id, 1, null::uuid, array[]::text[] from databases d where d.detached_at is null
+      union all
+      select u.database_id, u.owner_page_id, od.page_id, u.lvl + 1, coalesce(u.via_row_id, r.id),
+        array[od.title, r.title] || u.trail
+      from up u
+      join pages b on b.id = u.cur_page_id and b.kind::text = 'DB_ROW' and b.deleted_at is null
+      join database_rows r on r.id = b.database_row_id and r.deleted_at is null
+      join databases od on od.id = r.database_id and od.detached_at is null
+      where u.lvl < ${DB_LIMITS.nestingLevels}
+    )`
   const owner = sql`
-    join pages o on o.id = d.page_id and o.deleted_at is null and o.kind::text in ('DOC', 'TASK')
+    join up on up.database_id = d.id
+    join pages o on o.id = up.cur_page_id and o.deleted_at is null and o.kind::text in ('DOC', 'TASK')
     left join projects pr on pr.id = o.project_id and pr.deleted_at is null
     left join tasks t on t.id = o.task_id
     where d.detached_at is null and ${visible}
       and (o.kind::text <> 'TASK' or (t.id is not null and t.deleted_at is null))`
-  const cols = sql`d.id as database_id, o.id as page_id, t.id as task_id, d.title as database_title,
-    coalesce(t.name, o.title) as page_title`
-  const titleRows = await tx.execute<DbHitRow>(sql`
+  const cols = sql`d.id as database_id, up.owner_page_id as page_id, t.id as task_id, d.title as database_title,
+    coalesce(t.name, o.title) as page_title, up.via_row_id, up.trail`
+  const titleRows = await tx.execute<DbHitRow>(sql`${up}
     select ${cols}, null::uuid as row_id, null::text as row_title
     from databases d ${owner} and d.title ilike ${p.pattern} escape '\\'
     order by word_similarity(${p.q}, d.title) desc, length(d.title), d.id
     limit ${p.limit}`)
   const hits = titleRows.map((r) => toDbHit(r, 'database'))
   if (hits.length >= p.limit) return hits
-  const rowRows = await tx.execute<DbHitRow>(sql`
+  const rowRows = await tx.execute<DbHitRow>(sql`${up}
     select ${cols}, r.id as row_id, r.title as row_title
     from database_rows r join databases d on d.id = r.database_id ${owner}
       and r.deleted_at is null and r.title ilike ${p.pattern} escape '\\'
@@ -283,7 +308,7 @@ export async function searchDatabases(tx: Tx, user: SessionUser, q: string): Pro
   const rowIds = hits.flatMap((h) => (h.rowId ? [h.rowId] : []))
   try {
     const bodyRows = await tx.transaction((sp) =>
-      sp.execute<DbHitRow>(sql`
+      sp.execute<DbHitRow>(sql`${up}
         select ${cols}, r.id as row_id, r.title as row_title
         from pages b
         join database_rows r on r.id = b.database_row_id and r.deleted_at is null

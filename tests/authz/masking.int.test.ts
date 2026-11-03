@@ -110,7 +110,16 @@ import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './row
 import { calendarGet } from './rows/_m5'
 import { GRID_RANGE, gridGet, save, weekItem } from './rows/_m6'
 import { bodyGet } from './rows/_m6_1'
-import { databaseById, dbGet, liveRows, pDbSecrets, qDbSecrets, rowBodyGet } from './rows/_m11'
+import {
+  databaseById,
+  dbGet,
+  liveRows,
+  makeNestedChain,
+  nestedSecrets,
+  pDbSecrets,
+  qDbSecrets,
+  rowBodyGet,
+} from './rows/_m11'
 import { embedTasksGet, embedWorkloadGet, homeGet, searchIndexGet, searchQ } from './rows/_m10'
 import {
   milestonesGet,
@@ -2279,6 +2288,36 @@ describe('masking — databases (M11, plan/m11 S6.3; FR-1460, FR-1464, FR-1474, 
       { columns: body.columns, views: body.views, rows: body.rows.map((r) => r.title) },
       ['แถวลบแล้ว P', w.databases.dbPColumns.deleted.id, w.databases.dbPViews.deleted.id],
     )
+  })
+
+  it('nested databases (FR-1453 rev. 2026-11-03): outsider gets identical 404s through 2 levels and no nested name / id anywhere', async () => {
+    const w = await createWorld({ with: DBW })
+    const c = await makeNestedChain({ body: w.databases.pRowBody, by: w.manager, tag: 'P' })
+    const secrets = [...pDbSecrets(w), ...nestedSecrets(c, 'P')]
+    asUser(w.outsider)
+    const bodies: string[] = []
+    for (const res of [
+      await dbGet(w.databases.pRowBody.id, c.db2.id),
+      await dbGet(c.body2.id, c.db3.id),
+      await dbGet(c.body2.id, c.db2.id), // mismatch
+      await rowBodyGet(c.row2.id),
+      await rowBodyGet(c.row3.id),
+      await pageGet(c.body2.id),
+      await pageGet(c.body3.id),
+    ]) {
+      expect(res.status).toBe(404)
+      const text = await res.text()
+      assertNoLeak(JSON.parse(text), secrets)
+      bodies.push(text)
+    }
+    expect(new Set(bodies).size).toBe(1)
+    const search = await okJson<SearchAllResponse>(await searchQ('ลับ4'))
+    assertNoLeak(search, secrets)
+    // the team sees the nested hits (sanity: the payload is not empty for them)
+    asUser(w.member)
+    const mine = await okJson<SearchAllResponse>(await searchQ('ลับ4'))
+    assertContains(mine.databases, [c.db2.id, c.db3.id])
+    assertNoLeak(mine, qDbSecrets(w))
   })
 
   it('member: the body of a Q row → 404; archived A body readable with can.edit false', async () => {

@@ -127,6 +127,8 @@ describe('useFullWidth', () => {
       page: { id: 'rb1', version: 1, content: [], fullWidth: false, isBlank: true },
       can: { edit: true },
       uploadLimits: { maxBytes: 1, imageTypes: [], fileTypes: [] } as unknown as RowBodyView['uploadLimits'],
+      databaseLevel: 1,
+      canNestDatabase: true,
     }
     qc.setQueryData(qk.rowBody('r1'), view)
     act(() => result.current.toggle())

@@ -1,12 +1,14 @@
 // src/server/services/database-copy.ts — the one deep-copy path for databases (FR-1470, FR-1471; plan/m11 S0.7
 // signatures, S2 bodies; M11-D11/D12): live columns, views and rows with new ids everywhere (option ids included),
-// row bodies as new DB_ROW pages, files copied across project/space. Used by copyDatabase (paste) and duplicatePage.
+// row bodies as new DB_ROW pages, nested databases of those bodies recursively (FR-1453 rev. 2026-11-03), files
+// copied across project/space. Used by copyDatabase (paste) and duplicatePage.
 import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { ViewConfig } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { CopyDatabaseResult } from '@/lib/contracts/databases'
-import { extractContentText } from '@/lib/editor/content-text'
+import { extractContentText, remapContentIds } from '@/lib/editor/content-text'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import type { CopyDatabaseInput } from '@/lib/schemas/databases'
 import * as audit from '../audit'
 import * as authz from '../authz'
@@ -27,7 +29,7 @@ import { NotFoundError, ValidationError } from '../errors'
 import * as dbRepo from '../repo/databases'
 import type { SessionUser } from '../session'
 import { getStorage } from '../storage'
-import { lockOwnerForNewDatabase } from './databases'
+import { assertNestingAllowed, lockOwnerForNewDatabase } from './databases'
 
 export type CopyFilesMode = 'reuse' | 'copy'
 
@@ -146,18 +148,45 @@ async function copyFiles(
   return JSON.parse(json) as unknown[]
 }
 
-/** The deep copy itself (no authz, no audit): `targetPage` is an authorised DOC / TASK page. */
+/** The deep copy itself (no authz, no audit): `targetPage` is an authorised DOC / TASK page or row body. Nested
+ *  databases (attached ones inside live row bodies, FR-1453 rev. 2026-11-03) are copied recursively with new ids and
+ *  the copied bodies' database blocks remapped; `level` guards the recursion (≤ DB_LIMITS.nestingLevels). */
 async function copyInto(
   tx: Tx,
   user: SessionUser,
   source: DatabaseRow,
   targetPage: PageRow,
-  opts: { files: CopyFilesMode; newId?: string; checkLimit: boolean },
+  opts: { files: CopyFilesMode; newId?: string; checkLimit: boolean; level?: number },
 ): Promise<DatabaseRow> {
+  const level = opts.level ?? 1
+  if (level > DB_LIMITS.nestingLevels) return copyTooDeep()
   if (opts.checkLimit) await lockOwnerForNewDatabase(tx, targetPage.id)
   const cols = await dbRepo.listColumns(tx, source.id)
   const views = await dbRepo.listViews(tx, source.id)
   const rows = await dbRepo.listRows(tx, source.id)
+  // Everything is read before the first insert: pasting a database into one of its own row bodies must not see (and
+  // recursively copy) the copy being made. Row bodies → new DB_ROW pages in the target's space / project; the nested
+  // databases of those bodies get their new ids up front so the copied content can be remapped.
+  const bodies =
+    rows.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(pages)
+          .where(
+            and(
+              inArray(
+                pages.databaseRowId,
+                rows.map((r) => r.id),
+              ),
+              isNull(pages.deletedAt),
+            ),
+          )
+  const nested = await planPageDatabases(
+    tx,
+    bodies.map((b) => b.id),
+  )
+  const nestedIds = new Map([...nested].map(([oldId, p]) => [oldId, p.newId]))
   const maps: IdMaps = { columns: new Map(), options: new Map() }
   for (const c of cols) {
     maps.columns.set(c.id, randomUUID())
@@ -212,17 +241,11 @@ async function copyInto(
       })),
     )
   }
-  // row bodies → new DB_ROW pages in the target's space / project
-  const bodies =
-    rows.length === 0
-      ? []
-      : await tx
-          .select()
-          .from(pages)
-          .where(and(inArray(pages.databaseRowId, [...rowMap.keys()]), isNull(pages.deletedAt)))
+  const bodyCopies = new Map<string, PageRow>()
   const written: string[] = []
   try {
     for (const b of bodies) {
+      const remapped = nestedIds.size > 0 ? remapContentIds(b.content, { databases: nestedIds }) : b.content
       const [page] = await tx
         .insert(pages)
         .values({
@@ -231,24 +254,30 @@ async function copyInto(
           kind: 'DB_ROW',
           databaseRowId: rowMap.get(b.databaseRowId!)!,
           title: '',
-          content: b.content,
+          content: remapped,
           contentText: b.contentText,
           position: 'a0',
           fullWidth: b.fullWidth,
           createdBy: user.id,
           updatedBy: user.id,
         })
-        .returning({ id: pages.id })
+        .returning()
+      bodyCopies.set(b.id, page!)
       if (opts.files === 'copy') {
         // files rows reference the new page (FK), so the page exists before its files are copied
-        const content = await copyFiles(tx, user, b.content, { pageId: page!.id, projectId: targetPage.projectId }, written)
-        if (content !== b.content) {
+        const content = await copyFiles(tx, user, remapped, { pageId: page!.id, projectId: targetPage.projectId }, written)
+        if (content !== remapped) {
           await tx
             .update(pages)
             .set({ content, contentText: extractContentText(content) })
             .where(eq(pages.id, page!.id))
         }
       }
+    }
+    for (const { source: inner, newId } of nested.values()) {
+      const body = bodyCopies.get(inner.pageId)
+      if (!body) continue
+      await copyInto(tx, user, inner, body, { files: opts.files, newId, checkLimit: false, level: level + 1 })
     }
   } catch (e) {
     const storage = getStorage()
@@ -271,16 +300,13 @@ export async function copyDatabaseInto(
   return { databaseId: d.id }
 }
 
-/** M11-D12 order: source view (404, mismatch included) → target view (404) → target edit (403) → DB_ROW target (400)
- *  → limit (400). Audit on the target (`after.copyOf`). */
+/** M11-D12 order: source view (404, mismatch included) → target view (404) → target edit (403) → nesting depth of
+ *  the copy on the target (400, FR-1475 rev. 2026-11-03) → limit (400). Audit on the target (`after.copyOf`). */
 export async function copyDatabase(tx: Tx, user: SessionUser, input: CopyDatabaseInput): Promise<CopyDatabaseResult> {
   const src = await authz.requireDatabase(tx, user, input.sourceDatabaseId, 'view', { pageId: input.sourcePageId })
   const seen = await authz.requirePage(tx, user, input.targetPageId, 'view') // invisible → 404
   const target = await authz.accessForPage(tx, user, seen.page, 'edit') // archived / locked (workers) → 403
-  if (target.kind === 'DB_ROW') {
-    const msg = th.database.errors.nesting
-    throw new ValidationError({ targetPageId: [msg] }, msg)
-  }
+  assertNestingAllowed(target, await dbRepo.subtreeHeight(tx, src.database.id), 'targetPageId')
   const sameSpace =
     src.owner.page.space === target.page.space && src.owner.page.projectId === target.page.projectId
   const { databaseId } = await copyDatabaseInto(tx, user, src.database, target, { files: sameSpace ? 'reuse' : 'copy' })
@@ -293,6 +319,12 @@ export async function copyDatabase(tx: Tx, user: SessionUser, input: CopyDatabas
     after: { target: 'database', ids: [databaseId], copyOf: src.database.id },
   })
   return { databaseId }
+}
+
+/** Defensive: the services never create a database deeper than DB_LIMITS.nestingLevels, so a copy never reaches it. */
+function copyTooDeep(): never {
+  const msg = th.database.errors.nesting(DB_LIMITS.nestingLevels)
+  throw new ValidationError({ targetPageId: [msg] }, msg)
 }
 
 /** New database ids for the attached databases of `sourcePageIds` (duplicatePage remaps content before insert). */

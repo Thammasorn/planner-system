@@ -76,11 +76,16 @@ const clientItem = (c: SearchIndexClient): PaletteItem => ({
 /** M11 (FR-1474, M11-D28): a database title / row title / row body hit; Enter opens the owner page with `?db=&row=`. */
 export const databaseItem = (h: DatabaseSearchHit): PaletteItem => {
   const databaseTitle = h.databaseTitle || th.database.untitled
+  // nested databases: root page › outer database › outer row › … (FR-1453 rev. 2026-11-03)
+  const where = [
+    h.pageTitle,
+    ...(h.trail ?? []).map((t) => t.title || (t.kind === 'row' ? th.database.table.untitledRow : th.database.untitled)),
+  ].join(' › ')
   return {
     value: `db:${h.rowId ?? h.databaseId}`,
     href: h.href,
     title: h.rowId !== null ? h.rowTitle || th.database.table.untitledRow : databaseTitle,
-    subtitle: h.rowId !== null ? `${databaseTitle} · ${h.pageTitle}` : h.pageTitle,
+    subtitle: h.rowId !== null ? `${databaseTitle} · ${where}` : where,
     icon: h.rowId !== null ? '▤' : '▦',
     chips: h.matchedIn === 'content' ? [th.palette.matchedInRow] : [],
   }

@@ -1209,8 +1209,8 @@ export const th = {
     errors: {
       /** M6.1-D9 (FR-680): server rejects sub-page blocks in a TASK body */
       subpageNotAllowed: 'เนื้อหางานแทรกหน้าย่อยไม่ได้ — ใช้ @ เพื่อลิงก์ไปยังหน้าเอกสาร',
-      /** M11-D8/D38 (FR-1453): no database blocks inside a row body */
-      databaseNotAllowed: 'เนื้อหาของแถวแทรกฐานข้อมูลไม่ได้',
+      /** FR-1453 / FR-1475 (rev. 2026-11-03): a row body at the deepest database level takes no database block */
+      databaseNotAllowed: (max: number) => `ฐานข้อมูลซ้อนกันได้ไม่เกิน ${max} ชั้น — แทรกฐานข้อมูลในแถวนี้ไม่ได้`,
     },
     /** M11 (FR-1453): empty-document placeholder of a row body */
     rowPlaceholder: 'เพิ่มเนื้อหา… พิมพ์ / เพื่อแทรก',
@@ -2572,7 +2572,8 @@ export const th = {
       unknownColumn: 'ไม่พบคอลัมน์นี้',
       inactivePerson: 'เลือกคนที่ปิดใช้งานแล้วไม่ได้',
       badUrl: 'ลิงก์ต้องขึ้นต้นด้วย http://, https:// หรือ mailto:',
-      nesting: 'สร้างฐานข้อมูลในเนื้อหาของแถวไม่ได้',
+      /** FR-1475 (rev. 2026-11-03): nested databases go at most DB_LIMITS.nestingLevels levels deep */
+      nesting: (max: number) => `ฐานข้อมูลซ้อนกันได้ไม่เกิน ${max} ชั้น`,
       emptyName: 'ชื่อต้องไม่ว่าง',
       duplicateIds: 'มีค่าซ้ำกัน',
       /** BR-90: option names are unique per column (case-insensitive) */

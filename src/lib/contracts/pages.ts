@@ -176,6 +176,9 @@ export interface PageEditorProps {
   /** DOC 'mount' (M4); TASK 'focus' (M6.1-D8). */
   leaseAcquire?: 'mount' | 'focus'
   variant?: 'page' | 'compact'
+  /** DB_ROW: the row's database is below DB_LIMITS.nestingLevels — database blocks (slash items, paste, drop) are
+   *  allowed (FR-1453 / FR-1475 rev. 2026-11-03). Default false. Ignored for DOC / TASK. */
+  canNestDatabase?: boolean
 }
 
 /** `setPageFullWidth` result (M6.1-D15): `changed: false` = the value was already set (no audit row). */

@@ -21,6 +21,7 @@ import { collectDatabaseIds, extractContentText } from '@/lib/editor/content-tex
 import { fileUrl } from '@/lib/files/upload-rules'
 import { formatThaiDate } from '@/lib/format'
 import { isBlankPage } from '@/lib/pages/blank'
+import { DB_LIMITS } from '@/lib/schemas/db-limits'
 import { PAGE_TITLE_MAX } from '@/lib/schemas/pages'
 import { sanitizeContent, type PageContent } from '@/lib/schemas/page-content'
 import * as audit from '../audit'
@@ -263,15 +264,16 @@ export async function savePageContent(
     const msg = th.editor.errors.subpageNotAllowed
     throw new ValidationError({ content: [msg] }, msg)
   }
-  if (a.kind === 'DB_ROW' && collectDatabaseIds(i.content).size > 0) {
-    // M11-D8 / M11-D38: no database inside a row body
-    const msg = th.editor.errors.databaseNotAllowed
+  if (a.dbRow && a.dbRow.level >= DB_LIMITS.nestingLevels && collectDatabaseIds(i.content).size > 0) {
+    // FR-1453 / FR-1475 (rev. 2026-11-03): a row body at the deepest level holds no database block
+    const msg = th.editor.errors.databaseNotAllowed(DB_LIMITS.nestingLevels)
     throw new ValidationError({ content: [msg] }, msg)
   }
   const content = sanitizeContent(i.content)
   const version = await bumpContent(tx, user, a.page.id, i.baseVersion, { content })
-  // M11-D9 / FR-1472: detach databases whose block is gone, re-attach those that are back (DOC / TASK owners)
-  if (a.kind !== 'DB_ROW') await reconcileDetached(tx, a.page.id, content)
+  // M11-D9 / FR-1472: detach databases whose block is gone, re-attach those that are back (every owner kind — row
+  // bodies own nested databases since 2026-11-03)
+  await reconcileDetached(tx, a.page.id, content)
   return { version, lease: await getLease(tx, user, a.page.id) }
 }
 
