@@ -11,7 +11,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { toast } from 'sonner'
 import { type UndoEntry, useUndo } from '@/components/undo/useUndo'
-import { defaultColumnName, OPTION_COLORS, optionsOf } from '@/domain/database'
+import { defaultColumnName, OPTION_COLORS, optionKey, optionsOf } from '@/domain/database'
 import type { SelectOption } from '@/domain/types'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { th } from '@/i18n/th'
@@ -733,38 +733,65 @@ export function useDbMutations(o: { pageId: string; databaseId: string }): DbMut
       })
     }
 
-    const addOption: DbMutations['addOption'] = (columnId, name) => {
+    // BR-90 (owner bug 2026-11-03): one option per name in a column (trimmed, case-insensitive) — typing an existing
+    // name answers its id instead of creating. Each create sends the CONFIRMED options plus its own new one only:
+    // sending the other still-pending creates too (without ids) created them twice or three times. The other pending
+    // options stay in the optimistic column when one create is confirmed, so no chip ever shows a temp id.
+    const addOption: DbMutations['addOption'] = (columnId, rawName) => {
       const c = findById(get()?.columns ?? [], columnId)
-      if (!c) return Promise.resolve('')
+      const name = rawName.trim()
+      if (!c || name === '') return Promise.resolve('')
+      const same = optionsOf(c).find((o) => optionKey(o.name) === optionKey(name))
+      if (same) return Promise.resolve(same.id)
       const tmp = tempId()
       const existing = optionsOf(c)
       const color = OPTION_COLORS[existing.length % OPTION_COLORS.length]!
+      const pendingOf = (col: DbColumnDTO) =>
+        optionsOf(col).filter((o) => resolveDbId(o.id).startsWith('tmp_'))
       let sentIds = new Set<string>()
       void submit(
         {
           target: { kind: 'column', id: columnId },
           run: () => {
             const cur = column(columnId)
-            const options = resolveConfig({ options: [...optionsOf(cur)] }) as { options: SelectOption[] }
-            sentIds = new Set(
-              options.options.map((x) => x.id).filter((x): x is string => typeof x === 'string'),
-            )
+            const confirmed = (
+              resolveConfig({ options: [...optionsOf(cur)] }) as { options: SelectOption[] }
+            ).options.filter((x) => typeof x.id === 'string')
+            sentIds = new Set(confirmed.map((x) => x.id))
+            // created meanwhile (another tab / an earlier create of the same name): use it, create nothing
+            const dup = confirmed.find((x) => optionKey(x.name) === optionKey(name))
+            if (dup) return Promise.resolve({ column: cur, reuse: dup.id })
             return unwrap(
               actions.updateDatabaseColumn({
                 columnId: cur.id,
                 baseVersion: cur.version,
-                config: {
-                  options: [...options.options.filter((x) => x.id !== resolveDbId(tmp)), { name, color }],
-                },
+                config: { options: [...confirmed, { name, color }] },
               }),
             )
           },
-          done: (r: { column: DbColumnDTO }) => {
-            const created = optionsOf(r.column).find((x) => !sentIds.has(x.id) && x.name === name.trim())
-            if (created) dbIdMap.set(tmp, created.id)
+          done: (r: { column: DbColumnDTO; reuse?: string }) => {
+            const created =
+              r.reuse ??
+              (
+                optionsOf(r.column).find(
+                  (x) => !sentIds.has(x.id) && optionKey(x.name) === optionKey(name),
+                ) ?? optionsOf(r.column).find((x) => optionKey(x.name) === optionKey(name))
+              )?.id
+            if (created) dbIdMap.set(tmp, created)
             set((d) => {
-              const next = replaceColumn(d, r.column)
-              return created ? remapOptionInCells(next, r.column.id, tmp, created.id) : next
+              const cur = findById(d.columns, columnId)
+              // keep the other creates still waiting in the queue (their chips need a name until they answer)
+              const waiting = cur ? pendingOf(cur).filter((o) => o.id !== tmp) : []
+              const server = r.reuse ? (cur ?? r.column) : r.column
+              const merged =
+                waiting.length > 0 && 'options' in server.config
+                  ? {
+                      ...server,
+                      config: { options: [...optionsOf(server).filter((o) => o.id !== tmp), ...waiting] },
+                    }
+                  : server
+              const next = replaceColumn(d, merged)
+              return created ? remapOptionInCells(next, merged.id, tmp, created) : next
             })
           },
         },

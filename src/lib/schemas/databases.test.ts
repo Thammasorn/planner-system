@@ -10,6 +10,7 @@ import {
   createDatabaseRowsSchema,
   createDatabaseSchema,
   databaseParamsSchema,
+  selectConfigSchema,
   DB_LIMITS,
   deleteDatabaseRowsSchema,
   FILTER_OPS,
@@ -237,5 +238,26 @@ describe('params (X86)', () => {
     expect(ok(databaseParamsSchema, { id: A, databaseId: 'x' })).toBe(false)
     expect(ok(rowBodyParamsSchema, { id: 'x' })).toBe(false)
     expect(ok(ensureRowBodySchema, { rowId: A })).toBe(true)
+  })
+})
+
+describe('selectConfigSchema (BR-90: option names unique per column, trimmed, case-insensitive)', () => {
+  it('rejects a repeated name in another case / with spaces; accepts distinct names', () => {
+    const r = selectConfigSchema.safeParse({
+      options: [
+        { name: 'qwer', color: 'gray' },
+        { name: ' QWER', color: 'blue' },
+      ],
+    })
+    expect(r.success).toBe(false)
+    expect(r.error?.issues[0]?.message).toBe(th.database.errors.duplicateOption)
+    expect(
+      selectConfigSchema.safeParse({
+        options: [
+          { name: 'qwer', color: 'gray' },
+          { name: 'asdf', color: 'blue' },
+        ],
+      }).success,
+    ).toBe(true)
   })
 })

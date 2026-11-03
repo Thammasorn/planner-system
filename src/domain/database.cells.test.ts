@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest'
 import {
   DB_LIMITS,
   cellText,
+  duplicateOptionIndexes,
   isEmptyCell,
   normalizeCellInput,
   numberConfigOf,
+  optionKey,
   optionsOf,
   readCell,
   rowValue,
@@ -235,5 +237,24 @@ describe('config accessors', () => {
   it('optionsOf reads options or none', () => {
     expect(optionsOf(col('SELECT')).map((o) => o.id)).toEqual([OPT_TODO.id, OPT_DOING.id, OPT_DONE.id])
     expect(optionsOf(col('TEXT'))).toEqual([])
+  })
+})
+
+describe('option names (BR-90: unique per column, trimmed, case-insensitive)', () => {
+  it('optionKey trims and folds case (Thai unchanged)', () => {
+    expect(optionKey('  Qwer ')).toBe('qwer')
+    expect(optionKey('หกดหดก')).toBe('หกดหดก')
+  })
+  it('duplicateOptionIndexes flags every later repeat', () => {
+    expect(
+      duplicateOptionIndexes([
+        { name: 'qwer' },
+        { name: 'asdf' },
+        { name: 'QWER ' },
+        { name: 'qwer' },
+        { name: 'x' },
+      ]),
+    ).toEqual([2, 3])
+    expect(duplicateOptionIndexes([{ name: 'a' }, { name: 'b' }])).toEqual([])
   })
 })

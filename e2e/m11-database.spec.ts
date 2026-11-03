@@ -235,6 +235,45 @@ test.describe('D2/D3 cells, sort and the footer count (AC-1402, AC-1403)', () =>
   })
 })
 
+test.describe('D2b option editor: type + Enter creates once, an existing name in any case is picked (BR-90)', () => {
+  test.beforeAll(async () => {
+    await seedPosDatabase()
+  })
+
+  test('“Review” + Enter creates and closes; “review ” on another row picks it; one option, no temp id after reload', async ({
+    page,
+  }) => {
+    await loginAs(page, 'cindy')
+    const { db } = await openSeeded(page)
+    const first = await db.cell('ไม่มีวันที่', 'สถานะ')
+    await first.click()
+    const box = page.getByRole('combobox', { name: 'สถานะ', exact: true })
+    await expect(box).toBeFocused()
+    await box.fill('Review')
+    // "สร้าง “Review”" is the first, highlighted item
+    await expect(page.getByRole('option').first()).toHaveText(T.cells.createOption('Review'))
+    const created = waitForServerAction(page)
+    await page.keyboard.press('Enter')
+    await created
+    await expect(first).toContainText('Review')
+    const second = await db.cell('ทีมไม่พอ', 'สถานะ')
+    await second.click()
+    await page.getByRole('combobox', { name: 'สถานะ', exact: true }).fill('review ')
+    await expect(page.getByRole('option', { name: T.cells.createOption('review') })).toHaveCount(0)
+    const picked = waitForServerAction(page)
+    await page.keyboard.press('Enter')
+    await picked
+    await expect(second).toContainText('Review')
+    await page.reload()
+    await expect(db.table()).toBeVisible()
+    await expect(db.table()).not.toContainText('tmp_')
+    await (await db.cell('ไม่มีวันที่', 'สถานะ')).click()
+    await page.getByRole('combobox', { name: 'สถานะ', exact: true }).fill('rev')
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveText(['Review'])
+    await page.keyboard.press('Escape')
+  })
+})
+
 test.describe('D4 kanban moves with undo (AC-1404)', () => {
   test.beforeAll(async () => {
     await seedPosDatabase({ extraViews: [{ type: 'KANBAN', name: BY_PERSON, by: 'คน' }] })

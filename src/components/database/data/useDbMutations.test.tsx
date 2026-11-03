@@ -235,3 +235,90 @@ describe('useDbMutations (M11-D20)', () => {
     expect(await screen.findByText(th.database.errors.limit.rows(1000))).toBeInTheDocument()
   })
 })
+
+describe('addOption (BR-90, owner bug 2026-11-03: duplicate options, temp ids in chips)', () => {
+  const tags: DbColumnDTO = {
+    id: 'c-tags',
+    type: 'MULTI_SELECT',
+    name: 'ป้าย',
+    config: { options: [{ id: 'o-old', name: 'เดิม', color: 'gray' }] },
+    position: 'a2',
+    version: 1,
+  }
+  /** A slow server that assigns ids, rejects duplicate names and unknown option ids like the real one. */
+  function slowServer() {
+    let col: DbColumnDTO = tags
+    let n = 0
+    const later = <T,>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 15))
+    a.updateDatabaseColumn.mockImplementation(
+      (input: {
+        baseVersion: number
+        config: { options: { id?: string; name: string; color: string }[] }
+      }) => {
+        const names = input.config.options.map((o) => o.name.trim().toLocaleLowerCase())
+        if (new Set(names).size !== names.length)
+          return later({
+            ok: false as const,
+            code: 'VALIDATION',
+            message: th.database.errors.duplicateOption,
+          })
+        col = {
+          ...col,
+          version: col.version + 1,
+          config: {
+            options: input.config.options.map((o) => ({ ...o, id: o.id ?? `o-srv-${++n}` })),
+          } as DbColumnDTO['config'],
+        }
+        return later({ ok: true as const, column: col })
+      },
+    )
+    a.updateDatabaseRow.mockImplementation((input: { rowId: string; cells: Record<string, string[]> }) => {
+      const known = new Set((col.config as { options: { id: string }[] }).options.map((o) => o.id))
+      const ids = input.cells['c-tags'] ?? []
+      if (!ids.every((id) => known.has(id)))
+        return later({ ok: false as const, code: 'VALIDATION', message: 'unknown option' })
+      return later({ ok: true as const, row: row(input.rowId, 'a0', { 'c-tags': ids }, 2) })
+    })
+    return { names: () => (col.config as { options: { name: string }[] }).options.map((o) => o.name) }
+  }
+
+  it('three quick creates (one repeated in another case) → three options once each; the cell ends with server ids', async () => {
+    const server = slowServer()
+    const s = setup()
+    s.qc.setQueryData(qk.database(PAGE, DB), { ...initial(), columns: [title, text, tags] })
+    const m = () => s.hook.result.current.m
+    const ids: string[] = []
+    await act(async () => {
+      ids.push(await m().addOption('c-tags', 'qwer'))
+      ids.push(await m().addOption('c-tags', 'asdf'))
+      ids.push(await m().addOption('c-tags', ' QWER ')) // BR-90: the pending "qwer", not a new option
+      ids.push(await m().addOption('c-tags', 'หกด'))
+      m().updateRow('r1', { cells: { 'c-tags': [ids[0]!, ids[1]!, ids[3]!] } })
+    })
+    expect(ids[2]).toBe(ids[0])
+    // while waiting, every chip has a name (no temp id ever shown)
+    const optionNames = () =>
+      (s.data().columns[2]!.config as { options: { id: string; name: string }[] }).options.map((o) => o.name)
+    expect(optionNames()).toEqual(['เดิม', 'qwer', 'asdf', 'หกด'])
+    await waitFor(() => expect(s.data().rows[0]!.version).toBe(2), { timeout: 2000 })
+    expect(server.names()).toEqual(['เดิม', 'qwer', 'asdf', 'หกด'])
+    expect(optionNames()).toEqual(['เดิม', 'qwer', 'asdf', 'หกด'])
+    const cell = s.data().rows[0]!.cells['c-tags'] as string[]
+    expect(cell.every((id) => id.startsWith('o-srv-'))).toBe(true)
+    expect(a.updateDatabaseColumn).toHaveBeenCalledTimes(3)
+    for (const [input] of a.updateDatabaseColumn.mock.calls as [{ config: { options: { id?: string }[] } }][])
+      expect(input.config.options.filter((o) => o.id === undefined)).toHaveLength(1) // only its own new option
+  })
+
+  it('an existing name in another case answers the existing id without a server call', async () => {
+    slowServer()
+    const s = setup()
+    s.qc.setQueryData(qk.database(PAGE, DB), { ...initial(), columns: [title, text, tags] })
+    let id = ''
+    await act(async () => {
+      id = await s.hook.result.current.m.addOption('c-tags', '  เดิม ')
+    })
+    expect(id).toBe('o-old')
+    expect(a.updateDatabaseColumn).not.toHaveBeenCalled()
+  })
+})

@@ -36,6 +36,23 @@ export function optionsOf(col: Pick<DbColumnModel, 'config'>): readonly SelectOp
   return Array.isArray(options) ? (options as SelectOption[]) : []
 }
 
+/** BR-90: option names are unique per column, compared trimmed and case-insensitively (“Qwer ” = “qwer”). */
+export function optionKey(name: string): string {
+  return name.trim().toLocaleLowerCase()
+}
+
+/** Indexes of options whose name repeats an earlier option's name (BR-90). */
+export function duplicateOptionIndexes(options: readonly Pick<SelectOption, 'name'>[]): number[] {
+  const seen = new Set<string>()
+  const out: number[] = []
+  options.forEach((o, i) => {
+    const k = optionKey(o.name)
+    if (seen.has(k)) out.push(i)
+    else seen.add(k)
+  })
+  return out
+}
+
 /** The NUMBER display config with defaults (decimals as stored, thousands on — FR-1410). */
 export function numberConfigOf(col: Pick<DbColumnModel, 'config'>): NumberConfig {
   const c = col.config as Partial<NumberConfig>

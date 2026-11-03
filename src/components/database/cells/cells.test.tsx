@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import type { CellValue, DbColumnDTO } from '@/lib/contracts/databases'
+import { dbIdMap } from '@/lib/database/optimistic'
 import { C, COLUMNS, makeApi, O, row } from '../fixtures.test.helper'
 import { renderDb } from '../render.test.helper'
 import { CellDisplay } from './CellDisplay'
@@ -32,7 +33,14 @@ describe('CellDisplay', () => {
     const { unmount } = show(column, { [C.num]: '5' })
     expect(screen.getByText('5')).toHaveAttribute('data-align', 'end')
     unmount()
-    render(<CellDisplay column={column} row={row('r', 'x', 'a0', { [C.num]: '7' })} people={people} layout="block" />)
+    render(
+      <CellDisplay
+        column={column}
+        row={row('r', 'x', 'a0', { [C.num]: '7' })}
+        people={people}
+        layout="block"
+      />,
+    )
     expect(screen.getByText('7')).toHaveAttribute('data-align', 'start')
   })
   it('0.1 with 2 decimals shows 0.10', () => {
@@ -153,6 +161,41 @@ describe('CellEditor', () => {
     await userEvent.keyboard('{Tab}')
     expect(onCommit).toHaveBeenCalledWith([O.b, O.a])
     expect(onDone).toHaveBeenCalledWith('tab')
+  })
+  it('multi-select: type, Enter, type, Enter… creates each name once (any case) and stays open; temp ids commit as server ids', async () => {
+    let n = 0
+    const createOption = vi.fn((name: string) => Promise.resolve(`tmp_${++n}_${name}`))
+    const { onCommit, onDone } = edit(colOf(C.tags), {}, { createOption })
+    const box = screen.getByRole('combobox', { name: 'ป้าย' })
+    // the "สร้าง" item is first and highlighted
+    await userEvent.type(box, 'qwer')
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent(th.database.cells.createOption('qwer'))
+    await userEvent.keyboard('{Enter}')
+    expect(box).toHaveValue('')
+    expect(box).toHaveFocus()
+    await userEvent.type(box, 'asdf{Enter}QWER{Enter}ลูกค้า{Enter}')
+    expect(createOption.mock.calls.map((c) => c[0])).toEqual(['qwer', 'asdf'])
+    // chips show names (never ids); Backspace on the empty input drops the last one
+    const chips = () => screen.getAllByTestId('db-option-chip').map((c) => c.textContent)
+    expect(chips().slice(0, 3)).toEqual(['qwer', 'asdf', 'ลูกค้า'])
+    await userEvent.keyboard('{Backspace}')
+    expect(chips().slice(0, 2)).toEqual(['qwer', 'asdf'])
+    // the server answered meanwhile: commit (Esc closes and keeps the picks) sends the server ids
+    dbIdMap.set('tmp_1_qwer', 'o-qwer')
+    dbIdMap.set('tmp_2_asdf', 'o-asdf')
+    await userEvent.keyboard('{Escape}')
+    expect(onCommit).toHaveBeenCalledWith(['o-qwer', 'o-asdf'])
+    expect(onDone).toHaveBeenCalledWith('escape')
+    dbIdMap.clear()
+  })
+  it('select: an existing name in another case is picked, not created; ↑/↓ move the highlight', async () => {
+    const createOption = vi.fn(() => Promise.resolve('o-new'))
+    const { onCommit, onDone } = edit(colOf(C.status), {}, { createOption })
+    const box = screen.getByRole('combobox', { name: 'สถานะ' })
+    await userEvent.type(box, '  กำลังทำ {Enter}')
+    expect(createOption).not.toHaveBeenCalled()
+    expect(onCommit).toHaveBeenCalledWith(O.doing)
+    expect(onDone).toHaveBeenCalledWith('picked')
   })
   it('person: only active people are offered (M11-D33); two people in one cell keep their order', async () => {
     const { onCommit } = edit(colOf(C.people))

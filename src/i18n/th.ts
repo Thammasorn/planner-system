@@ -2355,7 +2355,6 @@ export const th = {
     },
     columnMenu: {
       label: (name: string) => `เมนูคอลัมน์ ${name}`,
-
       rename: 'เปลี่ยนชื่อ',
       changeType: 'เปลี่ยนชนิด',
       config: 'ตั้งค่า',
@@ -2434,7 +2433,10 @@ export const th = {
       invalidNumber: 'ตัวเลขไม่ถูกต้อง',
       invalidDate: 'วันที่ไม่ถูกต้อง',
       invalidUrl: 'ลิงก์ต้องขึ้นต้นด้วย http://, https:// หรือ mailto:',
-      createOption: (name: string) => `สร้าง "${name}"`,
+      createOption: (name: string) => `สร้าง “${name}”`,
+      /** viewers / full columns: nothing can be created, the input only searches */
+      pickOptionOnly: 'ค้นหาตัวเลือก',
+      removeOption: (name: string) => `เอา ${name} ออก`,
       unknownPerson: 'ไม่พบผู้ใช้',
       checked: 'ติ๊กแล้ว',
       unchecked: 'ยังไม่ติ๊ก',
@@ -2562,6 +2564,8 @@ export const th = {
       nesting: 'สร้างฐานข้อมูลในเนื้อหาของแถวไม่ได้',
       emptyName: 'ชื่อต้องไม่ว่าง',
       duplicateIds: 'มีค่าซ้ำกัน',
+      /** BR-90: option names are unique per column (case-insensitive) */
+      duplicateOption: 'มีตัวเลือกชื่อนี้อยู่แล้ว',
       oneTarget: 'ต้องระบุอย่างใดอย่างหนึ่ง',
       restoreExpired: 'กู้คืนไม่ได้ เพราะเกิน 30 วันแล้ว',
     },

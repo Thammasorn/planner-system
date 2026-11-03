@@ -201,3 +201,84 @@
   color: var(--load-over-fg);
   font-size: var(--font-xs);
 }
+
+/* SELECT / MULTI_SELECT editor (owner request 2026-11-03): chips on top, full-width search, the list below */
+.optionsEditor {
+  min-width: 240px;
+  gap: var(--space-2);
+}
+
+.optionsPicked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.pickedChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  margin-left: calc(var(--space-1) * -1);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.chipRemove:hover {
+  background: var(--hover-bg);
+  color: var(--mui-palette-text-primary);
+}
+
+.optionList {
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.optionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.optionItem[data-active='true'] {
+  background: var(--hover-bg);
+}
+
+.optionItem[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.createItem {
+  overflow: hidden;
+  color: var(--mui-palette-text-primary);
+  font-size: var(--font-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionCheck {
+  margin-left: auto;
+  color: var(--mui-palette-primary-main);
+  font-size: var(--font-lg);
+}

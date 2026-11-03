@@ -2,6 +2,7 @@
 // plan/m11 S0.5, M11-D14/D15/D23/D37). Ids are z.uuid() (X47, X86); Thai messages only via th (limits from DB_LIMITS).
 // Shapes only: whether a value fits the column's current type/options is the service's job (domain normalizeCellInput).
 import { th } from '@/i18n/th'
+import { duplicateOptionIndexes } from '@/domain/database/cells'
 import type { FilterOp } from '@/domain/types'
 import { z } from '@/lib/z'
 import { DB_LIMITS as L } from './db-limits'
@@ -85,7 +86,11 @@ export const selectConfigSchema = z
   .object({
     options: z
       .array(selectOptionInputSchema)
-      .max(L.optionsPerColumn, { error: lim.options(L.optionsPerColumn) }),
+      .max(L.optionsPerColumn, { error: lim.options(L.optionsPerColumn) })
+      // BR-90: one option per name (trimmed, case-insensitive) — the client picks the existing one instead
+      .refine((options) => duplicateOptionIndexes(options).length === 0, {
+        error: th.database.errors.duplicateOption,
+      }),
   })
   .strict()
 export const numberConfigSchema = z

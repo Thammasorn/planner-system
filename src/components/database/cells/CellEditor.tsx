@@ -6,19 +6,31 @@
 // Enter / Tab / Shift+Tab confirm, Esc cancels, clicking elsewhere confirms (invalid input is dropped then). Keys are
 // matched on e.code (X49) and ignored while an IME composes. CHECKBOX has no editor (toggled in place).
 import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
+import Check from '@mui/icons-material/Check'
+import Close from '@mui/icons-material/Close'
 import Autocomplete from '@mui/material/Autocomplete'
 import IconButton from '@mui/material/IconButton'
 import Popover from '@mui/material/Popover'
 import TextField from '@mui/material/TextField'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
-import { type JSX, type KeyboardEvent, useMemo, useRef, useState } from 'react'
+import { type JSX, type KeyboardEvent, useId, useMemo, useRef, useState } from 'react'
 import { dayjsToIso, isoToDayjs } from '@/components/common/DateField'
-import { DB_LIMITS, isDbUrl, optionsOf, parseDateInput, parseNumberInput, rowValue } from '@/domain/database'
+import {
+  DB_LIMITS,
+  isDbUrl,
+  optionKey,
+  optionsOf,
+  parseDateInput,
+  parseNumberInput,
+  rowValue,
+} from '@/domain/database'
 import type { ISODate } from '@/domain/types'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
 import { th } from '@/i18n/th'
 import type { CellValue, DbColumnDTO, DbRowDTO } from '@/lib/contracts/databases'
+import { resolveDbId, sameDbId } from '@/lib/database/optimistic'
 import { displayName } from '@/lib/display-name'
+import { OptionChip } from './Chips'
 import s from './cells.module.css'
 import type { PersonLookup } from './people'
 
@@ -229,103 +241,242 @@ function TextEditor(p: Inner): JSX.Element {
   )
 }
 
-const CREATE = '\u0000create:'
+/** Draft placeholder while a create has not answered yet (never committed: addOption answers synchronously). */
+const PENDING = '\u0000pending'
 
 /** Plain keys handled by the picker never reach the grid / panel (Esc closes only the picker); Mod+K etc. pass. */
 function stopKeys(e: KeyboardEvent): void {
   if (!e.metaKey && !e.ctrlKey) e.stopPropagation()
 }
 
+/**
+ * SELECT / MULTI_SELECT editor (owner request 2026-11-03, Notion / AFFiNE-like): the picked chips on top, a full-width
+ * search input, the options below. Typing filters; Enter picks the highlighted item — "สร้าง “…”" is first and
+ * highlighted when no option has that name (BR-90: an existing name, any case, is picked instead of created) — then
+ * MULTI clears the input and stays for the next name (type, Enter, type, Enter…) while SELECT closes; ↑/↓ move the
+ * highlight; Backspace on an empty input drops the last chip; Esc / Tab / clicking elsewhere close and commit.
+ * Temp ids of options created here are shown by name and committed as server ids once known (resolveDbId).
+ */
 function OptionsEditor(p: Inner): JSX.Element {
   const multi = p.column.type === 'MULTI_SELECT'
   const options = optionsOf(p.column)
-  const byId = useMemo(() => new Map(options.map((o) => [o.id, o])), [options])
   const initial = p.current === null ? [] : Array.isArray(p.current) ? p.current : [p.current as string]
   const [draft, setDraft] = useState<string[]>(initial)
   const [input, setInput] = useState(p.initialText ?? '')
+  const [hi, setHi] = useState(0)
   const settled = useRef(false)
+  /** Options created by this editor: id → name, and name key → id (one create per name, however fast Enter is). */
+  // the ref answers event handlers at once (two fast Enters); the state copy renders names and the "สร้าง" item
+  const [known, setKnown] = useState(() => ({
+    names: new Map<string, string>(),
+    ids: new Map<string, string>(),
+  }))
+  const created = useRef(known)
+  const remember = (key: string, id: string | null, name: string) => {
+    const c = created.current
+    const next = { names: new Map(c.names), ids: new Map(c.ids) }
+    if (id === null) next.ids.delete(key)
+    else {
+      next.ids.set(key, id)
+      next.names.set(id, name)
+    }
+    created.current = next
+    setKnown(next)
+  }
+  const listId = useId()
   const canCreate = p.createOption !== undefined && options.length < DB_LIMITS.optionsPerColumn
 
-  const done = (reason: EditorDone, value?: string[]) => {
+  /** The option an id names now (a temp id may have become a server id meanwhile). */
+  const optionOf = (id: string) =>
+    options.find((o) => o.id === id) ?? options.find((o) => o.id === resolveDbId(id))
+  const nameOf = (id: string): string => optionOf(id)?.name ?? known.names.get(id) ?? ''
+  const existingIn = (ids: ReadonlyMap<string, string>, name: string): string | undefined =>
+    options.find((o) => optionKey(o.name) === optionKey(name))?.id ?? ids.get(optionKey(name))
+
+  const q = input.trim()
+  const matches = (name: string) => q === '' || name.toLocaleLowerCase().includes(q.toLocaleLowerCase())
+  // options this editor created that the column does not show yet (their create is still on its way)
+  const fresh = [...known.ids.values()].filter((id) => optionOf(id) === undefined && matches(nameOf(id)))
+  const shown = [...options.filter((o) => matches(o.name)).map((o) => o.id), ...fresh]
+  const offerCreate = canCreate && q !== '' && existingIn(known.ids, q) === undefined
+  type Item = { kind: 'create'; name: string } | { kind: 'option'; id: string }
+  const items: Item[] = [
+    ...(offerCreate ? [{ kind: 'create' as const, name: q }] : []),
+    ...shown.map((id) => ({ kind: 'option' as const, id })),
+  ]
+  const active = Math.min(hi, Math.max(0, items.length - 1))
+  const full = multi && draft.length >= DB_LIMITS.multi
+
+  const finish = (reason: EditorDone, value: string[] | undefined) => {
     if (settled.current) return
     settled.current = true
-    if (reason !== 'escape' && value !== undefined) {
-      p.commit(value.length === 0 ? null : multi ? value : value[0]!)
+    if (value !== undefined) {
+      const ids = value.filter((x) => !x.startsWith(PENDING)).map(resolveDbId)
+      p.commit(ids.length === 0 ? null : multi ? ids : ids[0]!)
     }
     p.onDone(reason)
   }
-  const create = async (name: string): Promise<string | null> => {
+
+  const idFor = (item: Item): string | null => {
+    if (item.kind === 'option') return item.id
+    const existing = existingIn(created.current.ids, item.name)
+    if (existing !== undefined) return existing
     if (!p.createOption) return null
-    const id = await p.createOption(name.trim())
-    return id === '' ? null : id
+    // a placeholder until addOption answers (a microtask later, with the temp id): a second Enter on the same name
+    // in the meantime finds it and never creates twice
+    const key = optionKey(item.name)
+    const placeholder = `${PENDING}${key}`
+    remember(key, placeholder, item.name)
+    void p.createOption(item.name).then((x) => {
+      if (x === '') {
+        remember(key, null, item.name)
+        setDraft((d) => d.filter((y) => y !== placeholder))
+        return
+      }
+      remember(key, x, item.name)
+      setDraft((d) => d.map((y) => (y === placeholder ? x : y)))
+      if (!multi) finish('picked', [x])
+    })
+    return placeholder
   }
 
-  const label = (id: string): string =>
-    id.startsWith(CREATE)
-      ? th.database.cells.createOption(id.slice(CREATE.length))
-      : (byId.get(id)?.name ?? id)
+  const pick = (item: Item, toggle: boolean) => {
+    const id = idFor(item)
+    if (id === null) return
+    if (!multi) {
+      if (!id.startsWith(PENDING)) finish('picked', [id])
+      return
+    }
+    setDraft((d) => {
+      const has = d.some((x) => sameDbId(x, id))
+      if (has) return toggle ? d.filter((x) => !sameDbId(x, id)) : d
+      return d.length >= DB_LIMITS.multi ? d : [...d, id]
+    })
+    setInput('')
+    setHi(0)
+  }
 
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return
+    if (e.code === 'ArrowDown' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHi(Math.min(items.length - 1, active + 1))
+    } else if (e.code === 'ArrowUp' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHi(Math.max(0, active - 1))
+    } else if (isEnter(e)) {
+      e.preventDefault()
+      const item = items[active]
+      // an exact name (any case) always picks that option, whatever is highlighted (BR-90)
+      const exact = q === '' ? undefined : existingIn(created.current.ids, q)
+      if (exact !== undefined) pick({ kind: 'option', id: exact }, false)
+      else if (q !== '' && item) pick(item, false)
+      else if (q === '' && !multi && item) pick(item, false)
+      else finish('enter', draft)
+    } else if (isTab(e)) {
+      e.preventDefault()
+      finish(e.shiftKey ? 'shiftTab' : 'tab', draft)
+    } else if (isEsc(e)) {
+      e.preventDefault()
+      finish('escape', draft) // closes and keeps what was picked (owner, 2026-11-03)
+    } else if (
+      (e.code === 'Backspace' || e.key === 'Backspace') &&
+      input === '' &&
+      multi &&
+      draft.length > 0
+    ) {
+      e.preventDefault()
+      setDraft((d) => d.slice(0, -1))
+    }
+  }
+
+  const optionDomId = (i: number) => `${listId}-${i}`
   return (
-    <div className={s.editor} data-testid="db-cell-editor" onKeyDown={stopKeys}>
-      <Autocomplete<string, boolean, false, false>
-        open
-        multiple={multi}
-        disableCloseOnSelect={multi}
-        size="small"
-        options={options.map((o) => o.id)}
-        value={multi ? draft : (draft[0] ?? null)}
-        inputValue={input}
-        onInputChange={(_e, v, reason) => {
-          if (reason !== 'reset') setInput(v)
+    <div
+      className={`${s.editor} ${s.optionsEditor}`}
+      data-testid="db-cell-editor"
+      onKeyDown={stopKeys}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) finish('blur', draft)
+      }}
+    >
+      {draft.length > 0 ? (
+        <div className={s.optionsPicked}>
+          {draft.map((id) => {
+            const o = optionOf(id)
+            const name = nameOf(id)
+            return (
+              <span key={id} className={s.pickedChip}>
+                <OptionChip option={{ name, color: o?.color ?? 'gray' }} />
+                {multi ? (
+                  <button
+                    type="button"
+                    className={s.chipRemove}
+                    aria-label={th.database.cells.removeOption(name)}
+                    tabIndex={-1}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setDraft((d) => d.filter((x) => x !== id))}
+                  >
+                    <Close fontSize="inherit" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </span>
+            )
+          })}
+        </div>
+      ) : null}
+      <input
+        className={s.input}
+        role="combobox"
+        aria-label={p.label}
+        aria-expanded="true"
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={items.length > 0 ? optionDomId(active) : undefined}
+        autoFocus
+        placeholder={canCreate ? th.database.cells.pickOption : th.database.cells.pickOptionOnly}
+        value={input}
+        onChange={(e) => {
+          setInput(e.target.value)
+          setHi(0)
         }}
-        getOptionLabel={label}
-        getOptionDisabled={(id) => multi && !draft.includes(id) && draft.length >= DB_LIMITS.multi}
-        filterOptions={(ids, state) => {
-          const q = state.inputValue.trim().toLocaleLowerCase()
-          const shown = q === '' ? ids : ids.filter((id) => label(id).toLocaleLowerCase().includes(q))
-          const exact = options.some((o) => o.name.trim().toLocaleLowerCase() === q)
-          return canCreate && q !== '' && !exact ? [...shown, `${CREATE}${state.inputValue.trim()}`] : shown
-        }}
-        onChange={(_e, v) => {
-          const list = Array.isArray(v) ? v : v === null ? [] : [v]
-          const creating = list.find((x) => x.startsWith(CREATE))
-          if (creating) {
-            const name = creating.slice(CREATE.length)
-            void create(name).then((id) => {
-              if (id === null) return
-              const next = list.map((x) => (x === creating ? id : x))
-              if (multi) {
-                setDraft(next)
-                setInput('')
-              } else done('picked', [id])
-            })
-            return
-          }
-          if (multi) setDraft(list)
-          else done('picked', list)
-        }}
-        onClose={(_e, reason) => {
-          if (reason === 'escape') done('escape')
-          else if (reason === 'blur') done('blur', draft)
-        }}
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            autoFocus
-            placeholder={th.database.cells.pickOption}
-            slotProps={{
-              ...params.slotProps,
-              htmlInput: { ...params.slotProps.htmlInput, 'aria-label': p.label },
-            }}
-            onKeyDown={(e) => {
-              if (isTab(e)) {
-                e.preventDefault()
-                done(e.shiftKey ? 'shiftTab' : 'tab', draft)
-              }
-            }}
-          />
-        )}
+        onKeyDown={onKeyDown}
       />
+      <ul
+        id={listId}
+        role="listbox"
+        aria-label={p.label}
+        aria-multiselectable={multi || undefined}
+        className={s.optionList}
+      >
+        {items.map((item, i) => {
+          const selected = item.kind === 'option' && draft.some((x) => sameDbId(x, item.id))
+          const disabled = item.kind === 'option' && full && !selected
+          return (
+            <li
+              key={item.kind === 'create' ? 'create' : item.id}
+              id={optionDomId(i)}
+              role="option"
+              aria-selected={selected}
+              aria-disabled={disabled || undefined}
+              data-active={i === active || undefined}
+              className={s.optionItem}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setHi(i)}
+              onClick={() => {
+                if (!disabled) pick(item, true)
+              }}
+            >
+              {item.kind === 'create' ? (
+                <span className={s.createItem}>{th.database.cells.createOption(item.name)}</span>
+              ) : (
+                <OptionChip option={{ name: nameOf(item.id), color: optionOf(item.id)?.color ?? 'gray' }} />
+              )}
+              {selected ? <Check fontSize="inherit" className={s.optionCheck} aria-hidden="true" /> : null}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
