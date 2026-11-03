@@ -72,6 +72,20 @@ export function formatThaiDateRange(start: ISODate, end: ISODate): string {
   return start === end ? a : `${a} – ${formatThaiDate(end)}`
 }
 
+/**
+ * v3.7 database DATE range (FR-1410): compact Thai span — same month "3–7 พ.ย. 2569", same year
+ * "30 พ.ย. – 4 ธ.ค. 2569", across years "30 ธ.ค. 2569 – 2 ม.ค. 2570"; start = end → "3 พ.ย. 2569".
+ */
+export function formatThaiDateSpan(start: ISODate, end: ISODate): string {
+  if (start === end) return formatThaiDate(start)
+  const [d1, m1, y1] = formatThaiDate(start).split(' ') as [string, string, string]
+  const b = formatThaiDate(end)
+  const [d2, m2, y2] = b.split(' ') as [string, string, string]
+  if (y1 !== y2) return `${formatThaiDate(start)} – ${b}`
+  if (m1 !== m2) return `${d1} ${m1} – ${d2} ${m2} ${y2}`
+  return `${d1}–${d2} ${m2} ${y2}`
+}
+
 /** Leave label used in messages and toasts: the range + " (ครึ่งวันเช้า|ครึ่งวันบ่าย)" for half days. */
 export function formatLeaveRange(start: ISODate, end: ISODate, half: HalfDay | null): string {
   const range = formatThaiDateRange(start, end)

@@ -1,6 +1,6 @@
 // src/domain/database/filter.ts — BR-95 filters (AND only) with the M11-D23 operators, and the values a new
 // row inherits from the open view's equality filters (FR-1423).
-import { isISODate } from '../dates'
+import { isISODate, maxISO, minISO } from '../dates'
 import type {
   CellValue,
   DateRef,
@@ -12,6 +12,7 @@ import type {
   ViewFilter,
 } from '../types'
 import { optionsOf, rowValue, type DbColumnLike } from './cells'
+import { dateSpanOf } from './date'
 import { DB_LIMITS, ME_TOKEN } from './limits'
 import { compareDecimal, parseNumberInput } from './number'
 import { isDbUrl } from './url'
@@ -24,7 +25,7 @@ const OPS: Readonly<Record<DbColumnType, readonly FilterOp[]>> = {
   NUMBER: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'isEmpty', 'isNotEmpty'],
   SELECT: ['isAnyOf', 'isNoneOf', 'isEmpty', 'isNotEmpty'],
   MULTI_SELECT: ['hasAnyOf', 'hasAllOf', 'hasNoneOf', 'isEmpty', 'isNotEmpty'],
-  DATE: ['is', 'before', 'after', 'onOrAfter', 'onOrBefore', 'isEmpty', 'isNotEmpty'],
+  DATE: ['is', 'before', 'after', 'onOrAfter', 'onOrBefore', 'within', 'isEmpty', 'isNotEmpty'],
   CHECKBOX: ['checked', 'unchecked'],
   PERSON: ['hasAny', 'hasNone', 'isEmpty', 'isNotEmpty'],
 }
@@ -43,6 +44,7 @@ type Resolved =
   | { kind: 'number'; v: string }
   | { kind: 'ids'; ids: ReadonlySet<string>; list: readonly string[] }
   | { kind: 'date'; ref: DateRef }
+  | { kind: 'dateRange'; start: ISODate; end: ISODate }
 
 function textNorm(s: string): string {
   return s.trim().toLocaleLowerCase()
@@ -60,6 +62,12 @@ function resolve(f: ViewFilter, col: DbColumnLike): Resolved | null {
   }
   if (col.type === 'DATE') {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+    if (f.op === 'within') {
+      // v3.7: "อยู่ในช่วง" takes a fixed range (either order)
+      if (v.kind !== 'range' || !isISODate(v.start) || !isISODate(v.end)) return null
+      return { kind: 'dateRange', start: minISO(v.start, v.end), end: maxISO(v.start, v.end) }
+    }
+    if (v.kind === 'range') return null
     return v.kind === 'today' || isISODate(v.date) ? { kind: 'date', ref: v } : null
   }
   if (col.type === 'SELECT' || col.type === 'MULTI_SELECT' || col.type === 'PERSON') {
@@ -111,10 +119,17 @@ function matchOne(op: FilterOp, r: Resolved, v: CellValue | null, ctx: DbCtx): b
       if (op === 'gte') return c >= 0
       return op === 'lt' ? c < 0 : c <= 0
     }
+    case 'dateRange': {
+      // within = overlap: a single date inside the range, or a range sharing at least one day with it
+      const span = dateSpanOf(v)
+      return span !== null && span.start <= r.end && span.end >= r.start
+    }
     case 'date': {
-      if (v === null) return false
+      // v3.7: is / before / after / on-or-… compare the start of a range
+      const span = dateSpanOf(v)
+      if (span === null) return false
       const ref = dateOf(r.ref, ctx.today)
-      const d = v as string
+      const d = span.start
       if (op === 'is') return d === ref
       if (op === 'before') return d < ref
       if (op === 'after') return d > ref

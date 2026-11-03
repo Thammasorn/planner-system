@@ -25,6 +25,7 @@ import { th } from '@/i18n/th'
 import type { DbColumnDTO } from '@/lib/contracts/databases'
 import { displayName } from '@/lib/display-name'
 import { FILTER_VALUE_KIND } from '@/lib/schemas/databases'
+import { maxISO, minISO } from '@/domain/dates'
 import { dateEditText } from '../cells/CellEditor'
 import { useDbApi } from '../data/contract'
 import s from '../menus/menus.module.css'
@@ -146,6 +147,7 @@ function FilterValue(p: {
   if (kind === 'none') return null
   if (kind === 'string') return <StringValue {...p} />
   if (kind === 'date') return <DateValue {...p} />
+  if (kind === 'dateRange') return <DateRangeValue {...p} />
   return <IdsValue {...p} />
 }
 
@@ -177,7 +179,8 @@ function stripValue(f: ViewFilter): ViewFilter {
 
 function DateValue(p: { filter: ViewFilter; onChange: (f: ViewFilter) => void }): JSX.Element {
   const today = useDbApi().today
-  const ref = typeof p.filter.value === 'object' && !Array.isArray(p.filter.value) ? p.filter.value : null
+  const raw = typeof p.filter.value === 'object' && !Array.isArray(p.filter.value) ? p.filter.value : null
+  const ref = raw?.kind === 'range' ? null : raw
   const [draft, setDraft] = useState(ref?.kind === 'date' ? dateEditText(ref.date) : '')
   const [error, setError] = useState(false)
   const commit = () => {
@@ -219,6 +222,54 @@ function DateValue(p: { filter: ViewFilter; onChange: (f: ViewFilter) => void })
           slotProps={{ htmlInput: { 'aria-label': th.database.filters.specificDate } }}
         />
       )}
+    </div>
+  )
+}
+
+/** BR-95 (v3.7) "อยู่ในช่วง": two typed dates (either order); both filled → `{ kind: 'range', start, end }`. */
+function DateRangeValue(p: { filter: ViewFilter; onChange: (f: ViewFilter) => void }): JSX.Element {
+  const today = useDbApi().today
+  const v = p.filter.value
+  const ref = typeof v === 'object' && !Array.isArray(v) && v.kind === 'range' ? v : null
+  const [start, setStart] = useState(ref ? dateEditText(ref.start) : '')
+  const [end, setEnd] = useState(ref ? dateEditText(ref.end) : '')
+  const [error, setError] = useState(false)
+  const commit = () => {
+    const a = parseDateInput(start, today)
+    const b = parseDateInput(end, today)
+    if (a === 'invalid' || b === 'invalid') return setError(true)
+    setError(false)
+    p.onChange(
+      a === null || b === null
+        ? stripValue(p.filter)
+        : { ...p.filter, value: { kind: 'range', start: minISO(a, b), end: maxISO(a, b) } },
+    )
+  }
+  const field = (value: string, set: (s: string) => void, label: string) => (
+    <TextField
+      size="small"
+      className={s.grow}
+      value={value}
+      error={error}
+      placeholder={dateEditText(today)}
+      onChange={(e) => set(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        keepKeys(e)
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) commit()
+      }}
+      slotProps={{ htmlInput: { 'aria-label': label } }}
+    />
+  )
+  return (
+    <div className={s.row}>
+      {field(start, setStart, th.database.filters.rangeStart)}
+      {field(end, setEnd, th.database.filters.rangeEnd)}
+      {error ? (
+        <span className={s.hint} role="alert">
+          {th.database.cells.invalidDate}
+        </span>
+      ) : null}
     </div>
   )
 }

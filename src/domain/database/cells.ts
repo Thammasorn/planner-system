@@ -1,7 +1,16 @@
 // src/domain/database/cells.ts — BR-90 cell values: server validation (M11-D15), tolerant reads (FR-1416) and
 // display text (BR-93 step 4). A cell absent from `cells` is empty; the row title lives in `row.title`.
 import { isISODate } from '../dates'
-import type { CellValue, DbColumnModel, DbPersonRef, DbRowModel, NumberConfig, SelectOption } from '../types'
+import type {
+  CellValue,
+  DateRangeValue,
+  DbColumnModel,
+  DbPersonRef,
+  DbRowModel,
+  NumberConfig,
+  SelectOption,
+} from '../types'
+import { dateValueText, isDateRangeValue } from './date'
 import { DB_LIMITS } from './limits'
 import { isCanonicalDecimal } from './number'
 import { isDbUrl } from './url'
@@ -91,6 +100,9 @@ export function normalizeCellInput(
   if (col.type === 'TITLE') return fail('TITLE')
   const value = typeof input === 'string' ? input.trim() : input
   if (isEmptyCell(value)) return okv(null)
+  // v3.7: a DATE cell may hold a range { start, end } (start ≤ end); a single date stays a plain string
+  if (col.type === 'DATE' && typeof value === 'object' && !Array.isArray(value))
+    return isDateRangeValue(value) ? okv({ start: value.start, end: value.end }) : fail('DATE')
   switch (col.type) {
     case 'TEXT':
     case 'URL':
@@ -144,7 +156,8 @@ export function readCell(col: DbColumnLike, stored: unknown): CellValue | null {
     case 'NUMBER':
       return typeof stored === 'string' && isCanonicalDecimal(stored) ? stored : null
     case 'DATE':
-      return typeof stored === 'string' && isISODate(stored) ? stored : null
+      if (typeof stored === 'string') return isISODate(stored) ? stored : null
+      return isDateRangeValue(stored) ? { start: stored.start, end: stored.end } : null
     case 'CHECKBOX':
       return stored === true ? true : null
     case 'SELECT':
@@ -173,7 +186,7 @@ const CHECK_MARK = '✓'
 
 /**
  * BR-93 step 4 display text: option names joined `, `, `✓`, person full names joined `, ` (ids missing from
- * `people` skipped), canonical numbers, ISO dates. Empty → `''`.
+ * `people` skipped), canonical numbers, ISO dates (a range: `2026-11-03 → 2026-11-07`, v3.7). Empty → `''`.
  */
 export function cellText(
   col: DbColumnLike,
@@ -196,6 +209,8 @@ export function cellText(
         .map((id) => ctx.people.get(id)?.name)
         .filter((n): n is string => n !== undefined)
         .join(JOIN)
+    case 'DATE':
+      return dateValueText(v as string | DateRangeValue)
     default:
       return v as string
   }

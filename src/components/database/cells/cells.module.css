@@ -202,6 +202,31 @@
   font-size: var(--font-xs);
 }
 
+/* DATE editor (v3.7): start [→ end] + calendar button, then the "วันสิ้นสุด" switch */
+.dateEditor {
+  min-width: 200px;
+}
+
+.dateEditor[data-ranged='true'] {
+  min-width: 320px;
+}
+
+.rangeArrow {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.rangeSwitch {
+  margin-inline: 0;
+  font-size: var(--font-sm);
+}
+
+.pickPhase {
+  padding: var(--space-2) var(--space-3) 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
 /* SELECT / MULTI_SELECT editor (owner request 2026-11-03): chips on top, full-width search, the list below */
 .optionsEditor {
   min-width: 240px;

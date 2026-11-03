@@ -58,9 +58,15 @@ export type DbColumnType =
   'TITLE' | 'TEXT' | 'NUMBER' | 'SELECT' | 'MULTI_SELECT' | 'DATE' | 'CHECKBOX' | 'PERSON' | 'URL'
 /** SPEC §6.2 db_view_type. */
 export type DbViewType = 'TABLE' | 'KANBAN' | 'CALENDAR'
+/** BR-90 (v3.7): a DATE cell holding a range — `start ≤ end`, both ISODate; a single date stays a plain string. */
+export interface DateRangeValue {
+  start: ISODate
+  end: ISODate
+}
 /** BR-90: TEXT/URL/NUMBER (canonical decimal string, BR-91)/DATE (ISODate, BR-92)/SELECT (option id) = string;
- *  MULTI_SELECT (option ids)/PERSON (user ids) = string[]; CHECKBOX = true (unchecked = key absent). */
-export type CellValue = string | string[] | true
+ *  DATE range = { start, end } (v3.7); MULTI_SELECT (option ids)/PERSON (user ids) = string[]; CHECKBOX = true
+ *  (unchecked = key absent). */
+export type CellValue = string | string[] | true | DateRangeValue
 /** M11-D35: the 10 named option colours (tokens `--option-<name>-bg/-fg`). */
 export type OptionColor =
   'gray' | 'brown' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'red' | 'teal'
@@ -115,16 +121,23 @@ export type FilterOp =
   | 'after'
   | 'onOrAfter'
   | 'onOrBefore'
+  | 'within'
   | 'checked'
   | 'unchecked'
   | 'hasAny'
   | 'hasNone'
 /** Date filter reference: a fixed date or "today" (resolved with DbCtx.today). */
 export type DateRef = { kind: 'date'; date: ISODate } | { kind: 'today' }
+/** BR-95 (v3.7) `within` reference: a fixed inclusive range. */
+export interface DateRangeRef {
+  kind: 'range'
+  start: ISODate
+  end: ISODate
+}
 export interface ViewFilter {
   columnId: string
   op: FilterOp
-  value?: string | string[] | DateRef
+  value?: string | string[] | DateRef | DateRangeRef
 }
 export interface ViewSort {
   columnId: string

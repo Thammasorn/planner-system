@@ -1210,7 +1210,8 @@ export const th = {
       /** M6.1-D9 (FR-680): server rejects sub-page blocks in a TASK body */
       subpageNotAllowed: 'เนื้อหางานแทรกหน้าย่อยไม่ได้ — ใช้ @ เพื่อลิงก์ไปยังหน้าเอกสาร',
       /** FR-1453 / FR-1475 (rev. 2026-11-03): a row body at the deepest database level takes no database block */
-      databaseNotAllowed: (max: number) => `ฐานข้อมูลซ้อนกันได้ไม่เกิน ${max} ชั้น — แทรกฐานข้อมูลในแถวนี้ไม่ได้`,
+      databaseNotAllowed: (max: number) =>
+        `ฐานข้อมูลซ้อนกันได้ไม่เกิน ${max} ชั้น — แทรกฐานข้อมูลในแถวนี้ไม่ได้`,
     },
     /** M11 (FR-1453): empty-document placeholder of a row body */
     rowPlaceholder: 'เพิ่มเนื้อหา… พิมพ์ / เพื่อแทรก',
@@ -2279,7 +2280,8 @@ export const th = {
     titlePlaceholder: DB_UNTITLED,
     titleLabel: 'ชื่อฐานข้อมูล',
     dnd: {
-      instructions: 'กด Space หรือ Enter เพื่อหยิบ ใช้ลูกศรเพื่อย้าย แล้วกด Space หรือ Enter เพื่อวาง กด Esc เพื่อยกเลิก',
+      instructions:
+        'กด Space หรือ Enter เพื่อหยิบ ใช้ลูกศรเพื่อย้าย แล้วกด Space หรือ Enter เพื่อวาง กด Esc เพื่อยกเลิก',
       start: (name: string) => `หยิบ ${name}`,
       over: (name: string, over: string) => `${name} อยู่ที่ ${over}`,
       end: (name: string) => `วาง ${name} แล้ว`,
@@ -2408,6 +2410,8 @@ export const th = {
       column: 'คอลัมน์ที่กรอง',
       op: 'เงื่อนไข',
       specificDate: 'วันที่ที่ระบุ',
+      rangeStart: 'ตั้งแต่วันที่',
+      rangeEnd: 'ถึงวันที่',
       ops: {
         contains: 'มีคำว่า',
         notContains: 'ไม่มีคำว่า',
@@ -2430,6 +2434,7 @@ export const th = {
         after: 'หลัง',
         onOrAfter: 'ตั้งแต่',
         onOrBefore: 'ถึง',
+        within: 'อยู่ในช่วง',
         checked: 'ติ๊กแล้ว',
         unchecked: 'ยังไม่ติ๊ก',
         hasAny: 'มีคนใดคนหนึ่งใน',
@@ -2454,6 +2459,13 @@ export const th = {
       openLink: 'เปิดลิงก์',
       clear: 'ล้างค่า',
       pickDate: 'เลือกวันที่',
+      // v3.7 per-cell date ranges (owner 2026-11-03)
+      endDateSwitch: 'วันสิ้นสุด',
+      startDate: 'วันเริ่ม',
+      endDate: 'วันสิ้นสุด',
+      endBeforeStart: 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม',
+      pickingStart: 'เลือกวันเริ่ม',
+      pickingEnd: 'เลือกวันสิ้นสุด',
     },
     kanban: {
       label: 'คัมบัง',
@@ -2505,6 +2517,11 @@ export const th = {
       createDateColumn: 'สร้างคอลัมน์ "วันที่"',
       monthEmpty: 'ไม่มีแถวในเดือนนี้',
       openCard: (title: string) => `เปิด ${title}`,
+      // v3.7 range bars (BR-97)
+      openBar: (title: string, span: string) => `เปิด ${title} · ${span}`,
+      barKeysHint: 'Alt+ลูกศรซ้าย/ขวา = เลื่อนทั้งช่วง · Alt+Shift+ลูกศร = ปรับวันสิ้นสุด',
+      resizeStart: (title: string) => `ปรับวันเริ่มของ ${title}`,
+      resizeEnd: (title: string) => `ปรับวันสิ้นสุดของ ${title}`,
     },
     panel: {
       label: 'รายละเอียดแถว',

@@ -1,7 +1,7 @@
 // src/domain/database/convert.ts — BR-93 column type change (FR-1414, M11-D16, AC-1406).
 import type { CellValue, ColumnConfig, DbColumnType, DbRowModel, ISODate, SelectOption } from '../types'
 import { cellText, readCell, type DbColumnLike, optionsOf } from './cells'
-import { parseDateInput } from './date'
+import { parseDateCellInput } from './date'
 import { DB_LIMITS, DbDomainError, OPTION_COLORS } from './limits'
 import { compareDecimal, parseNumberInput } from './number'
 import { isDbUrl } from './url'
@@ -80,7 +80,8 @@ function textTo(to: Pick<DbColumnLike, 'type' | 'config'>, text: string, p: Prep
       return r.ok ? r.value : null
     }
     case 'DATE': {
-      const d = parseDateInput(text, p.today)
+      // v3.7: two dates joined by → / – etc. become a range (BR-93)
+      const d = parseDateCellInput(text, p.today)
       return d === 'invalid' ? null : d
     }
     case 'CHECKBOX':

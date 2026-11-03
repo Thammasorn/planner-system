@@ -443,6 +443,95 @@ test.describe('D5 calendar (AC-1405)', () => {
   })
 })
 
+test.describe('D5b date ranges per cell (owner 2026-11-03, BR-90/97)', () => {
+  test.beforeAll(async () => {
+    await seedPosDatabase()
+  })
+
+  test('“วันสิ้นสุด” makes งบเกิน a range; the calendar draws a bar that drags (move) and resizes (end edge)', async ({
+    page,
+  }) => {
+    await loginAs(page, 'cindy')
+    const { db } = await openSeeded(page)
+    // table: the switch adds an end date → one range value, shown "12–14 พ.ย. 2569"
+    const cell = await db.cell('งบเกิน', 'วันที่')
+    await cell.dblclick()
+    await page.getByRole('switch', { name: T.cells.endDateSwitch }).click()
+    const end = page.getByRole('textbox', { name: `วันที่ · ${T.cells.endDate}` })
+    await expect(end).toBeFocused()
+    await end.fill('14/11/2569')
+    const saved = waitForServerAction(page)
+    await end.press('Enter')
+    await saved
+    await expect(cell).toContainText('12–14 พ.ย. 2569')
+    const dateColId = async () => {
+      const rows = await liveRowsOf(await db.id())
+      const hit = rows.find((r) => r.title === 'งบเกิน')!
+      return {
+        hit,
+        value: Object.values(hit.cells).find((v) => typeof v === 'object' && v !== null && !Array.isArray(v)),
+      }
+    }
+    expect((await dateColId()).value).toEqual({ start: '2026-11-12', end: '2026-11-14' })
+
+    // calendar: a bar over 12–14, the single date stays a card
+    await db.tab('ปฏิทิน').click()
+    await db.calendar().getByRole('button', { name: T.calendar.next, exact: true }).click()
+    await db.calendar().getByRole('button', { name: T.calendar.next, exact: true }).click()
+    await expect(db.calendar()).toContainText('พฤศจิกายน 2569')
+    await expect(db.card('ลูกค้าส่ง spec ช้า')).toBeVisible()
+    const bar = db.calendar().locator('[data-testid="db-range-bar"]')
+    await expect(bar).toHaveCount(1)
+    await expect(bar).toHaveAttribute('data-start', '2026-11-12')
+    await expect(bar).toHaveAttribute('data-end', '2026-11-14')
+
+    const dayBox = async (d: string) => {
+      const b = await db.calendar().locator(`[role="gridcell"][data-date="${d}"]`).boundingBox()
+      if (!b) throw new Error(`day ${d} not laid out`)
+      return b
+    }
+    // drag the bar body from 13 Nov to 20 Nov → 19–21 พ.ย. (length kept)
+    const from = await dayBox('2026-11-13')
+    const barBox = (await bar.boundingBox())!
+    const to = await dayBox('2026-11-20')
+    await page.mouse.move(from.x + from.width / 2, barBox.y + barBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(from.x + from.width / 2 + 20, barBox.y + barBox.height / 2, { steps: 3 })
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height - 8, { steps: 8 })
+    const moved = waitForServerAction(page)
+    await page.mouse.up()
+    await moved
+    await expect(bar).toHaveAttribute('data-start', '2026-11-19')
+    await expect(bar).toHaveAttribute('data-end', '2026-11-21')
+    await expect(toastWith(page, T.toasts.moved)).toBeVisible()
+
+    // drag the end edge to 25 Nov → 19–25 พ.ย.
+    const edge = bar.locator('[data-edge="end"]')
+    const e = (await edge.boundingBox())!
+    const target = await dayBox('2026-11-25')
+    await page.mouse.move(e.x + e.width / 2, e.y + e.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height - 8, { steps: 8 })
+    const resized = waitForServerAction(page)
+    await page.mouse.up()
+    await resized
+    await expect(bar).toHaveAttribute('data-end', '2026-11-25')
+    await expect(bar).toHaveAttribute('data-start', '2026-11-19')
+
+    // keyboard: Alt+← moves the whole range a day
+    const main = bar.getByRole('button', { name: /^เปิด งบเกิน/ })
+    await main.focus()
+    const keyed = waitForServerAction(page)
+    await page.keyboard.press('Alt+ArrowLeft')
+    await keyed
+    await expect(bar).toHaveAttribute('data-start', '2026-11-18')
+    await expect(bar).toHaveAttribute('data-end', '2026-11-24')
+    await expect
+      .poll(async () => (await dateColId()).value)
+      .toEqual({ start: '2026-11-18', end: '2026-11-24' })
+  })
+})
+
 test.describe('D6/D7 type change, deletes and undo without dialogs (AC-1406, AC-1407)', () => {
   test.beforeAll(async () => {
     await seedPosDatabase()

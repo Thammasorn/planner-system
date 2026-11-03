@@ -40,11 +40,13 @@ export const optionColorSchema = z.enum([
 
 // ── cells (BR-90) ──
 
-/** string (TEXT/URL/NUMBER/DATE/SELECT) · string[] (MULTI_SELECT/PERSON, ≤ 20) · true (CHECKBOX). */
+/** string (TEXT/URL/NUMBER/DATE/SELECT) · string[] (MULTI_SELECT/PERSON, ≤ 20) · true (CHECKBOX) · { start, end }
+ *  (a DATE range, v3.7 — whether the dates exist and start ≤ end is normalizeCellInput's job). */
 export const cellValueSchema = z.union([
   z.string().max(L.text, { error: lim.text(L.text) }),
   z.array(z.string().min(1).max(L.idMax)).max(Math.max(L.multi, L.people), { error: lim.multi(L.multi) }),
   z.literal(true),
+  z.object({ start: z.string().max(10), end: z.string().max(10) }).strict(),
 ])
 /** updateDatabaseRow `cells`: only sent keys change; `null` clears (M11-D15). ≤ one key per column. */
 export const cellsPatchSchema = z
@@ -132,6 +134,7 @@ export const FILTER_OPS = [
   'after',
   'onOrAfter',
   'onOrBefore',
+  'within',
   'checked',
   'unchecked',
   'hasAny',
@@ -139,7 +142,7 @@ export const FILTER_OPS = [
 ] as const satisfies readonly FilterOp[]
 
 /** The value shape each operator takes (an absent value = an incomplete filter, skipped by the domain). */
-export type FilterValueKind = 'none' | 'string' | 'ids' | 'date'
+export type FilterValueKind = 'none' | 'string' | 'ids' | 'date' | 'dateRange'
 export const FILTER_VALUE_KIND: Readonly<Record<FilterOp, FilterValueKind>> = {
   contains: 'string',
   notContains: 'string',
@@ -162,6 +165,7 @@ export const FILTER_VALUE_KIND: Readonly<Record<FilterOp, FilterValueKind>> = {
   after: 'date',
   onOrAfter: 'date',
   onOrBefore: 'date',
+  within: 'dateRange',
   checked: 'none',
   unchecked: 'none',
   hasAny: 'ids',
@@ -172,6 +176,10 @@ export const dateRefSchema = z.union([
   z.object({ kind: z.literal('date'), date: z.iso.date() }).strict(),
   z.object({ kind: z.literal('today') }).strict(),
 ])
+/** BR-95 (v3.7) `within`: a fixed inclusive range. */
+export const dateRangeRefSchema = z
+  .object({ kind: z.literal('range'), start: z.iso.date(), end: z.iso.date() })
+  .strict()
 const filterStringSchema = z.string().max(L.text, { error: lim.text(L.text) })
 const filterIdsSchema = z.array(z.string().min(1).max(L.idMax)).max(L.filterValues)
 
@@ -179,7 +187,7 @@ export const viewFilterSchema = z
   .object({
     columnId: z.uuid(),
     op: z.enum(FILTER_OPS),
-    value: z.union([filterStringSchema, filterIdsSchema, dateRefSchema]).optional(),
+    value: z.union([filterStringSchema, filterIdsSchema, dateRefSchema, dateRangeRefSchema]).optional(),
   })
   .strict()
   .superRefine((f, ctx) => {
@@ -191,8 +199,10 @@ export const viewFilterSchema = z
         : kind === 'ids'
           ? Array.isArray(f.value)
           : kind === 'date'
-            ? typeof f.value === 'object' && !Array.isArray(f.value)
-            : false
+            ? typeof f.value === 'object' && !Array.isArray(f.value) && f.value.kind !== 'range'
+            : kind === 'dateRange'
+              ? typeof f.value === 'object' && !Array.isArray(f.value) && f.value.kind === 'range'
+              : false
     if (!ok) ctx.addIssue({ code: 'custom', path: ['value'], message: th.database.errors.badValue })
   })
 export const viewSortSchema = z.object({ columnId: z.uuid(), dir: z.enum(['ASC', 'DESC']) }).strict()

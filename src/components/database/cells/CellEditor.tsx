@@ -9,22 +9,26 @@ import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
 import Check from '@mui/icons-material/Check'
 import Close from '@mui/icons-material/Close'
 import Autocomplete from '@mui/material/Autocomplete'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Popover from '@mui/material/Popover'
+import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
-import { type JSX, type KeyboardEvent, useId, useMemo, useRef, useState } from 'react'
+import { type JSX, type KeyboardEvent, type RefObject, useId, useMemo, useRef, useState } from 'react'
 import { dayjsToIso, isoToDayjs } from '@/components/common/DateField'
 import {
   DB_LIMITS,
   isDbUrl,
   optionKey,
   optionsOf,
+  parseDateCellInput,
   parseDateInput,
   parseNumberInput,
   rowValue,
 } from '@/domain/database'
-import type { ISODate } from '@/domain/types'
+import { compareISO } from '@/domain/dates'
+import type { DateRangeValue, ISODate } from '@/domain/types'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
 import { th } from '@/i18n/th'
 import type { CellValue, DbColumnDTO, DbRowDTO } from '@/lib/contracts/databases'
@@ -63,8 +67,15 @@ export function dateEditText(iso: string): string {
   return `${d}/${m}/${y + 543}`
 }
 
+const isRange = (v: CellValue | null): v is DateRangeValue =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
 const sameValue = (a: CellValue | null, b: CellValue | null): boolean =>
-  Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, i) => x === b[i]) : a === b
+  Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((x, i) => x === b[i])
+    : isRange(a) && isRange(b)
+      ? a.start === b.start && a.end === b.end
+      : a === b
 
 export function CellEditor(p: CellEditorProps): JSX.Element {
   const current = p.column.type === 'TITLE' ? p.row.title : rowValue(p.row, p.column)
@@ -84,6 +95,8 @@ export function CellEditor(p: CellEditorProps): JSX.Element {
       return <PersonEditor {...p} commit={commit} current={current} />
     case 'CHECKBOX':
       return <></>
+    case 'DATE':
+      return <DateEditor {...p} commit={commit} current={current} />
     default:
       return <TextEditor {...p} commit={commit} current={current} />
   }
@@ -93,7 +106,7 @@ type Inner = CellEditorProps & { commit: (v: CellValue | null) => void; current:
 
 type Parsed = { ok: true; value: CellValue | null } | { ok: false; error: string }
 
-function parseText(type: DbColumnDTO['type'], text: string, today: ISODate): Parsed {
+function parseText(type: DbColumnDTO['type'], text: string): Parsed {
   switch (type) {
     case 'TITLE':
       return { ok: true, value: text.trim() }
@@ -108,10 +121,6 @@ function parseText(type: DbColumnDTO['type'], text: string, today: ISODate): Par
       if (t === '') return { ok: true, value: null }
       return isDbUrl(t) ? { ok: true, value: t } : { ok: false, error: th.database.cells.invalidUrl }
     }
-    case 'DATE': {
-      const r = parseDateInput(text, today)
-      return r === 'invalid' ? { ok: false, error: th.database.cells.invalidDate } : { ok: true, value: r }
-    }
     default:
       return { ok: true, value: null }
   }
@@ -119,12 +128,9 @@ function parseText(type: DbColumnDTO['type'], text: string, today: ISODate): Par
 
 function TextEditor(p: Inner): JSX.Element {
   const { type } = p.column
-  const start =
-    p.initialText ??
-    (p.current === null ? '' : type === 'DATE' ? dateEditText(p.current as string) : (p.current as string))
+  const start = p.initialText ?? (p.current === null ? '' : (p.current as string))
   const [draft, setDraft] = useState(start)
   const [error, setError] = useState<string | null>(null)
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const settled = useRef(false)
 
@@ -135,7 +141,7 @@ function TextEditor(p: Inner): JSX.Element {
       p.onDone('escape')
       return
     }
-    const r = parseText(type, text, p.today)
+    const r = parseText(type, text)
     if (!r.ok) {
       if (reason === 'blur') {
         settled.current = true
@@ -179,7 +185,6 @@ function TextEditor(p: Inner): JSX.Element {
     },
     onKeyDown,
     onBlur: (e: { relatedTarget: EventTarget | null }) => {
-      if (anchor !== null) return
       if (e.relatedTarget instanceof Node && wrapRef.current?.contains(e.relatedTarget)) return
       finish('blur')
     },
@@ -201,42 +206,217 @@ function TextEditor(p: Inner): JSX.Element {
             inputMode={type === 'NUMBER' ? 'decimal' : type === 'URL' ? 'url' : undefined}
           />
         )}
-        {type === 'DATE' ? (
-          <IconButton
-            size="small"
-            aria-label={th.database.cells.pickDate}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => setAnchor(e.currentTarget)}
-          >
-            <CalendarMonthOutlined fontSize="small" />
-          </IconButton>
-        ) : null}
       </div>
       {error !== null ? (
         <span className={s.error} role="alert">
           {error}
         </span>
       ) : null}
-      {type === 'DATE' ? (
-        <Popover
-          open={anchor !== null}
-          anchorEl={anchor}
-          onClose={() => setAnchor(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+    </div>
+  )
+}
+
+/**
+ * DATE editor (BR-90/92, v3.7 owner request 2026-11-03 — Notion-like per-cell ranges): a typed date (D/M/พ.ศ., ISO,
+ * or a whole range "3/11 → 7/11") + the calendar, and the "วันสิ้นสุด" switch. Switch on → a second input for the end
+ * date and the calendar picks the start, then the end (a click before the start restarts the range there); end ≥
+ * start. Switch off → a single date. Tab in the start input of a range goes to the end input; elsewhere Enter / Tab
+ * / clicking outside confirm and Esc cancels, like every other text-like cell editor (FR-1421).
+ */
+function DateEditor(p: Inner): JSX.Element {
+  const t = th.database.cells
+  const cur = p.current as string | DateRangeValue | null
+  const curStart = cur === null ? null : typeof cur === 'string' ? cur : cur.start
+  const [ranged, setRanged] = useState(cur !== null && typeof cur === 'object')
+  const [startText, setStartText] = useState(p.initialText ?? (curStart ? dateEditText(curStart) : ''))
+  const [endText, setEndText] = useState(cur !== null && typeof cur === 'object' ? dateEditText(cur.end) : '')
+  const [error, setError] = useState<string | null>(null)
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [phase, setPhase] = useState<'start' | 'end'>('start')
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const startRef = useRef<HTMLInputElement>(null)
+  const endRef = useRef<HTMLInputElement>(null)
+  const settled = useRef(false)
+
+  const parse = (a: string, b: string, isRanged: boolean): Parsed => {
+    const start = parseDateCellInput(a, p.today)
+    if (start === 'invalid') return { ok: false, error: t.invalidDate }
+    if (start !== null && typeof start === 'object') return { ok: true, value: start } // typed "3/11 → 7/11"
+    if (!isRanged) return { ok: true, value: start }
+    const end = parseDateInput(b, p.today)
+    if (end === 'invalid') return { ok: false, error: t.invalidDate }
+    if (start === null || end === null) return { ok: true, value: start ?? end }
+    if (compareISO(end, start) < 0) return { ok: false, error: t.endBeforeStart }
+    return { ok: true, value: { start, end } }
+  }
+
+  const finish = (reason: EditorDone, texts?: { a: string; b: string; ranged: boolean }) => {
+    if (settled.current) return
+    if (reason === 'escape') {
+      settled.current = true
+      p.onDone('escape')
+      return
+    }
+    const x = texts ?? { a: startText, b: endText, ranged }
+    const r = parse(x.a, x.b, x.ranged)
+    if (!r.ok) {
+      if (reason === 'blur') {
+        settled.current = true
+        p.onDone('escape') // invalid input is dropped when focus leaves
+        return
+      }
+      setError(r.error)
+      return
+    }
+    settled.current = true
+    p.commit(r.value)
+    p.onDone(reason)
+  }
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.nativeEvent.isComposing) return
+    if (isEsc(e)) {
+      e.preventDefault()
+      e.stopPropagation()
+      finish('escape')
+    } else if (isEnter(e)) {
+      e.preventDefault()
+      e.stopPropagation()
+      finish('enter')
+    } else if (isTab(e)) {
+      e.preventDefault()
+      e.stopPropagation()
+      if (ranged && !e.shiftKey && e.target === startRef.current) endRef.current?.focus()
+      else if (ranged && e.shiftKey && e.target === endRef.current) startRef.current?.focus()
+      else finish(e.shiftKey ? 'shiftTab' : 'tab')
+    }
+  }
+
+  const toggle = (on: boolean) => {
+    setRanged(on)
+    setError(null)
+    setPhase('start')
+    if (on) {
+      if (endText === '') setEndText(startText)
+      requestAnimationFrame(() => endRef.current?.focus())
+    } else setEndText('')
+  }
+
+  const onPick = (iso: ISODate) => {
+    setError(null)
+    if (!ranged) {
+      setAnchor(null)
+      finish('picked', { a: iso, b: '', ranged: false })
+      return
+    }
+    const startIso = parseDateInput(startText, p.today)
+    if (phase === 'start' || startIso === null || startIso === 'invalid' || compareISO(iso, startIso) < 0) {
+      setStartText(dateEditText(iso))
+      setPhase('end')
+      return
+    }
+    setEndText(dateEditText(iso))
+    setAnchor(null)
+    finish('picked', { a: startText, b: dateEditText(iso), ranged: true })
+  }
+
+  const calendarValue = (() => {
+    const r = parseDateInput(phase === 'end' && ranged ? endText || startText : startText, p.today)
+    return isoToDayjs(r === 'invalid' || r === null ? null : r)
+  })()
+  const input = (
+    ref: RefObject<HTMLInputElement | null>,
+    value: string,
+    set: (v: string) => void,
+    label: string,
+    autoFocus: boolean,
+  ) => (
+    <input
+      ref={ref}
+      className={s.input}
+      type="text"
+      value={value}
+      autoFocus={autoFocus}
+      aria-label={label}
+      aria-invalid={error !== null}
+      maxLength={DB_LIMITS.text}
+      onChange={(e) => {
+        set(e.target.value)
+        setError(null)
+      }}
+      onFocus={(e) => {
+        const n = e.target.value.length
+        e.target.setSelectionRange(n, n)
+      }}
+    />
+  )
+  return (
+    <div
+      ref={wrapRef}
+      className={`${s.editor} ${s.dateEditor}`}
+      data-testid="db-cell-editor"
+      data-ranged={ranged || undefined}
+      onKeyDown={onKeyDown}
+      onBlur={(e) => {
+        if (anchor !== null) return
+        if (e.relatedTarget instanceof Node && wrapRef.current?.contains(e.relatedTarget)) return
+        finish('blur')
+      }}
+    >
+      <div className={s.editorRow}>
+        {input(startRef, startText, setStartText, ranged ? `${p.label} · ${t.startDate}` : p.label, true)}
+        {ranged ? (
+          <>
+            <span className={s.rangeArrow} aria-hidden="true">
+              →
+            </span>
+            {input(endRef, endText, setEndText, `${p.label} · ${t.endDate}`, false)}
+          </>
+        ) : null}
+        <IconButton
+          size="small"
+          aria-label={t.pickDate}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            setPhase('start')
+            setAnchor(e.currentTarget)
+          }}
         >
-          <DateCalendar
-            value={(() => {
-              const r = parseDateInput(draft, p.today)
-              return isoToDayjs(r === 'invalid' || r === null ? null : r)
-            })()}
-            onChange={(d) => {
-              const iso = dayjsToIso(d)
-              setAnchor(null)
-              if (iso) finish('picked', iso)
-            }}
-          />
-        </Popover>
+          <CalendarMonthOutlined fontSize="small" />
+        </IconButton>
+      </div>
+      <FormControlLabel
+        className={s.rangeSwitch}
+        control={<Switch size="small" checked={ranged} onChange={(e) => toggle(e.target.checked)} />}
+        label={t.endDateSwitch}
+      />
+      {error !== null ? (
+        <span className={s.error} role="alert">
+          {error}
+        </span>
       ) : null}
+      <Popover
+        open={anchor !== null}
+        anchorEl={anchor}
+        onClose={() => {
+          setAnchor(null)
+          startRef.current?.focus()
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        {ranged ? (
+          <div className={s.pickPhase} role="status">
+            {phase === 'start' ? t.pickingStart : t.pickingEnd}
+          </div>
+        ) : null}
+        <DateCalendar
+          value={calendarValue}
+          onChange={(d) => {
+            const iso = dayjsToIso(d)
+            if (iso) onPick(iso)
+          }}
+        />
+      </Popover>
     </div>
   )
 }

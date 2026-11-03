@@ -156,6 +156,85 @@
   outline-offset: -2px;
 }
 
+/* v3.7 range bars (BR-97): absolutely placed in their first day cell, spanning --span cells (+ 1 px borders), one
+   24 px lane each below the day head; the cards start below the week's lanes (--lanes on the week row). */
+.laneSpace {
+  flex: none;
+  height: calc(var(--lanes) * 24px - 4px);
+}
+
+.bar {
+  position: absolute;
+  z-index: 1;
+  left: 2px;
+  top: calc(32px + var(--lane) * 24px);
+  width: calc(var(--span) * 100% + (var(--span) - 1) * 1px - 4px);
+  height: 20px;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--border-month);
+  border-inline-start: 4px solid var(--brand-blue);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--mui-palette-text-primary);
+  font-size: var(--font-xs);
+  touch-action: none;
+}
+
+.bar:hover,
+.bar:focus-within {
+  background: var(--hover-bg);
+}
+
+.bar[data-cut-left='true'] {
+  border-inline-start-width: 1px;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.bar[data-cut-right='true'] {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.barMain {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.barText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barEdge {
+  flex: none;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.barEdge:hover {
+  background: var(--border-month);
+}
+
+.barMain:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+
 .more {
   align-self: flex-start;
   padding: 0 var(--space-1);

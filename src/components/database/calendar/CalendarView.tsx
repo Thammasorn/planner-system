@@ -6,6 +6,9 @@
 // "ไม่มีวันที่ (N)" list beside (below in a narrow block). Cards move by dnd-kit (pointer or keyboard) onto a day / the
 // list, or by the card's ⋯ "ย้ายไปวันที่…" (date picker) / "เอาวันที่ออก" — the only way on phones, where the month is a
 // day list. Database data only: no leave, holidays or milestones (FR-1445, BR-98). Viewer state: the shown month.
+// v3.7 (BR-97, owner 2026-11-03): a cell holding a range is a multi-day bar laid out by the plan calendar's lane helper
+// (src/lib/plan-calendar monthBars, ≤ 3 lanes per week, the rest in "+N"); dragging the bar moves the whole range
+// (length kept), dragging its start/end edge resizes it, and Alt+←/→ (move) / Alt+Shift+←/→ (end) do it by keyboard.
 import {
   DndContext,
   type DragEndEvent,
@@ -35,14 +38,33 @@ import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Popover from '@mui/material/Popover'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
-import { type JSX, type PointerEventHandler, useMemo, useState } from 'react'
+import {
+  type CSSProperties,
+  type JSX,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type PointerEventHandler,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { dayjsToIso, isoToDayjs } from '@/components/common/DateField'
-import { calendarMonth, liveConfig, rowValue, valuesFromFilters } from '@/domain/database'
-import { isoWeekday } from '@/domain/dates'
-import type { ISODate } from '@/domain/types'
+import {
+  calendarMonth,
+  dateSpanOf,
+  liveConfig,
+  resizeDateRange,
+  rowValue,
+  shiftDateRange,
+  valuesFromFilters,
+} from '@/domain/database'
+import { diffDays, isoWeekday } from '@/domain/dates'
+import type { DateRangeValue, ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { CellValue, DbColumnDTO, DbRowDTO, DbViewDTO } from '@/lib/contracts/databases'
-import { formatThaiDate, formatThaiMonthYear } from '@/lib/format'
+import { formatThaiDate, formatThaiDateSpan, formatThaiMonthYear } from '@/lib/format'
+import { CALENDAR_MAX_LANES, monthBars, type BarSegment } from '@/lib/plan-calendar/bars'
 import { useDbApi } from '../data/contract'
 import { useRowMenu } from '../menus/RowMenu'
 import { dndAccessibility, useDbSensors } from '../dnd'
@@ -77,6 +99,47 @@ const shift = (m: { year: number; month: number }, by: number) => {
 const longDate = (d: ISODate) =>
   `${th.database.calendar.weekdaysLong[isoWeekday(d) - 1]} ${formatThaiDate(d, 'long')}`
 
+/** A range cell value (v3.7), else null. */
+const rangeOf = (v: CellValue | null): DateRangeValue | null =>
+  typeof v === 'object' && v !== null && !Array.isArray(v) ? v : null
+
+/**
+ * BR-97 (v3.7): the range a bar gesture produces — `move` shifts the whole range by the days between the grabbed
+ * day and the day under the pointer (length kept); `start` / `end` move that edge to the day (never past the other).
+ */
+export function dragRange(
+  mode: 'move' | 'start' | 'end',
+  orig: DateRangeValue,
+  grab: ISODate,
+  over: ISODate,
+): DateRangeValue {
+  return mode === 'move' ? shiftDateRange(orig, diffDays(grab, over)) : resizeDateRange(orig, mode, over)
+}
+
+/** BR-97 (v3.7) keyboard on a focused bar: Alt+←/→ move the range a day, Alt+Shift+←/→ move its end; else null. */
+export function rangeKey(
+  e: Pick<KeyboardEvent, 'key' | 'altKey' | 'shiftKey' | 'metaKey' | 'ctrlKey'>,
+  r: DateRangeValue,
+): DateRangeValue | null {
+  if (!e.altKey || e.metaKey || e.ctrlKey) return null
+  const by = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+  if (by === 0) return null
+  if (!e.shiftKey) return shiftDateRange(r, by)
+  const next = resizeDateRange(r, 'end', shiftDateRange(r, by).end)
+  return next.end === r.end ? null : next
+}
+
+/** The day cell under a viewport point, skipping range bars (they overlay the days). */
+function dayAt(x: number, y: number, root: HTMLElement | null): ISODate | null {
+  if (!root || typeof document.elementsFromPoint !== 'function') return null
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (!root.contains(el) || el.closest('[data-range-bar]')) continue
+    const cell = el.closest<HTMLElement>('[role="gridcell"][data-date]')
+    if (cell) return cell.dataset.date ?? null
+  }
+  return null
+}
+
 /** Pointer: the day under the pointer; keyboard: the day the card overlaps most. */
 const collision: CollisionDetection = (args) =>
   args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args)
@@ -96,6 +159,38 @@ export function CalendarView({ view, rows, openRow, narrow }: DatabaseViewProps)
   const sensors = useDbSensors()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showNoDate, setShowNoDate] = useState(true)
+  /** A bar being dragged: its live range (the layout follows it) until the pointer is released. */
+  const [preview, setPreview] = useState<{ rowId: string; range: DateRangeValue } | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const refocus = useRef<string | null>(null)
+  const weeks = useMemo(() => {
+    const ranges = cal.ranges.map((x) =>
+      preview && x.row.id === preview.rowId ? { ...x, ...preview.range } : x,
+    )
+    const ym = `${String(month.year).padStart(4, '0')}-${String(month.month).padStart(2, '0')}`
+    const bars = monthBars(
+      ranges.map((x) => ({
+        id: x.row.id,
+        parentId: null,
+        position: x.row.position,
+        startDate: x.start,
+        dueDate: x.end,
+        completedOn: null,
+      })),
+      ym,
+      { showCompleted: true, order: ranges.map((x) => x.row.id) },
+    )
+    return new Map(bars.map((w) => [w.week, w]))
+  }, [cal.ranges, preview, month])
+  useEffect(() => {
+    // keyboard moves re-render the bar in another day cell: keep the focus on it
+    const id = refocus.current
+    if (!id) return
+    refocus.current = null
+    gridRef.current
+      ?.querySelector<HTMLElement>(`[data-range-bar][data-row-id="${id}"] [data-bar-main]`)
+      ?.focus()
+  })
 
   if (!col) return <DateColumnPrompt view={view} />
 
@@ -103,9 +198,33 @@ export function CalendarView({ view, rows, openRow, narrow }: DatabaseViewProps)
   const title = formatThaiMonthYear(firstOf(month))
   const canDrag = api.canEdit && !narrow
   const rowById = new Map(rows.map((r) => [r.id, r]))
-  const dateOf = (r: DbRowDTO) => rowValue(r, col) as ISODate | null
-  const setDate = (rowId: string, value: ISODate | null) =>
+  /** The start of the row's date (a single date = itself). */
+  const dateOf = (r: DbRowDTO) => dateSpanOf(rowValue(r, col))?.start ?? null
+  const writeDate = (rowId: string, value: ISODate | DateRangeValue | null) =>
     api.updateRow(rowId, { cells: { [col.id]: value } }, undefined, { toast: th.database.toasts.moved })
+  /** Moves a row to start on `value` (a range keeps its length, v3.7) or clears its date (null). */
+  const setDate = (rowId: string, value: ISODate | null) => {
+    const r = rowById.get(rowId)
+    const range = r ? rangeOf(rowValue(r, col)) : null
+    writeDate(rowId, value !== null && range ? shiftDateRange(range, diffDays(range.start, value)) : value)
+  }
+  const rangeById = new Map(cal.ranges.map((x) => [x.row.id, x]))
+  const barProps: BarProps = {
+    canEdit: api.canEdit,
+    canDrag,
+    onOpen: openRow,
+    gridRef,
+    rangeOf: (id) => {
+      const x = rangeById.get(id)
+      return x ? { start: x.start, end: x.end } : null
+    },
+    rowOf: (id) => rowById.get(id),
+    onPreview: (rowId, range) => setPreview(range ? { rowId, range } : null),
+    onCommit: (rowId, range, keyboard) => {
+      if (keyboard) refocus.current = rowId
+      writeDate(rowId, range)
+    },
+  }
   const create = (date: ISODate, title: string) => {
     const inherited = valuesFromFilters(live.filters ?? [], api.db.columns, ctx)
     const cells: Record<string, CellValue> = { ...inherited.cells, [col.id]: date }
@@ -160,7 +279,9 @@ export function CalendarView({ view, rows, openRow, narrow }: DatabaseViewProps)
   )
 
   if (narrow) {
-    const days = cal.weeks.flat().filter((d) => d.inMonth && (d.rows.length > 0 || d.date === api.today))
+    const days = cal.weeks
+      .flat()
+      .filter((d) => d.inMonth && (d.rows.length + d.rangeRows.length > 0 || d.date === api.today))
     return (
       <div className={s.calendar} data-testid="db-calendar" data-narrow="true">
         {header}
@@ -171,7 +292,7 @@ export function CalendarView({ view, rows, openRow, narrow }: DatabaseViewProps)
                 <span>{longDate(d.date)}</span>
                 {d.date === api.today ? <span className={s.todayBadge}>{t.today}</span> : null}
               </div>
-              {d.rows.map((r) => (
+              {[...d.rangeRows, ...d.rows].map((r) => (
                 <CalendarCard key={r.id} row={r} {...cardProps} canDrag={false} />
               ))}
             </li>
@@ -195,7 +316,7 @@ export function CalendarView({ view, rows, openRow, narrow }: DatabaseViewProps)
         onDragCancel={() => setActiveId(null)}
       >
         <div className={s.body}>
-          <div className={s.grid} role="grid" aria-label={t.gridLabel(title)}>
+          <div ref={gridRef} className={s.grid} role="grid" aria-label={t.gridLabel(title)}>
             <div role="row" className={s.weekdays}>
               {t.weekdays.map((w, i) => (
                 <span key={w} role="columnheader" className={s.weekday} title={t.weekdaysLong[i]}>
@@ -203,23 +324,38 @@ export function CalendarView({ view, rows, openRow, narrow }: DatabaseViewProps)
                 </span>
               ))}
             </div>
-            {cal.weeks.map((week) => (
-              <div key={week[0]!.date} role="row" className={s.week}>
-                {week.map((d) => (
-                  <DayCell
-                    key={d.date}
-                    date={d.date}
-                    rows={d.rows}
-                    inMonth={d.inMonth}
-                    today={d.date === api.today}
-                    canEdit={api.canEdit}
-                    canDrag={canDrag}
-                    cardProps={cardProps}
-                    onCreate={create}
-                  />
-                ))}
-              </div>
-            ))}
+            {cal.weeks.map((week) => {
+              const wb = weeks.get(week[0]!.date)
+              const segs = wb?.segments ?? []
+              const lanes = segs.reduce((n, x) => Math.max(n, x.lane + 1), 0)
+              return (
+                <div
+                  key={week[0]!.date}
+                  role="row"
+                  className={s.week}
+                  style={{ '--lanes': Math.min(lanes, CALENDAR_MAX_LANES) } as CSSProperties}
+                >
+                  {week.map((d, i) => (
+                    <DayCell
+                      key={d.date}
+                      date={d.date}
+                      rows={d.rows}
+                      rangeRows={d.rangeRows}
+                      bars={segs.filter((x) => x.startCol === i)}
+                      overflow={wb?.overflow.get(d.date)?.length ?? 0}
+                      lanes={Math.min(lanes, CALENDAR_MAX_LANES)}
+                      inMonth={d.inMonth}
+                      today={d.date === api.today}
+                      canEdit={api.canEdit}
+                      canDrag={canDrag}
+                      cardProps={cardProps}
+                      barProps={barProps}
+                      onCreate={create}
+                    />
+                  ))}
+                </div>
+              )
+            })}
           </div>
           {noDate}
         </div>
@@ -249,6 +385,15 @@ interface CardProps {
 function DayCell(p: {
   date: ISODate
   rows: DbRowDTO[]
+  /** v3.7: rows whose range covers this day (bars; listed in the "+N" popover). */
+  rangeRows: DbRowDTO[]
+  /** Bar segments that start in this cell. */
+  bars: BarSegment[]
+  /** Ranges covering this day that did not fit the week's lanes. */
+  overflow: number
+  /** Bar lanes used in this week row (≤ 3): the space kept above the cards. */
+  lanes: number
+  barProps: BarProps
   inMonth: boolean
   today: boolean
   canEdit: boolean
@@ -262,14 +407,15 @@ function DayCell(p: {
   const [more, setMore] = useState<HTMLElement | null>(null)
   const weekend = isoWeekday(p.date) >= 6
   const shown = p.rows.slice(0, MAX_PER_DAY)
-  const hidden = p.rows.length - shown.length
+  const hidden = p.rows.length - shown.length + p.overflow
   const dayNumber = Number(p.date.slice(8, 10))
+  const total = p.rows.length + p.rangeRows.length
   return (
     <div
       ref={setNodeRef}
       role="gridcell"
       className={s.day}
-      aria-label={t.dayLabel(longDate(p.date), p.rows.length)}
+      aria-label={t.dayLabel(longDate(p.date), total)}
       data-date={p.date}
       data-today={p.today || undefined}
       data-weekend={weekend || undefined}
@@ -291,6 +437,10 @@ function DayCell(p: {
           </button>
         ) : null}
       </div>
+      {p.bars.length > 0 || p.lanes > 0 ? <div className={s.laneSpace} aria-hidden="true" /> : null}
+      {p.bars.map((b) => (
+        <RangeBar key={b.taskId} seg={b} {...p.barProps} />
+      ))}
       {shown.map((r) => (
         <CalendarCard key={r.id} row={r} {...p.cardProps} />
       ))}
@@ -315,11 +465,146 @@ function DayCell(p: {
       >
         <div className={s.popover}>
           <div className={s.popoverTitle}>{longDate(p.date)}</div>
-          {p.rows.map((r) => (
+          {[...p.rangeRows, ...p.rows].map((r) => (
             <CalendarCard key={r.id} row={r} {...p.cardProps} canDrag={false} />
           ))}
         </div>
       </Popover>
+    </div>
+  )
+}
+
+interface BarProps {
+  canEdit: boolean
+  canDrag: boolean
+  onOpen: (rowId: string) => void
+  gridRef: { current: HTMLDivElement | null }
+  rangeOf: (rowId: string) => DateRangeValue | null
+  rowOf: (rowId: string) => DbRowDTO | undefined
+  onPreview: (rowId: string, range: DateRangeValue | null) => void
+  onCommit: (rowId: string, range: DateRangeValue, keyboard: boolean) => void
+}
+
+/** Pixels the pointer must travel before a press on a bar becomes a drag (a shorter press is a click). */
+const DRAG_SLOP = 4
+
+/**
+ * One week-row segment of a range bar (BR-97 v3.7): the row title over the covered days, ◂/▸ cut ends when it goes on
+ * in the previous/next row. Press-and-drag the bar = move the whole range; drag an edge handle = resize; click =
+ * open the row; Alt+←/→ / Alt+Shift+←/→ on the focused bar = move / change the end; right-click / Shift+F10 = row menu.
+ */
+function RangeBar(p: BarProps & { seg: BarSegment }): JSX.Element | null {
+  const t = th.database.calendar
+  const rowMenu = useRowMenu({ openRow: p.onOpen })
+  const suppressClick = useRef(false)
+  const row = p.rowOf(p.seg.taskId)
+  const range = p.rangeOf(p.seg.taskId)
+  if (!row || !range) return null
+  const title = row.title || th.database.table.untitledRow
+  const span = formatThaiDateSpan(range.start, range.end)
+
+  const begin = (mode: 'move' | 'start' | 'end') => (e: ReactPointerEvent<HTMLElement>) => {
+    if (!p.canDrag || e.button !== 0) return
+    e.stopPropagation()
+    if (mode !== 'move') e.preventDefault()
+    const grab = dayAt(e.clientX, e.clientY, p.gridRef.current) ?? range.start
+    const x0 = e.clientX
+    const y0 = e.clientY
+    let moved = false
+    let last: DateRangeValue = range
+    const onMove = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < DRAG_SLOP) return
+      moved = true
+      const over = dayAt(ev.clientX, ev.clientY, p.gridRef.current)
+      if (!over) return
+      const next = dragRange(mode, range, grab, over)
+      if (next.start !== last.start || next.end !== last.end) {
+        last = next
+        p.onPreview(row.id, next)
+      }
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      p.onPreview(row.id, null)
+      if (!moved) return
+      suppressClick.current = true
+      if (last.start !== range.start || last.end !== range.end) p.onCommit(row.id, last, false)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (p.canEdit) {
+      const next = rangeKey(e, range)
+      if (next) {
+        e.preventDefault()
+        e.stopPropagation()
+        p.onCommit(row.id, next, true)
+        return
+      }
+    }
+    void rowMenu.onKeyDown(e, row.id)
+  }
+
+  return (
+    <div
+      className={s.bar}
+      style={{ '--lane': p.seg.lane, '--span': p.seg.endCol - p.seg.startCol + 1 } as CSSProperties}
+      data-range-bar=""
+      data-testid="db-range-bar"
+      data-row-id={row.id}
+      data-start={range.start}
+      data-end={range.end}
+      data-cut-left={p.seg.continuesLeft || undefined}
+      data-cut-right={p.seg.continuesRight || undefined}
+      onContextMenu={(e) => rowMenu.onContextMenu(e, row.id)}
+    >
+      {p.canDrag && !p.seg.continuesLeft ? (
+        <span
+          className={s.barEdge}
+          data-edge="start"
+          role="presentation"
+          title={t.resizeStart(title)}
+          onPointerDown={begin('start')}
+        />
+      ) : null}
+      <button
+        type="button"
+        className={s.barMain}
+        data-bar-main=""
+        aria-label={t.openBar(title, span)}
+        aria-keyshortcuts={
+          p.canEdit ? 'Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : undefined
+        }
+        title={p.canEdit ? `${span} · ${t.barKeysHint}` : span}
+        onPointerDown={begin('move')}
+        onClick={() => {
+          if (suppressClick.current) {
+            suppressClick.current = false
+            return
+          }
+          p.onOpen(row.id)
+        }}
+        onKeyDown={onKeyDown}
+      >
+        {p.seg.continuesLeft ? <span aria-hidden="true">◂</span> : null}
+        <span className={s.barText}>{title}</span>
+        {p.seg.continuesRight ? <span aria-hidden="true">▸</span> : null}
+      </button>
+      {p.canDrag && !p.seg.continuesRight ? (
+        <span
+          className={s.barEdge}
+          data-edge="end"
+          role="presentation"
+          title={t.resizeEnd(title)}
+          onPointerDown={begin('end')}
+        />
+      ) : null}
+      {rowMenu.menu}
     </div>
   )
 }

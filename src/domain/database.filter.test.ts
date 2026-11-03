@@ -41,7 +41,7 @@ describe('filterOpsFor (M11-D23)', () => {
     ['NUMBER', ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'isEmpty', 'isNotEmpty']],
     ['SELECT', ['isAnyOf', 'isNoneOf', 'isEmpty', 'isNotEmpty']],
     ['MULTI_SELECT', ['hasAnyOf', 'hasAllOf', 'hasNoneOf', 'isEmpty', 'isNotEmpty']],
-    ['DATE', ['is', 'before', 'after', 'onOrAfter', 'onOrBefore', 'isEmpty', 'isNotEmpty']],
+    ['DATE', ['is', 'before', 'after', 'onOrAfter', 'onOrBefore', 'within', 'isEmpty', 'isNotEmpty']],
     ['CHECKBOX', ['checked', 'unchecked']],
     ['PERSON', ['hasAny', 'hasNone', 'isEmpty', 'isNotEmpty']],
   ] as const)('%s → %j', (type, ops) => expect(filterOpsFor(type)).toEqual(ops))

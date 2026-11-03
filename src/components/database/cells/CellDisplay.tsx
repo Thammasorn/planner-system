@@ -9,7 +9,8 @@ import type { JSX } from 'react'
 import { formatNumberCell, isDbUrl, numberConfigOf, optionsOf, rowValue } from '@/domain/database'
 import { th } from '@/i18n/th'
 import type { DbColumnDTO, DbRowDTO } from '@/lib/contracts/databases'
-import { formatThaiDate } from '@/lib/format'
+import type { DateRangeValue } from '@/domain/types'
+import { formatThaiDate, formatThaiDateSpan } from '@/lib/format'
 import { OptionChip, PersonChip } from './Chips'
 import s from './cells.module.css'
 import type { PersonLookup } from './people'
@@ -91,7 +92,14 @@ export function CellDisplay({
         </span>
       )
     case 'DATE':
-      return <span className={s.text}>{formatThaiDate(v as string, 'medium')}</span>
+      // v3.7: a range reads "3–7 พ.ย. 2569" (formatThaiDateSpan)
+      return (
+        <span className={s.text}>
+          {typeof v === 'string'
+            ? formatThaiDate(v, 'medium')
+            : formatThaiDateSpan((v as DateRangeValue).start, (v as DateRangeValue).end)}
+        </span>
+      )
     case 'URL': {
       const url = v as string
       return isDbUrl(url) ? (

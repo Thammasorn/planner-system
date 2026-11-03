@@ -24,7 +24,7 @@ describe('calendarMonth › month grid, Monday first (BR-97, FR-1440)', () => {
   it('พฤศจิกายน 2569 (Nov 2026, the 1st is a Sunday) → Mon 2026-10-26 … Sun 2026-12-06, 6 weeks', () => {
     const out = calendarMonth({ year: 2026, month: 11 }, [], date.id, [], cols, ctx)
     expect(out.weeks).toHaveLength(6)
-    expect(out.weeks[0]![0]).toEqual({ date: '2026-10-26', inMonth: false, rows: [] })
+    expect(out.weeks[0]![0]).toEqual({ date: '2026-10-26', inMonth: false, rows: [], rangeRows: [] })
     expect(out.weeks[0]![5]).toMatchObject({ date: '2026-10-31', inMonth: false })
     expect(out.weeks[0]![6]).toMatchObject({ date: '2026-11-01', inMonth: true })
     expect(out.weeks[1]![0]).toMatchObject({ date: '2026-11-02', inMonth: true }) // today in the fixtures

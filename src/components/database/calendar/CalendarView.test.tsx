@@ -12,7 +12,7 @@ import type { DatabaseResponse, DbViewDTO } from '@/lib/contracts/databases'
 import { createFakeDbApi, type FakeDbApi } from '../data/fakeDbApi.test-helper'
 import { C, callsOf, makeDb, row } from '../fixtures.test.helper'
 import { renderDb } from '../render.test.helper'
-import { CalendarMenuItems, CalendarView, dropValue } from './CalendarView'
+import { CalendarMenuItems, CalendarView, dragRange, dropValue, rangeKey } from './CalendarView'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/server/actions/databases', () => ({}))
@@ -242,5 +242,101 @@ describe('CalendarMenuItems (view ⋯)', () => {
     expect(callsOf(api, 'updateView')[1]![1]).toEqual({
       config: { dateColumnId: 'c-due', cardColumnIds: [C.status] },
     })
+  })
+})
+
+describe('CalendarView — date ranges as bars (v3.7, BR-97)', () => {
+  const R = { start: '2026-11-04', end: '2026-11-10' }
+  const rangeRows = () => [row('rr', 'สปรินต์', 'a0', { [C.date]: R })]
+  const bars = () => screen.queryAllByTestId('db-range-bar')
+
+  it('a range is a bar per week row (cut ◂ ▸ at the row edges), not a card; the popover lists it', () => {
+    show({ rows: rangeRows() })
+    const segs = bars()
+    expect(segs).toHaveLength(2) // Wed 4 – Sun 8, then Mon 9 – Tue 10
+    expect(segs[0]!.style.getPropertyValue('--span')).toBe('5')
+    expect(segs[0]).toHaveAttribute('data-cut-right', 'true')
+    expect(segs[1]!.style.getPropertyValue('--span')).toBe('2')
+    expect(segs[1]).toHaveAttribute('data-cut-left', 'true')
+    expect(day(4)).toContainElement(segs[0]!)
+    expect(day(9)).toContainElement(segs[1]!)
+    expect(cardIds(day(4))).toEqual([])
+    expect(day(6)).toHaveAccessibleName(/· 1 แถว$/)
+    expect(
+      within(segs[0]!).getByRole('button', {
+        name: th.database.calendar.openBar('สปรินต์', '4–10 พ.ย. 2569'),
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('click opens the row; Alt+→ moves the whole range a day; Alt+Shift+← shortens the end', async () => {
+    const { api, openRow } = show({ rows: rangeRows() })
+    const main = () => within(bars()[0]!).getByRole('button', { name: /^เปิด สปรินต์/ })
+    await userEvent.click(main())
+    expect(openRow).toHaveBeenCalledWith('rr')
+    main().focus()
+    await userEvent.keyboard('{Alt>}{ArrowRight}{/Alt}')
+    expect(callsOf(api, 'updateRow')[0]!.slice(0, 2)).toEqual([
+      'rr',
+      { cells: { [C.date]: { start: '2026-11-05', end: '2026-11-11' } } },
+    ])
+    expect(bars()[0]).toHaveAttribute('data-start', '2026-11-05')
+    expect(main()).toHaveFocus()
+    await userEvent.keyboard('{Alt>}{Shift>}{ArrowLeft}{/Shift}{/Alt}')
+    expect(callsOf(api, 'updateRow')[1]![1]).toEqual({
+      cells: { [C.date]: { start: '2026-11-05', end: '2026-11-10' } },
+    })
+  })
+
+  it('viewers: no edge handles and the keys do nothing', async () => {
+    const { api } = show({ rows: rangeRows() }, { canEdit: false })
+    expect(bars()[0]!.querySelector('[data-edge]')).toBeNull()
+    within(bars()[0]!)
+      .getByRole('button', { name: /^เปิด สปรินต์/ })
+      .focus()
+    await userEvent.keyboard('{Alt>}{ArrowRight}{/Alt}')
+    expect(callsOf(api, 'updateRow')).toEqual([])
+  })
+
+  it('"ย้ายไปวันที่…" on a range row (phone list) keeps its length', async () => {
+    const { api } = show({ rows: rangeRows() }, { narrow: true })
+    const list = screen.getByTestId('db-calendar-days')
+    const card = within(list).getAllByTestId('db-card')[0]!
+    await userEvent.click(within(card).getByRole('button', { name: /^ตัวเลือกของ/ }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: th.database.calendar.moveTo }))
+    const picker = await screen.findByRole('dialog', { name: th.database.calendar.moveTo })
+    await userEvent.click(within(picker).getByRole('gridcell', { name: '16' }))
+    expect(callsOf(api, 'updateRow')[0]![1]).toEqual({
+      cells: { [C.date]: { start: '2026-11-16', end: '2026-11-22' } },
+    })
+  })
+
+  it('dragRange / rangeKey (pure)', () => {
+    expect(dragRange('move', R, '2026-11-06', '2026-11-09')).toEqual({
+      start: '2026-11-07',
+      end: '2026-11-13',
+    })
+    expect(dragRange('start', R, '2026-11-04', '2026-11-12')).toEqual({
+      start: '2026-11-10',
+      end: '2026-11-10',
+    })
+    expect(dragRange('end', R, '2026-11-10', '2026-11-20')).toEqual({
+      start: '2026-11-04',
+      end: '2026-11-20',
+    })
+    const k = (key: string, shiftKey = false, altKey = true) =>
+      rangeKey({ key, altKey, shiftKey, metaKey: false, ctrlKey: false }, R)
+    expect(k('ArrowLeft')).toEqual({ start: '2026-11-03', end: '2026-11-09' })
+    expect(k('ArrowRight', true)).toEqual({ start: '2026-11-04', end: '2026-11-11' })
+    expect(k('ArrowRight', false, false)).toBeNull()
+    expect(
+      rangeKey(
+        { key: 'ArrowLeft', altKey: true, shiftKey: true, metaKey: false, ctrlKey: false },
+        {
+          start: '2026-11-04',
+          end: '2026-11-04',
+        },
+      ),
+    ).toBeNull()
   })
 })

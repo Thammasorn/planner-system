@@ -2,6 +2,7 @@
 // `position` (plain code-unit `<`, matching `COLLATE "C"`), then `id`.
 import type { CellValue, DbColumnModel, DbCtx, DbRowModel, ViewSort } from '../types'
 import { optionsOf, rowValue, type DbColumnLike } from './cells'
+import { dateSpanOf } from './date'
 import { toScaled } from './number'
 
 /** BR-94 text order. */
@@ -55,10 +56,15 @@ function prepareSort(col: DbColumnLike, dir: ViewSort['dir'], ctx: DbCtx): Prepa
         cmp: (a, b) => cmpPrimitive(a as bigint, b as bigint),
       }
     case 'DATE':
+      // v3.7: by start, then end (a single date = a one-day span, so it comes before a range from the same day)
       return {
         col,
         sign,
-        key: raw as (r: DbRowModel) => Key,
+        key: (r) =>
+          mapNull(raw(r), (v) => {
+            const span = dateSpanOf(v)!
+            return `${span.start}|${span.end}`
+          }),
         cmp: (a, b) => cmpPrimitive(a as string, b as string),
       }
     case 'CHECKBOX':

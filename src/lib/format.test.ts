@@ -7,6 +7,7 @@ import {
   formatRelative,
   formatThaiDate,
   formatThaiDateRange,
+  formatThaiDateSpan,
   formatThaiInstantDate,
   formatThaiMonthYear,
   formatWeekHeader,
@@ -133,4 +134,13 @@ describe('formatThaiMonthYear (M11, FR-1441)', () => {
     vi.stubEnv('TZ', 'Pacific/Honolulu')
     expect(formatThaiMonthYear('2026-11-01')).toBe('พฤศจิกายน 2569')
   })
+})
+
+describe('formatThaiDateSpan (v3.7 database date ranges)', () => {
+  it.each([
+    ['2026-11-03', '2026-11-07', '3–7 พ.ย. 2569'],
+    ['2026-11-30', '2026-12-04', '30 พ.ย. – 4 ธ.ค. 2569'],
+    ['2026-12-30', '2027-01-02', '30 ธ.ค. 2569 – 2 ม.ค. 2570'],
+    ['2026-11-03', '2026-11-03', '3 พ.ย. 2569'],
+  ])('%s … %s → %s', (a, b, want) => expect(formatThaiDateSpan(a, b)).toBe(want))
 })
