@@ -402,8 +402,12 @@ test.describe('P ⟲ Cmd/Ctrl+K palette and quick commands (FR-1102…1105, KEY-
     const screen = new PageScreen(page)
     await screen.goto(await idOf('page', LIVE_PAGES.wiki))
     const palette = new Palette(page)
+    // the editor is read-only until the first lease answer: keys typed before that are dropped (as in m4 E6)
+    await screen.editor.waitReady()
+    await screen.editor.expectEditable()
     await screen.editor.focusEnd()
     await page.keyboard.type(' ลิงก์ทดสอบ')
+    await expect(screen.editor.content()).toContainText('ลิงก์ทดสอบ')
     await screen.editor.selectText('ลิงก์ทดสอบ')
     // BlockNote's Mod+K link handler lives in the formatting toolbar: wait until it has mounted with the selection
     await expect(screen.editor.formattingToolbar()).toBeVisible()

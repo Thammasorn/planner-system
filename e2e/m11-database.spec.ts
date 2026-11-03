@@ -271,7 +271,8 @@ test.describe('D2b option editor: type + Enter creates once, an existing name in
     await expect(db.table()).not.toContainText('tmp_')
     await (await db.cell('ไม่มีวันที่', 'สถานะ')).click()
     await page.getByRole('combobox', { name: 'สถานะ', exact: true }).fill('rev')
-    await expect(page.getByRole('listbox').getByRole('option')).toHaveText(['Review'])
+    // one “Review” option (no duplicate, no temp id); “rev” is not a whole name, so creating it is still offered first
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveText([T.cells.createOption('rev'), 'Review'])
     await page.keyboard.press('Escape')
   })
 })
@@ -292,7 +293,13 @@ test.describe('D2c the column menu opens under its header, also for a just-creat
         if (!h || !d) return 'not laid out'
         const inSpan = d.x >= h.x - 1 && d.x <= h.x + h.width
         const below = d.y >= h.y + h.height - 2 && d.y <= h.y + h.height + 24
-        return inSpan && below ? 'under' : `menu ${d.x},${d.y} vs header ${h.x},${h.y} ${h.width}×${h.height}`
+        // the table ends the charter, so its header sits low on screen: a menu taller than the room below is shifted up
+        // by MUI to end at the viewport's bottom margin (16 px) — still beside its header, never at the corner
+        const vh = page.viewportSize()!.height
+        const shiftedUp = d.y > 0 && d.y < h.y && Math.abs(d.y + d.height - (vh - 16)) <= 2
+        return inSpan && (below || shiftedUp)
+          ? 'under'
+          : `menu ${d.x},${d.y} vs header ${h.x},${h.y} ${h.width}×${h.height}`
       })
       .toBe('under')
   }
@@ -306,7 +313,9 @@ test.describe('D2c the column menu opens under its header, also for a just-creat
     await db.root.getByRole('button', { name: T.table.addColumn, exact: true }).click()
     await page.getByRole('menuitem', { name: T.types.SELECT, exact: true }).click()
     await created // the temp id is now the server id (the header re-mounted)
-    const header = db.table().getByRole('columnheader').last() // new columns are appended
+    // a CSS locator: while the menu (a modal Popover) is open MUI marks the page aria-hidden, so a role locator would
+    // find no header at all
+    const header = db.table().locator('[role="columnheader"]').last() // new columns are appended
     await expectUnder(page, header)
     const name = (await header.innerText()).trim()
     await page.keyboard.press('Escape')
@@ -334,10 +343,9 @@ test.describe('D2d the row panel never scrolls the page (owner bug 2026-11-03)',
     const start = await top()
     const stays = async (what: string) =>
       expect.poll(async () => Math.abs((await top()) - start), { message: what }).toBeLessThan(2)
-    await db
-      .row('ทีมไม่พอ')
-      .getByRole('button', { name: `${T.table.openRow} ทีมไม่พอ`, exact: true })
-      .click({ force: true })
+    // ⤢ is display:none until the row is hovered (then it is in the accessibility tree)
+    await db.row('ทีมไม่พอ').hover()
+    await db.row('ทีมไม่พอ').getByRole('button', { name: `${T.table.openRow} ทีมไม่พอ`, exact: true }).click()
     await expect(rowPanel(page)).toBeVisible()
     await stays('open with ⤢')
     await rowPanel(page).getByRole('button', { name: T.panel.next, exact: true }).click()
@@ -451,6 +459,9 @@ test.describe('D5b date ranges per cell (owner 2026-11-03, BR-90/97)', () => {
   test('“วันสิ้นสุด” makes งบเกิน a range; the calendar draws a bar that drags (move) and resizes (end edge)', async ({
     page,
   }) => {
+    // a tall window: the database ends the charter, so the calendar's later weeks would sit below a 900 px viewport and
+    // a pointer drag can only land on days that are on screen
+    await page.setViewportSize({ width: 1440, height: 1400 })
     await loginAs(page, 'cindy')
     const { db } = await openSeeded(page)
     // table: the switch adds an end date → one range value, shown "12–14 พ.ย. 2569"
@@ -485,6 +496,7 @@ test.describe('D5b date ranges per cell (owner 2026-11-03, BR-90/97)', () => {
     await expect(bar).toHaveAttribute('data-start', '2026-11-12')
     await expect(bar).toHaveAttribute('data-end', '2026-11-14')
 
+    await db.calendar().evaluate((el) => el.scrollIntoView({ block: 'start' }))
     const dayBox = async (d: string) => {
       const b = await db.calendar().locator(`[role="gridcell"][data-date="${d}"]`).boundingBox()
       if (!b) throw new Error(`day ${d} not laid out`)
@@ -515,17 +527,20 @@ test.describe('D5b date ranges per cell (owner 2026-11-03, BR-90/97)', () => {
     const resized = waitForServerAction(page)
     await page.mouse.up()
     await resized
-    await expect(bar).toHaveAttribute('data-end', '2026-11-25')
-    await expect(bar).toHaveAttribute('data-start', '2026-11-19')
+    // 19–25 crosses a week row: two segments of one bar (◂ ▸), both carry the range
+    await expect(bar).toHaveCount(2)
+    await expect(bar.first()).toHaveAttribute('data-end', '2026-11-25')
+    await expect(bar.first()).toHaveAttribute('data-start', '2026-11-19')
 
     // keyboard: Alt+← moves the whole range a day
-    const main = bar.getByRole('button', { name: /^เปิด งบเกิน/ })
+    const main = bar.first().getByRole('button', { name: /^เปิด งบเกิน/ })
     await main.focus()
     const keyed = waitForServerAction(page)
     await page.keyboard.press('Alt+ArrowLeft')
     await keyed
-    await expect(bar).toHaveAttribute('data-start', '2026-11-18')
-    await expect(bar).toHaveAttribute('data-end', '2026-11-24')
+    await expect(bar.first()).toHaveAttribute('data-start', '2026-11-18')
+    await expect(bar.first()).toHaveAttribute('data-end', '2026-11-24')
+    await expect(bar.first().getByRole('button', { name: /^เปิด งบเกิน/ })).toBeFocused()
     await expect
       .poll(async () => (await dateColId()).value)
       .toEqual({ start: '2026-11-18', end: '2026-11-24' })
@@ -949,6 +964,10 @@ test.describe('D15 nested databases in row pages (owner decision 2026-11-03, FR-
     await expect(again.card('การ์ดซ้อน')).toBeVisible()
     const nestedId = await again.id()
     const nestedRow = (await liveRowsOf(nestedId))[0]!.id
+    // the Cmd+K href of a nested row (FR-1474): /r/<outer row>?db=<nested db>&row=<row> opens its panel there
+    await page.goto(`/r/${level1Row}?db=${nestedId}&row=${nestedRow}`)
+    await expect(rowPanel(page)).toBeVisible()
+    await expect(rowPanel(page).getByRole('textbox', { name: T.types.TITLE, exact: true })).toHaveValue('การ์ดซ้อน')
     await page.context().clearCookies()
     await loginAs(page, 'peter')
     const res = await page.goto(`/r/${nestedRow}`)
