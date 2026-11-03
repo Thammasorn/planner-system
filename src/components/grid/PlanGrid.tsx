@@ -113,6 +113,7 @@ import {
   type RowKey,
 } from '@/lib/grid/rows'
 import { cellsOf } from '@/lib/grid/selection'
+import { isRowSelected, rangeRows, selectOne, toggleRow } from '@/lib/grid/row-select'
 import { targetGrid } from '@/lib/grid/targets'
 import {
   cellMarks,
@@ -151,6 +152,7 @@ import { Br24Dialog } from './Br24Dialog'
 import { CellMenu, type CellMenuItem } from './CellMenu'
 import { createGridStore } from './gridStore'
 import { RowHeader } from './RowHeader'
+import { useRowMenu } from './useRowMenu'
 import { useFillHandle } from './useFillHandle'
 import { useGridChunks } from './useGridChunks'
 import { useGridClipboard } from './useGridClipboard'
@@ -787,9 +789,19 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       m,
     )
   }, [store])
+  /** v3.8: a right click / ContextMenu key on a row header (set below, once the row menu exists) */
+  const rowMenuOpenRef = useRef<((header: HTMLElement, e: ReactMouseEvent<HTMLDivElement>) => void) | null>(null)
   const onContextMenu = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
+      const t = e.target as HTMLElement
+      // text inputs (cell editor, quick-add) keep the browser's menu (copy / paste / spelling)
+      if (t.closest('input, textarea, [contenteditable="true"]')) return
+      const header = t.closest<HTMLElement>('[data-row-header]')
+      if (header) {
+        rowMenuOpenRef.current?.(header, e)
+        return
+      }
+      const el = t.closest<HTMLElement>('[data-cell]')
       if (!el) return
       e.preventDefault()
       const p = { r: Number(el.dataset.r), c: Number(el.dataset.c) }
@@ -818,6 +830,94 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const closeMenu = useCallback(() => setMenu(null), [])
   const closeSumHint = useCallback(() => setSumHint(null), [])
 
+
+  const onSelectRow = useCallback(
+    (r: number, how?: 'toggle' | 'range') => {
+      const row = viewRows[r]
+      if (!row) return
+      // v3.8: Mod+click toggles, Shift+click ranges task rows (not in the person grid: no row delete there, M9-D28)
+      const s = store.get()
+      const sel =
+        how === 'toggle' && canAddTask
+          ? toggleRow(s, row)
+          : how === 'range' && canAddTask
+            ? rangeRows(s, viewRows, row)
+            : selectOne(row.key)
+      store.set({
+        ...sel,
+        hasSelection: false,
+        active: true,
+        focus: { r, c: store.get().focus?.c ?? store.get().home.c },
+      })
+    },
+    [store, viewRows, canAddTask],
+  )
+  const onToggle = useCallback(
+    (taskId: string) =>
+      setCollapsed((prev) => {
+        const next = new Set(prev)
+        if (next.has(taskId)) next.delete(taskId)
+        else next.add(taskId)
+        return next
+      }),
+    [],
+  )
+  const onUnassign = useCallback(
+    (taskAssignmentId: string, name: string) => {
+      const r = viewRows.findIndex(
+        (x) =>
+          (x.kind === 'merged' || x.kind === 'assignee') && x.assignee.taskAssignmentId === taskAssignmentId,
+      )
+      if (r >= 0) focusCell(r) // the × button unmounts with its row
+      taskMut.unassign([taskAssignmentId], name)
+    },
+    [taskMut, viewRows, focusCell],
+  )
+
+  // ── v3.8 row menu + multi-select delete (FR-6xx grid row menu): M3's deleteTaskTree / restoreTaskBatch with the
+  // "ลบ N งานแล้ว · เลิกทำ" toast and Cmd+Z (useTaskMutations.remove invalidates the task and grid caches) ──
+  const removeTasks = useCallback(
+    (ids: string[]) => {
+      const set = new Set(ids)
+      const first = viewRows.findIndex((x) => isTaskViewRow(x) && set.has(x.task.id))
+      // focus leaves the row header for a cell first: the header unmounts with the row (no drop to <body>)
+      focusCell(Math.max(0, first))
+      taskMut.remove(ids)
+    },
+    [viewRows, focusCell, taskMut],
+  )
+  const createSubtask = useCallback(
+    (parentId: string, name: string) => {
+      setCollapsed((prev) => {
+        if (!prev.has(parentId)) return prev
+        const next = new Set(prev)
+        next.delete(parentId)
+        return next
+      })
+      taskMut.create({ parentId, name })
+    },
+    [taskMut],
+  )
+  const rowMenu = useRowMenu({
+    store,
+    viewRows,
+    gridEl: () => gridRef.current?.element() ?? null,
+    canEdit: canAddTask,
+    personName: (u) => model?.people[u]?.name ?? '',
+    openTask,
+    onUnassign,
+    removeTasks,
+    createSubtask,
+  })
+  const onRowMenu = useCallback(
+    (r: number, anchor: HTMLElement) => {
+      const row = viewRows[r]
+      if (!row || !isTaskViewRow(row)) return
+      if (!isRowSelected(store.get(), row.key)) onSelectRow(r)
+      rowMenu.open(row.key, { el: anchor })
+    },
+    [viewRows, store, onSelectRow, rowMenu],
+  )
   const handlers = useRef<GridKeyHandlers | null>(null)
   useLayoutEffect(() => {
     const selectedRow = () => viewRows.find((r) => r.key === store.get().rowSelection)
@@ -827,16 +927,19 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       flush: () => void save.flush(),
       newTask: focusQuickAdd,
       // M9-D28: the person grid has no row Delete
-      rowDeletable: () => {
-        const row = selectedRow()
-        return canAddTask && row !== undefined && isTaskViewRow(row) && row.kind !== 'assignee'
-      },
+      // v3.8: every selected task row (Mod/Shift+click multi-select); assignee rows have no task of their own
+      rowDeletable: () => canAddTask && rowMenu.deletableTaskIds().length > 0,
       deleteRow: () => {
+        const ids = rowMenu.deletableTaskIds()
+        if (canAddTask && ids.length > 0) removeTasks(ids)
+      },
+      rowMenu: () => {
         const row = selectedRow()
-        if (!canAddTask || !row || !isTaskViewRow(row) || row.kind === 'assignee') return
-        // focus leaves the row header for a cell first: the header unmounts with the row (no drop to <body>)
-        focusCell(Math.max(0, viewRows.indexOf(row)))
-        taskMut.remove([row.task.id])
+        if (!row || !isTaskViewRow(row)) return
+        const el = gridRef.current
+          ?.element()
+          ?.querySelector<HTMLElement>(`[data-row-header][data-row-key="${CSS.escape(row.key)}"]`)
+        if (el) rowMenu.open(row.key, { el })
       },
       openRow: () => {
         const row = selectedRow()
@@ -846,7 +949,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         const f = store.get().focus
         const row = f ? viewRows[f.r] : undefined
         if (!f || !row) return
-        store.set({ rowSelection: row.key, hasSelection: false })
+        store.set({ ...selectOne(row.key), hasSelection: false })
         gridRef.current
           ?.element()
           ?.querySelector<HTMLElement>(`[data-row-header][data-r="${f.r}"]`)
@@ -889,41 +992,18 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   })
   const gridKeyDown = useGridKeyboard(acc, editing, handlers)
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => gridKeyDown(e)
-
-  const onSelectRow = useCallback(
-    (r: number) => {
+  useLayoutEffect(() => {
+    rowMenuOpenRef.current = (header, e) => {
+      const r = Number(header.dataset.r)
       const row = viewRows[r]
-      if (!row) return
-      store.set({
-        rowSelection: row.key,
-        hasSelection: false,
-        active: true,
-        focus: { r, c: store.get().focus?.c ?? store.get().home.c },
-      })
-    },
-    [store, viewRows],
-  )
-  const onToggle = useCallback(
-    (taskId: string) =>
-      setCollapsed((prev) => {
-        const next = new Set(prev)
-        if (next.has(taskId)) next.delete(taskId)
-        else next.add(taskId)
-        return next
-      }),
-    [],
-  )
-  const onUnassign = useCallback(
-    (taskAssignmentId: string, name: string) => {
-      const r = viewRows.findIndex(
-        (x) =>
-          (x.kind === 'merged' || x.kind === 'assignee') && x.assignee.taskAssignmentId === taskAssignmentId,
-      )
-      if (r >= 0) focusCell(r) // the × button unmounts with its row
-      taskMut.unassign([taskAssignmentId], name)
-    },
-    [taskMut, viewRows, focusCell],
-  )
+      if (!row || !isTaskViewRow(row)) return
+      e.preventDefault()
+      if (!isRowSelected(store.get(), row.key)) onSelectRow(r)
+      // a keyboard-initiated contextmenu event (no pointer position) anchors at the header, like Shift+F10
+      const keyboard = e.clientX === 0 && e.clientY === 0
+      rowMenu.open(row.key, keyboard ? { el: header } : { x: e.clientX, y: e.clientY })
+    }
+  })
 
   // ── "+ คน" (M6-D19, §8.9): one picker keyed by task id, outliving the row re-key that each pick causes ──
   const [addPersonTask, setAddPersonTask] = useState<string | null>(null)
@@ -1243,6 +1323,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           onOpenTask={openTask}
           onToggle={onToggle}
           onUnassign={onUnassign}
+          onRowMenu={onRowMenu}
           showAssignees={showAssignees}
           draggable={canReorder && treeItems !== null}
           onDragHandle={drag.onHandlePointerDown}
@@ -1705,6 +1786,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           setShowAssignees(true, row && isTaskViewRow(row) ? { taskId: row.task.id, c } : undefined)
         }}
       />
+      {rowMenu.element}
       {gm.overlays}
       <GridLegend />
       <CellTooltip rootRef={rootRef} contentFor={contentFor} />

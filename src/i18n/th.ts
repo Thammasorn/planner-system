@@ -1711,6 +1711,14 @@ export const th = {
       collapse: 'ยุบงานย่อย',
       /** aria-describedby of the rowheader (§8.9): the states its aria-label leaves out */
       states: (list: string) => `สถานะ: ${list}`,
+      /** v3.8 (FR-6xx row menu): the ⋯ button, the menu's own items (เปิดเป็นหน้า / เพิ่มงานย่อย / ลบงาน reuse
+       *  th.tasks.rowMenu / th.tasks.undoLabel) and the multi-select mark */
+      menuButton: (name: string) => `เมนูของ ${name}`,
+      menuOpen: 'เปิด',
+      menuDeleteMany: (n: number) => `ลบ ${n} งาน`,
+      menuUnassign: (name: string) => `นำ ${name} ออกจากงาน`,
+      addSubtaskLabel: (name: string) => `เพิ่มงานย่อยของ ${name}`,
+      selectedMark: 'เลือกแล้ว',
     },
     cell: {
       label: (row: string, week: string, value: string) => `${row} สัปดาห์ ${week}: ${value}`,

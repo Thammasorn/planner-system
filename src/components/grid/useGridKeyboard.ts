@@ -29,6 +29,8 @@ export interface GridKeyHandlers {
   /** M7.1: the selected row header's task may be moved (editable, not archived) */
   rowMovable: () => boolean
   moveRow: (dir: 'up' | 'down' | 'in' | 'out') => void
+  /** v3.8: Shift+F10 / ContextMenu key on a row header → the row menu */
+  rowMenu: () => void
 }
 
 export function useGridKeyboard(
@@ -71,6 +73,11 @@ export function useGridKeyboard(
       taskRowSelected: inRowHeader && s.rowSelection !== null && handlers.rowMovable(),
     })
     if (!action) return
+    if (inRowHeader && action.kind === 'cellMenu') {
+      e.preventDefault()
+      handlers.rowMenu()
+      return
+    }
     // the row header only takes row-level keys
     if (
       inRowHeader &&

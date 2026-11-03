@@ -4,6 +4,7 @@
 // flags changed (never 3 000 cells).
 import { useSyncExternalStore } from 'react'
 import { inRect, rectOf, type CellPos, type Rect } from '@/lib/grid/selection'
+import { EMPTY_ROW_KEYS } from '@/lib/grid/row-select'
 import type { RowKey } from '@/lib/grid/rows'
 
 export interface GridSelState {
@@ -14,6 +15,11 @@ export interface GridSelState {
   draft: string
   /** row-header selection (Delete on a task row deletes the task, M6-D19) */
   rowSelection: RowKey | null
+  /** v3.8 multi-select of task rows (Mod/Shift+click); meaningful only while it holds `rowSelection`
+   *  (src/lib/grid/row-select.ts) — so every existing `rowSelection: null` also ends a multi-selection */
+  rowKeys: ReadonlySet<RowKey>
+  /** Shift+click range anchor */
+  rowAnchor: RowKey | null
   /** fill-handle preview rect (excludes the source) */
   fill: Rect | null
   /** the user interacted with the grid: focused cells may take DOM focus */
@@ -46,6 +52,8 @@ export function createGridStore(): GridStore {
     mode: 'nav',
     draft: '',
     rowSelection: null,
+    rowKeys: EMPTY_ROW_KEYS,
+    rowAnchor: null,
     fill: null,
     active: false,
     hasSelection: false,

@@ -30,6 +30,7 @@ import { ASSIGNEE_COL_W, FROZEN_COL_W, FROZEN_COLS, TASK_COL_W } from '@/lib/gri
 import { formatThaiDate } from '@/lib/format'
 import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick } from '@/lib/nav/task-href'
+import { isRowSelected } from '@/lib/grid/row-select'
 import { sumPeopleCount, type GridViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
 import styles from './grid.module.css'
@@ -59,7 +60,10 @@ export interface RowHeaderProps {
   /** PlanGrid's picker is open for this task */
   addPersonOpen: boolean
   onAddPerson: (taskId: string) => void
-  onSelectRow: (r: number) => void
+  /** v3.8: Mod+click = 'toggle', Shift+click = 'range' (task rows multi-select) */
+  onSelectRow: (r: number, how?: 'toggle' | 'range') => void
+  /** v3.8: the ⋯ row menu (same menu as a right click / Shift+F10 on the row header) */
+  onRowMenu?: (r: number, anchor: HTMLElement) => void
   onOpenTask: (taskId: string) => void
   onToggle: (taskId: string) => void
   onUnassign: (taskAssignmentId: string, name: string) => void
@@ -121,7 +125,12 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
     p.store,
     (s) => s.rowSelection === row.key || (s.hasSelection && s.focus?.r === p.r),
   )
-  const selected = useGridSel(p.store, (s) => s.rowSelection === row.key)
+  const selected = useGridSel(p.store, (s) => isRowSelected(s, row.key))
+  // v3.8: a ✓ marks every row of a multi-selection (not by colour alone, §8.9)
+  const multi = useGridSel(
+    p.store,
+    (s) => s.rowSelection !== null && s.rowKeys.size > 1 && s.rowKeys.has(s.rowSelection),
+  )
   const tab = active ? 0 : -1
   const isLeaf = !task.hasChildren
   const assignee = row.kind === 'merged' || row.kind === 'assignee' ? row.assignee : null
@@ -161,7 +170,12 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       data-r={p.r}
       data-dragging={p.dragging ? 'true' : undefined}
       data-late-for-milestone={late ? 'true' : undefined}
-      onClick={() => p.onSelectRow(p.r)}
+      onClick={(e) => {
+        const how = e.metaKey || e.ctrlKey ? 'toggle' : e.shiftKey ? 'range' : undefined
+        if (how === 'range') window.getSelection()?.removeAllRanges()
+        if (how) p.onSelectRow(p.r, how)
+        else p.onSelectRow(p.r)
+      }}
       onDoubleClick={() => p.onOpenTask(task.id)}
     >
       {states.length > 0 ? (
@@ -170,6 +184,12 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
         </span>
       ) : null}
       <div className={styles.taskCell} style={{ width: TASK_COL_W, paddingLeft: indent(row.depth) }} data-task-cell="">
+        {selected && multi ? (
+          <span className={styles.rowCheck} title={th.grid.row.selectedMark} data-row-check="">
+            <span aria-hidden="true">✓</span>
+            <span className={styles.srOnly}>{th.grid.row.selectedMark}</span>
+          </span>
+        ) : null}
         {ownsTask && p.draggable ? (
           // the keyboard path is Alt+↑/↓/→/← on the selected row (M7.1-D17); the button names the gesture
           <button
@@ -309,6 +329,22 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
                 {th.grid.row.addPerson}
               </button>
             ) : null}
+            {p.onRowMenu ? (
+              <button
+                type="button"
+                className={styles.openPage}
+                tabIndex={tab}
+                aria-label={th.grid.row.menuButton(label)}
+                aria-haspopup="menu"
+                data-row-menu=""
+                onClick={(e) => {
+                  stop(e)
+                  p.onRowMenu?.(p.r, e.currentTarget)
+                }}
+              >
+                ⋯
+              </button>
+            ) : null}
           </span>
         ) : null}
       </div>
@@ -332,6 +368,23 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
                   onDoubleClick={stop}
                 >
                   ×
+                </button>
+              ) : null}
+              {!ownsTask && p.onRowMenu ? (
+                <button
+                  type="button"
+                  className={styles.openPage}
+                  tabIndex={tab}
+                  aria-label={th.grid.row.menuButton(label)}
+                  aria-haspopup="menu"
+                  data-row-menu=""
+                  onClick={(e) => {
+                    stop(e)
+                    p.onRowMenu?.(p.r, e.currentTarget)
+                  }}
+                  onDoubleClick={stop}
+                >
+                  ⋯
                 </button>
               ) : null}
             </>

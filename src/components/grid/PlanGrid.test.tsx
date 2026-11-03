@@ -381,6 +381,9 @@ describe('PlanGrid (S3.9, S3.15)', () => {
     expect(
       within(header).getByRole('button', { name: th.grid.row.addPersonLabel('Rollout สาขา') }),
     ).toHaveFocus()
+    // v3.8: the ⋯ row menu button ends the task cell's actions
+    await user.tab()
+    expect(within(header).getByRole('button', { name: th.grid.row.menuButton('Rollout สาขา · Mint') })).toHaveFocus()
     // M7.1 (FR-816): × now sits in the ผู้รับผิดชอบ cell, after the task cell
     await user.tab()
     expect(within(header).getByRole('button', { name: th.grid.row.removeAssignee('Mint') })).toHaveFocus()
