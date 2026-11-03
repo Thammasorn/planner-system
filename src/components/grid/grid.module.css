@@ -368,6 +368,17 @@
   border-left: 1px solid var(--border-subtle);
 }
 
+/* v3.9: "รอมอบหมาย" sits in the ผู้รับผิดชอบ column of an unassigned leaf (text, not colour alone) */
+.unassignedHint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faded-fg);
+  font-size: var(--font-xs);
+}
+
 .assigneeCell .person {
   flex: 1 1 auto;
   max-width: none;

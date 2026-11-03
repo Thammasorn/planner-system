@@ -225,3 +225,43 @@ describe('RowHeader caret slot (v3.8): sibling names line up, children indent on
     expect(p.indent).toBe('16px')
   })
 })
+
+describe('RowHeader unassigned hint (v3.9): in the ผู้รับผิดชอบ column, beside the name only when it is hidden', () => {
+  const lone: ViewRow = {
+    key: 't:t-lone',
+    kind: 'task',
+    task: task({ id: 't-lone', name: 'งานเดี่ยว', assigneeCount: 0 }),
+    depth: 0,
+    collapsed: false,
+  }
+
+  it('assignee column shown: "รอมอบหมาย" + "+ คน" live in the assignee cell; the task cell has the name only', () => {
+    const { header } = renderRow(lone)
+    const taskCell = header.querySelector<HTMLElement>('[data-task-cell]')!
+    const assigneeCell = header.querySelector<HTMLElement>('[data-assignee-cell]')!
+    expect(within(taskCell).queryByText(th.grid.row.unassigned)).toBeNull()
+    expect(
+      within(taskCell).queryByRole('button', { name: th.grid.row.addPersonLabel('งานเดี่ยว') }),
+    ).toBeNull()
+    expect(within(assigneeCell).getByText(th.grid.row.unassigned)).toBeInTheDocument()
+    expect(
+      within(assigneeCell).getByRole('button', { name: th.grid.row.addPersonLabel('งานเดี่ยว') }),
+    ).toBeInTheDocument()
+  })
+
+  it('assignee column hidden: the hint and "+ คน" stay in the task cell', () => {
+    const { header } = renderRow(lone, { showAssignees: false })
+    const taskCell = header.querySelector<HTMLElement>('[data-task-cell]')!
+    expect(header.querySelector('[data-assignee-cell]')).toBeNull()
+    expect(within(taskCell).getByText(th.grid.row.unassigned)).toBeInTheDocument()
+    expect(
+      within(taskCell).getByRole('button', { name: th.grid.row.addPersonLabel('งานเดี่ยว') }),
+    ).toBeInTheDocument()
+  })
+
+  it('an assigned (merged) row keeps "+ คน" in the task cell actions', () => {
+    const { header } = renderRow(merged)
+    expect(header.querySelector('[data-assignee-cell] [data-add-person]')).toBeNull()
+    expect(header.querySelector('[data-task-cell] [data-add-person]')).not.toBeNull()
+  })
+})

@@ -44,7 +44,6 @@ function rememberGridScroll(e: MouseEvent<HTMLElement>): void {
   if (box) rememberBoxScroll(box)
 }
 
-
 export interface RowHeaderProps {
   store: GridStore
   r: number
@@ -90,7 +89,8 @@ export function rowStateTexts(
 ): string[] {
   const task = row.task
   const out: string[] = []
-  if ((row.kind === 'merged' || row.kind === 'assignee') && !personActive) out.push(th.users.deactivatedSuffix)
+  if ((row.kind === 'merged' || row.kind === 'assignee') && !personActive)
+    out.push(th.users.deactivatedSuffix)
   if (row.kind === 'assignee') return out
   if (milestone) {
     out.push(th.milestones.grid.taskLinkLabel(milestone.name))
@@ -151,6 +151,27 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const late = ms !== null && task.lateForMilestone
   const states = rowStateTexts(row, p.personActive, ms)
   const ownsTask = row.kind !== 'assignee'
+  // v3.9: an unassigned leaf shows "รอมอบหมาย" + "+ คน" in the ผู้รับผิดชอบ column (next to the name when it is hidden)
+  const unassigned = (row.kind === 'task' || row.kind === 'sum') && isLeaf && task.assigneeCount === 0
+  const canAddHere = isLeaf && p.canEdit && p.canAddPerson
+  const addPersonInActions = canAddHere && !(unassigned && showAssignees)
+  const addPersonButton = canAddHere ? (
+    <button
+      type="button"
+      className={styles.addPerson}
+      tabIndex={tab}
+      aria-label={th.grid.row.addPersonLabel(task.name)}
+      aria-haspopup="dialog"
+      aria-expanded={p.addPersonOpen}
+      data-add-person=""
+      onClick={(e) => {
+        stop(e)
+        p.onAddPerson(task.id)
+      }}
+    >
+      {th.grid.row.addPerson}
+    </button>
+  ) : null
   const lead = taskLeadLayout(row.depth, { check: false, handle: Boolean(p.draggable) })
 
   return (
@@ -213,7 +234,12 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
               </button>
             ) : null}
             {lead.indentW > 0 ? (
-              <span className={styles.indent} style={{ width: lead.indentW }} aria-hidden="true" data-indent={row.depth} />
+              <span
+                className={styles.indent}
+                style={{ width: lead.indentW }}
+                aria-hidden="true"
+                data-indent={row.depth}
+              />
             ) : null}
             {hasToggle ? (
               <button
@@ -246,7 +272,12 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
           </span>
         ) : null}
         {ms ? (
-          <span className={styles.msTaskLink} title={th.milestones.grid.taskLinkLabel(ms.name)} aria-hidden="true" data-ms-link="">
+          <span
+            className={styles.msTaskLink}
+            title={th.milestones.grid.taskLinkLabel(ms.name)}
+            aria-hidden="true"
+            data-ms-link=""
+          >
             {th.milestones.grid.taskLink(ms.name)}
           </span>
         ) : null}
@@ -289,9 +320,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
             focusable={false}
           />
         ) : null}
-        {(row.kind === 'task' || row.kind === 'sum') && isLeaf && task.assigneeCount === 0 ? (
-          <span className={styles.muted}>{th.grid.row.unassigned}</span>
-        ) : null}
+        {unassigned && !showAssignees ? <span className={styles.muted}>{th.grid.row.unassigned}</span> : null}
         {ownsTask ? (
           <span className={styles.actions} onClick={stop} onDoubleClick={stop}>
             {/* M6.1-D17: the page link. The click only stops propagation (no row selection), so Next's Link
@@ -324,23 +353,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
                 <ViewTimelineOutlined fontSize="inherit" aria-hidden="true" />
               </button>
             ) : null}
-            {isLeaf && p.canEdit && p.canAddPerson ? (
-              <button
-                type="button"
-                className={styles.addPerson}
-                tabIndex={tab}
-                aria-label={th.grid.row.addPersonLabel(task.name)}
-                aria-haspopup="dialog"
-                aria-expanded={p.addPersonOpen}
-                data-add-person=""
-                onClick={(e) => {
-                  stop(e)
-                  p.onAddPerson(task.id)
-                }}
-              >
-                {th.grid.row.addPerson}
-              </button>
-            ) : null}
+            {addPersonInActions ? addPersonButton : null}
             {p.onRowMenu ? (
               <button
                 type="button"
@@ -362,6 +375,14 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
       </div>
       {showAssignees ? (
         <div className={styles.assigneeCell} style={{ width: ASSIGNEE_COL_W }} data-assignee-cell="">
+          {unassigned ? (
+            <>
+              <span className={styles.unassignedHint} data-unassigned="">
+                {th.grid.row.unassigned}
+              </span>
+              {addPersonButton}
+            </>
+          ) : null}
           {assignee ? (
             <>
               <span className={styles.person}>
