@@ -230,6 +230,7 @@ export function fxMilestone(id: string, date: ISODate, o: Partial<GridMilestone>
     date,
     description: null,
     completedOn: null,
+    color: 'PURPLE',
     status: 'UPCOMING',
     late: false,
     lateTaskCount: 0,

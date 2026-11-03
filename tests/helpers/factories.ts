@@ -37,7 +37,6 @@ import {
   leaveTypes,
   milestones,
   pages,
-  planMarkers,
   positions,
   projectMembers,
   projects,
@@ -59,7 +58,6 @@ import {
   type LeaveTypeRow,
   type MilestoneDbRow,
   type PageRow,
-  type PlanMarkerDbRow,
   type ProjectRow,
   type ProjectMemberRow,
   type TimeOffRow,
@@ -866,33 +864,6 @@ export async function assignmentVersion(assignmentId: string): Promise<number> {
   return row.version
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// M7.1 — plan markers (plan/m07.1 S0.11). Plain Drizzle (X59); `deleted` = soft-deleted with that batch.
-// ---------------------------------------------------------------------------------------------------------------
-
-export async function makePlanMarker(o: {
-  projectId: string
-  date: ISODate
-  color?: 'RED' | 'YELLOW' | 'GREEN'
-  label?: string | null
-  createdBy: string | { id: string }
-  deleted?: { daysAgo: number; batch: string }
-}): Promise<PlanMarkerDbRow> {
-  const [row] = await db
-    .insert(planMarkers)
-    .values({
-      projectId: o.projectId,
-      date: o.date,
-      color: o.color ?? 'RED',
-      label: o.label ?? null,
-      createdBy: typeof o.createdBy === 'string' ? o.createdBy : o.createdBy.id,
-      deletedAt: o.deleted ? sql`now() - make_interval(days => ${o.deleted.daysAgo})` : null,
-      deletedBatch: o.deleted?.batch ?? null,
-    })
-    .returning()
-  return row!
-}
-
 // ── M8 (plan/m08 S0.10, X59/X70) ────────────────────────────────────────────────────────────────────────────────────
 
 /** A milestone (plain Drizzle). `deleted` soft-deletes it `daysAgo` days before now() with that batch. Never inserts
@@ -904,6 +875,8 @@ export async function makeMilestone(o: {
   createdBy: { id: string }
   completedOn?: ISODate | null
   description?: string | null
+  /** M11.1: absent = the DB default PURPLE */
+  color?: MilestoneDbRow['color']
   deleted?: { batch: string; daysAgo: number }
 }): Promise<MilestoneDbRow> {
   const [row] = await db
@@ -914,6 +887,7 @@ export async function makeMilestone(o: {
       date: o.date,
       description: o.description ?? null,
       completedOn: o.completedOn ?? null,
+      ...(o.color ? { color: o.color } : {}),
       createdBy: o.createdBy.id,
       deletedAt: o.deleted ? sql`now() - make_interval(days => ${o.deleted.daysAgo})` : null,
       deletedBatch: o.deleted?.batch ?? null,

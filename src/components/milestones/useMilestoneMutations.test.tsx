@@ -126,6 +126,36 @@ it('FR-707: a date update pushes moved and its undo sends the previous date', as
   )
 })
 
+it('M11.1 FR-709: a colour change patches the cache at once, toasts recoloured with เลิกทำ, undo sends the previous colour', async () => {
+  const user = userEvent.setup()
+  a.updateMilestone.mockReturnValue(
+    ok({
+      milestone: { ...beta, color: 'RED' },
+      previous: {
+        name: 'Beta',
+        date: '2026-11-13',
+        description: null,
+        completed: false,
+        completedOn: null,
+        color: 'PURPLE',
+      },
+      changed: ['color'],
+    }),
+  )
+  const { qc } = renderTasks(<Harness patch={{ color: 'RED' }} />, { seed })
+  await user.click(screen.getByRole('button', { name: 'update' }))
+  expect(
+    await screen.findByText(th.milestones.toast.recoloured('Beta', th.milestones.color.name.RED)),
+  ).toBeInTheDocument()
+  expect(
+    qc.getQueryData<{ milestones: { color: string }[] }>(qk.projectMilestones(PID))?.milestones[0]?.color,
+  ).toBe('RED')
+  await user.click(screen.getByRole('button', { name: 'undo' }))
+  await waitFor(() =>
+    expect(a.updateMilestone).toHaveBeenLastCalledWith({ milestoneId: M.beta, patch: { color: 'PURPLE' } }),
+  )
+})
+
 it('M8-D19: reopening a milestone completed on 2026-09-16 → undo sends that exact completedOn', async () => {
   const user = userEvent.setup()
   a.updateMilestone.mockReturnValue(

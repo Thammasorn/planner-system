@@ -129,10 +129,7 @@
 
 .cornerButton:focus-visible,
 .resizeHandle:focus-visible,
-.dragHandle:focus-visible,
-.markerFlag:focus-visible,
-.markerMore:focus-visible,
-.markerColor:focus-visible {
+.dragHandle:focus-visible {
   outline: 2px solid var(--brand-blue);
   outline-offset: -2px;
 }
@@ -1071,189 +1068,44 @@
   z-index: 1;
 }
 
-/* marker lines (FR-820): 2 px, pattern per tone (never colour alone) */
+/* milestone lines (BR-102, FR-709 / M11.1): 2 px, colour + a pattern per colour (never colour alone) —
+   PURPLE dash-dot · RED solid · YELLOW dashed · GREEN dotted · BLUE double */
 .markerLine {
   position: absolute;
   width: 0;
-  border-left: 2px solid var(--marker-red);
+  border-left: 2px solid var(--milestone);
   pointer-events: none;
   z-index: 1;
 }
 
-.markerLine[data-tone='YELLOW'] {
-  border-left-style: dashed;
-  border-left-color: var(--marker-yellow);
+.markerLine[data-color='PURPLE'] {
+  width: 2px;
+  border-left: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--milestone) 0 8px,
+    transparent 8px 11px,
+    var(--milestone) 11px 13px,
+    transparent 13px 16px
+  );
 }
 
-.markerLine[data-tone='GREEN'] {
+.markerLine[data-color='RED'] {
+  border-left-color: var(--milestone-red);
+}
+
+.markerLine[data-color='YELLOW'] {
+  border-left-style: dashed;
+  border-left-color: var(--milestone-yellow);
+}
+
+.markerLine[data-color='GREEN'] {
   border-left-style: dotted;
-  border-left-color: var(--marker-green);
+  border-left-color: var(--milestone-green);
 }
 
-.markerLine[data-tone='MILESTONE'] {
-  border-left-style: dashed;
-  border-left-color: var(--milestone);
-}
-
-.markerFlagGroup {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--space-1) / 2);
-  transform: translateX(-100%);
-  padding-right: var(--space-1);
-  max-width: 160px;
-}
-
-.markerFlag,
-.markerMore {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--space-1) / 2);
-  min-width: 0;
-  height: 18px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--marker-red);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--mui-palette-text-primary);
-  font: inherit;
-  font-size: var(--font-xs);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-.markerFlag[data-tone='YELLOW'] {
-  border-style: dashed;
-  border-color: var(--marker-yellow);
-}
-
-.markerFlag[data-tone='GREEN'] {
-  border-style: dotted;
-  border-color: var(--marker-green);
-}
-
-.markerFlag[data-tone='MILESTONE'] {
-  border-color: var(--milestone);
-}
-
-.markerFlag > [aria-hidden='true']:first-child {
-  color: var(--marker-red);
-}
-
-.markerFlag[data-tone='YELLOW'] > [aria-hidden='true']:first-child {
-  color: var(--marker-yellow);
-}
-
-.markerFlag[data-tone='GREEN'] > [aria-hidden='true']:first-child {
-  color: var(--marker-green);
-}
-
-.markerMore {
-  flex: none;
-  border-color: var(--border-subtle);
-}
-
-.markerFlagText {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-/* marker popover (FR-1604 light form) */
-.markerForm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  width: 300px;
-}
-
-.markerColors {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.markerColor {
-  flex: 1 1 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  min-height: 30px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--mui-palette-text-primary);
-  font: inherit;
-  font-size: var(--font-sm);
-  cursor: pointer;
-}
-
-.markerColor:hover {
-  background: var(--hover-bg);
-}
-
-.markerColor[aria-pressed='true'] {
-  background: var(--brand-light);
-  color: var(--brand-navy);
-  font-weight: var(--weight-bold);
-}
-
-.markerSwatch {
-  display: inline-block;
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--marker-red);
-  margin-right: var(--space-1);
-}
-
-.markerSwatch[data-tone='YELLOW'] {
-  background: var(--marker-yellow);
-}
-
-.markerSwatch[data-tone='GREEN'] {
-  background: var(--marker-green);
-}
-
-.markerFormRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.markerReadOnly {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-1) var(--space-3);
-  margin: 0;
-  font-size: var(--font-sm);
-}
-
-.markerReadOnly dt {
-  color: var(--text-secondary);
-}
-
-.markerReadOnly dd {
-  margin: 0;
-}
-
-.markerReadOnly dd:nth-last-child(-n + 2) {
-  grid-column: 1 / -1;
-}
-
-.markersMenuText {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  max-width: 280px;
+.markerLine[data-color='BLUE'] {
+  border-left: 3px double var(--milestone-blue);
 }
 
 .toolbarGlyph {
@@ -1408,6 +1260,22 @@
   color: var(--milestone);
   font-size: var(--font-sm);
   line-height: 1;
+}
+
+.msDiamond[data-color='RED'] .msGlyph {
+  color: var(--milestone-red);
+}
+
+.msDiamond[data-color='YELLOW'] .msGlyph {
+  color: var(--milestone-yellow);
+}
+
+.msDiamond[data-color='GREEN'] .msGlyph {
+  color: var(--milestone-green);
+}
+
+.msDiamond[data-color='BLUE'] .msGlyph {
+  color: var(--milestone-blue);
 }
 
 .msGhost {

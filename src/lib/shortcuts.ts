@@ -235,12 +235,6 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
     ],
     label: th.shortcuts.items.gridIndentRow,
   },
-  {
-    id: 'grid.addMarker',
-    scope: 'grid',
-    combos: [['Shift', 'F10']],
-    label: th.shortcuts.items.gridAddMarker,
-  },
   // M8 (FR-707, M8-D10, X49): Enter on a focused ◆ opens its popover (date field = keyboard move). Shift+F10 on ◆ is
   // M7's grid.cellMenu entry (same CellMenu, other items) — no second entry.
   {

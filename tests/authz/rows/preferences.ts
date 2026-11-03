@@ -104,4 +104,30 @@ export const rows: AuthzRow[] = [
       return last!
     },
   }),
+  // ── M11.1 (SPEC §6.2 user_preferences key load.display, M11.1-D4) ──
+  defineRow({
+    id: 'PREF-M11.1-LOAD-DISPLAY',
+    spec: 'X05 + M11.1-D4 setPreference load.display DAYS / PERCENT (own row, not audited)',
+    action: 'setPreference',
+    mutates: true,
+    audit: false,
+    expect: ALL,
+    run: async (_w, _ctx, actor) => {
+      const days = await setAndStored(actor, { key: 'load.display', value: 'DAYS' })
+      if (!days.ok) return days
+      return setAndStored(actor, { key: 'load.display', value: 'PERCENT' })
+    },
+  }),
+  defineRow({
+    id: 'PREF-M11.1-LOAD-DISPLAY-BAD',
+    spec: "X05 + M11.1-D4 setPreference load.display 'FRACTION' / 'percent' → VALIDATION",
+    action: 'setPreference',
+    mutates: false,
+    expect: { M: '400', L: '400', Me: '400', W: '400' },
+    run: async () => {
+      const first = await setPreference({ key: 'load.display', value: 'FRACTION' } as never)
+      if (first.ok || String(first.code) !== 'VALIDATION') return first
+      return setPreference({ key: 'load.display', value: 'percent' } as never)
+    },
+  }),
 ]

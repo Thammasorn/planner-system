@@ -2,7 +2,7 @@
 // src/components/grid/MilestoneRow.tsx — header row 1: ◆ Milestones (SPEC FR-705, §8.3 "◆ → เดือน → สัปดาห์/วัน", §8.9;
 // plan/m08 S3.3–S3.6, S3.9, M8-D9/D10/D11). Part of the grid's sticky header group (one scroll container). One
 // role="rowheader" spanning the frozen columns, one role="gridcell" per rendered (virtual) column and the sticky "รวม"
-// cell. A column holding milestones shows its first ◆ (date then id) as a button — ◆ glyph in --milestone, the name,
+// cell. A column holding milestones shows its first ◆ (date then id) as a button — ◆ glyph in its colour (M11.1), the name,
 // status glyph + visually hidden status text, ⚠ + hidden "เลย milestone N งาน" when late — and "+N" for the rest.
 // State is never colour alone (§8.9). Gestures: click / Enter / Space on ◆ → popover; Shift+F10 / ContextMenu key /
 // right click → the cell menu; pointer drag (useMilestoneDrag, managers only); a click on the empty part of a cell or
@@ -174,6 +174,7 @@ export const MilestoneRow = memo(function MilestoneRow(p: MilestoneRowProps) {
         data-testid={`ms-${m.id}`}
         data-ms-id={m.id}
         data-status={m.status}
+        data-color={m.color}
         data-late={m.late ? 'true' : 'false'}
         data-period-key={key}
         data-dragging={p.drag?.id === m.id ? 'true' : undefined}

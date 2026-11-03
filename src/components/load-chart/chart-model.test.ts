@@ -7,6 +7,8 @@ import {
   chartPeople,
   days1,
   compactText,
+  isOverFull,
+  noCapacityNote,
   pointText,
   pointValue,
   SHAPES,
@@ -35,24 +37,46 @@ describe('chartPeople (M7.1-D4)', () => {
   })
 })
 
-describe('point values (BR-104 display edge)', () => {
-  it('DAYS = cd / 100, FRACTION = pct / 100, cap 0 → no point, not loaded → null', () => {
+describe('point values (BR-104 display edge, M11.1 load.display)', () => {
+  it('DAYS = cd / 100; PERCENT = the integer pct; cap 0 → no PERCENT point (gap); not loaded → null', () => {
     expect(pointValue(pt(), 'DAYS')).toBe(2.5)
-    expect(pointValue(pt(), 'FRACTION')).toBe(0.5)
-    expect(pointValue(pt({ capacityCd: 0, pct: null }), 'FRACTION')).toBeNull()
+    expect(pointValue(pt(), 'PERCENT')).toBe(50)
+    expect(pointValue(pt({ loadCd: 375, capacityCd: 600, pct: 63 }), 'PERCENT')).toBe(63)
+    expect(pointValue(pt({ capacityCd: 0, pct: null }), 'PERCENT')).toBeNull()
     expect(pointValue(pt({ capacityCd: 0, pct: null }), 'DAYS')).toBe(2.5)
     expect(pointValue(NULL_PT, 'DAYS')).toBeNull()
+    expect(pointValue(NULL_PT, 'PERCENT')).toBeNull()
     expect(capacityValue(pt())).toBe(5)
     expect(capacityValue(NULL_PT)).toBeNull()
   })
 
-  it('texts: "2.5 / 5.0 วัน", ratio with 2 decimals, 0 shows as 0, no capacity, not loaded', () => {
+  it('texts: PERCENT "63% (3.8 / 6.0 วัน)"; DAYS "2.5 / 5.0 วัน"; 0 shows as 0; no capacity; not loaded', () => {
+    expect(pointText(pt({ loadCd: 375, capacityCd: 600, pct: 63 }), 'PERCENT')).toBe(
+      `63% (${th.loadChart.daysValue('3.8', '6.0')})`,
+    )
     expect(pointText(pt(), 'DAYS')).toBe(th.loadChart.daysValue('2.5', '5.0'))
     expect(pointText(pt({ loadCd: 0, pct: 0 }), 'DAYS')).toBe(th.loadChart.daysValue('0', '5.0'))
-    expect(pointText(pt(), 'FRACTION')).toBe(`0.50 (${th.loadChart.daysValue('2.5', '5.0')})`)
-    expect(pointText(pt({ capacityCd: 0, pct: null }), 'FRACTION')).toBe(th.loadChart.noCapacity)
+    expect(pointText(pt({ loadCd: 0, pct: 0 }), 'PERCENT')).toBe(`0% (${th.loadChart.daysValue('0', '5.0')})`)
+    expect(pointText(pt({ capacityCd: 0, pct: null }), 'PERCENT')).toBe(th.loadChart.noCapacity)
     expect(pointText(NULL_PT, 'DAYS')).toBe(th.loadChart.notLoaded)
     expect(days1(130)).toBe('1.3')
+  })
+
+  it('above 100 % (M11.1-D5): only PERCENT points over 100 are flagged', () => {
+    expect(isOverFull(pt({ pct: 125 }), 'PERCENT')).toBe(true)
+    expect(isOverFull(pt({ pct: 100 }), 'PERCENT')).toBe(false)
+    expect(isOverFull(pt({ pct: 125 }), 'DAYS')).toBe(false)
+    expect(isOverFull(pt({ capacityCd: 0, pct: null }), 'PERCENT')).toBe(false)
+  })
+
+  it('no-capacity note: PERCENT lists each person with the loaded weeks whose capacity is 0', () => {
+    const series: LoadSeries[] = [
+      { userId: 'cindy', name: 'Cindy', points: [pt(), pt({ week: '2026-10-12', capacityCd: 0, pct: null })] },
+      { userId: 'ivy', name: 'Ivy', points: [pt(), NULL_PT] },
+    ]
+    expect(noCapacityNote(series, 'PERCENT')).toBe(th.loadChart.noCapacityNote(th.loadChart.noCapacityOf('Cindy', '12/10')))
+    expect(noCapacityNote(series, 'DAYS')).toBeNull()
+    expect(noCapacityNote([series[1]!], 'PERCENT')).toBeNull()
   })
 
   it('alerts: OVER carries the excess, RISK its text, OK none', () => {
@@ -76,11 +100,11 @@ describe('axis + markers (FR-813, FR-820)', () => {
     expect(weekLabels(['2026-09-28', '2026-10-05'])).toEqual(['28/9', '5/10'])
   })
 
-  it('compact table text (M7.1-D30): DAYS load/cap, FRACTION ratio, not loaded / no capacity → –', () => {
+  it('compact table text (M7.1-D30, M11.1): DAYS load/cap, PERCENT "50%", not loaded / no capacity → –', () => {
     expect(compactText(pt(), 'DAYS')).toBe('2.5/5.0')
     expect(compactText(pt({ loadCd: 0 }), 'DAYS')).toBe('0/5.0')
-    expect(compactText(pt(), 'FRACTION')).toBe('0.50')
-    expect(compactText(pt({ pct: null, capacityCd: 0 }), 'FRACTION')).toBe('–')
+    expect(compactText(pt(), 'PERCENT')).toBe('50%')
+    expect(compactText(pt({ pct: null, capacityCd: 0 }), 'PERCENT')).toBe('–')
     expect(compactText(NULL_PT, 'DAYS')).toBe('–')
   })
 })

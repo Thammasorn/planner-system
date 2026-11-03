@@ -4,7 +4,7 @@ import { periodSlots } from '@/lib/grid/chart-geometry'
 import { buildColumns, TOTAL_W } from '@/lib/grid/columns'
 import { markerEdges } from '@/lib/grid/markers'
 import { monthStartKeys } from '@/lib/grid/months'
-import type { GridMarkerView } from '@/lib/contracts/plan-markers'
+import type { GridMarkerView } from '@/lib/grid/markers'
 import type { ChartLayout } from './types'
 
 export const FROZEN = 352

@@ -1,0 +1,2 @@
+CREATE TYPE "public"."milestone_color" AS ENUM('PURPLE', 'RED', 'YELLOW', 'GREEN', 'BLUE');--> statement-breakpoint
+ALTER TABLE "milestones" ADD COLUMN "color" "milestone_color" DEFAULT 'PURPLE' NOT NULL;

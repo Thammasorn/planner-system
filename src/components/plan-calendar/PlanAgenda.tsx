@@ -1,6 +1,6 @@
 'use client'
 // Phone layout of the project calendar (< 600 px, FR-812, M7.1-D19): the month's days with tasks (agendaDays), each a
-// heading + bar-like rows (starting first, then ◂ running ones) + the day's marker flags — the /calendar AgendaList look.
+// heading + bar-like rows (starting first, then ◂ running ones) + the day's milestone flags — the /calendar AgendaList look.
 import { useMemo } from 'react'
 import { isoWeekday } from '@/domain/dates'
 import type { ISODate } from '@/domain/types'
@@ -8,10 +8,10 @@ import { th } from '@/i18n/th'
 import { inMonth, monthGrid, monthTitle, type YearMonth } from '@/lib/calendar/month-grid'
 import { formatThaiDate } from '@/lib/format'
 import { agendaDays } from '@/lib/plan-calendar/agenda'
-import type { PlanMarkerDTO } from '@/lib/contracts/plan-markers'
+import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import type { TaskDTO } from '@/lib/contracts/tasks'
 import type { BarInfo } from './labels'
-import { MarkerFlags } from './MarkerFlags'
+import { MilestoneFlags } from './MilestoneFlags'
 import { TaskBar } from './TaskBar'
 import styles from './PlanCalendar.module.css'
 
@@ -20,7 +20,7 @@ export interface CalendarViewProps {
   tasks: readonly TaskDTO[]
   infos: ReadonlyMap<string, BarInfo>
   holidays: ReadonlyMap<ISODate, string>
-  markersByDate: ReadonlyMap<ISODate, PlanMarkerDTO[]>
+  milestonesByDate: ReadonlyMap<ISODate, MilestoneDTO[]>
   showCompleted: boolean
   today: ISODate
   onOpen: (taskId: string) => void
@@ -33,12 +33,12 @@ export function PlanAgenda(p: CalendarViewProps) {
     const withTasks = new Map(
       agendaDays(p.tasks, month, { showCompleted: p.showCompleted }).map((d) => [d.date, d]),
     )
-    // days with a task, plus days with only a marker flag (so a flag is never lost on the phone)
+    // days with a task, plus days with only a milestone flag (so a flag is never lost on the phone)
     return monthGrid(month)
       .weeks.flat()
-      .filter((d) => inMonth(d, month) && (withTasks.has(d) || p.markersByDate.has(d)))
+      .filter((d) => inMonth(d, month) && (withTasks.has(d) || p.milestonesByDate.has(d)))
       .map((date) => ({ date, starting: withTasks.get(date)?.starting ?? [], active: withTasks.get(date)?.active ?? [] }))
-  }, [p.tasks, month, p.showCompleted, p.markersByDate])
+  }, [p.tasks, month, p.showCompleted, p.milestonesByDate])
 
   if (days.length === 0) {
     return (
@@ -63,10 +63,10 @@ export function PlanAgenda(p: CalendarViewProps) {
               {`${th.calendar.weekdaysLong[isoWeekday(date) - 1]} ${formatThaiDate(date)}`}
               {date === today ? ` · ${th.calendar.today}` : null}
             </h2>
-            {holiday !== undefined || p.markersByDate.has(date) ? (
+            {holiday !== undefined || p.milestonesByDate.has(date) ? (
               <div className={styles.agendaMeta}>
                 {holiday !== undefined ? <span>{`${th.calendar.holidayPrefix} ${holiday}`}</span> : null}
-                <MarkerFlags markers={p.markersByDate.get(date)} />
+                <MilestoneFlags milestones={p.milestonesByDate.get(date)} />
               </div>
             ) : null}
             {[...starting.map((t) => ({ t, cut: false })), ...active.map((t) => ({ t, cut: true }))].map(({ t, cut }) => {

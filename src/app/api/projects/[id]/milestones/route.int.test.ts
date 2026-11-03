@@ -29,6 +29,7 @@ describe('GET /api/projects/[id]/milestones', () => {
       date: '2026-09-15',
       description: null,
       completedOn: '2026-09-16',
+      color: 'PURPLE',
       status: 'DONE',
       late: false,
       lateTaskCount: 0,

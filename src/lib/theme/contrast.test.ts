@@ -127,7 +127,7 @@ describe('design tokens', () => {
   })
 })
 
-describe('M7.1 non-text tokens (X51: chart series, plan markers, month boundary)', () => {
+describe('M7.1 / M11.1 non-text tokens (X51: chart series, milestone line colours, month boundary)', () => {
   const cases = NON_TEXT_TOKENS.flatMap((fg) =>
     NON_TEXT_BACKGROUNDS.flatMap((bg) =>
       (['light', 'dark'] as const).map((scheme) => [`${fg} on ${bg} (${scheme})`, fg, bg, scheme] as const),
@@ -141,16 +141,18 @@ describe('M7.1 non-text tokens (X51: chart series, plan markers, month boundary)
     expect(contrastRatio(f ?? '', b ?? '')).toBeGreaterThanOrEqual(NON_TEXT_MIN_RATIO)
   })
 
-  it('marker colours are the plan values; --border-month deviates because the plan sample fails 3:1', () => {
+  it('milestone line colours (M11.1: the M7.1 marker values + blue); --border-month deviates because the plan sample fails 3:1', () => {
     expect(blocks.light).toMatchObject({
-      'marker-red': '#dc2626',
-      'marker-yellow': '#a16207',
-      'marker-green': '#15803d',
+      'milestone-red': '#dc2626',
+      'milestone-yellow': '#a16207',
+      'milestone-green': '#15803d',
+      'milestone-blue': '#2563eb',
     })
     expect(blocks.dark).toMatchObject({
-      'marker-red': '#f87171',
-      'marker-yellow': '#facc15',
-      'marker-green': '#4ade80',
+      'milestone-red': '#f87171',
+      'milestone-yellow': '#facc15',
+      'milestone-green': '#4ade80',
+      'milestone-blue': '#60a5fa',
     })
     expect(contrastRatio('#94A3B8', '#FFFFFF')).toBeLessThan(3)
     expect(contrastRatio('#64748B', '#273449')).toBeLessThan(3)

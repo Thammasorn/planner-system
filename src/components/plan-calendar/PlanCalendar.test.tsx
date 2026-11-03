@@ -6,7 +6,7 @@ import { renderTasks } from '@/components/tasks/render.test.helper'
 import { th } from '@/i18n/th'
 import { monthGrid } from '@/lib/calendar/month-grid'
 import type { CalendarResponse } from '@/lib/contracts/calendar'
-import type { PlanMarkersResponse } from '@/lib/contracts/plan-markers'
+import type { MilestoneDTO, ProjectMilestonesResponse } from '@/lib/contracts/milestones'
 import type { TaskDTO } from '@/lib/contracts/tasks'
 import { formatThaiDate, formatThaiDateRange } from '@/lib/format'
 import { qk } from '@/lib/query-keys'
@@ -67,7 +67,7 @@ function tasks(extra: TaskDTO[] = []): TaskDTO[] {
   ]
 }
 
-function seed(o: { holidays?: CalendarResponse['holidays']; markers?: PlanMarkersResponse['markers'] } = {}) {
+function seed(o: { holidays?: CalendarResponse['holidays']; milestones?: MilestoneDTO[] } = {}) {
   return (qc: QueryClient) => {
     const { from, to } = monthGrid('2026-11')
     qc.setQueryData<CalendarResponse>(qk.calendar(from, to), {
@@ -79,12 +79,17 @@ function seed(o: { holidays?: CalendarResponse['holidays']; markers?: PlanMarker
       milestones: [],
       viewer: { userId: 'cindy', canEditOthers: false },
     })
-    qc.setQueryData<PlanMarkersResponse>(qk.planMarkers(PID), { markers: o.markers ?? [] })
+    qc.setQueryData<ProjectMilestonesResponse>(qk.projectMilestones(PID), {
+      projectId: PID,
+      today: '2026-11-04',
+      canManage: true,
+      milestones: o.milestones ?? [],
+    })
   }
 }
 
 function renderCalendar(
-  o: { extra?: TaskDTO[]; holidays?: CalendarResponse['holidays']; markers?: PlanMarkersResponse['markers']; showCompleted?: boolean } = {},
+  o: { extra?: TaskDTO[]; holidays?: CalendarResponse['holidays']; milestones?: MilestoneDTO[]; showCompleted?: boolean } = {},
 ) {
   const onOpenTask = vi.fn()
   const r = renderTasks(
@@ -212,18 +217,22 @@ describe('PlanCalendar (FR-811/812, BR-103, AC-806)', () => {
     expect(within(dialog).getAllByRole('link', { name: th.tasks.openAsPage })).toHaveLength(5)
   })
 
-  it('holidays: shaded cell with the name in its label + tooltip; today ring; marker flags on their date', () => {
+  it('holidays: shaded cell with the name in its label + tooltip; today ring; milestone ◆ flags on their date (M11.1)', () => {
     renderCalendar({
       holidays: [{ date: '2026-11-23', name: 'วันลอยกระทง' }],
-      markers: [
+      milestones: [
         {
           id: id(301),
           projectId: PID,
+          name: 'UAT sign-off',
           date: '2026-11-13',
+          description: null,
+          completedOn: null,
           color: 'RED',
-          label: 'UAT sign-off',
-          createdBy: 'cindy',
-          updatedAt: '2026-11-01T00:00:00Z',
+          status: 'UPCOMING',
+          late: false,
+          lateTaskCount: 0,
+          progress: { done: 0, total: 0 },
         },
       ],
     })
@@ -232,10 +241,11 @@ describe('PlanCalendar (FR-811/812, BR-103, AC-806)', () => {
     expect(hol).toHaveAttribute('title', th.planCalendar.holiday('วันลอยกระทง'))
     expect(hol.getAttribute('aria-label')).toContain(th.planCalendar.holiday('วันลอยกระทง'))
     const flagDay = screen.getByTestId('plan-day-2026-11-13')
-    const flag = flagDay.querySelector('[data-marker]')!
+    const flag = flagDay.querySelector('[data-milestone]')!
     expect(flag).toHaveAttribute('data-color', 'RED')
     expect(flag).toHaveTextContent('UAT sign-off')
-    expect(flag).toHaveTextContent(th.planMarkers.color.RED)
+    expect(flag).toHaveTextContent(th.milestones.diamond)
+    expect(flag).toHaveTextContent(th.milestones.color.named(th.milestones.color.name.RED))
   })
 
   it('keyboard: arrows move day focus, bars of the focused day join the tab order, PageDown/‹ › change month', async () => {

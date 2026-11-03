@@ -53,7 +53,6 @@ import type {
   WorkloadResponse,
 } from '@/lib/contracts/workload'
 import type { MilestoneTargetsResponse } from '@/lib/contracts/milestones'
-import type { PlanMarkersResponse } from '@/lib/contracts/plan-markers'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
 import type { EmbedTasksResponse, EmbedWorkloadResponse } from '@/lib/contracts/embed'
@@ -93,7 +92,7 @@ import {
   seedGolden,
 } from '../../scripts/lib/fixtures'
 import { asUser } from '../helpers/as-user'
-import { allocationRows, makeBlocker, makePage, makePlanMarker, type TestUser } from '../helpers/factories'
+import { allocationRows, makeBlocker, makeMilestone, makePage, type TestUser } from '../helpers/factories'
 import { allNumbersInteger, containsAny } from '../helpers/json'
 import { outcomeOf, outcomeOfCall } from '../helpers/outcome'
 import { createWorld, type World } from '../helpers/world'
@@ -111,7 +110,6 @@ import { fileGet, lockCall, pageGet, searchGet, titlesGet, treeGet } from './row
 import { calendarGet } from './rows/_m5'
 import { GRID_RANGE, gridGet, save, weekItem } from './rows/_m6'
 import { bodyGet } from './rows/_m6_1'
-import { markersGet } from './rows/_m7_1'
 import { databaseById, dbGet, liveRows, pDbSecrets, qDbSecrets, rowBodyGet } from './rows/_m11'
 import { embedTasksGet, embedWorkloadGet, homeGet, searchIndexGet, searchQ } from './rows/_m10'
 import {
@@ -1343,7 +1341,7 @@ describe('masking — grid day (M7, plan/m07 S4.2; §3.3, X29, X30)', () => {
   })
 })
 
-describe('masking — M7.1 chart + plan markers (plan/m07.1 S5.2; §3.3, X29, AC-807, AC-812)', () => {
+describe('masking — M7.1 chart + milestone lines (plan/m07.1 S5.2, M11.1; §3.3, X29, AC-807, AC-812)', () => {
   // AC-807: Mint is a member of POS (and Mobile), not of CRM / Data Warehouse / Store Analytics.
   const NOT_MINT: GoldenProject[] = ['CRM Migration', 'Data Warehouse', 'Store Analytics Dashboard']
   const CHART_WEEKS = ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26']
@@ -1369,46 +1367,24 @@ describe('masking — M7.1 chart + plan markers (plan/m07.1 S5.2; §3.3, X29, AC
     assertNoLeak(body, hidden)
   })
 
-  it('Peter (not in POS): the POS grid chunk and the POS markers route are 404s without POS names, ids or labels', async () => {
+  it('M11.1: Peter (not in POS): the POS grid chunk and the POS milestones route (formerly markers) are 404s without POS names, ids or labels', async () => {
     await seedGolden(db)
     const posId = await goldenProjectId('POS Upgrade')
     const cindy = await goldenUser('Cindy')
-    await makePlanMarker({ projectId: posId, date: '2026-10-23', color: 'RED', label: 'UAT sign-off', createdBy: cindy })
+    await makeMilestone({ project: { id: posId }, name: 'UAT sign-off', date: '2026-10-23', color: 'RED', createdBy: cindy })
     const peter = await goldenUser('Peter')
     const grid = await gridAs(peter, posId, CHART_RANGE)
     expect(grid.status).toBe(404)
-    assertNoLeak(grid.body, ['POS Upgrade', posId, ...goldenTaskNames(['POS Upgrade'])])
+    assertNoLeak(grid.body, ['POS Upgrade', posId, 'UAT sign-off', ...goldenTaskNames(['POS Upgrade'])])
     asUser(peter)
-    const markers = await bodyOf(await markersGet(posId))
-    expect(markers.status).toBe(404)
-    assertNoLeak(markers.body, ['POS Upgrade', posId, 'UAT sign-off'])
-    // and Cindy (POS lead) does see it — the 404 is about Peter, not a missing marker
+    const lines = await bodyOf(await milestonesGet(posId))
+    expect(lines.status).toBe(404)
+    assertNoLeak(lines.body, ['POS Upgrade', posId, 'UAT sign-off'])
+    // and Cindy (POS lead) does see it with its colour — the 404 is about Peter, not a missing milestone
     asUser(cindy)
-    const own = await bodyOf(await markersGet(posId))
+    const own = await bodyOf(await milestonesGet(posId))
     expect(own.status).toBe(200)
-    assertContains(own.body, ['UAT sign-off'])
-  })
-
-  it('markers are per project: Q’s and A’s markers never appear in P’s response, whoever asks', async () => {
-    const w = await createWorld({ with: ['planMarkers'] })
-    const { pRed, pGreen, aYellow, qRed } = w.planMarkers
-    for (const viewer of [w.manager, w.lead, w.member]) {
-      asUser(viewer)
-      const { status, body } = await bodyOf(await markersGet(w.P.id))
-      expect(status, viewer.name).toBe(200)
-      expect((body as PlanMarkersResponse).markers.map((m) => m.id), viewer.name).toEqual([pRed.id, pGreen.id])
-      assertNoLeak(body, [qRed.id, qRed.label!, w.Q.id, w.Q.name, aYellow.id, aYellow.label!, w.A.id])
-    }
-    // the member is not in Q: Q's markers are a 404 with nothing of Q
-    asUser(w.member)
-    const q = await bodyOf(await markersGet(w.Q.id))
-    expect(q.status).toBe(404)
-    assertNoLeak(q.body, [qRed.id, qRed.label!, w.Q.name])
-    // the outsider sees neither P's markers nor P
-    asUser(w.outsider)
-    const p = await bodyOf(await markersGet(w.P.id))
-    expect(p.status).toBe(404)
-    assertNoLeak(p.body, [pRed.id, pRed.label!, pGreen.id, w.P.name])
+    assertContains(own.body, ['UAT sign-off', 'RED'])
   })
 })
 
@@ -1452,6 +1428,7 @@ describe('masking — milestones (M8, plan/m08 S5.2)', () => {
         projectColor: w.Q.color,
         name: 'Milestone Q-ลับ05',
         date: '2026-10-20',
+        color: 'PURPLE',
         status: 'UPCOMING', // 10-20 − 09-30 = 20 > 7 (BR-70)
         late: false,
       },

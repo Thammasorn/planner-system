@@ -39,14 +39,12 @@ vi.mock('@/server/actions/tasks', () => ({
   deleteTaskTree: vi.fn(),
   restoreTaskBatch: vi.fn(),
 }))
-vi.mock('@/server/actions/assignments', () => ({ assign: vi.fn(), unassign: vi.fn(), restoreAssignmentBatch: vi.fn() }))
-vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
-vi.mock('@/server/actions/plan-markers', () => ({
-  createPlanMarker: vi.fn(),
-  updatePlanMarker: vi.fn(),
-  deletePlanMarker: vi.fn(),
-  restorePlanMarkerBatch: vi.fn(),
+vi.mock('@/server/actions/assignments', () => ({
+  assign: vi.fn(),
+  unassign: vi.fn(),
+  restoreAssignmentBatch: vi.fn(),
 }))
+vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
 
 /** The task list in the grid's order (positions a0 < a1 < a2). */
 function tasksResponse() {
@@ -64,9 +62,7 @@ beforeEach(() => {
   m.fetchGridChunk.mockImplementation((_c: unknown, chunk: GridChunk) =>
     Promise.resolve(gridResponse({ from: chunk.from, tasks: POS_TASKS, people: POS_PEOPLE })),
   )
-  m.getJson.mockImplementation((url: string) =>
-    Promise.resolve(url.endsWith('/plan-markers') ? { markers: [] } : tasksResponse()),
-  )
+  m.getJson.mockImplementation(() => Promise.resolve(tasksResponse()))
 })
 
 function renderPos(archived = false) {
@@ -94,7 +90,13 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
     await waitFor(() => expect(handleOf('a:a-mix-rollout')).not.toBeNull())
     const handle = handleOf('a:a-mix-rollout')!
     expect(handle).toHaveAccessibleName(th.grid.reorder.handle)
-    fireEvent.pointerDown(handle, { button: 0, pointerId: 7, clientX: 20, clientY: yOf(2), pointerType: 'mouse' })
+    fireEvent.pointerDown(handle, {
+      button: 0,
+      pointerId: 7,
+      clientX: 20,
+      clientY: yOf(2),
+      pointerType: 'mouse',
+    })
     fireEvent.pointerMove(window, { pointerId: 7, clientX: 20, clientY: yOf(0) - 8 })
     const indicator = await screen.findByTestId('drop-indicator')
     expect(indicator).toHaveAttribute('data-index', '0')
@@ -110,7 +112,12 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
   it('Esc cancels the drag: no move, no indicator', async () => {
     renderPos()
     await waitFor(() => expect(handleOf('a:a-mix-rollout')).not.toBeNull())
-    fireEvent.pointerDown(handleOf('a:a-mix-rollout')!, { button: 0, pointerId: 3, clientX: 20, clientY: yOf(2) })
+    fireEvent.pointerDown(handleOf('a:a-mix-rollout')!, {
+      button: 0,
+      pointerId: 3,
+      clientX: 20,
+      clientY: yOf(2),
+    })
     fireEvent.pointerMove(window, { pointerId: 3, clientX: 20, clientY: yOf(0) - 8 })
     await screen.findByTestId('drop-indicator')
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -126,7 +133,9 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
     await waitFor(() => expect(handleOf('a:a-ivy-uat')).not.toBeNull())
     await user.click(screen.getByText('ทำ UAT + คู่มือหน้าร้าน'))
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}')
-    await waitFor(() => expect(m.moveTask).toHaveBeenCalledWith({ taskId: 't-uat', parentId: null, afterId: null }))
+    await waitFor(() =>
+      expect(m.moveTask).toHaveBeenCalledWith({ taskId: 't-uat', parentId: null, afterId: null }),
+    )
     await waitFor(() => expect(keys()).toEqual(['a:a-ivy-uat', 'a:a-cindy-pos', 'a:a-mix-rollout']))
   })
 

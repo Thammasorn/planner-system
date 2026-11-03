@@ -58,6 +58,7 @@ async function checkedJson<T>(res: Response, check: (b: T) => void): Promise<Res
 
 /** MilestoneDTO = MilestoneRef + projectId, description, status, late, lateTaskCount, progress (M8-D7/D8). */
 const DTO_KEYS = [
+  'color', // M11.1 (FR-709)
   'completedOn',
   'date',
   'description',
@@ -190,6 +191,21 @@ export const rows: AuthzRow[] = [
           progress: { done: 0, total: 0 },
         })
         expect(r.milestone.id).toMatch(UUID)
+        expect(r.milestone.color).toBe('PURPLE') // M11.1: absent colour = the default
+      }),
+  }),
+  defineRow({
+    id: 'MS-CREATE-COLOR',
+    spec: 'PERM-15 + FR-709 (M11.1) — createMilestone with a line colour',
+    action: 'createMilestone',
+    mutates: true,
+    audit: auditP,
+    with: MILESTONE_WORLD,
+    expect: MANAGE,
+    run: async (w) =>
+      checked(await ms.create({ projectId: w.P.id, name: 'x', date: '2026-11-13', color: 'RED' }), (r) => {
+        expectDto(r.milestone)
+        expect(r.milestone.color).toBe('RED')
       }),
   }),
   defineRow({
@@ -216,6 +232,31 @@ export const rows: AuthzRow[] = [
         expect(r.previous).toMatchObject({ name: 'Milestone P-ลับ06', date: '2026-10-23', completedOn: null })
         expect(r.changed).toEqual(['name'])
       }),
+  }),
+  defineRow({
+    id: 'MS-RECOLOR',
+    spec: 'PERM-15 + FR-709 (M11.1) — updateMilestone colour (previous colour for exact undo)',
+    action: 'updateMilestone',
+    mutates: true,
+    audit: auditP,
+    with: MILESTONE_WORLD,
+    expect: MANAGE,
+    run: async (w) =>
+      checked(await ms.update({ milestoneId: w.milestones.p.id, patch: { color: 'GREEN' } }), (r) => {
+        expect(r.milestone).toMatchObject({ id: w.milestones.p.id, color: 'GREEN', date: '2026-10-23' })
+        expect(r.previous.color).toBe('PURPLE')
+        expect(r.changed).toEqual(['color'])
+      }),
+  }),
+  defineRow({
+    id: 'MS-RECOLOR-ARCH',
+    spec: 'PERM-15 + X42 + FR-709 (M11.1) — updateMilestone colour on archived A',
+    action: 'updateMilestone',
+    mutates: true,
+    audit: auditA,
+    with: MILESTONE_WORLD,
+    expect: ARCH,
+    run: (w) => ms.update({ milestoneId: w.milestones.a.id, patch: { color: 'BLUE' } }),
   }),
   defineRow({
     id: 'MS-MOVE',

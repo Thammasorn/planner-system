@@ -149,6 +149,7 @@ describe('assembleGrid', () => {
       date: '2026-10-02',
       description: null,
       completedOn: null,
+      color: 'PURPLE' as const,
       status: 'DUE_SOON' as const,
       late: true,
       lateTaskCount: 1,

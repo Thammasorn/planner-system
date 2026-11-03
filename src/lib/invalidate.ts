@@ -107,13 +107,6 @@ export function invalidateTaskViews(qc: QueryClient, projectId: string): Promise
   return invalidateAll(qc, [qk.projectTasks(projectId), qkPrefix.myTasks, qkPrefix.teamTasks])
 }
 
-// ── M7.1 (plan/m07.1 S0.5, X82) ─────────────────────────────────────────────────────────────────────────────────────
-
-/** After any plan-marker create / update / delete / restore: that project's markers only (grid, calendar, chart). */
-export function invalidatePlanMarkers(qc: QueryClient, projectId: string): Promise<void> {
-  return invalidateAll(qc, [qk.planMarkers(projectId)])
-}
-
 // ── M8 (plan/m08 S0.6, M8-D22, X82) ─────────────────────────────────────────────────────────────────────────────────
 
 /** After any milestone change (create / update / move / complete / delete / restore) and any task-binding, due-date or

@@ -185,6 +185,8 @@ export function milestoneTooltipFor(m: GridMilestone): string[] {
     m.name,
     th.milestones.dateLine(formatThaiDate(m.date, 'medium'), th.milestones.status[m.status]),
     th.milestones.progress(m.progress.done, m.progress.total),
+    // M11.1 (FR-709): the colour by name and pattern — the line itself is aria-hidden
+    th.milestones.color.line(th.milestones.color.name[m.color], th.milestones.color.pattern[m.color]),
   ]
   if (m.late) lines.push(th.milestones.lateTasks(m.lateTaskCount))
   const d = m.description?.trim()

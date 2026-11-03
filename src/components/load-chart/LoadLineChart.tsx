@@ -5,10 +5,10 @@
 // the same left / width (gridlines = the grid's column edges, month lines on the grid's month starts); each weekly
 // point is centred on its week's value column (a collapsed week, or the "รวม" column of an expanded week). The frozen
 // area holds the y axis, the sticky "รวม" area is blank like the grid's (the chart plots weekly loads only).
-import { memo, useMemo, useState } from 'react'
-import type { CellUnit } from '@/domain/types'
+import { memo, useId, useMemo, useState } from 'react'
 import { th } from '@/i18n/th'
 import { formatWeekHeader } from '@/lib/format'
+import type { LoadDisplay } from '@/lib/load/display'
 import {
   linePath,
   niceScale,
@@ -24,6 +24,8 @@ import {
   alertPoints,
   alertText,
   capacityValue,
+  isOverFull,
+  noCapacityNote,
   pointText,
   pointValue,
   seriesIdOf,
@@ -38,7 +40,8 @@ export interface LoadLineChartProps {
   series: readonly LoadSeries[]
   /** chartPeople(series): colour + shape per person, same order */
   people: readonly ChartPerson[]
-  unit: CellUnit
+  /** M11.1: PERCENT (y = % of each person's own capacity, 100 % line) or DAYS */
+  display: LoadDisplay
   /** the focused person (legend): others fade, DAYS shows their capacity dashed */
   focused: string | null
   height: number
@@ -53,7 +56,7 @@ function fmtTick(v: number): string {
 }
 
 export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) {
-  const { layout, series, people, unit, focused } = p
+  const { layout, series, people, display, focused } = p
   const plotH = p.height - PLOT_TOP - AXIS_H
   const slots = layout.slots
   const values = useMemo(() => valueSlots(slots), [slots])
@@ -65,18 +68,18 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
   const xOfWeek = useMemo(() => new Map(values.map((s) => [s.weekStart, slotCenter(s)])), [values])
 
   const scale = useMemo(() => {
-    let max = unit === 'FRACTION' ? 1 : 0
+    let max = display === 'PERCENT' ? 100 : 0
     for (const s of series)
       for (const pt of s.points) {
-        const v = pointValue(pt, unit)
+        const v = pointValue(pt, display)
         if (v !== null && v > max) max = v
-        if (unit === 'DAYS' && focusedPerson?.userId === s.userId) {
+        if (display === 'DAYS' && focusedPerson?.userId === s.userId) {
           const c = capacityValue(pt)
           if (c !== null && c > max) max = c
         }
       }
     return niceScale(max)
-  }, [series, unit, focusedPerson])
+  }, [series, display, focusedPerson])
   const y = (v: number) => yOf(v, scale.max, PLOT_TOP, plotH)
 
   const first = slots[0]
@@ -89,10 +92,10 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
       series.map((s) => {
         const pts = s.points
           .filter((pt) => xOfWeek.has(pt.week))
-          .map((pt) => ({ pt, x: xOfWeek.get(pt.week)! - x0, v: pointValue(pt, unit) }))
+          .map((pt) => ({ pt, x: xOfWeek.get(pt.week)! - x0, v: pointValue(pt, display) }))
         return { s, pts }
       }),
-    [series, xOfWeek, x0, unit],
+    [series, xOfWeek, x0, display],
   )
 
   const hover = hoverKey ? slots.find((s) => s.key === hoverKey) : undefined
@@ -103,159 +106,207 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
     setHoverKey(s ? s.key : null)
   }
   const capSeries =
-    unit === 'DAYS' && focusedPerson ? series.find((s) => s.userId === focusedPerson.userId) : undefined
+    display === 'DAYS' && focusedPerson ? series.find((s) => s.userId === focusedPerson.userId) : undefined
+  const note = useMemo(() => noCapacityNote(series, display), [series, display])
+  const patternId = `load-over-${useId().replace(/:/g, '')}`
 
   return (
-    <AlignedScroller layout={layout} className={styles.chartScroller}>
-      <div
-        className={styles.track}
-        style={{ width: layout.contentWidth, height: p.height }}
-        data-testid="load-line-chart"
-        role="img"
-        aria-label={th.loadChart.title}
-        onPointerLeave={() => setHoverKey(null)}
-      >
-        <div className={styles.frozen} aria-hidden="true">
-          <span className={styles.axisUnit}>
-            {unit === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitFraction}
-          </span>
-          {scale.ticks.map((t) => (
-            <span key={t} className={styles.yTick} style={{ top: y(t) }}>
-              {fmtTick(t)}
-            </span>
-          ))}
-          {unit === 'FRACTION' ? (
-            <span className={styles.yRefLabel} style={{ top: y(1) }}>
-              {th.loadChart.fullCapacity}
-            </span>
-          ) : null}
-        </div>
-
-        {/* one chart column per rendered grid column: same left / width, right border = the grid's column edge */}
+    <>
+      <AlignedScroller layout={layout} className={styles.chartScroller}>
         <div
-          className={styles.cols}
-          style={{ left: x0, width: spanW, height: PLOT_TOP + plotH }}
-          aria-hidden="true"
-          onPointerMove={onPointerMove}
+          className={styles.track}
+          style={{ width: layout.contentWidth, height: p.height }}
+          data-testid="load-line-chart"
+          role="img"
+          aria-label={th.loadChart.title}
+          onPointerLeave={() => setHoverKey(null)}
         >
-          {slots.map((s) => (
-            <div
-              key={s.key}
-              className={styles.col}
-              style={{ left: s.left - x0, width: s.width }}
-              data-chart-col={s.key}
-              data-role={s.role}
-              data-month-start={layout.monthStarts.has(s.key) ? '' : undefined}
-              data-hover={hoverValue?.weekStart === s.weekStart ? 'true' : undefined}
-            />
-          ))}
-        </div>
+          <div className={styles.frozen} aria-hidden="true">
+            <span className={styles.axisUnit}>
+              {display === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitPercent}
+            </span>
+            {scale.ticks.map((t) => (
+              <span key={t} className={styles.yTick} style={{ top: y(t) }}>
+                {fmtTick(t)}
+              </span>
+            ))}
+            {display === 'PERCENT' ? (
+              <span className={styles.yRefLabel} style={{ top: y(100) }}>
+                {th.loadChart.fullCapacityPercent}
+              </span>
+            ) : null}
+          </div>
 
-        <svg
-          className={styles.plot}
-          style={{ left: x0 }}
-          width={Math.max(0, spanW)}
-          height={PLOT_TOP + plotH}
-          aria-hidden="true"
-          focusable="false"
-        >
-          {scale.ticks.map((t) => (
-            <line key={t} x1={0} x2={spanW} y1={y(t)} y2={y(t)} className={styles.hLine} />
-          ))}
-          {unit === 'FRACTION' ? (
-            <line x1={0} x2={spanW} y1={y(1)} y2={y(1)} className={styles.refLine} />
-          ) : null}
-          {capSeries && focusedPerson ? (
-            <path
-              d={linePath(
-                capSeries.points
-                  .filter((pt) => xOfWeek.has(pt.week))
-                  .map((pt) => {
-                    const c = capacityValue(pt)
-                    return { x: xOfWeek.get(pt.week)! - x0, y: c === null ? null : y(c) }
-                  }),
-              )}
-              className={styles.capLine}
-              stroke={focusedPerson.color}
-              data-series="cap"
-            />
-          ) : null}
-          {lines.map(({ s, pts }, i) => {
-            const person = people[i]!
-            const faded = focusedPerson !== null && focusedPerson.userId !== s.userId
-            return (
-              <g key={s.userId} data-series={seriesIdOf(s.userId)} opacity={faded ? 0.3 : 1}>
-                <path
-                  d={linePath(pts.map((q) => ({ x: q.x, y: q.v === null ? null : y(q.v) })))}
-                  className={styles.line}
-                  stroke={person.color}
+          {/* one chart column per rendered grid column: same left / width, right border = the grid's column edge */}
+          <div
+            className={styles.cols}
+            style={{ left: x0, width: spanW, height: PLOT_TOP + plotH }}
+            aria-hidden="true"
+            onPointerMove={onPointerMove}
+          >
+            {slots.map((s) => (
+              <div
+                key={s.key}
+                className={styles.col}
+                style={{ left: s.left - x0, width: s.width }}
+                data-chart-col={s.key}
+                data-role={s.role}
+                data-month-start={layout.monthStarts.has(s.key) ? '' : undefined}
+                data-hover={hoverValue?.weekStart === s.weekStart ? 'true' : undefined}
+              />
+            ))}
+          </div>
+
+          <svg
+            className={styles.plot}
+            style={{ left: x0 }}
+            width={Math.max(0, spanW)}
+            height={PLOT_TOP + plotH}
+            aria-hidden="true"
+            focusable="false"
+          >
+            {scale.ticks.map((t) => (
+              <line key={t} x1={0} x2={spanW} y1={y(t)} y2={y(t)} className={styles.hLine} />
+            ))}
+            {display === 'PERCENT' ? (
+              <>
+                {/* M11.1-D5: the band above 100 % is hatched (never colour alone) */}
+                <defs>
+                  <pattern
+                    id={patternId}
+                    width={6}
+                    height={6}
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                  >
+                    <line x1={0} y1={0} x2={0} y2={6} className={styles.overHatch} />
+                  </pattern>
+                </defs>
+                {scale.max > 100 ? (
+                  <rect
+                    x={0}
+                    y={y(scale.max)}
+                    width={Math.max(0, spanW)}
+                    height={Math.max(0, y(100) - y(scale.max))}
+                    fill={`url(#${patternId})`}
+                    className={styles.overBand}
+                    data-over-band=""
+                  />
+                ) : null}
+                <line
+                  x1={0}
+                  x2={spanW}
+                  y1={y(100)}
+                  y2={y(100)}
+                  className={styles.refLine}
+                  data-ref-line="100"
                 />
-                {pts.map((q) => {
-                  if (q.v === null) return null
-                  const level = alerts.get(`${seriesIdOf(s.userId)}:${s.points.indexOf(q.pt)}`)
-                  return (
-                    <g
-                      key={q.pt.week}
-                      transform={`translate(${q.x} ${y(q.v)})`}
-                      data-chart-point=""
-                      data-user={s.userId}
-                      data-week={q.pt.week}
-                      data-alert={level}
-                    >
-                      {level ? (
-                        <circle
-                          r={level === 'OVER' ? 9 : 8}
-                          fill="none"
-                          stroke={person.color}
-                          strokeWidth={2}
-                          strokeDasharray={level === 'RISK' ? '3 2' : undefined}
-                        />
-                      ) : null}
-                      <g transform="translate(-6 -6)">
-                        <ShapePath shape={person.shape} color={person.color} />
+              </>
+            ) : null}
+            {capSeries && focusedPerson ? (
+              <path
+                d={linePath(
+                  capSeries.points
+                    .filter((pt) => xOfWeek.has(pt.week))
+                    .map((pt) => {
+                      const c = capacityValue(pt)
+                      return { x: xOfWeek.get(pt.week)! - x0, y: c === null ? null : y(c) }
+                    }),
+                )}
+                className={styles.capLine}
+                stroke={focusedPerson.color}
+                data-series="cap"
+              />
+            ) : null}
+            {lines.map(({ s, pts }, i) => {
+              const person = people[i]!
+              const faded = focusedPerson !== null && focusedPerson.userId !== s.userId
+              return (
+                <g key={s.userId} data-series={seriesIdOf(s.userId)} opacity={faded ? 0.3 : 1}>
+                  <path
+                    d={linePath(pts.map((q) => ({ x: q.x, y: q.v === null ? null : y(q.v) })))}
+                    className={styles.line}
+                    stroke={person.color}
+                  />
+                  {pts.map((q) => {
+                    if (q.v === null) return null
+                    const level = alerts.get(`${seriesIdOf(s.userId)}:${s.points.indexOf(q.pt)}`)
+                    const overFull = isOverFull(q.pt, display)
+                    return (
+                      <g
+                        key={q.pt.week}
+                        transform={`translate(${q.x} ${y(q.v)})`}
+                        data-chart-point=""
+                        data-user={s.userId}
+                        data-week={q.pt.week}
+                        data-alert={level}
+                        data-over-full={overFull ? 'true' : undefined}
+                      >
+                        {level ? (
+                          <circle
+                            r={level === 'OVER' ? 9 : 8}
+                            fill="none"
+                            stroke={person.color}
+                            strokeWidth={2}
+                            strokeDasharray={level === 'RISK' ? '3 2' : undefined}
+                          />
+                        ) : null}
+                        <g transform="translate(-6 -6)">
+                          <ShapePath shape={person.shape} color={person.color} />
+                        </g>
+                        {overFull && q.pt.pct !== null ? (
+                          <text x={0} y={-12} textAnchor="middle" className={styles.overLabel}>
+                            {th.loadChart.overFull(q.pt.pct)}
+                          </text>
+                        ) : null}
                       </g>
-                    </g>
-                  )
-                })}
-              </g>
+                    )
+                  })}
+                </g>
+              )
+            })}
+          </svg>
+
+          {layout.markerEdges.map((e) => {
+            const v = e.views[0]!
+            return (
+              <div
+                key={e.colIndex}
+                aria-hidden="true"
+                className={styles.markerLine}
+                style={{ left: layout.frozenWidth + e.x - 1, height: PLOT_TOP + plotH }}
+                data-color={v.color}
+                data-chart-marker={e.views.map((x) => x.id).join(',')}
+              />
             )
           })}
-        </svg>
 
-        {layout.markerEdges.map((e) => {
-          const v = e.views[0]!
-          return (
-            <div
-              key={e.colIndex}
+          {values.map((s) => (
+            <span
+              key={s.key}
               aria-hidden="true"
-              className={styles.markerLine}
-              style={{ left: layout.frozenWidth + e.x - 1, height: PLOT_TOP + plotH }}
-              data-tone={v.tone}
-              data-chart-marker={e.views.map((x) => x.id).join(',')}
-            />
-          )
-        })}
+              className={styles.xTick}
+              style={{ left: s.left, width: s.width, top: PLOT_TOP + plotH }}
+              data-chart-tick={s.key}
+              data-week={s.weekStart}
+            >
+              {formatWeekHeader(s.weekStart)}
+            </span>
+          ))}
 
-        {values.map((s) => (
-          <span
-            key={s.key}
-            aria-hidden="true"
-            className={styles.xTick}
-            style={{ left: s.left, width: s.width, top: PLOT_TOP + plotH }}
-            data-chart-tick={s.key}
-            data-week={s.weekStart}
-          >
-            {formatWeekHeader(s.weekStart)}
-          </span>
-        ))}
+          {hoverValue ? (
+            <Tooltip slot={hoverValue} slots={slots} series={series} people={people} display={display} />
+          ) : null}
 
-        {hoverValue ? (
-          <Tooltip slot={hoverValue} slots={slots} series={series} people={people} unit={unit} />
-        ) : null}
-
-        <div className={styles.cover} aria-hidden="true" />
-      </div>
-    </AlignedScroller>
+          <div className={styles.cover} aria-hidden="true" />
+        </div>
+      </AlignedScroller>
+      {note ? (
+        <p className={styles.noCapacityNote} data-testid="load-chart-no-capacity">
+          {note}
+        </p>
+      ) : null}
+    </>
   )
 })
 
@@ -264,7 +315,7 @@ function Tooltip(p: {
   slots: readonly PeriodSlot[]
   series: readonly LoadSeries[]
   people: readonly ChartPerson[]
-  unit: CellUnit
+  display: LoadDisplay
 }) {
   const i = p.slots.indexOf(p.slot)
   const flip = i > p.slots.length / 2
@@ -289,7 +340,7 @@ function Tooltip(p: {
             <ShapeGlyph shape={person.shape} color={person.color} />
             <span>{s.name}</span>
             <span className={styles.tooltipValue}>
-              {pointText(pt, p.unit)}
+              {pointText(pt, p.display)}
               {alert ? ` · ${alert}` : ''}
             </span>
           </div>

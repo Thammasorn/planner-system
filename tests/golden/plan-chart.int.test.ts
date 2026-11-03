@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { viewLoad } from '@/domain/certainty'
 import { overloadLevel } from '@/domain/overload'
+import { loadPct } from '@/lib/load/display'
 import type { Cd, ISODate, LoadPair, LoadView, PeriodKey } from '@/domain/types'
 import type { GridAssigneeRow, GridResponse, GridTaskRow } from '@/lib/contracts/grid'
 import { footerTotals, footerValue } from '@/lib/grid/aggregate'
@@ -91,7 +92,7 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
     const g = await posChunk(true)
     const m = modelOf(g)
 
-    const off = memberLoadSeries(m, WEEKS, { view: 'ALL', includeOthers: false, unit: 'DAYS' })
+    const off = memberLoadSeries(m, WEEKS, { view: 'ALL', includeOthers: false })
     // one line per footer person, in footerTotals order (M7.1-D4): Cindy, Ivy, Mint
     expect(off.map((l) => l.userId)).toEqual(footerTotals(m, { includeOthers: false }).people)
     expect(off.map((l) => ids.get(l.userId))).toEqual(POS_PEOPLE)
@@ -105,7 +106,7 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
     expect(at(off, 'Ivy', '2026-10-05').loadCd).toBe(125)
     expect(at(off, 'Cindy', '2026-10-05').loadCd).toBe(0)
 
-    const on = memberLoadSeries(m, WEEKS, { view: 'ALL', includeOthers: true, unit: 'DAYS' })
+    const on = memberLoadSeries(m, WEEKS, { view: 'ALL', includeOthers: true })
     expect(at(on, 'Cindy', '2026-10-05').loadCd).toBe(250)
     expect(at(on, 'Cindy', '2026-10-05').capacityCd).toBe(500)
     expect(at(on, 'Cindy', '2026-10-05').pct).toBe(50)
@@ -113,7 +114,7 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
     expect(at(on, 'Cindy', '2026-10-05').level).toBe('OK')
   })
 
-  it('every point = the chunk oracle (load, capacity, pct, level); switch on = F1 byUserWeek; FRACTION keeps the same cd and pct', async () => {
+  it('every point = the chunk oracle (load, capacity, pct, level); switch on = F1 byUserWeek; pct = loadPct (M11.1 % mode)', async () => {
     await seedGolden(db)
     const nick = new Map<string, GoldenViewer>()
     for (const n of POS_PEOPLE) nick.set((await goldenUser(n)).id, n)
@@ -121,9 +122,7 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
       const g = await posChunk(includeOthers)
       const m = modelOf(g)
       for (const view of VIEWS) {
-        const days = memberLoadSeries(m, WEEKS, { view, includeOthers, unit: 'DAYS' })
-        const frac = memberLoadSeries(m, WEEKS, { view, includeOthers, unit: 'FRACTION' })
-        expect(frac, `${view} ${includeOthers}: unit changes display only`).toEqual(days)
+        const days = memberLoadSeries(m, WEEKS, { view, includeOthers })
         for (const line of days) {
           const who = nick.get(line.userId)!
           for (const p of line.points) {
@@ -133,6 +132,8 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
             expect(p.loadCd, label).toBe(viewLoad(pair, view))
             expect(p.capacityCd, label).toBe(cap)
             expect(p.pct, label).toBe(pctHalfUp(viewLoad(pair, view), cap))
+            // M11.1 (BR-104 % mode): the chart's percent is the shared load-display helper's
+            expect(p.pct, `${label} loadPct`).toBe(loadPct(viewLoad(pair, view), cap))
             expect(p.level, label).toBe(overloadLevel(pair, cap))
             expect(Number.isInteger(p.loadCd), label).toBe(true)
             if (includeOthers) {
@@ -155,7 +156,7 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
       const m = modelOf(await posChunk(includeOthers))
       const footer = footerTotals(m, { includeOthers })
       for (const view of VIEWS) {
-        const series = memberLoadSeries(m, WEEKS, { view, includeOthers, unit: 'DAYS' })
+        const series = memberLoadSeries(m, WEEKS, { view, includeOthers })
         for (const [i, w] of WEEKS.entries()) {
           const sum = series.reduce((acc, l) => acc + (l.points[i]!.loadCd ?? 0), 0)
           const cell = footer.cells[wk(w)]
@@ -174,12 +175,10 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
     const asMint = memberLoadSeries(modelOf(await posChunk(true, 'Mint')), WEEKS, {
       view: 'ALL',
       includeOthers: true,
-      unit: 'DAYS',
     })
     const asCindy = memberLoadSeries(modelOf(await posChunk(true, 'Cindy')), WEEKS, {
       view: 'ALL',
       includeOthers: true,
-      unit: 'DAYS',
     })
     expect(asMint).toEqual(asCindy)
     expect(asMint.find((l) => l.userId === cindy.id)?.points.find((p) => p.week === '2026-10-05')?.loadCd).toBe(250)
@@ -195,7 +194,6 @@ describe('M7.1 load chart on F1 (BR-104, FR-813, AC-807)', () => {
     const series = memberLoadSeries(m, ['2026-10-26', '2026-11-02', '2026-11-09', '2026-11-16'], {
       view: 'ALL',
       includeOthers: false,
-      unit: 'DAYS',
     })
     for (const l of series) {
       expect(l.points[0]!.loadCd).not.toBeNull()

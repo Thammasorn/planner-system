@@ -6,7 +6,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { makeUser } from '../../../tests/helpers/factories'
 import { db } from './client'
-import { clients, milestones, planMarkers, projectMembers, projects, taskStatuses, tasks } from './schema'
+import { clients, milestones, projectMembers, projects, taskStatuses, tasks } from './schema'
 
 describe('database harness and migrations', () => {
   let sql: postgres.Sql
@@ -1017,27 +1017,8 @@ describe('M6.1 schema (SPEC §6.2 page_kind, pages.kind / task_id / full_width, 
   })
 })
 
-describe('M7.1 schema (SPEC §6.2 plan_marker_color, plan_markers)', () => {
+describe('M11.1 schema (SPEC §6.2 milestone_color, milestones.color; plan_markers dropped)', () => {
   let sql: postgres.Sql
-
-  async function pgError(
-    run: () => Promise<unknown>,
-  ): Promise<{ code?: string; constraint?: string } | null> {
-    try {
-      await run()
-      return null
-    } catch (e) {
-      const err = e as { code?: string; constraint_name?: string }
-      return { code: err.code, constraint: err.constraint_name }
-    }
-  }
-
-  async function seedProject(): Promise<{ projectId: string; userId: string }> {
-    const u = await makeUser({ role: 'manager' })
-    const [p] = await sql<{ id: string }[]>`
-      insert into projects (name, created_by) values ('P', ${u.id}) returning id`
-    return { projectId: p!.id, userId: u.id }
-  }
 
   beforeAll(() => {
     sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
@@ -1047,55 +1028,38 @@ describe('M7.1 schema (SPEC §6.2 plan_marker_color, plan_markers)', () => {
     await sql.end()
   })
 
-  it('plan_marker_color has exactly RED, YELLOW, GREEN', async () => {
-    const rows = await sql<{ v: string }[]>`select unnest(enum_range(null::plan_marker_color))::text as v`
-    expect(rows.map((r) => r.v)).toEqual(['RED', 'YELLOW', 'GREEN'])
+  it('milestone_color has exactly PURPLE, RED, YELLOW, GREEN, BLUE', async () => {
+    const rows = await sql<{ v: string }[]>`select unnest(enum_range(null::milestone_color))::text as v`
+    expect(rows.map((r) => r.v)).toEqual(['PURPLE', 'RED', 'YELLOW', 'GREEN', 'BLUE'])
   })
 
-  it('insert/select round-trip through Drizzle: date as ISO string, default colour RED, label null', async () => {
-    const { projectId, userId } = await seedProject()
+  it('milestones.color is not null with default PURPLE; a colour round-trips through Drizzle', async () => {
+    const u = await makeUser({ role: 'manager' })
+    const [p] = await sql<
+      { id: string }[]
+    >`insert into projects (name, created_by) values ('P', ${u.id}) returning id`
     const [row] = await db
-      .insert(planMarkers)
-      .values({ projectId, date: '2026-10-23', createdBy: userId })
+      .insert(milestones)
+      .values({ projectId: p!.id, name: 'M', date: '2026-10-23', createdBy: u.id })
       .returning()
-    expect(row).toMatchObject({ projectId, date: '2026-10-23', color: 'RED', label: null, deletedAt: null })
-    const [again] = await db.select().from(planMarkers).where(eq(planMarkers.id, row!.id))
-    expect(again?.date).toBe('2026-10-23')
-    await db
-      .update(planMarkers)
-      .set({ color: 'GREEN', label: 'UAT sign-off' })
-      .where(eq(planMarkers.id, row!.id))
-    const [upd] = await db.select().from(planMarkers).where(eq(planMarkers.id, row!.id))
-    expect(upd).toMatchObject({ color: 'GREEN', label: 'UAT sign-off' })
+    expect(row?.color).toBe('PURPLE')
+    await db.update(milestones).set({ color: 'BLUE' }).where(eq(milestones.id, row!.id))
+    const [again] = await db.select().from(milestones).where(eq(milestones.id, row!.id))
+    expect(again?.color).toBe('BLUE')
+    await expect(sql`update milestones set color = null where id = ${row!.id}`).rejects.toMatchObject({
+      code: '23502',
+    })
   })
 
-  it("label check: '  ' and 81 chars violate plan_markers_label_check; 80 chars ok", async () => {
-    const { projectId, userId } = await seedProject()
-    const ins = (label: string) =>
-      sql`insert into plan_markers (project_id, date, label, created_by)
-          values (${projectId}, '2026-10-23', ${label}, ${userId})`
-    for (const bad of ['  ', '', 'ก'.repeat(81)])
-      expect(await pgError(() => ins(bad))).toMatchObject({
-        code: '23514',
-        constraint: 'plan_markers_label_check',
-      })
-    expect(await pgError(() => ins('ก'.repeat(80)))).toBeNull()
-  })
-
-  it('partial index (project_id, date) where deleted_at is null', async () => {
-    const [idx] = await sql<{ def: string }[]>`
-      select indexdef as def from pg_indexes where indexname = 'plan_markers_project_id_date_idx'`
-    expect(idx?.def).toMatch(/\(project_id, date\) WHERE \(deleted_at IS NULL\)/)
-  })
-
-  it('project hard delete cascades its markers', async () => {
-    const { projectId, userId } = await seedProject()
-    await db.insert(planMarkers).values({ projectId, date: '2026-11-06', color: 'YELLOW', createdBy: userId })
-    await sql`delete from projects where id = ${projectId}`
-    const [r] = await sql<
+  it('plan_markers and plan_marker_color no longer exist', async () => {
+    const [t] = await sql<
       { n: number }[]
-    >`select count(*)::int as n from plan_markers where project_id = ${projectId}`
-    expect(r?.n).toBe(0)
+    >`select count(*)::int as n from information_schema.tables where table_name = 'plan_markers'`
+    expect(t?.n).toBe(0)
+    const [e] = await sql<
+      { n: number }[]
+    >`select count(*)::int as n from pg_type where typname = 'plan_marker_color'`
+    expect(e?.n).toBe(0)
   })
 })
 

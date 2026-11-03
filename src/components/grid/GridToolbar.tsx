@@ -2,10 +2,11 @@
 // src/components/grid/GridToolbar.tsx — `[สัปดาห์] ◀ [วันนี้] ▶ ภาระ: [ทั้งหมด▾] หน่วย: [วัน▾]` (SPEC §8.3, FR-801/802/804/809,
 // M6-D12/D21). The toolbar is one set of MUI controls (not per cell). M7: `[สัปดาห์ | วัน]` is ZoomToggle (FR-802).
 // M6.1 (S5.2, §8.12): light toggles from grid.module.css (token scale, --radius-md); it sits right under the header bar.
-// M7.1 (§8.3 sketch v3.3): ☑ แสดงผู้รับผิดชอบ (FR-816), ⚑ เส้นกำกับ (N) ▾ (FR-819, MarkersMenu as `markers`) and
-// 📈 กราฟภาระ (FR-813, aria-pressed) — all optional props, absent = the M7 toolbar.
+// M7.1 (§8.3 sketch v3.3): ☑ แสดงผู้รับผิดชอบ (FR-816) and 📈 กราฟภาระ (FR-813, aria-pressed) — optional props, absent =
+// the M7 toolbar. M11.1: M7.1's ⚑ เส้นกำกับ menu is gone (markers merged into milestones); the person grid adds the
+// "% | วัน/capacity" toggle (`loadDisplayToggle`).
 // M7.1 review (§8.12 / §4.16, SPEC §9 phone): three wrapping groups — view (switch, zoom, ‹ วันนี้ › kept on one line),
-// filters (ภาระ, หน่วย, switches) and overlays (เส้นกำกับ, กราฟภาระ) — so a narrow toolbar wraps between groups, never
+// filters (ภาระ, หน่วย, switches) and overlays (+ milestone, กราฟภาระ) — so a narrow toolbar wraps between groups, never
 // strands a chevron on its own line.
 // M8 (FR-702, M8-D11): "+ milestone" in the overlays group when `onAddMilestone` is given (managers only) — the keyboard
 // path to create a milestone; PlanGrid opens the create popover at this button, pre-filled with today.
@@ -44,8 +45,8 @@ export interface GridToolbarProps {
   /** M7.1 (FR-816) */
   showAssignees?: boolean
   onShowAssignees?: (on: boolean) => void
-  /** M7.1 (FR-819): the MarkersMenu */
-  markers?: ReactNode
+  /** M11.1 (FR-1008/FR-1010): the "% | วัน/capacity" toggle (person grid) */
+  loadDisplayToggle?: ReactNode
   /** M7.1 (FR-813) */
   chartOpen?: boolean
   onChart?: (open: boolean) => void
@@ -138,8 +139,9 @@ export function GridToolbar(p: GridToolbarProps) {
             data-testid="show-assignees"
           />
         ) : null}
+        {p.loadDisplayToggle}
       </div>
-      {p.markers || p.onChart || p.onAddMilestone ? (
+      {p.onChart || p.onAddMilestone ? (
         <div className={styles.toolbarGroup} data-toolbar-group="overlays">
           {p.onAddMilestone ? (
             <Button
@@ -153,7 +155,6 @@ export function GridToolbar(p: GridToolbarProps) {
               {th.milestones.grid.toolbarAdd}
             </Button>
           ) : null}
-          {p.markers}
           {p.onChart ? (
             <Button
               size="small"

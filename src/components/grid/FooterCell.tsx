@@ -65,7 +65,7 @@ export const FooterCell = memo(function FooterCell({
       ) : tone === 'noCapacity' ? (
         <StatusGlyph kind="noCapacity" />
       ) : null}
-      {text}
+      <span data-footer-text="">{text}</span>
     </div>
   )
 })

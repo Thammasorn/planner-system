@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
+import type { Preferences } from '@/lib/schemas/preferences'
 import { buildColumns, FOOTER_ROWS, HEADER_ROWS, timelineWeeks } from '@/lib/grid/columns'
 import { fxMilestone } from '@/lib/grid/fixtures.test.data'
 import { IVY_PROJECTS, personResponse } from '@/lib/grid/person.test.data'
@@ -81,7 +82,10 @@ function peterChunk(from: string): GridResponse {
   })
 }
 
-function renderPerson(ctx: GridCtx, o: { focusWeek?: string; onOpenTask?: (t: string, p?: string) => void } = {}) {
+function renderPerson(
+  ctx: GridCtx,
+  o: { focusWeek?: string; onOpenTask?: (t: string, p?: string) => void; prefs?: Partial<Preferences> } = {},
+) {
   return renderGrid(
     <PlanGrid
       context={ctx}
@@ -92,6 +96,7 @@ function renderPerson(ctx: GridCtx, o: { focusWeek?: string; onOpenTask?: (t: st
       onOpenTask={o.onOpenTask ?? vi.fn()}
       {...(o.focusWeek ? { focusWeek: o.focusWeek } : {})}
     />,
+    o.prefs ? { prefs: o.prefs } : {},
   )
 }
 
@@ -180,14 +185,25 @@ describe('PlanGrid — person context (M9 S3.4)', () => {
     )
   })
 
-  it('footer (F3 Peter as Cindy): ภาระรวม 5.0 with 🔴 and the hidden status text, tone over', async () => {
-    renderPerson(PETER)
+  it('footer (F3 Peter as Cindy), days: ภาระรวม 5/3 with 🔴 and the hidden status text, tone over', async () => {
+    renderPerson(PETER, { prefs: { 'load.display': 'DAYS' } })
     const cell = await screen.findByTestId('cell-footer-load-W:2026-10-05')
-    await waitFor(() => expect(cell).toHaveTextContent('5.0'))
+    await waitFor(() => expect(cell.querySelector('[data-footer-text]')).toHaveTextContent('5/3'))
     expect(cell).toHaveAttribute('data-tone', 'over')
     expect(cell.querySelector('[data-glyph="over"]')).toHaveTextContent('🔴')
     expect(cell).toHaveTextContent(th.overload.footerStatus(th.overload.level.OVER, '5.0', '3.0'))
     expect(screen.getByTestId('cell-footer-capacity-W:2026-10-05')).toHaveTextContent('3.0')
+  })
+
+  it('M11.1 FR-1008/FR-1010: the person footer follows load.display (default %) with a toolbar toggle', async () => {
+    renderPerson(PETER)
+    const cell = await screen.findByTestId('cell-footer-load-W:2026-10-05')
+    await waitFor(() => expect(cell.querySelector('[data-footer-text]')).toHaveTextContent('167%'))
+    expect(cell).toHaveAttribute('data-tone', 'over')
+    expect(cell).toHaveTextContent(th.overload.footerStatus(th.overload.level.OVER, '5.0', '3.0'))
+    const toggle = screen.getByTestId('load-display-toggle')
+    fireEvent.click(within(toggle).getByRole('button', { name: th.loadDisplay.DAYS_long }))
+    await waitFor(() => expect(cell.querySelector('[data-footer-text]')).toHaveTextContent('5/3'))
   })
 
   it('focusWeek opens that week as the first column and marks its header', async () => {
@@ -242,7 +258,7 @@ describe('PlanGrid — person context (M9 S3.4)', () => {
     await user.click(cell)
     await user.keyboard('2{Enter}')
     await waitFor(() => expect(screen.getByTestId('cell-p:p-pos-W:2026-10-05')).toHaveTextContent('2.0'))
-    expect(screen.getByTestId('cell-footer-load-W:2026-10-05')).toHaveTextContent('3.0')
+    expect(screen.getByTestId('cell-footer-load-W:2026-10-05')).toHaveTextContent('60%') // 3.0 of 5 days
     fireEvent.blur(screen.getByRole('grid', { name: th.people.grid.label('ivy') }))
     await waitFor(() => expect(m.saveAllocations).toHaveBeenCalledTimes(1))
     const input = m.saveAllocations.mock.calls[0]![0] as SaveAllocationsInput

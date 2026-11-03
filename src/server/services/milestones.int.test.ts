@@ -131,6 +131,45 @@ describe('updateMilestone (FR-701/704/707, M8-D19)', () => {
     expect(reopened.milestone.status).toBe('DUE_SOON')
   })
 
+  it('M11.1 FR-709: create with a colour; recolour → milestoneRecoloured audit {color}; undo with previous.color; member 403', async () => {
+    const w = await world()
+    asUser(w.lead)
+    const created = ok(await createMilestone({ projectId: w.P.id, name: 'UAT sign-off', date: '2026-10-23', color: 'RED' }))
+    expect(created.milestone.color).toBe('RED')
+    const plain = ok(await createMilestone({ projectId: w.P.id, name: 'Go-live', date: '2026-10-30' }))
+    expect(plain.milestone.color).toBe('PURPLE')
+
+    let before = await auditCount()
+    const green = ok(await updateMilestone({ milestoneId: created.milestone.id, patch: { color: 'GREEN' } }))
+    expect(green.changed).toEqual(['color'])
+    expect(green.previous.color).toBe('RED')
+    expect(green.milestone.color).toBe('GREEN')
+    expect(await auditRowsAfter(before)).toMatchObject([
+      {
+        entity: 'milestone',
+        action: 'update',
+        summary: th.audit.milestoneRecoloured('UAT sign-off', th.milestones.color.name.RED, th.milestones.color.name.GREEN),
+        before: { color: 'RED' },
+        after: { color: 'GREEN' },
+      },
+    ])
+    // the undo of the toast = update with the previous colour
+    const undone = ok(await updateMilestone({ milestoneId: created.milestone.id, patch: { color: green.previous.color } }))
+    expect(undone.milestone.color).toBe('RED')
+    // same colour again: no change, no audit
+    before = await auditCount()
+    expect(ok(await updateMilestone({ milestoneId: created.milestone.id, patch: { color: 'RED' } })).changed).toEqual([])
+    expect(await auditRowsAfter(before)).toHaveLength(0)
+    // the project list carries the colour
+    const list = await okJson<ProjectMilestonesResponse>(
+      await callRoute(getMilestones, `/api/projects/${w.P.id}/milestones`, { id: w.P.id }),
+    )
+    expect(list.milestones.find((m) => m.id === created.milestone.id)?.color).toBe('RED')
+    // PERM-15: a MEMBER cannot recolour (plan markers used to allow it — M11.1-D3)
+    asUser(w.member)
+    expect(outcomeOf(await updateMilestone({ milestoneId: created.milestone.id, patch: { color: 'BLUE' } }))).toBe('403')
+  })
+
   it('exact undo of reopen restores the original completedOn; a future completedOn → 400', async () => {
     const w = await world()
     asUser(w.lead)

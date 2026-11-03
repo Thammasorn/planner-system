@@ -17,6 +17,7 @@ it('M8-D16: a day with only a ◆ milestone is listed, with the chip linking to 
         projectColor: '#2F5597',
         name: 'UAT sign-off',
         date: '2026-10-23',
+        color: 'PURPLE' as const,
         status: 'UPCOMING' as const,
         late: false,
       },

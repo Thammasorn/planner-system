@@ -9,11 +9,11 @@
 // ↕ collapse-to-week (BR-23) in the รวม cell and the cell menu, day-level overload glyphs and footer tones.
 // M7.1 (plan/m07.1 S3): two frozen columns งาน / ผู้รับผิดชอบ with a resizable task column (FR-814/816), show/hide
 // assignees with summed rows (FR-816/817, cellRowOf + SumModeHint), the month header row + month boundaries
-// (FR-818, HEADER_ROWS = 2), plan markers (FR-819/820: usePlanMarkers, MarkerLayer, MarkerPopover, MarkersMenu, header
-// context menu), row reorder by drag / Alt+arrows through M3's moveTask with an optimistic grid patch (FR-815,
+// (FR-818, HEADER_ROWS = 2), the line layer (MarkerLayer; M11.1: milestones only — plan markers were merged into
+// milestones, FR-709), row reorder by drag / Alt+arrows through M3's moveTask with an optimistic grid patch (FR-815,
 // applyRowMove), and the กราฟภาระ pane under the grid sharing the footer's includeOthers (FR-813).
 // M8 (plan/m08 S3): the ◆ Milestones header row on top (HEADER_ROWS = 3), its popovers / menu / drag / create
-// (useGridMilestones), dash-dot milestone lines in the marker layer (FR-820), "→◆" + "เลย milestone" on task rows and
+// (useGridMilestones), milestone lines in the line layer in each milestone's colour (FR-709, M11.1), "→◆" + "เลย milestone" on task rows and
 // "+ milestone" in the toolbar.
 // M9 (plan/m09 S3, M9-D12/D13/D28/D29): the person context — project header rows (collapsible, read-only sums), merged
 // task rows of every project of the person, the masked "งานในโปรเจคอื่น" row last; no structure affordances (no quick
@@ -22,8 +22,6 @@
 // BR-40 glyphs in both contexts (M9-D13, X06); ◆ read-only with a project-name prefix (M9-D29).
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
-import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
 import { useQueryClient } from '@tanstack/react-query'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import {
@@ -53,7 +51,6 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
 import type { GridResponse, GridZoom } from '@/lib/contracts/grid'
-import type { GridMarkerView, PlanMarkerDTO } from '@/lib/contracts/plan-markers'
 import { formatWeekHeader } from '@/lib/format'
 import {
   type BoxScroll,
@@ -96,12 +93,7 @@ import {
   initialHoldStep,
 } from '@/lib/grid/initial-scroll'
 import {
-  defaultMarkerDate,
-  defaultToolbarMarkerDate,
-  markerEdgeColumn,
   markerEdges,
-  toMarkerViews,
-  type MarkerEdge,
 } from '@/lib/grid/markers'
 import type { GridModel } from '@/lib/grid/merge'
 import { monthStartKeys } from '@/lib/grid/months'
@@ -132,7 +124,6 @@ import {
 import { rememberVersion } from '@/lib/grid/versions'
 import type { GridCtx } from '@/lib/query-keys'
 import { qk } from '@/lib/query-keys'
-import { PLAN_MARKER_LIMIT } from '@/lib/schemas/plan-markers'
 import { gridPreference, taskPreference } from '@/lib/schemas/preferences'
 import {
   flattenTree,
@@ -145,13 +136,10 @@ import {
 } from '@/lib/tree/ops'
 import { ColumnResizeHandle } from './ColumnResizeHandle'
 import { DropIndicator } from './DropIndicator'
-import { MarkerFlags, MarkerLines, markerName, paddingOf, renderedEdges } from './MarkerLayer'
-import { MarkerPopover } from './MarkerPopover'
-import { MarkersMenu } from './MarkersMenu'
+import { MarkerLines, paddingOf, renderedEdges } from './MarkerLayer'
 import { MonthHeader } from './MonthHeader'
 import { PersonRowHeader } from './PersonRowHeader'
 import { SumModeHint } from './SumModeHint'
-import { usePlanMarkers } from './usePlanMarkers'
 import { useRowDrag } from './useRowDrag'
 import { CellTooltip } from './CellTooltip'
 import { Footer } from './Footer'
@@ -174,6 +162,8 @@ import { useGridMilestones } from './useGridMilestones'
 import { useGridUndo } from './useGridUndo'
 import { useSaveAllocations } from './useSaveAllocations'
 import { GridLoadChart } from './GridLoadChart'
+import { LoadDisplayToggle } from '@/components/load/LoadDisplayToggle'
+import { loadDisplay as loadDisplayOf } from '@/lib/load/display'
 import { VirtualGrid, type VirtualGridHandle } from './VirtualGrid'
 import styles from './grid.module.css'
 
@@ -236,6 +226,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const openWeek = props.focusWeek ? weekStart(props.focusWeek) : null
   const { prefs, setPreference } = usePreferences()
   const unit = gridPreference(prefs, 'grid.unit')
+  /** M11.1 (FR-1010): % of capacity or days — the chart and the person footer (not the grid cells: FR-804 `unit`) */
+  const loadDisplay = loadDisplayOf(prefs)
   const view = gridPreference(prefs, 'load.view')
   const showCompleted = taskPreference(prefs, 'tasks.showCompleted')
   const [includeOthers, setIncludeOthers] = useState(false)
@@ -573,14 +565,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     onDrop: onRowDrop,
   })
 
-  // ── M7.1 plan markers (FR-819/820, M7.1-D11–D15) ──
-  const markersEnabled = context.kind === 'project'
-  const planMarkers = usePlanMarkers(context.id, { enabled: markersEnabled })
-  const markerViews = useMemo<GridMarkerView[]>(
-    () => toMarkerViews(planMarkers.markers, canEdit),
-    [planMarkers.markers, canEdit],
-  )
-  // ── M8 ◆ row (FR-705/707, M8-D8–D11) + milestone lines in the same layer (FR-820, D24: lines only, no flags) ──
+  // ── M8 ◆ row (FR-705/707, M8-D8–D11) + the milestone line layer (BR-102; M11.1: in each milestone's colour, no flags) ──
   const scrollEl = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {
@@ -603,60 +588,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     thisWeek,
     ...(isPerson ? { projectLabel: msProjectLabel } : {}),
   })
-  const flagEdges = useMemo(() => markerEdges(markerViews, cols), [markerViews, cols])
-  const edges = useMemo(
-    () => (gm.markerViews.length === 0 ? flagEdges : markerEdges([...markerViews, ...gm.markerViews], cols)),
-    [flagEdges, markerViews, gm.markerViews, cols],
-  )
+  const edges = useMemo(() => markerEdges(gm.markerViews, cols), [gm.markerViews, cols])
   const monthStarts = useMemo(() => monthStartKeys(cols), [cols])
-  const [markerOpen, setMarkerOpen] = useState<{ id: string; anchor: Element } | null>(null)
-  const [markerStack, setMarkerStack] = useState<{ edge: MarkerEdge; anchor: Element } | null>(null)
-  const openMarker = useCallback(
-    (v: GridMarkerView, anchor: Element) => setMarkerOpen({ id: v.id, anchor }),
-    [],
-  )
-  const openStack = useCallback((edge: MarkerEdge, anchor: Element) => setMarkerStack({ edge, anchor }), [])
-  const canAddMarker = canEdit && markersEnabled && planMarkers.markers.length < PLAN_MARKER_LIMIT
-  /** Creates at once (FR-819 "สร้างทันที") and opens its popover at `anchor`. */
-  const addMarker = useCallback(
-    (date: ISODate, anchor: Element | null) => {
-      if (!canAddMarker) return
-      const id = planMarkers.create({ date })
-      if (anchor) setMarkerOpen({ id, anchor })
-    },
-    [canAddMarker, planMarkers],
-  )
-  /** "เพิ่มเส้นกำกับที่ขอบขวา" (header / cell menu): the column's default date (BR-102, M7.1-D11), anchored at its header. */
-  const addMarkerAtColumn = useCallback(
-    (c: number) => {
-      const col = cols[c]
-      if (!col) return
-      // by id, not gridRef: the cell menu's items carry this callback as data (react-hooks/refs)
-      const root = document.getElementById(rootId)
-      addMarker(defaultMarkerDate(col), root?.querySelector(`[role="columnheader"][data-c="${c}"]`) ?? root)
-    },
-    [cols, addMarker, rootId],
-  )
-  /** Toolbar "ไปที่": scroll to the marker's edge, then open its popover at its flag (or the column header). */
-  const goToMarker = useCallback(
-    (m: PlanMarkerDTO) => {
-      const c = markerEdgeColumn(m.date, cols)
-      if (c === null) return
-      gridRef.current?.scrollToColumn(Math.max(0, c - 2))
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          const root = gridRef.current?.element()
-          const el =
-            root?.querySelector(`[data-marker-flag="${CSS.escape(m.id)}"]`) ??
-            root?.querySelector(`[data-frozen-header] ~ [data-c="${c}"]`) ??
-            document.querySelector('[data-testid="markers-menu"]')
-          if (el) setMarkerOpen({ id: m.id, anchor: el })
-        }),
-      )
-    },
-    [cols],
-  )
-  const openedMarker = markerOpen ? planMarkers.find(markerOpen.id) : undefined
 
   // ── M7.1 frozen columns (FR-814/816, M7.1-D7/D8/D9) ──
   const refocusAfterToggle = useRef<{ taskId: string; c: number; assignee: boolean } | null>(null)
@@ -839,10 +772,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const [menu, setMenu] = useState<{
     anchor: { rowKey: RowKey; periodKey: PeriodKey } | { x: number; y: number }
     targets: CollapseTarget[]
-    /** M7.1: the column under the menu ("เพิ่มเส้นกำกับที่ขอบขวา") */
-    col: number
-    /** M7.1: opened on a column header — only the marker item */
-    header?: boolean
   } | null>(null)
   const selectionDayTargets = useCallback((): CollapseTarget[] => {
     const m = modelRef.current
@@ -860,21 +789,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   }, [store])
   const onContextMenu = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {
-      // M7.1 (FR-819): right click on a period header → "เพิ่มเส้นกำกับที่ขอบขวา"
-      const header = (e.target as HTMLElement).closest<HTMLElement>('[role="columnheader"][data-c]')
-      if (header) {
-        if (!canEdit || !markersEnabled) return
-        e.preventDefault()
-        const r = header.getBoundingClientRect()
-        const keyboard = e.clientX === 0 && e.clientY === 0
-        setMenu({
-          anchor: keyboard ? { x: r.left + r.width / 2, y: r.bottom } : { x: e.clientX, y: e.clientY },
-          targets: [],
-          col: Number(header.dataset.c),
-          header: true,
-        })
-        return
-      }
       const el = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]')
       if (!el) return
       e.preventDefault()
@@ -889,10 +803,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       setMenu({
         anchor: keyboard ? { rowKey: row.key, periodKey: col.key } : { x: e.clientX, y: e.clientY },
         targets: selectionDayTargets(),
-        col: p.c,
       })
     },
-    [store, selectionDayTargets, cellRows, cols, canEdit, markersEnabled],
+    [store, selectionDayTargets, cellRows, cols],
   )
   const onCollapseCell = useCallback(
     (rowKey: string, periodKey: string) => {
@@ -960,7 +873,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         const row = f ? cellRows[f.r] : undefined
         const col = f ? cols[f.c] : undefined
         if (!f || !row || !col) return
-        setMenu({ anchor: { rowKey: row.key, periodKey: col.key }, targets: selectionDayTargets(), col: f.c })
+        setMenu({ anchor: { rowKey: row.key, periodKey: col.key }, targets: selectionDayTargets() })
       },
       // M7.1-D17: the same targets as the task list (M3); archived / read-only grids and assignee rows: no-op
       rowMovable: () => {
@@ -975,23 +888,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     }
   })
   const gridKeyDown = useGridKeyboard(acc, editing, handlers)
-  /** M7.1 (FR-819, X07): Shift+F10 / ContextMenu on a focused column header (its toggle) → the header menu. */
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const header = (e.target as HTMLElement).closest<HTMLElement>('[role="columnheader"][data-c]')
-    if (header && ((e.code === 'F10' && e.shiftKey) || e.code === 'ContextMenu')) {
-      if (!canEdit || !markersEnabled) return
-      e.preventDefault()
-      const r = header.getBoundingClientRect()
-      setMenu({
-        anchor: { x: r.left + r.width / 2, y: r.bottom },
-        targets: [],
-        col: Number(header.dataset.c),
-        header: true,
-      })
-      return
-    }
-    gridKeyDown(e)
-  }
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => gridKeyDown(e)
 
   const onSelectRow = useCallback(
     (r: number) => {
@@ -1600,13 +1497,10 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     />
   )
 
-  // M7.1: the cell menu = M7's ↕ item + "เพิ่มเส้นกำกับที่ขอบขวา"; on a column header only the marker item
+  // the cell menu = M7's ↕ item (M11.1: M7.1's "เพิ่มเส้นกำกับที่ขอบขวา" left with the plan markers)
   const onMenuCollapse = useCallback(() => {
     if (menu) collapseToWeek(menu.targets)
   }, [menu, collapseToWeek])
-  const onMenuAddMarker = useCallback(() => {
-    if (menu) addMarkerAtColumn(menu.col)
-  }, [menu, addMarkerAtColumn])
   const menuItems = useMemo<CellMenuItem[] | undefined>(() => {
     if (!menu) return undefined
     const collapse: CellMenuItem = {
@@ -1615,16 +1509,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       disabled: menu.targets.length === 0,
       onSelect: onMenuCollapse,
     }
-    const add: CellMenuItem = {
-      id: 'addMarker',
-      label: canAddMarker ? th.planMarkers.addHere : th.planMarkers.limit(PLAN_MARKER_LIMIT),
-      disabled: !canAddMarker || cols[menu.col] === undefined,
-      onSelect: onMenuAddMarker,
-    }
-    const withMarker = canEdit && markersEnabled
-    if (menu.header) return withMarker ? [add] : []
-    return withMarker ? [collapse, add] : [collapse]
-  }, [menu, canEdit, markersEnabled, canAddMarker, cols, onMenuCollapse, onMenuAddMarker])
+    return [collapse]
+  }, [menu, onMenuCollapse])
 
   return (
     <div id={rootId} className={styles.root} ref={rootRef} data-chart-open={chartOpen ? 'true' : undefined}>
@@ -1644,23 +1530,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onShowCompleted={(on) => setPreference('tasks.showCompleted', on)}
         showAssignees={showAssignees}
         {...(isPerson ? {} : { onShowAssignees: (on: boolean) => setShowAssignees(on) })}
-        markers={
-          markersEnabled ? (
-            <MarkersMenu
-              markers={planMarkers.markers}
-              canEdit={canEdit}
-              onGoTo={goToMarker}
-              onAdd={() => {
-                const date = defaultToolbarMarkerDate(today)
-                const c = markerEdgeColumn(date, cols)
-                if (c !== null) gridRef.current?.scrollToColumn(Math.max(0, c - 2))
-                addMarker(date, document.querySelector('[data-testid="markers-menu"]'))
-              }}
-            />
-          ) : null
-        }
         chartOpen={chartOpen}
-        {...(isPerson ? {} : { onChart })}
+        {...(isPerson ? { loadDisplayToggle: <LoadDisplayToggle /> } : { onChart })}
         {...(gm.canManage ? { onAddMilestone: (anchor: HTMLElement) => gm.openCreate(anchor) } : {})}
       />
       {archived ? (
@@ -1694,7 +1565,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onWidthChange={setGridWidth}
         renderHeader={(vCols, totalWidth, view) => {
           const shown = renderedEdges(edges, vCols)
-          const flags = renderedEdges(flagEdges, vCols)
           return (
             <div className={styles.headerGroup} style={{ width: totalWidth }} role="rowgroup">
               {gm.row(vCols, totalWidth)}
@@ -1704,13 +1574,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
                 totalWidth={totalWidth}
                 viewFrom={view?.from}
                 viewTo={view?.to}
-                renderFlags={
-                  flags.length > 0
-                    ? (span) => (
-                        <MarkerFlags span={span} edges={flags} onOpen={openMarker} onOpenStack={openStack} />
-                      )
-                    : undefined
-                }
               />
               <GridHeader
                 cols={cols}
@@ -1765,7 +1628,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             onIncludeOthers={setIncludeOthers}
             dayCells={footerDays}
             weekCells={footerWeeks}
-            {...(isPerson ? { loadLabel: th.people.grid.footerLoad, showOthersSwitch: false } : {})}
+            {...(isPerson ? { loadLabel: th.people.grid.footerLoad, showOthersSwitch: false, loadDisplay } : {})}
             monthStarts={monthStarts}
             overlay={
               <MarkerLines piece="footer" edges={renderedEdges(edges, vCols)} pad={paddingOf(cols, vCols)} />
@@ -1786,7 +1649,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
                   follow={g.follow}
                   model={model}
                   view={view}
-                  unit={unit}
+                  display={loadDisplay}
                   includeOthers={includeOthers}
                   onIncludeOthers={setIncludeOthers}
                   monthStarts={monthStarts}
@@ -1831,33 +1694,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onClose={closeMenu}
         {...(menuItems ? { items: menuItems } : {})}
       />
-      <MarkerPopover
-        marker={openedMarker ?? null}
-        anchorEl={markerOpen?.anchor ?? null}
-        editable={canEdit}
-        onChange={planMarkers.update}
-        onDelete={planMarkers.remove}
-        onClose={() => setMarkerOpen(null)}
-      />
-      <Menu
-        open={markerStack !== null}
-        anchorEl={markerStack?.anchor ?? null}
-        onClose={() => setMarkerStack(null)}
-        slotProps={{ list: { 'aria-label': th.planMarkers.menu(markerStack?.edge.views.length ?? 0) } }}
-      >
-        {(markerStack?.edge.views ?? []).map((v) => (
-          <MenuItem
-            key={v.id}
-            onClick={() => {
-              const anchor = markerStack?.anchor ?? null
-              setMarkerStack(null)
-              if (anchor) setMarkerOpen({ id: v.id, anchor })
-            }}
-          >
-            {markerName(v)}
-          </MenuItem>
-        ))}
-      </Menu>
       <SumModeHint
         anchorEl={sumHint?.anchor ?? null}
         people={sumHint?.people ?? 0}

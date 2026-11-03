@@ -32,6 +32,8 @@ export async function insertMilestone(
     name: string
     date: ISODate
     description?: string | null
+    /** M11.1: absent = the DB default PURPLE */
+    color?: MilestoneDbRow['color']
     createdBy: string
     completedOn?: ISODate | null
     deletedAt?: Date | null
@@ -45,6 +47,7 @@ export async function insertMilestone(
       name: row.name,
       date: row.date,
       description: row.description ?? null,
+      ...(row.color ? { color: row.color } : {}),
       createdBy: row.createdBy,
       completedOn: row.completedOn ?? null,
       deletedAt: row.deletedAt ?? null,
@@ -128,7 +131,7 @@ export async function listForProjects(
 export async function update(
   tx: Tx,
   id: string,
-  set: Partial<Pick<MilestoneDbRow, 'name' | 'date' | 'description' | 'completedOn'>>,
+  set: Partial<Pick<MilestoneDbRow, 'name' | 'date' | 'description' | 'completedOn' | 'color'>>,
 ): Promise<MilestoneDbRow> {
   const [row] = await tx
     .update(milestones)

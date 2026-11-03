@@ -5,7 +5,8 @@
 // the column window does not change, scrolling re-renders nothing here (VirtualGrid keeps scrollLeft in sync itself).
 import type { VirtualItem } from '@tanstack/react-virtual'
 import { memo, useMemo } from 'react'
-import type { CellUnit, LoadView, PeriodKey } from '@/domain/types'
+import type { LoadView, PeriodKey } from '@/domain/types'
+import type { LoadDisplay } from '@/lib/load/display'
 import { LoadChartPanel } from '@/components/load-chart/LoadChartPanel'
 import type { ChartLayout } from '@/components/load-chart/types'
 import { periodSlots, slotWeeks } from '@/lib/grid/chart-geometry'
@@ -26,7 +27,8 @@ export interface GridLoadChartProps {
   follow: ChartLayout['follow']
   model: GridModel | null
   view: LoadView
-  unit: CellUnit
+  /** M11.1 (FR-813/FR-1010): `load.display`, not the grid unit */
+  display: LoadDisplay
   includeOthers: boolean
   onIncludeOthers: (on: boolean) => void
   monthStarts: ReadonlySet<PeriodKey>
@@ -39,11 +41,8 @@ export const GridLoadChart = memo(function GridLoadChart(p: GridLoadChartProps) 
   const weekKey = slotWeeks(slots).join(',')
   const weeks = useMemo(() => (weekKey ? weekKey.split(',') : []), [weekKey])
   const series = useMemo(
-    () =>
-      p.model
-        ? memberLoadSeries(p.model, weeks, { view: p.view, includeOthers: p.includeOthers, unit: p.unit })
-        : [],
-    [p.model, weeks, p.view, p.includeOthers, p.unit],
+    () => (p.model ? memberLoadSeries(p.model, weeks, { view: p.view, includeOthers: p.includeOthers }) : []),
+    [p.model, weeks, p.view, p.includeOthers],
   )
   const markerEdges = useMemo(() => renderedEdges(p.edges, p.vCols), [p.edges, p.vCols])
   const layout = useMemo<ChartLayout>(
@@ -74,7 +73,7 @@ export const GridLoadChart = memo(function GridLoadChart(p: GridLoadChartProps) 
         weeks={weeks}
         layout={layout}
         series={series}
-        unit={p.unit}
+        display={p.display}
         view={p.view}
         includeOthers={p.includeOthers}
         onIncludeOthers={p.onIncludeOthers}

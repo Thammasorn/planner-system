@@ -4,7 +4,7 @@
 // grid renders (chart-geometry.ts slotWeeks, M7.1-D30 — no 4–26 clamp any more).
 import { addLoad, viewLoad, ZERO_LOAD } from '@/domain/certainty'
 import { overloadLevel } from '@/domain/overload'
-import type { CellUnit, ISODate, LoadPair, LoadView, PeriodKey } from '@/domain/types'
+import type { ISODate, LoadPair, LoadView, PeriodKey } from '@/domain/types'
 import type { LoadSeries } from '@/components/load-chart/types'
 import type { GridTaskRow } from '@/lib/contracts/grid'
 import { footerTotals, footerValue } from './aggregate'
@@ -15,8 +15,6 @@ export interface LoadSeriesOptions {
   view: LoadView
   /** the footer's "รวมงานโปรเจคอื่น" switch (shared state) */
   includeOthers: boolean
-  /** display only — the chart converts cd / pct at the edge; values here do not depend on it */
-  unit?: CellUnit
 }
 
 /**

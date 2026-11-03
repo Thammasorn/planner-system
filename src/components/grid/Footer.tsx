@@ -7,12 +7,14 @@
 // M9 (S3.5, M9-D13, X06): week cells of the ภาระรวม row carry the BR-45 tone of the selected view AND the number AND the
 // BR-40 glyph + hidden status text (never colour alone); the person grid relabels the row "ภาระรวม (ทุกโปรเจค)" and has
 // no includeOthers switch (its masked row already carries every other project).
+// M11.1 (FR-1008/FR-1010): in the person grid that row follows `load.display` ("90%" or "4.5/5").
 import Switch from '@mui/material/Switch'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import type { ReactNode } from 'react'
 import { formatCd } from '@/domain/units'
 import type { LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
+import { workloadDisplayText, type LoadDisplay } from '@/lib/load/display'
 import { footerValue, type FooterCell as FooterCellData } from '@/lib/grid/aggregate'
 import type { FooterDayCell } from '@/lib/grid/day-footer'
 import type { FooterPeriodCell } from '@/lib/grid/load-footer'
@@ -51,6 +53,8 @@ export interface FooterProps {
   loadLabel?: string
   /** M9: false hides the "รวมงานโปรเจคอื่น" switch (person grid); default true */
   showOthersSwitch?: boolean
+  /** M11.1 (FR-1008/FR-1010): person grid — the ภาระรวม row shows "90%" (PERCENT) or "4.5/5" (DAYS); absent = days */
+  loadDisplay?: LoadDisplay
 }
 
 const days1 = (cd: number) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
@@ -61,7 +65,11 @@ export function Footer(p: FooterProps) {
       kind: 'load' as const,
       label:
         p.loadLabel ?? (p.names.length > 0 ? th.grid.footer.load(p.names.join(', ')) : th.grid.footer.loadEmpty),
-      text: (c: FooterCellData) => days1(footerValue(c, p.view).loadCd),
+      text: (c: FooterCellData) => {
+        const loadCd = footerValue(c, p.view).loadCd
+        if (!p.loadDisplay) return days1(loadCd)
+        return loadCd === 0 ? '' : workloadDisplayText(loadCd, c.capacityCd, p.loadDisplay)
+      },
     },
     {
       kind: 'capacity' as const,

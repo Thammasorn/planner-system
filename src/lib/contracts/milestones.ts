@@ -5,6 +5,17 @@ import type { ISODate, MilestoneStatus } from '@/domain/types'
 
 export type { MilestoneStatus }
 
+/** M11.1 (FR-709, M11.1-D1): the line / ◆ colour; PURPLE (the M8 `--milestone`) is the default. */
+export type MilestoneColor = 'PURPLE' | 'RED' | 'YELLOW' | 'GREEN' | 'BLUE'
+export const MILESTONE_COLORS = [
+  'PURPLE',
+  'RED',
+  'YELLOW',
+  'GREEN',
+  'BLUE',
+] as const satisfies readonly MilestoneColor[]
+export const DEFAULT_MILESTONE_COLOR: MilestoneColor = 'PURPLE'
+
 /** Light reference used inside task responses; status computed client-side (M8-D7). */
 export interface MilestoneRef {
   id: string
@@ -22,6 +33,8 @@ export interface MilestoneProgress {
 export interface MilestoneDTO extends MilestoneRef {
   projectId: string
   description: string | null
+  /** M11.1 (FR-709) */
+  color: MilestoneColor
   /** BR-70 with serverToday(). */
   status: MilestoneStatus
   /** BR-71 (M8-D6): ≥ 1 late bound task. */
@@ -47,7 +60,7 @@ export interface CreateMilestoneResult {
   milestone: MilestoneDTO
 }
 
-export type MilestoneChangeKey = 'name' | 'date' | 'description' | 'completed'
+export type MilestoneChangeKey = 'name' | 'date' | 'description' | 'completed' | 'color'
 
 /** `completedOn` makes undo of complete/reopen exact (M8-D19). */
 export interface MilestonePrevious {
@@ -56,6 +69,7 @@ export interface MilestonePrevious {
   description: string | null
   completed: boolean
   completedOn: ISODate | null
+  color: MilestoneColor
 }
 
 export interface UpdateMilestoneResult {
@@ -110,6 +124,7 @@ export interface CalendarMilestone {
   projectColor: string
   name: string
   date: ISODate
+  color: MilestoneColor
   status: MilestoneStatus
   late: boolean
 }

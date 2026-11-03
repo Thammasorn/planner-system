@@ -20,6 +20,7 @@ import type { Page, Request } from '@playwright/test'
 import { cdToNumeric, formatCd } from '../src/domain/units'
 import { th } from '../src/i18n/th'
 import { formatLeaveRange, formatThaiDate, formatWeekHeader } from '../src/lib/format'
+import { workloadDisplayText } from '../src/lib/load/display'
 import { compactDays, twoDecimals } from '../src/lib/workload/format'
 import {
   expect,
@@ -58,8 +59,9 @@ const SHARED = 'งานร่วม AC-604'
 const VACATION = th.leaveTypes.defaults[0].name
 
 const d1 = (cd: number) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
-/** WorkloadCell text (M9-D6): compact(load)/compact(cap). */
-const cellText = (loadCd: number, capCd: number) => `${compactDays(loadCd)}/${compactDays(capCd)}`
+/** WorkloadCell text in the default display (M11.1-D4/D5: "% of capacity"; M9-D6's compact(load)/compact(cap) is the
+ *  DAYS display, checked in e2e/m11.1-milestone-colour-load-percent.spec.ts). */
+const cellText = (loadCd: number, capCd: number) => workloadDisplayText(loadCd, capCd, 'PERCENT')
 /** The 12 Mondays of the default window [28/9, +12 w). */
 const WINDOW = [
   '2026-09-28',
@@ -403,7 +405,12 @@ test.describe('W6 ⟲ (FR-1008, MASK-4) Cindy on Peter’s page: header + one ma
     await expect(grid.projectRows()).toHaveCount(0)
     await expect(grid.root().getByRole('textbox', { name: th.grid.row.addTaskLabel })).toHaveCount(0)
     await expect(grid.value(await grid.reveal(`m:${peter}`, '2026-09-28'))).toHaveText(d1(500))
-    await expect(grid.footerLoad('W:2026-09-28')).toHaveText(d1(500))
+    // M11.1 (FR-1008/FR-1010): the person footer follows load.display — default %; days → "5/5"
+    await expect(grid.footerLoad('W:2026-09-28').locator('[data-footer-text]')).toHaveText(/^\d+%$/)
+    await grid.setLoadDisplay('DAYS')
+    await expect(grid.footerLoad('W:2026-09-28').locator('[data-footer-text]')).toHaveText(
+      new RegExp(`^${escapeRe(compactDays(500))}/`),
+    )
     await expect(grid.value(await grid.reveal(`m:${peter}`, '2026-10-19'))).toHaveText(d1(250))
 
     await expectNoNeedles(await bodies(), [DW, DW_TASK, STORE, STORE_TASK])
@@ -450,9 +457,12 @@ test.describe('W7 ⟲ (AC-604) one task, two people: each person page shows only
     const rIndex = async (rowKey: string) => Number(await grid.rowHeaderByKey(rowKey).getAttribute('data-r'))
     expect(await rIndex(`p:${mobile}`)).toBeLessThan(await rIndex(jackRow)) // under the Mobile project row
     await expect(grid.value(await grid.reveal(jackRow, '2026-11-16'))).toHaveText(d1(300))
+    await grid.setLoadDisplay('DAYS') // M11.1: the footer numbers below are the days display (default is %)
     await expect(grid.rowHeader(SHARED, 'Mint')).toHaveCount(0)
     // footer = Jack's full load: 3.0 + Store 2.5 (TENTATIVE) = 5.5 vs 5 → RISK (⚠ + hidden text, never colour alone)
-    await expect(grid.footerLoad('W:2026-11-16')).toHaveText(new RegExp(`${escapeRe(d1(550))}$`))
+    await expect(grid.footerLoad('W:2026-11-16').locator('[data-footer-text]')).toHaveText(
+      new RegExp(`^${escapeRe(compactDays(550))}/`),
+    )
     await expect(grid.footerGlyph('2026-11-16')).toHaveAttribute('data-glyph', 'risk')
     await expect(grid.footerLoad('W:2026-11-16')).toContainText(th.overload.level.RISK)
 
@@ -462,7 +472,9 @@ test.describe('W7 ⟲ (AC-604) one task, two people: each person page shows only
     const mintRow = await grid.rowKeyOf(SHARED, 'Mint')
     await expect(grid.value(await grid.reveal(mintRow, '2026-11-16'))).toHaveText(d1(200))
     await expect(grid.rowHeader(SHARED, 'Jack')).toHaveCount(0)
-    await expect(grid.footerLoad('W:2026-11-16')).toHaveText(d1(200))
+    await expect(grid.footerLoad('W:2026-11-16').locator('[data-footer-text]')).toHaveText(
+      new RegExp(`^${escapeRe(compactDays(200))}/`),
+    ) // still days: one preference for every screen (M11.1-D4)
   })
 })
 

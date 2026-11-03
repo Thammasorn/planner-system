@@ -179,11 +179,15 @@ describe('applyLateness (M8-D12)', () => {
   })
 })
 
-describe('milestoneMarkerViews (FR-820, D24)', () => {
-  it('one non-editable MILESTONE line per milestone, on the column edge of its ◆ (BR-102)', () => {
-    const views = milestoneMarkerViews([ms('m1', '2026-10-23', { name: 'UAT sign-off' })])
+describe('milestoneMarkerViews (FR-709, BR-102, M11.1-D1)', () => {
+  it('one line per milestone in its colour, on the column edge of its ◆ (BR-102)', () => {
+    const views = milestoneMarkerViews([
+      ms('m1', '2026-10-23', { name: 'UAT sign-off', color: 'RED' }),
+      ms('m2', '2026-10-30', { name: 'Go-live' }),
+    ])
     expect(views).toEqual([
-      { id: 'ms:m1', source: 'MILESTONE', tone: 'MILESTONE', date: '2026-10-23', label: 'UAT sign-off', editable: false },
+      { id: 'm1', date: '2026-10-23', color: 'RED', label: 'UAT sign-off' },
+      { id: 'm2', date: '2026-10-30', color: 'PURPLE', label: 'Go-live' },
     ])
     const cols = expandedCols()
     expect(cols[markerEdgeColumn('2026-10-23', cols)!]!.key).toBe(milestoneColumnKey('2026-10-23', cols))

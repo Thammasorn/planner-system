@@ -24,6 +24,7 @@ import ChevronRight from '@mui/icons-material/ChevronRight'
 import { EmptyState } from '@/components/common/EmptyState'
 import { addDays, addWeeks, weekStart } from '@/domain/dates'
 import type { ISODate, LoadView } from '@/domain/types'
+import { LoadDisplayToggle } from '@/components/load/LoadDisplayToggle'
 import { usePreferences } from '@/hooks/usePreferences'
 import { useSidebar } from '@/hooks/useSidebar'
 import { useToday } from '@/hooks/useToday'
@@ -106,6 +107,8 @@ export function WorkloadPage({ initialView }: { initialView: LoadView }) {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+        {/* M11.1 (FR-1002/FR-1010): "% | วัน/capacity" — the shared load.display preference */}
+        <LoadDisplayToggle />
         <FormControl size="small" sx={SELECT_SX}>
           <InputLabel id="wl-position">{th.workload.filters.position}</InputLabel>
           <Select

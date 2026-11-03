@@ -12,7 +12,6 @@ import {
   leaveTypes,
   milestones,
   pages,
-  planMarkers,
   projectMembers,
   taskAssignments,
   taskBlockers,
@@ -74,7 +73,6 @@ describe('world fixture (X91)', () => {
     expect(() => w.dayWeeks.pDay).toThrow("needs createWorld({ with: ['dayAllocations'] })")
     expect(() => w.allocations.pLeafLead).toThrow("needs createWorld({ with: ['allocations'] })")
     expect(() => w.taskBodies.pLeafBody).toThrow("needs createWorld({ with: ['taskBodies'] })")
-    expect(() => w.planMarkers.pRed).toThrow("needs createWorld({ with: ['planMarkers'] })")
     expect(() => w.milestones.p).toThrow("needs createWorld({ with: ['milestones'] })")
     expect(() => w.deletedMilestones.pDeleted).toThrow("needs createWorld({ with: ['milestones'] })")
     expect(() => w.batches.pDeletedMilestone).toThrow("needs createWorld({ with: ['milestones'] })")
@@ -433,24 +431,6 @@ describe('world fixture (X91)', () => {
     expect(await allocationRows(a.qTaskCoworker.id, '2026-10-05')).toEqual([W(300, '2026-10-05')])
     expect(await allocationRows(a.pLeafLead.id, '2026-09-28')).toEqual([W(250, '2026-09-28')])
     for (const id of Object.values(a).map((x) => x.id)) expect(await assignmentVersion(id)).toBe(1)
-  })
-
-  it('M7.1 with planMarkers: P RED + GREEN, A YELLOW, Q RED; implies nothing; all live (plan/m07.1 S0.11)', async () => {
-    expect([...expandParts(['planMarkers'])]).toEqual(['planMarkers'])
-    const w = await createWorld({ with: ['planMarkers'] })
-    const m = w.planMarkers
-    expect(m.pRed).toMatchObject({
-      projectId: w.P.id,
-      date: '2026-10-23',
-      color: 'RED',
-      label: 'UAT sign-off',
-    })
-    expect(m.pGreen).toMatchObject({ projectId: w.P.id, date: '2026-11-06', color: 'GREEN', label: null })
-    expect(m.aYellow).toMatchObject({ projectId: w.A.id, color: 'YELLOW' })
-    expect(m.qRed).toMatchObject({ projectId: w.Q.id, color: 'RED' })
-    const rows = await db.select().from(planMarkers).orderBy(asc(planMarkers.date))
-    expect(rows).toHaveLength(4)
-    expect(rows.every((r) => r.deletedAt === null && r.deletedBatch === null)).toBe(true)
   })
 
   it('M8 with milestones: implies tasks + allocations; live/deleted milestones, bindings, batches (plan/m08 S0.10)', async () => {

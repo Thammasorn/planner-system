@@ -1,7 +1,7 @@
 'use client'
 // src/components/grid/useGridMilestones.tsx — everything ◆ for PlanGrid (SPEC §4.7 FR-702/705/707/708, FR-820, §8.9;
 // plan/m08 S3.3–S3.6, M8-D8–D11, C40) so PlanGrid only renders `row(...)`, `overlays` and the toolbar button:
-// - the MilestoneRow props (placement, drag, gestures) and the dash-dot milestone lines for the marker layer;
+// - the MilestoneRow props (placement, drag, gestures) and the milestone lines (in their colour, M11.1) for the line layer;
 // - popovers (details / create / "+N" list) and the ◆ cell menu (CellMenu `items`);
 // - every edit patches the cached chunks optimistically (applyMilestonePatch / removeMilestone / sortedInsert)
 //   BEFORE the shared useMilestoneMutations call (one undo entry + toast, invalidateMilestones on settle); a call that
@@ -15,8 +15,8 @@ import { milestoneStatus } from '@/domain/milestone'
 import type { ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { GridMilestone, GridResponse } from '@/lib/contracts/grid'
-import type { GridMarkerView } from '@/lib/contracts/plan-markers'
 import type { GridColumn } from '@/lib/grid/columns'
+import type { GridMarkerView } from '@/lib/grid/markers'
 import type { GridModel } from '@/lib/grid/merge'
 import {
   applyMilestonePatch,
@@ -41,7 +41,7 @@ export interface GridMilestones {
   canManage: boolean
   milestones: readonly GridMilestone[]
   byId: ReadonlyMap<string, GridMilestone>
-  /** FR-820: dash-dot lines, concatenated with the plan markers by PlanGrid */
+  /** BR-102 / FR-709: one line per milestone in its colour (the grid's whole line layer since M11.1) */
   markerViews: GridMarkerView[]
   row: (vCols: readonly VirtualItem[], totalWidth: number) => ReactNode
   overlays: ReactNode
@@ -92,6 +92,7 @@ export function useGridMilestones(o: {
       if (patch.name !== undefined) g.name = patch.name
       if (patch.date !== undefined) g.date = patch.date
       if (patch.completed !== undefined) g.completedOn = patch.completed ? (m.completedOn ?? today) : null
+      if (patch.color !== undefined) g.color = patch.color
       g.status = milestoneStatus({ date: g.date ?? m.date, completedOn: g.completedOn ?? m.completedOn }, today)
       patchGrid((r) => applyMilestonePatch(r, m.id, g))
       run(() => mut.update(m, patch, toast ? { toast } : undefined))
@@ -118,7 +119,7 @@ export function useGridMilestones(o: {
   )
   const projectId = context.kind === 'project' ? context.id : null
   const create = useCallback(
-    (v: { name: string; date: ISODate; description: string | null }) => {
+    (v: { name: string; date: ISODate; description: string | null; color: GridMilestone['color'] }) => {
       if (projectId === null) return
       run(() =>
         mut.create({ projectId, ...v }).then((m) => {

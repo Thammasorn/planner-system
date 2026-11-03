@@ -550,7 +550,7 @@ test.describe('M10 ⟲ A.2 (§7.4, BR-70/71/72) the POS grid as the manager', ()
 
     await expect(grid.footerLoad(W('2026-09-28'))).toHaveText(d1(500)) // BR-72: milestones carry no load
     await expect(grid.toolbarAddMilestone()).toBeVisible()
-    // milestone line in the marker layer (FR-820): one dash-dot line per milestone, not interactive
-    await expect(grid.root().locator('[data-marker-line][data-tone="MILESTONE"]').first()).toBeAttached()
+    // milestone line in the line layer (BR-102; M11.1 FR-709: default PURPLE = dash-dot), not interactive
+    await expect(grid.root().locator('[data-marker-line][data-color="PURPLE"]').first()).toBeAttached()
   })
 })

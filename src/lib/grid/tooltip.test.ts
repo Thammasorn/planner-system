@@ -104,13 +104,14 @@ describe('milestoneTooltipFor (M8 S3.3)', () => {
       'UAT sign-off',
       th.milestones.dateLine(formatThaiDate('2026-10-02', 'medium'), th.milestones.status.DUE_SOON),
       th.milestones.progress(1, 3),
+      th.milestones.color.line(th.milestones.color.name.PURPLE, th.milestones.color.pattern.PURPLE),
       th.milestones.lateTasks(1),
       'ก'.repeat(200) + '…',
     ])
   })
   it('not late, no description → no late / description lines', () => {
     const lines = milestoneTooltipFor(fxMilestone('m1', '2026-10-02', { name: 'X', status: 'DONE' }))
-    expect(lines).toHaveLength(3)
+    expect(lines).toHaveLength(4) // name, date · status, progress, colour (M11.1)
     expect(lines.join(' ')).not.toContain(th.milestones.late)
   })
 })

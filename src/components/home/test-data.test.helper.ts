@@ -124,6 +124,7 @@ export function homeResponse(over: Partial<HomeResponse> = {}): HomeResponse {
         projectColor: '#2F5597',
         name: 'UAT sign-off',
         date: '2026-10-02',
+        color: 'PURPLE',
         status: 'DUE_SOON',
         late: true,
       },

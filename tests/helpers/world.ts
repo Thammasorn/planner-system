@@ -18,7 +18,6 @@ import type {
   LeaveTypeRow,
   MilestoneDbRow,
   PageRow,
-  PlanMarkerDbRow,
   ProjectRow,
   TimeOffRow,
 } from '@/server/db/schema'
@@ -47,7 +46,6 @@ import {
   makeMembership,
   makeMilestone,
   makePage,
-  makePlanMarker,
   makeProject,
   makeRowBody,
   makeStatus,
@@ -61,7 +59,7 @@ import {
 } from './factories'
 
 /** Pinned part list (X91); each milestone adds the builder for its part(s).
- *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations · M7.1 planMarkers ·
+ *  M3 tasks · M4 pages, files · M5 timeOff · M6 allocations · M6.1 taskBodies · M7 dayAllocations (M7.1's planMarkers part was removed in M11.1) ·
  *  M8 milestones · M10 home · M11 databases */
 export type WorldPart =
   | 'tasks'
@@ -71,7 +69,6 @@ export type WorldPart =
   | 'timeOff'
   | 'allocations'
   | 'dayAllocations'
-  | 'planMarkers'
   | 'milestones'
   | 'home'
   | 'databases'
@@ -85,7 +82,6 @@ export const WORLD_PART_ORDER: readonly WorldPart[] = [
   'timeOff',
   'allocations',
   'dayAllocations',
-  'planMarkers', // M7.1: needs only P / Q / A
   'milestones',
   'home', // M10: adds keys to the tasks / pages / timeOff / milestones objects of the earlier parts
   'databases', // M11: last — databases on the world's DOC / TASK pages (plan/m11 S0.17)
@@ -310,20 +306,6 @@ export interface WorldDayAllocations {
   }
 }
 
-/** Part 'planMarkers' (M7.1, plan/m07.1 S0.11): live markers only, created by the project's lead (Q: the manager). */
-export interface WorldPlanMarkers {
-  planMarkers: {
-    /** P · RED · 2026-10-23 · 'UAT sign-off'. */
-    pRed: PlanMarkerDbRow
-    /** P · GREEN · 2026-11-06 · no label. */
-    pGreen: PlanMarkerDbRow
-    /** A (archived) · YELLOW · 2026-10-16 · 'A-ลับ เส้นกำกับ'. */
-    aYellow: PlanMarkerDbRow
-    /** Q (member and lead are not members) · RED · 2026-10-30 · 'Q-ลับ เส้นกำกับ'. */
-    qRed: PlanMarkerDbRow
-  }
-}
-
 /** Part 'milestones' (M8, plan/m08 S0.10, M8-D23). Live milestones (P/A by the lead, Q by the manager) bound to M3
  *  tasks with bindTask; `w.tasks.*` rows carry the new `milestoneId`. Soft-deleted ones are in `deletedMilestones`
  *  and their batches in `w.batches`. */
@@ -453,7 +435,6 @@ export interface World
     WorldTimeOff,
     WorldAllocations,
     WorldDayAllocations,
-    WorldPlanMarkers,
     WorldMilestones,
     WorldDatabases {
   batches: WorldBatches
@@ -895,39 +876,6 @@ async function buildDayAllocations(w: World): Promise<void> {
   w.dayWeeks = dayWeeks
 }
 
-/** M7.1 'planMarkers' part (plan/m07.1 S0.11). */
-async function buildPlanMarkers(w: World): Promise<void> {
-  w.planMarkers = {
-    pRed: await makePlanMarker({
-      projectId: w.P.id,
-      date: '2026-10-23',
-      color: 'RED',
-      label: 'UAT sign-off',
-      createdBy: w.lead,
-    }),
-    pGreen: await makePlanMarker({
-      projectId: w.P.id,
-      date: '2026-11-06',
-      color: 'GREEN',
-      createdBy: w.lead,
-    }),
-    aYellow: await makePlanMarker({
-      projectId: w.A.id,
-      date: '2026-10-16',
-      color: 'YELLOW',
-      label: 'A-ลับ เส้นกำกับ',
-      createdBy: w.lead,
-    }),
-    qRed: await makePlanMarker({
-      projectId: w.Q.id,
-      date: '2026-10-30',
-      color: 'RED',
-      label: 'Q-ลับ เส้นกำกับ',
-      createdBy: w.manager,
-    }),
-  }
-}
-
 /** M8 'milestones' part (plan/m08 S0.10): milestones + bindings on M3 tasks only (X70: no task inserted). */
 async function buildMilestones(w: World): Promise<void> {
   const t = w.tasks
@@ -1264,7 +1212,6 @@ const BUILDERS: Partial<Record<WorldPart, PartBuilder>> = {
   timeOff: buildTimeOff,
   allocations: buildAllocations,
   dayAllocations: buildDayAllocations,
-  planMarkers: buildPlanMarkers,
   milestones: buildMilestones,
   home: buildHome,
   databases: buildDatabases,
@@ -1331,7 +1278,6 @@ export async function createWorld(opts: { with?: readonly WorldPart[] } = {}): P
     holidays: notBuilt('timeOff', 'holidays'),
     allocations: notBuilt('allocations', 'allocations'),
     dayWeeks: notBuilt('dayAllocations', 'dayWeeks'),
-    planMarkers: notBuilt('planMarkers', 'planMarkers'),
     milestones: notBuilt('milestones', 'milestones'),
     deletedMilestones: notBuilt('milestones', 'deletedMilestones'),
     databases: notBuilt('databases', 'databases'),

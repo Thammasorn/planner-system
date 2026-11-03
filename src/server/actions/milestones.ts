@@ -82,7 +82,12 @@ export const createMilestone = action(
         action: 'create',
         projectId: input.projectId,
         summary: th.audit.milestoneCreated(r.milestone.name),
-        after: { name: r.milestone.name, date: r.milestone.date, description: r.milestone.description },
+        after: {
+          name: r.milestone.name,
+          date: r.milestone.date,
+          description: r.milestone.description,
+          color: r.milestone.color,
+        },
       })
       return r
     }),

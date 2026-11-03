@@ -41,36 +41,40 @@ vi.mock('@/server/actions/tasks', () => ({
   deleteTaskTree: vi.fn(),
   restoreTaskBatch: vi.fn(),
 }))
-vi.mock('@/server/actions/assignments', () => ({ assign: vi.fn(), unassign: vi.fn(), restoreAssignmentBatch: vi.fn() }))
-vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
-vi.mock('@/server/actions/plan-markers', () => ({
-  createPlanMarker: vi.fn(),
-  updatePlanMarker: vi.fn(),
-  deletePlanMarker: vi.fn(),
-  restorePlanMarkerBatch: vi.fn(),
+vi.mock('@/server/actions/assignments', () => ({
+  assign: vi.fn(),
+  unassign: vi.fn(),
+  restoreAssignmentBatch: vi.fn(),
 }))
+vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
 
 beforeEach(() => {
   resetVersions()
   stubViewport()
   stubScrollTo()
   m.fetchGridChunk.mockImplementation((_c: unknown, chunk: GridChunk) =>
-    Promise.resolve(gridResponse({ from: chunk.from, tasks: POS_TASKS, people: POS_PEOPLE, expand: chunk.expand })),
+    Promise.resolve(
+      gridResponse({ from: chunk.from, tasks: POS_TASKS, people: POS_PEOPLE, expand: chunk.expand }),
+    ),
   )
-  m.getJson.mockImplementation((url: string) =>
-    Promise.resolve(url.endsWith('/plan-markers') ? { markers: [] } : projectTasksResponse()),
-  )
+  m.getJson.mockImplementation(() => Promise.resolve(projectTasksResponse()))
 })
 
 function renderPos() {
   return renderGrid(
-    <PlanGrid context={{ kind: 'project', id: PID }} projectName="POS Upgrade" archived={false} canEdit onOpenTask={vi.fn()} />,
+    <PlanGrid
+      context={{ kind: 'project', id: PID }}
+      projectName="POS Upgrade"
+      archived={false}
+      canEdit
+      onOpenTask={vi.fn()}
+    />,
   )
 }
 
-const monthHeader = (label: string) =>
-  screen.getByRole('columnheader', { name: label })
-const starts = (sel: string) => document.querySelector<HTMLElement>(sel)?.hasAttribute('data-month-start') ?? false
+const monthHeader = (label: string) => screen.getByRole('columnheader', { name: label })
+const starts = (sel: string) =>
+  document.querySelector<HTMLElement>(sel)?.hasAttribute('data-month-start') ?? false
 
 describe('MonthHeader (FR-818, AC-811)', () => {
   it('M8: three header rows from HEADER_ROWS: ◆ row 1, month row 2, period row 3; aria-rowcount includes all', async () => {
@@ -114,7 +118,9 @@ describe('MonthHeader (FR-818, AC-811)', () => {
     expect(starts('[role="columnheader"][data-col-key="D:2026-09-30"]')).toBe(false)
     expect(starts('[role="columnheader"][data-col-key="W:2026-10-05"]')).toBe(false)
     const oct = monthHeader(th.grid.months.long(th.calendar.months[9], 2569))
-    const firstDay = document.querySelector<HTMLElement>('[role="columnheader"][data-col-key="D:2026-10-01"]')!
+    const firstDay = document.querySelector<HTMLElement>(
+      '[role="columnheader"][data-col-key="D:2026-10-01"]',
+    )!
     expect(oct.style.left).toBe(firstDay.style.left)
   })
 

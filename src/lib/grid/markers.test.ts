@@ -1,52 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { addWeeks, daysOfWeek } from '@/domain/dates'
-import type { GridMarkerView, PlanMarkerDTO } from '@/lib/contracts/plan-markers'
 import { buildColumns } from './columns'
-import {
-  defaultMarkerDate,
-  defaultToolbarMarkerDate,
-  markerEdgeColumn,
-  markerEdges,
-  toMarkerViews,
-} from './markers'
+import { markerEdgeColumn, markerEdges, type GridMarkerView } from './markers'
 
 const weeks = (from: string, n: number) => Array.from({ length: n }, (_, i) => addWeeks(from, i))
 const cols = (from: string, n: number, expanded: string[] = [], days = new Map<string, string[]>()) =>
   buildColumns(weeks(from, n), new Set(expanded), days)
 
-const dto = (id: string, date: string, o: Partial<PlanMarkerDTO> = {}): PlanMarkerDTO => ({
-  id,
-  projectId: 'p',
-  date,
-  color: 'RED',
-  label: null,
-  createdBy: 'u',
-  updatedAt: '2026-10-01T00:00:00Z',
-  ...o,
-})
-const view = (id: string, date: string): GridMarkerView => ({
-  id,
-  source: 'PLAN',
-  date,
-  tone: 'RED',
-  label: null,
-  editable: true,
-})
-
-describe('toMarkerViews (M7.1-D12)', () => {
-  it('maps DTOs to PLAN views in input order with canEdit', () => {
-    expect(
-      toMarkerViews([dto('a', '2026-10-23', { label: 'UAT sign-off' }), dto('b', '2026-11-06', { color: 'GREEN' })], true),
-    ).toEqual([
-      { id: 'a', source: 'PLAN', date: '2026-10-23', tone: 'RED', label: 'UAT sign-off', editable: true },
-      { id: 'b', source: 'PLAN', date: '2026-11-06', tone: 'GREEN', label: null, editable: true },
-    ])
-    expect(toMarkerViews([dto('a', '2026-10-23', { color: 'YELLOW' })], false)[0]).toMatchObject({
-      tone: 'YELLOW',
-      editable: false,
-    })
-  })
-})
+const view = (id: string, date: string): GridMarkerView => ({ id, date, color: 'RED', label: id })
 
 describe('markerEdgeColumn (BR-102)', () => {
   it('collapsed week 2026-10-19 + date 2026-10-23 → that week column', () => {
@@ -101,18 +62,5 @@ describe('markerEdges (BR-102 stacking)', () => {
     const cs = cols('2026-10-19', 1, ['2026-10-19'])
     const [e] = markerEdges([view('a', '2026-10-23')], cs)
     expect(e!.x).toBe(5 * 44)
-  })
-})
-
-describe('defaultMarkerDate (M7.1-D11)', () => {
-  it('week header → Friday; day header → that day; รวม → Friday', () => {
-    const cs = cols('2026-10-19', 2, ['2026-10-26'])
-    expect(defaultMarkerDate(cs[0]!)).toBe('2026-10-23')
-    expect(defaultMarkerDate(cs.find((c) => c.date === '2026-10-28')!)).toBe('2026-10-28')
-    expect(defaultMarkerDate(cs[cs.length - 1]!)).toBe('2026-10-30')
-  })
-  it('toolbar → Friday of the week of today', () => {
-    expect(defaultToolbarMarkerDate('2026-09-30')).toBe('2026-10-02')
-    expect(defaultToolbarMarkerDate('2026-10-04')).toBe('2026-10-02')
   })
 })

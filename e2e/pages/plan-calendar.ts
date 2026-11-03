@@ -18,7 +18,7 @@ export function planMonthTitle(month: string): string {
  *   th.planCalendar.next, วันนี้), a Monday-first `role="grid"` of `plan-day-<iso>` gridcells;
  * - a bar = `[data-task-bar=<taskId>]` (`data-tentative`, `data-cut-left`, `data-cut-right`) holding a button named
  *   barLabel ("<task> · <names>, <dates>, …");
- * - "ไม่มีวันที่ (N)" = `plan-no-dates`; marker flags `[data-marker=<id>]` inside the day cell;
+ * - "ไม่มีวันที่ (N)" = `plan-no-dates`; milestone flags `[data-milestone=<id>]` (+ data-color) inside the day cell;
  * - below 600 px the month grid is replaced by `plan-agenda` with `plan-agenda-<iso>` items.
  */
 export class PlanCalendarPage {
@@ -109,8 +109,8 @@ export class PlanCalendarPage {
   agendaDay(iso: ISODate): Locator {
     return this.page.getByTestId(`plan-agenda-${iso}`)
   }
-  /** Plan-marker flags drawn in a day cell. */
-  markersOn(iso: ISODate): Locator {
-    return this.day(iso).locator('[data-marker]')
+  /** Milestone ◆ flags drawn in a day cell (M11.1: replace M7.1's plan-marker flags). */
+  milestonesOn(iso: ISODate): Locator {
+    return this.day(iso).locator('[data-milestone]')
   }
 }

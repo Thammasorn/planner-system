@@ -23,7 +23,6 @@ function setup() {
       onZoom={vi.fn()}
       showAssignees
       onShowAssignees={vi.fn()}
-      markers={<button type="button">markers</button>}
       chartOpen={false}
       onChart={vi.fn()}
     />,

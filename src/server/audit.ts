@@ -5,8 +5,9 @@ import { auditLog } from './db/schema'
 import type { DbOrTx } from './db/types'
 
 /** Grows to exactly the X93 list: M2 client, project, project_member · M3 task, task_assignment, task_status,
- *  task_blocker · M4 page, file · M5 holiday, leave_type, time_off · M6 allocation · M7.1 plan_marker · M8 milestone ·
+ *  task_blocker · M4 page, file · M5 holiday, leave_type, time_off · M6 allocation · M8 milestone ·
  *  M11 database (M11-D5: entity_id = databaseId; rows/columns/views named in `after.target` / `after.ids`). */
+// M11.1: M7.1's 'plan_marker' is history only (rows written before migration 0016; markers became milestones).
 export type AuditEntity =
   | 'user'
   | 'position'
@@ -23,7 +24,6 @@ export type AuditEntity =
   | 'leave_type'
   | 'time_off'
   | 'allocation'
-  | 'plan_marker'
   | 'milestone'
   | 'database'
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'

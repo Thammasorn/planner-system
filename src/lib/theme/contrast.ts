@@ -45,9 +45,10 @@ export const NON_TEXT_TOKENS: readonly string[] = [
   'chart-6',
   'chart-7',
   'chart-8',
-  'marker-red',
-  'marker-yellow',
-  'marker-green',
+  'milestone-red', // M11.1 (FR-709): the M7.1 marker colours became milestone line colours
+  'milestone-yellow',
+  'milestone-green',
+  'milestone-blue',
   'border-month',
 ]
 export const NON_TEXT_BACKGROUNDS: readonly string[] = [

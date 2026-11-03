@@ -1,13 +1,14 @@
 'use client'
 // src/components/calendar/MilestoneChip.tsx — ◆ on the team calendar (plan/m08 S4.9, FR-907, X24, M8-D16): a link to
 // the project's overview, "◆ name · project" + status glyph with hidden status text, ⚠ "เลย milestone" text when late.
-// Colour is decoration only (project colour border, --milestone glyph).
+// Colour is decoration only (project colour border; M11.1: the milestone's line colour as the inline-end border).
 import type { CSSProperties } from 'react'
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import Link from '@/components/Link'
 import { VisuallyHidden } from '@/components/common/VisuallyHidden'
 import { MILESTONE_STATUS_ICONS } from '@/components/milestones/MilestoneStatusChip'
 import { th } from '@/i18n/th'
+import { milestoneColorVar } from '@/lib/theme/tokens'
 import type { CalendarMilestone } from '@/lib/contracts/milestones'
 import styles from './MonthGrid.module.css'
 
@@ -19,13 +20,17 @@ export function milestoneChipLabel(m: CalendarMilestone): string {
 
 export function MilestoneChip({ m, tabIndex }: { m: CalendarMilestone; tabIndex?: number }) {
   const Icon = MILESTONE_STATUS_ICONS[m.status]
-  const style: CSSProperties = { borderInlineStartColor: m.projectColor }
+  const style: CSSProperties = {
+    borderInlineStartColor: m.projectColor,
+    borderInlineEnd: `3px solid ${milestoneColorVar(m.color)}`,
+  }
   return (
     <Link
       href={`/projects/${m.projectId}/overview`}
       className={styles.milestoneChip}
       data-chip="milestone"
       data-status={m.status}
+      data-color={m.color}
       data-late={m.late ? 'true' : undefined}
       aria-label={milestoneChipLabel(m)}
       style={style}

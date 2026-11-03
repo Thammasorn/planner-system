@@ -232,6 +232,33 @@
   stroke-dasharray: 4 3;
 }
 
+/* M11.1-D5: % mode — the hatched band above 100 % and the value label of a point above it */
+.overHatch {
+  stroke: var(--border-month);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.overBand {
+  pointer-events: none;
+}
+
+.overLabel {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  fill: var(--mui-palette-text-primary);
+  paint-order: stroke;
+  stroke: var(--mui-palette-background-paper);
+  stroke-width: 3px;
+}
+
+.noCapacityNote {
+  margin: var(--space-1) 0 0;
+  padding-inline: var(--space-3);
+  font-size: var(--font-xs);
+  color: var(--mui-palette-text-secondary);
+}
+
 .line,
 .capLine {
   fill: none;
@@ -258,23 +285,39 @@
   top: 0;
   z-index: 2;
   width: 0;
-  border-left: 2px solid var(--marker-red);
+  border-left: 2px solid var(--milestone);
   pointer-events: none;
 }
 
-.markerLine[data-tone='YELLOW'] {
-  border-left-style: dashed;
-  border-left-color: var(--marker-yellow);
+/* milestone lines (FR-709, M11.1): the grid's colour + pattern per colour */
+.markerLine[data-color='PURPLE'] {
+  width: 2px;
+  border-left: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--milestone) 0 8px,
+    transparent 8px 11px,
+    var(--milestone) 11px 13px,
+    transparent 13px 16px
+  );
 }
 
-.markerLine[data-tone='GREEN'] {
+.markerLine[data-color='RED'] {
+  border-left-color: var(--milestone-red);
+}
+
+.markerLine[data-color='YELLOW'] {
+  border-left-style: dashed;
+  border-left-color: var(--milestone-yellow);
+}
+
+.markerLine[data-color='GREEN'] {
   border-left-style: dotted;
-  border-left-color: var(--marker-green);
+  border-left-color: var(--milestone-green);
 }
 
-.markerLine[data-tone='MILESTONE'] {
-  border-left-style: dashed;
-  border-left-color: var(--milestone);
+.markerLine[data-color='BLUE'] {
+  border-left: 3px double var(--milestone-blue);
 }
 
 .tooltip {

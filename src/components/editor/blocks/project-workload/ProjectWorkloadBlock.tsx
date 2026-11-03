@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { type JSX, useCallback, useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
 import styles from '@/components/workload/Workload.module.css'
+import { LoadDisplayToggle } from '@/components/load/LoadDisplayToggle'
 import { WorkloadCell } from '@/components/workload/WorkloadCell'
 import { WorkloadTooltipHost, type WorkloadTooltipTarget } from '@/components/workload/WorkloadTooltip'
 import { th } from '@/i18n/th'
@@ -102,6 +103,8 @@ function ProjectWorkloadBody(p: ProjectWorkloadBlockProps & { pageId: string }):
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
+      {/* M11.1 (FR-1303/FR-1010): the viewer's own load.display (a preference, never saved in the page) */}
+      <LoadDisplayToggle />
       <Link href={r.workloadHref}>{L.openWorkload}</Link>
     </Box>
   )

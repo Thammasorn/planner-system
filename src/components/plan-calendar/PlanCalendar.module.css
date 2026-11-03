@@ -1,6 +1,6 @@
 /* Project month calendar (FR-811/812, §8.13, PLAN §3.9): the /calendar look (M5 MonthGrid) with task bars.
    Plain elements + theme CSS variables, §8.12 scale (M7.1-D21). Never colour alone: tentative = ◐ + yellow edge,
-   done = strike-through + text, holiday = background + 🎌 + name, today = ring + "วันนี้", marker = ⚑ + label. */
+   done = strike-through + text, holiday = background + 🎌 + name, today = ring + "วันนี้", milestone = ◆ in its colour + name (M11.1). */
 .root {
   display: flex;
   flex-direction: column;

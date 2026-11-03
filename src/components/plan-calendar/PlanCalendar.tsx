@@ -1,7 +1,7 @@
 'use client'
 // src/components/plan-calendar/PlanCalendar.tsx — the project month calendar of the แผนงาน tab (SPEC FR-810–812,
 // FR-820, BR-103, §8.13; plan/m07.1 S4.2, M7.1-D19). Read-only: dates change in the panel / task page.
-// Data: M3's useProjectTasks (same as the งาน tab), holidays from GET /api/calendar, qk.planMarkers — no new endpoint.
+// Data: M3's useProjectTasks (same as the งาน tab), holidays from GET /api/calendar, the project milestones (qk.projectMilestones, M11.1) — no new endpoint.
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
@@ -21,6 +21,7 @@ import ChevronLeft from '@mui/icons-material/ChevronLeft'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import { compareISO, isoWeekday } from '@/domain/dates'
 import type { ISODate } from '@/domain/types'
+import { useProjectMilestones } from '@/components/milestones/useProjectMilestones'
 import { useProjectTasks } from '@/components/tasks/useProjectTasks'
 import { usePeopleOptions } from '@/hooks/usePeopleOptions'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -39,7 +40,7 @@ import {
 } from '@/lib/calendar/month-grid'
 import type { CalendarResponse } from '@/lib/contracts/calendar'
 import type { PersonOption } from '@/lib/contracts/people'
-import type { PlanMarkerDTO } from '@/lib/contracts/plan-markers'
+import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import { formatThaiDate } from '@/lib/format'
 import { matchesHotkey, type Hotkey } from '@/lib/keys'
 import { taskPageHref } from '@/lib/nav/task-href'
@@ -48,11 +49,10 @@ import { qk } from '@/lib/query-keys'
 import { taskPreference } from '@/lib/schemas/preferences'
 import { taskCertainty } from '@/lib/tasks/certainty'
 import { assigneeIdsByTask, assigneeText, type BarInfo } from './labels'
-import { MarkerFlags } from './MarkerFlags'
+import { MilestoneFlags } from './MilestoneFlags'
 import { NoDateList } from './NoDateList'
 import { PlanAgenda, type CalendarViewProps } from './PlanAgenda'
 import { TaskBar } from './TaskBar'
-import { usePlanMarkers } from './usePlanMarkers'
 import styles from './PlanCalendar.module.css'
 
 export interface PlanCalendarProps {
@@ -90,7 +90,7 @@ function sameDayIn(d: ISODate, ym: YearMonth): ISODate {
 export function useCalendarModel(projectId: string, month: YearMonth) {
   const tasksQ = useProjectTasks(projectId)
   const peopleQ = usePeopleOptions()
-  const markersQ = usePlanMarkers(projectId)
+  const milestonesQ = useProjectMilestones(projectId)
   const { from, to } = monthGrid(month)
   const calQ = useQuery({
     queryKey: qk.calendar(from, to),
@@ -122,15 +122,16 @@ export function useCalendarModel(projectId: string, month: YearMonth) {
     () => new Map((calQ.data?.holidays ?? []).map((h) => [h.date, h.name])),
     [calQ.data?.holidays],
   )
-  const markersByDate = useMemo(() => {
-    const out = new Map<ISODate, PlanMarkerDTO[]>()
-    for (const m of markersQ.data?.markers ?? []) {
+  // M11.1 (FR-705/FR-709): the project's milestones as ◆ flags on their date (M7.1's plan markers became milestones)
+  const milestonesByDate = useMemo(() => {
+    const out = new Map<ISODate, MilestoneDTO[]>()
+    for (const m of milestonesQ.data?.milestones ?? []) {
       const list = out.get(m.date)
       if (list) list.push(m)
       else out.set(m.date, [m])
     }
     return out
-  }, [markersQ.data])
+  }, [milestonesQ.data])
   const noDates = useMemo(() => (data ? noDateTasks(data.tasks, { showCompleted }) : []), [data, showCompleted])
 
   return {
@@ -138,7 +139,7 @@ export function useCalendarModel(projectId: string, month: YearMonth) {
     tasks: data?.tasks,
     infos,
     holidays,
-    markersByDate,
+    milestonesByDate,
     noDates,
     showCompleted,
     setShowCompleted: (on: boolean) => setPreference('tasks.showCompleted', on),
@@ -206,7 +207,7 @@ export function PlanCalendar({ projectId, projectColor, toolbarStart, onOpenTask
           tasks={tasks}
           infos={model.infos}
           holidays={model.holidays}
-          markersByDate={model.markersByDate}
+          milestonesByDate={model.milestonesByDate}
           showCompleted={model.showCompleted}
           today={today}
           onOpen={onOpenTask}
@@ -221,7 +222,7 @@ export function PlanCalendar({ projectId, projectColor, toolbarStart, onOpenTask
           tasks={tasks}
           infos={model.infos}
           holidays={model.holidays}
-          markersByDate={model.markersByDate}
+          milestonesByDate={model.milestonesByDate}
           showCompleted={model.showCompleted}
           today={today}
           onOpen={onOpenTask}
@@ -388,7 +389,7 @@ function CalendarGrid(p: CalendarViewProps & { onMonthChange: (m: YearMonth) => 
                           {th.calendar.holidayPrefix}
                         </span>
                       ) : null}
-                      <MarkerFlags markers={p.markersByDate.get(iso)} />
+                      <MilestoneFlags milestones={p.milestonesByDate.get(iso)} />
                     </div>
                     {row.segments
                       .filter((s) => s.startCol === col)

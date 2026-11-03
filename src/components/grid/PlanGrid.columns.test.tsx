@@ -57,12 +57,6 @@ vi.mock('@/server/actions/assignments', () => ({
   restoreAssignmentBatch: vi.fn(),
 }))
 vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
-vi.mock('@/server/actions/plan-markers', () => ({
-  createPlanMarker: vi.fn(),
-  updatePlanMarker: vi.fn(),
-  deletePlanMarker: vi.fn(),
-  restorePlanMarkerBatch: vi.fn(),
-}))
 // S4 owns the chart; this stand-in exposes the shared switch and the x weeks it receives
 vi.mock('@/components/load-chart/LoadChartPanel', () => ({
   LoadChartPanel: (p: {
@@ -113,9 +107,7 @@ beforeEach(() => {
   m.fetchGridChunk.mockImplementation((_ctx: unknown, chunk: GridChunk) =>
     Promise.resolve(gridResponse({ from: chunk.from, tasks: POS_JACK, people: PEOPLE })),
   )
-  m.getJson.mockImplementation((url: string) =>
-    Promise.resolve(url.endsWith('/plan-markers') ? { markers: [] } : projectTasksResponse()),
-  )
+  m.getJson.mockImplementation(() => Promise.resolve(projectTasksResponse()))
 })
 
 const rowKeys = (grid: HTMLElement) =>

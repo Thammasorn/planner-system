@@ -9,7 +9,6 @@ import {
   invalidateLoad,
   invalidateMilestones,
   invalidatePages,
-  invalidatePlanMarkers,
   invalidateProjects,
   invalidateStatuses,
   invalidateTaskBody,
@@ -219,28 +218,6 @@ describe('task bodies (M6.1 S0.8)', () => {
     expect(invalidated(qc, qk.projectTasks('p2'))).toBe(false)
     expect(invalidated(qc, qk.sidebar())).toBe(false)
     expect(invalidated(qc, ['grid', 'project', 'x', {}])).toBe(false)
-  })
-})
-
-describe('plan markers (M7.1 S0.5, X82)', () => {
-  it('qk.planMarkers is ["planMarkers", projectId]; invalidatePlanMarkers touches that project only', async () => {
-    expect(qk.planMarkers('p1')).toEqual(['planMarkers', 'p1'])
-    const qc = seeded()
-    qc.setQueryData(qk.planMarkers('p1'), 1)
-    qc.setQueryData(qk.planMarkers('p2'), 1)
-    await invalidatePlanMarkers(qc, 'p1')
-    expect(invalidated(qc, qk.planMarkers('p1'))).toBe(true)
-    expect(invalidated(qc, qk.planMarkers('p2'))).toBe(false)
-    expect(invalidated(qc, qk.projectTasks('p1'))).toBe(false)
-    expect(invalidated(qc, ['grid', 'project', 'x', {}])).toBe(false)
-  })
-
-  it('task and load invalidations leave the markers alone', async () => {
-    const qc = seeded()
-    qc.setQueryData(qk.planMarkers('p1'), 1)
-    await invalidateTasks(qc, 'p1')
-    await invalidateLoad(qc)
-    expect(invalidated(qc, qk.planMarkers('p1'))).toBe(false)
   })
 })
 

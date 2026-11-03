@@ -248,6 +248,7 @@ describe('getCalendar — milestones (FR-907, M8-D16, §3.3)', () => {
       projectColor: uat.projectColor,
       name: 'UAT sign-off',
       date: '2026-10-02',
+      color: 'PURPLE',
       status: 'DUE_SOON',
       late: true,
     })

@@ -36,7 +36,7 @@ function props(over: Partial<LoadChartProps> = {}): LoadChartProps {
     weeks: [...W],
     layout: testLayout(),
     series: SERIES,
-    unit: 'DAYS',
+    display: 'DAYS',
     view: 'ALL',
     includeOthers: false,
     onIncludeOthers: vi.fn(),
@@ -139,14 +139,20 @@ describe('LoadChartPanel (FR-813, M7.1-D3–D5, D30)', () => {
     expect(cell.style.width).toBe(head.style.width)
   })
 
-  it('FRACTION table: ratio with 2 decimals; cap 0 → ไม่มี capacity', async () => {
+  it('PERCENT table (M11.1): "50% (2.5 / 5.0 วัน)" as the cell text, "50%" visible; cap 0 → ไม่มี capacity', async () => {
     const user = userEvent.setup()
-    renderPanel(props({ unit: 'FRACTION' }))
+    renderPanel(props({ display: 'PERCENT' }))
     await user.click(screen.getByRole('button', { name: th.loadChart.table }))
     const rows = within(screen.getByRole('table')).getAllByRole('row')
     const ivy = within(rows[2]!).getAllByRole('cell')
-    expect(ivy[0]).toHaveTextContent(`0.50 (${th.loadChart.daysValue('2.5', '5.0')})`)
+    expect(ivy[0]).toHaveTextContent(`50% (${th.loadChart.daysValue('2.5', '5.0')})`)
+    expect(ivy[0]!.querySelector('[aria-hidden="true"]')).toHaveTextContent('50%')
     expect(ivy[2]).toHaveTextContent(th.loadChart.noCapacity)
+  })
+
+  it('M11.1 FR-1010: the panel head has the "% | วัน/capacity" toggle (the load.display preference)', () => {
+    renderPanel(props())
+    expect(screen.getByRole('group', { name: th.loadDisplay.label })).toBeInTheDocument()
   })
 
   it('the "รวมงานโปรเจคอื่น" switch calls onIncludeOthers (shared with the footer, X29)', async () => {
@@ -184,10 +190,10 @@ describe('LoadChartPanel (FR-813, M7.1-D3–D5, D30)', () => {
   it('keyboard focus on a legend item previews that person', async () => {
     const user = userEvent.setup()
     renderPanel(props())
-    await user.tab() // switch
-    await user.tab() // table toggle
-    await user.tab() // first legend item
-    expect(screen.getByRole('button', { name: 'Cindy' })).toHaveFocus()
+    // Tab through the head (M11.1 "% | วัน/capacity" toggle, switch, table toggle) to the first legend item
+    const cindy = screen.getByRole('button', { name: 'Cindy' })
+    for (let i = 0; i < 8 && document.activeElement !== cindy; i++) await user.tab()
+    expect(cindy).toHaveFocus()
     expect(opacityOf('ivy')).toBe('0.3')
   })
 

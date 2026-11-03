@@ -25,6 +25,10 @@ export const TASK_COLUMN_WIDTH_MIN = 120
 export const TASK_COLUMN_WIDTH_MAX = 640
 export const TASK_COLUMN_WIDTH_DEFAULT = 240
 const TASK_COLUMN_WIDTH = z.number().int().min(TASK_COLUMN_WIDTH_MIN).max(TASK_COLUMN_WIDTH_MAX)
+/** M11.1 (FR-813/FR-1002, M11.1-D4): load shown as % of capacity (default) or days/capacity — one key for the load
+ *  chart, /workload, /people, the person page and the projectWorkload block. */
+export const LOAD_DISPLAYS = ['PERCENT', 'DAYS'] as const
+export type LoadDisplay = (typeof LOAD_DISPLAYS)[number]
 
 export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('theme'), value: z.enum(THEMES) }),
@@ -50,6 +54,8 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('grid.chart'), value: z.boolean() }),
   // M10 (X05/X59, M10-D27): last project picked in the palette's "สร้าง task" flow
   z.object({ key: z.literal('palette.lastProjectId'), value: z.uuid().nullable() }),
+  // M11.1 (M11.1-D4)
+  z.object({ key: z.literal('load.display'), value: z.enum(LOAD_DISPLAYS) }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -81,6 +87,8 @@ export const preferencesSchema = z.object({
   'grid.chart': z.boolean().optional().catch(undefined),
   // M10 key (M10-D27): optional like the others (absent or invalid = null); read with paletteLastProjectId(prefs).
   'palette.lastProjectId': z.uuid().nullable().optional().catch(undefined),
+  // M11.1 key (M11.1-D4): optional like the others (absent or invalid = PERCENT); read with loadDisplay(prefs).
+  'load.display': z.enum(LOAD_DISPLAYS).optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 

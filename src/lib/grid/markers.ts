@@ -1,20 +1,16 @@
-// src/lib/grid/markers.ts — plan-marker placement on the grid (SPEC FR-819/820, BR-102, M7.1-D11/D12). Pure.
-// One layer for plan markers (M7.1) and milestones (M8): placement works on GridMarkerView, whatever its source.
-import { addDays, compareISO, weekStart } from '@/domain/dates'
+// src/lib/grid/markers.ts — placement of the milestone lines on the grid (SPEC BR-102, FR-709/FR-705; M7.1-D12,
+// M11.1-D1). Pure. Since M11.1 the line layer draws milestones only (plan markers were merged into milestones).
+import { compareISO, weekStart } from '@/domain/dates'
 import type { ISODate } from '@/domain/types'
-import type { GridMarkerView, PlanMarkerDTO } from '@/lib/contracts/plan-markers'
+import type { MilestoneColor } from '@/lib/contracts/milestones'
 import type { GridColumn } from './columns'
 
-/** Plan markers → layer views, in input order (the API orders by date, created_at). */
-export function toMarkerViews(markers: readonly PlanMarkerDTO[], canEdit: boolean): GridMarkerView[] {
-  return markers.map((m) => ({
-    id: m.id,
-    source: 'PLAN',
-    date: m.date,
-    tone: m.color,
-    label: m.label,
-    editable: canEdit,
-  }))
+/** One line of the layer: a milestone (id = the milestone id), its colour (line colour + pattern) and name. */
+export interface GridMarkerView {
+  id: string
+  date: ISODate
+  color: MilestoneColor
+  label: string
 }
 
 /**
@@ -68,14 +64,4 @@ export function markerEdges(views: readonly GridMarkerView[], cols: readonly Gri
         views: list.sort((a, b) => compareISO(a.v.date, b.v.date) || a.order - b.order).map((e) => e.v),
       }
     })
-}
-
-/** Default date of a marker added from a column header: a day column → that day; else Friday of the week. */
-export function defaultMarkerDate(col: GridColumn): ISODate {
-  return col.role === 'day' ? col.date : addDays(col.weekStart, 4)
-}
-
-/** Default date of a marker added from the toolbar: Friday of the week of `today`. */
-export function defaultToolbarMarkerDate(today: ISODate): ISODate {
-  return addDays(weekStart(today), 4)
 }

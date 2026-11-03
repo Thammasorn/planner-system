@@ -19,6 +19,7 @@ import { MilestoneLateBadge, MilestoneStatusChip } from '@/components/milestones
 import { useMilestoneMutations } from '@/components/milestones/useMilestoneMutations'
 import { useProjectMilestones } from '@/components/milestones/useProjectMilestones'
 import { compareMilestones } from '@/domain/milestone'
+import { milestoneColorVar } from '@/lib/theme/tokens'
 import { th } from '@/i18n/th'
 import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import { formatThaiDate } from '@/lib/format'
@@ -52,7 +53,12 @@ function MilestoneRow({ m, canManage, onEdit }: { m: MilestoneDTO; canManage: bo
           sx={{ p: 0.5 }}
         />
       ) : null}
-      <Box aria-hidden="true" sx={{ color: 'var(--milestone)', pt: 0.5 }}>
+      <Box
+        aria-hidden="true"
+        data-color={m.color}
+        title={th.milestones.color.named(th.milestones.color.name[m.color])}
+        sx={{ color: milestoneColorVar(m.color), pt: 0.5 }}
+      >
         {th.milestones.diamond}
       </Box>
       <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
@@ -105,12 +111,13 @@ function MilestoneRow({ m, canManage, onEdit }: { m: MilestoneDTO; canManage: bo
 /** Only the fields that differ from the milestone (no-op when none). */
 function changedPatch(
   m: MilestoneDTO,
-  v: { name: string; date: string; description: string | null },
+  v: { name: string; date: string; description: string | null; color: MilestoneDTO['color'] },
 ): MilestonePatch {
   const p: MilestonePatch = {}
   if (v.name !== m.name) p.name = v.name
   if (v.date !== m.date) p.date = v.date
   if ((v.description ?? null) !== (m.description ?? null)) p.description = v.description
+  if (v.color !== m.color) p.color = v.color // M11.1 (FR-709)
   return p
 }
 
@@ -148,7 +155,7 @@ export function ProjectMilestones({ projectId }: { projectId: string }) {
             onCancel={() => setAdding(false)}
             onSubmit={(v) => {
               void ms
-                .create({ projectId, name: v.name, date: v.date, description: v.description })
+                .create({ projectId, name: v.name, date: v.date, description: v.description, color: v.color })
                 .then((m) => {
                   if (m) setAdding(false)
                 })
@@ -185,7 +192,7 @@ export function ProjectMilestones({ projectId }: { projectId: string }) {
             editingId === m.id && canManage ? (
               <Box role="listitem" key={m.id} sx={{ py: 1, maxWidth: 480 }}>
                 <MilestoneForm
-                  initial={{ name: m.name, date: m.date, description: m.description ?? '' }}
+                  initial={{ name: m.name, date: m.date, description: m.description ?? '', color: m.color }}
                   submitLabel={th.milestones.form.save}
                   onCancel={() => setEditingId(null)}
                   onSubmit={(v) => {

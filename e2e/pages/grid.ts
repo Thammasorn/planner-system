@@ -375,14 +375,13 @@ export class GridPage {
     }
   }
 
-  // ── M7.1 two frozen columns, month row, markers, row drag, chart pane (plan/m07.1 S6) ─────────────────────────
+  // ── M7.1 two frozen columns, month row, milestone lines, row drag, chart pane (plan/m07.1 S6) ─────────────────────────
   // DOM contract (S3): one rowheader per row (aria-colspan 2) holding `[data-task-cell]` (⠿ `[data-drag-handle]`,
   // name `span[title]`, "👥 N" `[data-sum-people]`) and `[data-assignee-cell]` (absent when hidden). Header row 2 has
   // `[data-frozen-header="task"]` (with the ⇔ separator, test id task-column-resize) and `[data-frozen-header=
   // "assignee"]` ("ซ่อน", test id hide-assignees); header row 1 holds month spans `[data-month="YYYY-MM"]` named by the
-  // long label. The first column of every month carries `data-month-start` on header, body and footer cells. Marker
-  // lines `[data-marker-line=header|body|footer][data-tone][data-marker-ids]`; flags are buttons named
-  // th.planMarkers.flag(label | colour, date). Hidden assignees: grid root `data-assignees="hidden"`, one summed row
+  // long label. The first column of every month carries `data-month-start` on header, body and footer cells. Milestone
+  // lines `[data-marker-line=header|body|footer][data-color][data-marker-ids]` (M11.1: no flags). Hidden assignees: grid root `data-assignees="hidden"`, one summed row
   // per task keyed `t:<task>`.
 
   /** Opens `/projects/<id>/plan<search>` directly (archived projects are not in the sidebar). */
@@ -596,68 +595,36 @@ export class GridPage {
     return this.root().locator(`[role="columnheader"][data-col-key="${periodKey}"][data-month-start]`)
   }
 
-  // plan markers (FR-819/820)
-  /** The flag of a marker in the month row, by its label (or colour name when it has none). */
-  markerFlag(label: string): Locator {
-    return this.root().getByRole('button', { name: new RegExp(`^${escapeRe(label)} · `) })
+  // milestone lines (BR-102; M11.1 FR-709: in the milestone's colour — M7.1's plan markers were merged into milestones)
+  /** The line pieces of the layer, optionally of one milestone (`data-marker-ids` lists the milestones at that edge). */
+  markerLines(piece: 'header' | 'body' | 'footer', milestoneId?: string): Locator {
+    const ids = milestoneId ? `[data-marker-ids~="${milestoneId}"]` : ''
+    return this.root().locator(`[data-marker-line="${piece}"]${ids}`)
   }
-  markerLines(piece: 'header' | 'body' | 'footer'): Locator {
-    return this.root().locator(`[data-marker-line="${piece}"]`)
-  }
-  /** The "เส้นกำกับ (N) ▾" toolbar button. */
+  /** M11.1: the "เส้นกำกับ" toolbar menu no longer exists. */
   markersMenuButton(): Locator {
     return this.toolbar().getByTestId('markers-menu')
   }
-  markersMenu(): Locator {
-    return this.page.getByRole('menu').filter({ has: this.page.locator('[data-testid^="markers-menu-"]') })
+  /** The colour radio named `name` (th.milestones.color.name[c]) inside a MilestoneForm `scope`. */
+  milestoneColor(scope: Locator, color: 'PURPLE' | 'RED' | 'YELLOW' | 'GREEN' | 'BLUE'): Locator {
+    return scope
+      .getByRole('radiogroup', { name: th.milestones.color.label })
+      .getByRole('radio', { name: th.milestones.color.name[color], exact: true })
   }
-  /** The editable marker popover (light form) — or the read-only variant (named th.planMarkers.readOnly). */
-  markerPopover(): Locator {
-    return this.page.getByTestId('marker-popover')
+  /** M11.1 (FR-1010): picks `d` on the person grid toolbar's "% | วัน/capacity" toggle and waits for the save. */
+  async setLoadDisplay(d: 'PERCENT' | 'DAYS'): Promise<void> {
+    const b = this.loadDisplayButton(this.toolbar(), d)
+    if ((await b.getAttribute('aria-pressed')) === 'true') return
+    const saved = waitForServerActionWith(this.page, 'load.display')
+    await b.click()
+    await saved
+    await expect(b).toHaveAttribute('aria-pressed', 'true')
   }
-  markerColor(color: 'RED' | 'YELLOW' | 'GREEN'): Locator {
-    return this.markerPopover().getByRole('button', { name: new RegExp(`${th.planMarkers.color[color]}$`) })
-  }
-  markerLabel(): Locator {
-    return this.markerPopover().getByRole('textbox', { name: th.planMarkers.label })
-  }
-  markerDelete(): Locator {
-    return this.markerPopover().getByRole('button', { name: th.planMarkers.delete, exact: true })
-  }
-  /** Right click on a week header → the menu with "เพิ่มเส้นกำกับที่ขอบขวา". */
-  async openHeaderMenu(week: ISODate): Promise<void> {
-    if ((await this.columnHeader(week).count()) === 0) await this.scrollToWeek(week)
-    await this.columnHeader(week).click({ button: 'right' })
-    await expect(this.cellMenu()).toBeVisible()
-  }
-  addMarkerItem(): Locator {
-    return this.cellMenu().getByRole('menuitem', { name: th.planMarkers.addHere, exact: true })
-  }
-  /**
-   * Header context menu on `week` → "เพิ่มเส้นกำกับที่ขอบขวา" (created at once on that week's Friday, red) → the
-   * popover: colour + label; waits for each save and closes the popover.
-   */
-  async addMarker(
-    week: ISODate,
-    o: { color?: 'RED' | 'YELLOW' | 'GREEN'; label?: string } = {},
-  ): Promise<void> {
-    await this.openHeaderMenu(week)
-    const created = waitForServerAction(this.page)
-    await this.addMarkerItem().click()
-    await created
-    await expect(this.markerPopover()).toBeVisible()
-    if (o.color && o.color !== 'RED') {
-      const saved = waitForServerActionWith(this.page, o.color)
-      await this.markerColor(o.color).click()
-      await saved
-    }
-    if (o.label) {
-      const saved = waitForServerActionWith(this.page, o.label)
-      await this.markerLabel().fill(o.label)
-      await saved // label debounce 400 ms (M7.1-D11): wait for its save, never a sleep
-    }
-    await this.page.keyboard.press('Escape')
-    await expect(this.markerPopover()).toHaveCount(0)
+  /** M11.1 (FR-1010): the "% | วัน/capacity" toggle (person grid toolbar, chart pane head). */
+  loadDisplayButton(scope: Locator, d: 'PERCENT' | 'DAYS'): Locator {
+    return scope
+      .getByRole('group', { name: th.loadDisplay.label })
+      .getByRole('button', { name: d === 'PERCENT' ? th.loadDisplay.PERCENT_long : th.loadDisplay.DAYS_long })
   }
 
   // row reorder (FR-815)

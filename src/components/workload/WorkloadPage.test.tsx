@@ -54,13 +54,24 @@ describe('WorkloadPage (FR-1001…1006, §8.5)', () => {
     expect(groups).toEqual(['Project Manager', 'Developer', 'Designer', 'QA', 'Data'])
   })
 
-  it('Jack 19/10 reads 5/4 with the hidden OVER status; person links to the person page', () => {
+  it('Jack 19/10 reads 125% (default PERCENT, M11.1) with the hidden OVER status; person links to the person page', () => {
     renderPage()
     const row = document.querySelector(`tr[data-user-id="${U.jack}"]`) as HTMLElement
     const btn = row.querySelector('[data-week="2026-10-19"]') as HTMLElement
-    expect(btn).toHaveTextContent('5/4')
+    expect(btn).toHaveTextContent('125%')
     expect(btn).toHaveTextContent(th.overload.level.OVER)
     expect(within(row).getByRole('link', { name: 'Jack' })).toHaveAttribute('href', `/people/${U.jack}/plan`)
+  })
+
+  it('M11.1 FR-1002: the "% | วัน/capacity" toggle switches every cell to 5/4 and stores load.display', async () => {
+    const user = userEvent.setup()
+    const { onSet } = renderPage()
+    const toolbar = screen.getByRole('toolbar', { name: th.workload.filters.label })
+    await user.click(within(toolbar).getByRole('button', { name: th.loadDisplay.DAYS_long }))
+    expect(onSet).toHaveBeenCalledWith('load.display', 'DAYS')
+    const btn = document.querySelector(`tr[data-user-id="${U.jack}"] [data-week="2026-10-19"]`) as HTMLElement
+    expect(btn).toHaveTextContent('5/4')
+    expect(btn).toHaveAttribute('data-display', 'DAYS')
   })
 
   it('switching the view calls the preference setter and does not refetch', async () => {

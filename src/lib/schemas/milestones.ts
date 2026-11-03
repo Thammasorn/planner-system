@@ -2,6 +2,7 @@
 // Names trimmed 1–200 (DB check milestones_name_check mirrors it); description ≤ 2 000, blank → null. X47: z.uuid(),
 // z.iso.date(), Thai only via th.*. "completedOn ≤ today" is checked in the service (needs serverToday()).
 import { th } from '@/i18n/th'
+import { MILESTONE_COLORS } from '@/lib/contracts/milestones'
 import { z } from '@/lib/z'
 import { isoDateSchema } from './dates'
 
@@ -22,11 +23,16 @@ export const zMilestoneDescription = z
   .transform((s) => (s.trim() === '' ? null : s))
   .nullable()
 
+/** M11.1 (FR-709): one of the five line colours. */
+export const zMilestoneColor = z.enum(MILESTONE_COLORS)
+
 export const createMilestoneSchema = z.object({
   projectId: z.uuid(),
   name: zMilestoneName,
   date: zMilestoneDate,
   description: zMilestoneDescription.optional(),
+  /** absent = PURPLE (the DB default) */
+  color: zMilestoneColor.optional(),
 })
 
 export const milestonePatchSchema = z
@@ -34,6 +40,7 @@ export const milestonePatchSchema = z
     name: zMilestoneName.optional(),
     date: zMilestoneDate.optional(),
     description: zMilestoneDescription.optional(),
+    color: zMilestoneColor.optional(),
     completed: z.boolean().optional(),
     /** Exact undo of complete/reopen (M8-D19); never together with `completed`; ≤ today checked in the service. */
     completedOn: z.iso.date().nullable().optional(),

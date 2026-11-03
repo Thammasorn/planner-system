@@ -135,3 +135,23 @@ describe('M8 extensions of M1/M3 schemas', () => {
     expect(preferenceInput.safeParse({ key: 'tasks.groupBy', value: 'milestone' }).success).toBe(true)
   })
 })
+
+describe('milestone colour (M11.1 FR-709, M11.1-D1)', () => {
+  const base = { projectId: P, name: 'UAT sign-off', date: '2026-10-23' }
+
+  it('create: colour optional (absent = DB default PURPLE); each of the five colours parses', () => {
+    expect(createMilestoneSchema.parse(base).color).toBeUndefined()
+    for (const color of ['PURPLE', 'RED', 'YELLOW', 'GREEN', 'BLUE'])
+      expect(createMilestoneSchema.parse({ ...base, color }).color).toBe(color)
+  })
+
+  it('create / patch: unknown colours are rejected', () => {
+    for (const color of ['red', 'ORANGE', '#ff0000', ''])
+      expect(createMilestoneSchema.safeParse({ ...base, color }).success).toBe(false)
+    expect(milestonePatchSchema.safeParse({ color: 'PINK' }).success).toBe(false)
+  })
+
+  it('patch: colour alone is a valid patch', () => {
+    expect(milestonePatchSchema.parse({ color: 'GREEN' })).toEqual({ color: 'GREEN' })
+  })
+})

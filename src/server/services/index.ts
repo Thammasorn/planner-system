@@ -38,7 +38,6 @@ export * as grid from './grid'
 // M6.1 (task bodies, task page, full width)
 export * as taskPages from './task-pages'
 // M7.1 (plan/m07.1 S0.6)
-export * as planMarkers from './plan-markers'
 // M8 (X87, plan/m08 S0.5)
 export * as milestones from './milestones'
 // M9 (plan/m09 S0.6)

@@ -15,14 +15,15 @@ import type { MilestonePatch } from '@/components/milestones/useMilestoneMutatio
 import type { ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { GridMilestone } from '@/lib/contracts/grid'
+import { milestoneColorVar } from '@/lib/theme/tokens'
 import { formatThaiDate } from '@/lib/format'
 import { milestoneDisplayName, milestoneLabel } from './MilestoneRow'
 import styles from './grid.module.css'
 
 /** Only the fields that differ from the milestone (null when nothing changed). */
 export function milestoneFormPatch(
-  m: Pick<GridMilestone, 'name' | 'date' | 'description'>,
-  v: { name: string; date: ISODate; description: string | null },
+  m: Pick<GridMilestone, 'name' | 'date' | 'description' | 'color'>,
+  v: { name: string; date: ISODate; description: string | null; color?: GridMilestone['color'] },
 ): MilestonePatch | null {
   const patch: MilestonePatch = {}
   const name = v.name.trim()
@@ -30,6 +31,7 @@ export function milestoneFormPatch(
   if (v.date !== m.date) patch.date = v.date
   const description = v.description?.trim() ? v.description : null
   if (description !== m.description) patch.description = description
+  if (v.color !== undefined && v.color !== m.color) patch.color = v.color // M11.1 (FR-709)
   return Object.keys(patch).length > 0 ? patch : null
 }
 
@@ -72,7 +74,7 @@ function Details(p: MilestonePopoverProps & { milestone: GridMilestone }): JSX.E
   return (
     <div className={styles.msPopover}>
       <h2 className={styles.msPopoverTitle}>
-        <span aria-hidden="true" className={styles.msGlyph}>
+        <span aria-hidden="true" className={styles.msGlyph} style={{ color: milestoneColorVar(m.color) }}>
           {th.milestones.diamond}
         </span>{' '}
         {milestoneDisplayName(m, p.projectLabel ?? undefined)}
@@ -90,7 +92,7 @@ function Details(p: MilestonePopoverProps & { milestone: GridMilestone }): JSX.E
           <MilestoneForm
             dense
             projectId={m.projectId}
-            initial={{ name: m.name, date: m.date, description: m.description ?? '' }}
+            initial={{ name: m.name, date: m.date, description: m.description ?? '', color: m.color }}
             submitLabel={th.milestones.form.save}
             onSubmit={(v) => {
               const patch = milestoneFormPatch(m, v)
@@ -125,9 +127,14 @@ function Details(p: MilestonePopoverProps & { milestone: GridMilestone }): JSX.E
           </div>
         </>
       ) : (
+        <>
+        <div className={styles.muted} data-testid="ms-color">
+          {th.milestones.color.line(th.milestones.color.name[m.color], th.milestones.color.pattern[m.color])}
+        </div>
         <div className={styles.muted} data-testid="ms-read-only">
           {th.milestones.grid.readOnly}
         </div>
+        </>
       )}
       <Link href={`/projects/${m.projectId}/overview`} prefetch={false} className={styles.openPage}>
         {th.milestones.form.openOverview}
@@ -140,7 +147,7 @@ export interface MilestoneCreatePopoverProps {
   /** null = closed */
   at: { anchor: Element; date: ISODate } | null
   projectId: string
-  onCreate(v: { name: string; date: ISODate; description: string | null }): void
+  onCreate(v: { name: string; date: ISODate; description: string | null; color: GridMilestone['color'] }): void
   onClose(): void
 }
 
@@ -169,7 +176,7 @@ export function MilestoneCreatePopover(p: MilestoneCreatePopoverProps): JSX.Elem
             initial={{ name: '', date: p.at.date, description: '' }}
             submitLabel={th.milestones.form.create}
             onSubmit={(v) => {
-              p.onCreate({ name: v.name, date: v.date, description: v.description })
+              p.onCreate({ name: v.name, date: v.date, description: v.description, color: v.color })
               p.onClose()
             }}
             onCancel={() => p.onClose()}

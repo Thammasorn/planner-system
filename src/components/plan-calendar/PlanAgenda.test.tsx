@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { task } from '@/components/tasks/fixtures.test.data'
 import { renderTasks } from '@/components/tasks/render.test.helper'
 import { th } from '@/i18n/th'
-import type { PlanMarkerDTO } from '@/lib/contracts/plan-markers'
+import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import type { TaskDTO } from '@/lib/contracts/tasks'
 import type { BarInfo } from './labels'
 import { PlanAgenda } from './PlanAgenda'
@@ -21,14 +21,19 @@ const TASKS: TaskDTO[] = [
 const infos = new Map<string, BarInfo>(
   TASKS.map((t) => [t.id, { task: t, assignees: th.planCalendar.unassigned, certainty: 'CONFIRMED' }]),
 )
-const MARKER: PlanMarkerDTO = {
+/** M11.1: the agenda shows milestones (◆ in their colour) — M7.1's plan markers became milestones */
+const MARKER: MilestoneDTO = {
   id: 'm1',
   projectId: 'p',
+  name: th.milestones.fromMarkerName,
   date: '2026-11-20',
+  description: null,
+  completedOn: null,
   color: 'GREEN',
-  label: null,
-  createdBy: 'cindy',
-  updatedAt: '2026-11-01T00:00:00Z',
+  status: 'UPCOMING',
+  late: false,
+  lateTaskCount: 0,
+  progress: { done: 0, total: 0 },
 }
 
 function renderAgenda(o: { showCompleted?: boolean; tasks?: TaskDTO[]; month?: string } = {}) {
@@ -40,7 +45,7 @@ function renderAgenda(o: { showCompleted?: boolean; tasks?: TaskDTO[]; month?: s
       tasks={o.tasks ?? TASKS}
       infos={infos}
       holidays={new Map([['2026-11-04', 'วันหยุดทดสอบ']])}
-      markersByDate={new Map([['2026-11-20', [MARKER]]])}
+      milestonesByDate={new Map([['2026-11-20', [MARKER]]])}
       showCompleted={o.showCompleted ?? true}
       today="2026-11-04"
       onOpen={onOpen}
@@ -51,7 +56,7 @@ function renderAgenda(o: { showCompleted?: boolean; tasks?: TaskDTO[]; month?: s
 }
 
 describe('PlanAgenda (< 600 px, FR-812)', () => {
-  it('lists the days with tasks (starting first, then ◂ running) and marker-only days, in date order', () => {
+  it('lists the days with tasks (starting first, then ◂ running) and milestone-only days, in date order', () => {
     renderAgenda()
     const list = screen.getByRole('list', { name: th.planCalendar.agendaLabel('พฤศจิกายน 2569') })
     const days = within(list).getAllByRole('listitem').map((li) => li.getAttribute('data-testid'))
@@ -64,7 +69,7 @@ describe('PlanAgenda (< 600 px, FR-812)', () => {
     expect(rows).toEqual([B, A]) // UAT starts on the 4th; Rollout runs on from the 3rd
     expect(nov4.querySelector(`[data-task-bar="${A}"]`)).toHaveAttribute('data-cut-left', 'true')
     expect(nov4.querySelector(`[data-task-bar="${B}"]`)).toHaveAttribute('data-done', 'true')
-    expect(screen.getByTestId('plan-agenda-2026-11-20').querySelector('[data-marker]')).toHaveAttribute(
+    expect(screen.getByTestId('plan-agenda-2026-11-20').querySelector('[data-milestone]')).toHaveAttribute(
       'data-color',
       'GREEN',
     )

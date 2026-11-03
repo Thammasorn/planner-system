@@ -9,6 +9,7 @@ import Button from '@mui/material/Button'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Skeleton from '@mui/material/Skeleton'
 import Switch from '@mui/material/Switch'
+import { LoadDisplayToggle } from '@/components/load/LoadDisplayToggle'
 import { th } from '@/i18n/th'
 import { chartPeople } from './chart-model'
 import { LoadLineChart } from './LoadLineChart'
@@ -39,9 +40,11 @@ export function LoadChartPanel(p: LoadChartProps) {
       <div className={styles.head}>
         <h2 className={styles.title}>{th.loadChart.title}</h2>
         <span className={styles.hint}>
-          {p.unit === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitFraction}
+          {p.display === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitPercent}
         </span>
         <span className={styles.spacer} />
+        {/* M11.1 (FR-813/FR-1010): % of capacity (default) or days — the shared load.display preference */}
+        <LoadDisplayToggle />
         <FormControlLabel
           control={
             <Switch
@@ -96,14 +99,14 @@ export function LoadChartPanel(p: LoadChartProps) {
             ))}
           </ul>
           {asTable ? (
-            <LoadTable layout={p.layout} series={p.series} people={people} unit={p.unit} />
+            <LoadTable layout={p.layout} series={p.series} people={people} display={p.display} />
           ) : (
             <div className={styles.chart} data-focused={focused ?? undefined}>
               <LoadLineChart
                 layout={p.layout}
                 series={p.series}
                 people={people}
-                unit={p.unit}
+                display={p.display}
                 focused={focused}
                 height={CHART_HEIGHT}
               />

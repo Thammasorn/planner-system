@@ -2,9 +2,8 @@
 // src/components/grid/MonthHeader.tsx — header row 2 (M8: the ◆ row is row 1): month + year above the week / day row (SPEC FR-818, AC-811,
 // M7.1-D10). One columnheader per month span intersecting the rendered columns (aria-colspan = its columns); the label
 // ("ตุลาคม 2569", narrow spans "ต.ค. 69" with the long name as the accessible name and title) sticks to the right edge
-// of the frozen columns while its month is in view. Marker flags (MarkerFlags) are drawn inside the span of the column
-// that carries them (`renderFlags`), so every interactive element sits in a columnheader.
-import { memo, type ReactNode } from 'react'
+// of the frozen columns while its month is in view. (M7.1's marker flags left with the plan markers in M11.1.)
+import { memo } from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import {
   FROZEN_COL_W,
@@ -16,7 +15,7 @@ import {
   TOTAL_COL_W,
   type GridColumn,
 } from '@/lib/grid/columns'
-import { monthLabel, monthSpans, visibleSpanWidth, type MonthSpan } from '@/lib/grid/months'
+import { monthLabel, monthSpans, visibleSpanWidth } from '@/lib/grid/months'
 import styles from './grid.module.css'
 
 export interface MonthHeaderProps {
@@ -26,8 +25,6 @@ export interface MonthHeaderProps {
   /** visible period area in column-offset space (left / right edge); undefined = unmeasured → whole spans */
   viewFrom?: number
   viewTo?: number
-  /** marker flags of the columns inside `span` (positioned relative to the span's left edge) */
-  renderFlags?: (span: MonthSpan) => ReactNode
 }
 
 /** The month row sits right above the period row (HEADER_ROWS); M8 puts its ◆ row above both (X85). */
@@ -79,7 +76,6 @@ export const MonthHeader = memo(function MonthHeader(p: MonthHeaderProps) {
             >
               {text}
             </span>
-            {p.renderFlags?.(s)}
           </div>
         )
       })}

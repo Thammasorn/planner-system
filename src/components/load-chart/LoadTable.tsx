@@ -3,8 +3,8 @@
 // rendered periods at the grid's x positions, a person's weekly value sits in the week's value column (a collapsed
 // week, or the "รวม" column of an expanded week), day columns stay empty, and it scrolls with the grid. A cell shows a
 // compact value; the full text (th.loadChart.daysValue …, OVER / RISK text) is its accessible text.
-import type { CellUnit } from '@/domain/types'
 import { th } from '@/i18n/th'
+import type { LoadDisplay } from '@/lib/load/display'
 import { formatWeekHeader } from '@/lib/format'
 import { periodColIndex, totalColIndex } from '@/lib/grid/columns'
 import { valueSlots } from '@/lib/grid/chart-geometry'
@@ -18,16 +18,16 @@ export function LoadTable({
   layout,
   series,
   people,
-  unit,
+  display,
 }: {
   layout: ChartLayout
   series: readonly LoadSeries[]
   people: readonly ChartPerson[]
-  unit: CellUnit
+  display: LoadDisplay
 }) {
   const values = valueSlots(layout.slots)
   const caption = th.loadChart.tableCaption(
-    unit === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitFraction,
+    display === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitPercent,
   )
   const colCount = totalColIndex(Math.max(0, ...layout.slots.map((s) => s.index + 1)))
   return (
@@ -89,14 +89,14 @@ export function LoadTable({
                       data-week={p.week}
                       data-level={p.level ?? undefined}
                       data-month-start={layout.monthStarts.has(slot.key) ? '' : undefined}
-                      title={alert ? `${pointText(p, unit)} · ${alert}` : pointText(p, unit)}
+                      title={alert ? `${pointText(p, display)} · ${alert}` : pointText(p, display)}
                     >
                       <span className={styles.srOnly}>
-                        {pointText(p, unit)}
+                        {pointText(p, display)}
                         {alert ? ` · ${alert}` : ''}
                       </span>
                       <span aria-hidden="true">
-                        {compactText(p, unit)}
+                        {compactText(p, display)}
                         {alert ? (
                           <span className={styles.glyph}>{p.level === 'OVER' ? '🔴' : '⚠'}</span>
                         ) : null}

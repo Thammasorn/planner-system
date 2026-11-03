@@ -23,7 +23,7 @@ import { formatCd } from '../src/domain/units'
 import { th } from '../src/i18n/th'
 import { formatHomeDate, formatLeaveRange, formatWeekHeader } from '../src/lib/format'
 import { formatPercentTenths } from '../src/lib/home/percent'
-import { compactDays, workloadCellText } from '../src/lib/workload/format'
+import { compactDays, twoDecimals, workloadCellText } from '../src/lib/workload/format'
 import {
   expect,
   idOf,
@@ -545,9 +545,12 @@ test.describe('B ⟲ live blocks มุมมองงาน / ภาระท�
     const names = await live.rows(block).getByRole('rowheader').allTextContents()
     expect(names.map((n) => n.trim()).sort()).toEqual(['Cindy', 'Ivy', 'Mint'])
     const mintCell = live.cell(block, 'Mint', W0)
-    await expect(mintCell).toContainText(compactDays(250))
+    // M11.1 (FR-1303/FR-1010): the block shows % of capacity by default; the tooltip keeps the days
+    await expect(mintCell.locator('[data-wl-cell]')).toHaveAttribute('data-display', 'PERCENT')
+    await expect(mintCell).toContainText('%')
     await mintCell.hover()
     await expect(page.getByRole('tooltip')).toContainText(th.masking.otherProjects)
+    await expect(page.getByRole('tooltip')).toContainText(th.workload.tooltip.days(twoDecimals(250)))
     const html = await page.content()
     for (const secret of [MOBILE, MINT_TASK]) expect(html, `page leaks ${secret}`).not.toContain(secret)
     await leaveEditor(page, charterId) // Ivy, a POS member, holds the edit lease; B6/B7 edit the charter as Cindy

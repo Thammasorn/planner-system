@@ -44,7 +44,6 @@ describe('grid scope (M6, X07)', () => {
       'grid.cellMenu',
       'grid.moveRow',
       'grid.indentRow',
-      'grid.addMarker',
       'grid.milestoneOpen',
     ])
     expect(grid.find((s) => s.id === 'grid.full')?.combos).toEqual([['F']])
@@ -95,8 +94,8 @@ describe('task page (M6.1, FR-685/686)', () => {
   })
 })
 
-describe('grid rows and markers (M7.1, FR-815/819, X07)', () => {
-  it('Alt+↑/↓ moves the row, Alt+→/← indents/outdents, Shift+F10 on a header adds a marker — listed in the help', () => {
+describe('grid rows (M7.1, FR-815, X07)', () => {
+  it('Alt+↑/↓ moves the row, Alt+→/← indents/outdents — listed in the help', () => {
     const by = (id: string) => SHORTCUTS.find((s) => s.id === id)
     expect(by('grid.moveRow')).toMatchObject({
       scope: 'grid',
@@ -114,11 +113,8 @@ describe('grid rows and markers (M7.1, FR-815/819, X07)', () => {
       ],
       label: th.shortcuts.items.gridIndentRow,
     })
-    expect(by('grid.addMarker')).toMatchObject({
-      scope: 'grid',
-      combos: [['Shift', 'F10']],
-      label: th.shortcuts.items.gridAddMarker,
-    })
+    // M11.1: Shift+F10 on a column header no longer adds a plan marker (markers merged into milestones)
+    expect(by('grid.addMarker')).toBeUndefined()
     // The `?` help renders SHORTCUTS grouped by SHORTCUT_SCOPES, so a registered grid entry is a listed one.
     expect(SHORTCUT_SCOPES).toContain('grid')
   })

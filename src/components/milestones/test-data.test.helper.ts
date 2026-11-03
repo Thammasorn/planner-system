@@ -16,6 +16,7 @@ export function milestone(
     projectId: PID,
     description: null,
     completedOn: null,
+    color: 'PURPLE',
     status: 'UPCOMING',
     late: false,
     lateTaskCount: 0,

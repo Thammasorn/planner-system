@@ -623,47 +623,18 @@ export type AllocationDbRow = typeof allocations.$inferSelect
 export type NewAllocation = typeof allocations.$inferInsert
 
 // ---------------------------------------------------------------------------------------------------------------
-// M7.1 — plan markers (SPEC §6.2, §4.8.1 FR-819, BR-102, D24; plan/m07.1 S0.2). A marker is a dated, coloured line on
-// the project plan — not a milestone. ≤ 100 live markers per project are enforced in the service after
-// `select … from projects where id = $1 for update` (M7.1-D13). No `version`: last write wins (§7.10).
+// M7.1 plan markers (`plan_markers`) were merged into milestones in M11.1 (SPEC v3.4, D24 reversed; migration 0016
+// copies them, 0017 drops the table and its enum). The milestone line layer keeps the BR-102 placement.
 // ---------------------------------------------------------------------------------------------------------------
-
-export const planMarkerColor = pgEnum('plan_marker_color', ['RED', 'YELLOW', 'GREEN'])
-
-export const planMarkers = pgTable(
-  'plan_markers',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    projectId: uuid('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    date: date('date', { mode: 'string' }).notNull(), // drawn at the right edge of the column containing it (BR-102)
-    color: planMarkerColor('color').notNull().default('RED'),
-    label: text('label'),
-    createdBy: text('created_by')
-      .notNull()
-      .references(() => user.id),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-    deletedAt: timestamptz('deleted_at'),
-    deletedBatch: uuid('deleted_batch'),
-  },
-  (t) => [
-    check('plan_markers_label_check', sql`${t.label} is null or length(trim(${t.label})) between 1 and 80`),
-    index('plan_markers_project_id_date_idx')
-      .on(t.projectId, t.date)
-      .where(sql`${t.deletedAt} is null`),
-  ],
-)
-
-export type PlanMarkerDbRow = typeof planMarkers.$inferSelect
-export type NewPlanMarker = typeof planMarkers.$inferInsert
 
 // ---------------------------------------------------------------------------------------------------------------
 // M8 — milestones (SPEC §6.2, §4.7, §5.9; plan/m08 S0.2, M8-D2/D5). Soft delete + batch (X04); `tasks.milestone_id`
 // is never touched on delete — every read joins the live milestone (repo.milestones.LIVE_MILESTONE_JOIN/ON, X87).
 // Same-project binding is checked in the service (X66), no composite FK.
 // ---------------------------------------------------------------------------------------------------------------
+
+/** M11.1 (owner 2026-11-02, M11.1-D1): the milestone's line colour; PURPLE = the M8 `--milestone` purple. */
+export const milestoneColor = pgEnum('milestone_color', ['PURPLE', 'RED', 'YELLOW', 'GREEN', 'BLUE'])
 
 export const milestones = pgTable(
   'milestones',
@@ -676,6 +647,7 @@ export const milestones = pgTable(
     date: date('date', { mode: 'string' }).notNull(),
     description: text('description'),
     completedOn: date('completed_on', { mode: 'string' }),
+    color: milestoneColor('color').notNull().default('PURPLE'), // M11.1 (FR-709): line / ◆ colour
     createdBy: text('created_by')
       .notNull()
       .references(() => user.id),

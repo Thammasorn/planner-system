@@ -50,7 +50,11 @@ vi.mock('@/server/actions/tasks', () => ({
   deleteTaskTree: vi.fn(),
   restoreTaskBatch: vi.fn(),
 }))
-vi.mock('@/server/actions/assignments', () => ({ assign: vi.fn(), unassign: vi.fn(), restoreAssignmentBatch: vi.fn() }))
+vi.mock('@/server/actions/assignments', () => ({
+  assign: vi.fn(),
+  unassign: vi.fn(),
+  restoreAssignmentBatch: vi.fn(),
+}))
 vi.mock('@/server/actions/task-blockers', () => ({ addTaskBlocker: vi.fn(), removeTaskBlocker: vi.fn() }))
 vi.mock('@/components/milestones/useMilestoneMutations', () => ({ useMilestoneMutations: () => m.mut }))
 // a minimal stand-in for S4's MilestoneForm: the date field (keyboard move) + submit with the initial values
@@ -61,7 +65,7 @@ vi.mock('@/components/milestones/MilestoneForm', async () => {
       initial: { name: string; date: string | null; description: string }
       readOnly?: boolean
       submitLabel: string
-      onSubmit(v: { name: string; date: string; description: string | null }): void
+      onSubmit(v: { name: string; date: string; description: string | null; color: string }): void
     }) => (
       <form
         aria-label="milestone-form"
@@ -73,7 +77,12 @@ vi.mock('@/components/milestones/MilestoneForm', async () => {
             const v = fd.get(k)
             return typeof v === 'string' ? v : ''
           }
-          p.onSubmit({ name: get('name') || p.initial.name || 'ใหม่', date: get('date'), description: null })
+          p.onSubmit({
+            name: get('name') || p.initial.name || 'ใหม่',
+            date: get('date'),
+            description: null,
+            color: 'PURPLE',
+          })
         }}
       >
         <label>
@@ -98,7 +107,11 @@ const UAT = fxMilestone('m-uat', '2026-10-02', {
 })
 const BETA = fxMilestone('m-beta', '2026-10-20', { name: 'Beta release' })
 const REVIEW = fxMilestone('m-review', '2026-10-23', { name: 'Dashboard review' })
-const DONE = fxMilestone('m-kick', '2026-09-15', { name: 'Kickoff', status: 'DONE', completedOn: '2026-09-15' })
+const DONE = fxMilestone('m-kick', '2026-09-15', {
+  name: 'Kickoff',
+  status: 'DONE',
+  completedOn: '2026-09-15',
+})
 
 const TASKS: FxTask[] = POS_TASKS.map((t) =>
   t.id === 't-uat' ? { ...t, milestoneId: 'm-uat', lateForMilestone: true } : t,
@@ -106,7 +119,9 @@ const TASKS: FxTask[] = POS_TASKS.map((t) =>
 
 function serve(milestones: GridMilestone[], canManage: boolean) {
   m.fetchGridChunk.mockImplementation((_c: unknown, chunk: GridChunk) =>
-    Promise.resolve(gridResponse({ from: chunk.from, tasks: TASKS, people: POS_PEOPLE, milestones, canManage })),
+    Promise.resolve(
+      gridResponse({ from: chunk.from, tasks: TASKS, people: POS_PEOPLE, milestones, canManage }),
+    ),
   )
 }
 
@@ -173,7 +188,7 @@ describe('◆ row: rendering (S3.3, FR-705, §8.9)', () => {
     }
   })
 
-  it('S3.9: aria-rowcount from HEADER_ROWS (3) and the ◆ shares its period column\'s aria-colindex', async () => {
+  it("S3.9: aria-rowcount from HEADER_ROWS (3) and the ◆ shares its period column's aria-colindex", async () => {
     serve([UAT], true)
     renderPos()
     const grid = screen.getByRole('grid')
@@ -187,13 +202,35 @@ describe('◆ row: rendering (S3.3, FR-705, §8.9)', () => {
     expect(rows.slice(0, 3).map((r) => r.getAttribute('aria-rowindex'))).toEqual(['1', '2', '3'])
   })
 
-  it('the milestone is also a dash-dot line in the marker layer (FR-820), without a flag', async () => {
-    serve([UAT], true)
+  it('the milestone is also a line in the line layer in its colour (FR-709, BR-102), without a flag', async () => {
+    serve([UAT, { ...REVIEW, color: 'RED' }], true)
     renderPos()
     await screen.findByTestId('ms-m-uat')
-    const lines = document.querySelectorAll('[data-marker-line][data-tone="MILESTONE"]')
-    expect(lines.length).toBeGreaterThanOrEqual(3) // header, body, footer
-    expect(document.querySelector('[data-marker-flag="ms:m-uat"]')).toBeNull()
+    const purple = document.querySelectorAll('[data-marker-line][data-marker-ids="m-uat"]')
+    expect([...purple].map((e) => e.getAttribute('data-marker-line')).sort()).toEqual([
+      'body',
+      'footer',
+      'header',
+    ])
+    for (const e of purple) {
+      expect(e).toHaveAttribute('data-color', 'PURPLE')
+      expect(e).toHaveAttribute('aria-hidden', 'true')
+    }
+    expect(document.querySelector('[data-marker-line][data-marker-ids="m-review"]')).toHaveAttribute(
+      'data-color',
+      'RED',
+    )
+    // M11.1: no ⚑ flags and no "เส้นกำกับ" toolbar menu any more
+    expect(document.querySelector('[data-marker-flag]')).toBeNull()
+    expect(screen.queryByTestId('markers-menu')).toBeNull()
+  })
+
+  it('M11.1: the ◆ carries its colour (data-color + the colour name in its accessible description), never colour alone', async () => {
+    serve([{ ...UAT, color: 'GREEN' }], true)
+    renderPos()
+    const diamond = await screen.findByTestId('ms-m-uat')
+    expect(diamond).toHaveAttribute('data-color', 'GREEN')
+    // the colour is named in the ◆ tooltip (milestoneTooltipFor, tooltip.test.ts) and the form's radio group
   })
 })
 
@@ -206,9 +243,18 @@ describe('◆ row: create (S3.4, FR-702, M8-D11)', () => {
     await waitFor(() => expect(cell).toHaveAttribute('tabindex', '-1'))
     fireEvent.click(cell)
     const pop = await screen.findByTestId('ms-create-popover')
-    expect(within(pop).getByRole('form', { name: 'milestone-form' })).toHaveAttribute('data-initial-date', '2026-10-19')
+    expect(within(pop).getByRole('form', { name: 'milestone-form' })).toHaveAttribute(
+      'data-initial-date',
+      '2026-10-19',
+    )
     fireEvent.click(within(pop).getByRole('button', { name: th.milestones.form.create }))
-    expect(m.mut.create).toHaveBeenCalledWith({ projectId: PID, name: 'ใหม่', date: '2026-10-19', description: null })
+    expect(m.mut.create).toHaveBeenCalledWith({
+      projectId: PID,
+      name: 'ใหม่',
+      date: '2026-10-19',
+      description: null,
+      color: 'PURPLE',
+    })
     expect(await screen.findByTestId('ms-m-new')).toBeInTheDocument()
   })
 
@@ -220,7 +266,10 @@ describe('◆ row: create (S3.4, FR-702, M8-D11)', () => {
     cell.focus()
     fireEvent.keyDown(cell, { code: 'Enter', key: 'Enter' })
     expect(await screen.findByTestId('ms-create-popover')).toBeInTheDocument()
-    expect(screen.getByRole('form', { name: 'milestone-form' })).toHaveAttribute('data-initial-date', '2026-10-26')
+    expect(screen.getByRole('form', { name: 'milestone-form' })).toHaveAttribute(
+      'data-initial-date',
+      '2026-10-26',
+    )
   })
 
   it('member: nothing opens; empty cells are not focusable; no toolbar button', async () => {
@@ -259,11 +308,17 @@ describe('◆ popover + cell menu (S3.5, FR-707/708, §8.9)', () => {
     const date = within(pop).getByLabelText(th.milestones.fields.date)
     fireEvent.change(date, { target: { value: '2026-10-09' } })
     fireEvent.click(within(pop).getByRole('button', { name: th.milestones.form.save }))
-    expect(m.mut.update).toHaveBeenCalledWith(expect.objectContaining({ id: 'm-uat' }), { date: '2026-10-09' }, {
-      toast: 'moved',
-    })
+    expect(m.mut.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'm-uat' }),
+      { date: '2026-10-09' },
+      {
+        toast: 'moved',
+      },
+    )
     // optimistic: the ◆ moved to the week of 5/10 before any refetch
-    await waitFor(() => expect(screen.getByTestId('ms-cell-W:2026-10-05')).toContainElement(screen.getByTestId('ms-m-uat')))
+    await waitFor(() =>
+      expect(screen.getByTestId('ms-cell-W:2026-10-05')).toContainElement(screen.getByTestId('ms-m-uat')),
+    )
   })
 
   it('member: the popover has no inputs and the read-only text', async () => {
@@ -286,7 +341,11 @@ describe('◆ popover + cell menu (S3.5, FR-707/708, §8.9)', () => {
     diamond.focus()
     fireEvent.keyDown(diamond, { code: 'F10', key: 'F10', shiftKey: true })
     const menu = await screen.findByRole('menu', { name: th.grid.day.cellMenu })
-    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((i) => i.textContent),
+    ).toEqual([
       th.milestones.grid.menu.open,
       th.milestones.grid.menu.complete,
       th.milestones.grid.menu.delete,
@@ -304,7 +363,11 @@ describe('◆ popover + cell menu (S3.5, FR-707/708, §8.9)', () => {
     const diamond = await screen.findByTestId('ms-m-uat')
     fireEvent.contextMenu(diamond, { clientX: 40, clientY: 40 })
     const menu = await screen.findByRole('menu')
-    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual([th.milestones.grid.menu.open])
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((i) => i.textContent),
+    ).toEqual([th.milestones.grid.menu.open])
     view.unmount()
 
     serve([UAT], true)
@@ -312,9 +375,13 @@ describe('◆ popover + cell menu (S3.5, FR-707/708, §8.9)', () => {
     const d2 = await screen.findByTestId('ms-m-uat')
     fireEvent.contextMenu(d2, { clientX: 40, clientY: 40 })
     fireEvent.click(await screen.findByRole('menuitem', { name: th.milestones.grid.menu.complete }))
-    expect(m.mut.update).toHaveBeenCalledWith(expect.objectContaining({ id: 'm-uat' }), { completed: true }, {
-      toast: 'completed',
-    })
+    expect(m.mut.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'm-uat' }),
+      { completed: true },
+      {
+        toast: 'completed',
+      },
+    )
     await waitFor(() => expect(screen.getByTestId('ms-m-uat')).toHaveAttribute('data-status', 'DONE'))
   })
 
@@ -348,9 +415,13 @@ describe('◆ drag (S3.6, FR-707, X66)', () => {
     const diamond = await screen.findByTestId('ms-m-review')
     drag(diamond, 70)
     expect(m.mut.update).toHaveBeenCalledTimes(1)
-    expect(m.mut.update).toHaveBeenCalledWith(expect.objectContaining({ id: 'm-review' }), { date: '2026-10-30' }, {
-      toast: 'moved',
-    })
+    expect(m.mut.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'm-review' }),
+      { date: '2026-10-30' },
+      {
+        toast: 'moved',
+      },
+    )
     expect(screen.queryByTestId('ms-popover')).toBeNull()
     await waitFor(() =>
       expect(screen.getByTestId('ms-cell-W:2026-10-26')).toContainElement(screen.getByTestId('ms-m-review')),

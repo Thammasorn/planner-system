@@ -1,7 +1,8 @@
 // src/components/load-chart/types.ts — the load-chart contract (SPEC FR-813, BR-104, M7.1-D3/D4/D5; plan/m07.1 S0.10).
 // S1's src/lib/grid/load-series.ts returns LoadSeries[]; S3 passes LoadChartProps to LoadChartPanel; S4 renders it.
 import type { OverloadLevel } from '@/domain/overload'
-import type { CellUnit, Cd, ISODate, LoadView } from '@/domain/types'
+import type { Cd, ISODate, LoadView } from '@/domain/types'
+import type { LoadDisplay } from '@/lib/load/display'
 import type { PeriodSlot } from '@/lib/grid/chart-geometry'
 import type { MarkerEdge } from '@/lib/grid/markers'
 
@@ -38,7 +39,7 @@ export interface ChartLayout {
   viewWidth: number
   /** keys of the first column of each month (the grid's month lines) */
   monthStarts: ReadonlySet<string>
-  /** the grid's marker edges inside the rendered window (x = right edge, column-offset space) */
+  /** the grid's milestone line edges inside the rendered window (x = right edge, column-offset space) */
   markerEdges: readonly MarkerEdge[]
   /** ref callback of the pane's horizontal scroller, kept in lockstep with the grid (VirtualGrid `follow`) */
   follow: (el: HTMLElement | null) => (() => void) | undefined
@@ -49,7 +50,8 @@ export interface LoadChartProps {
   weeks: ISODate[]
   layout: ChartLayout
   series: LoadSeries[]
-  unit: CellUnit
+  /** M11.1 (FR-813/FR-1010): `load.display` — PERCENT (default) or DAYS; no longer the grid unit */
+  display: LoadDisplay
   view: LoadView
   /** Shared with the footer's switch (FR-806, X29). */
   includeOthers: boolean

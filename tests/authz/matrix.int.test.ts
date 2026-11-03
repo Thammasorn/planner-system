@@ -158,42 +158,14 @@ describe('authz matrix', () => {
     expect(rows.find((r) => r.id === 'AL-DAYWEEK')?.expect).toEqual({ M: '409', L: '409', Me: '409', W: '404' })
   })
 
-  it('M7.1 meta (plan/m07.1 §7.2, S5.1): every PM-* and PREF-M7.1-* row exists, PERM-06/PERM-29 are cited, PM rows run on the planMarkers world and audit plan_marker; M3 move rows still exist', () => {
+  it('M7.1 meta (plan/m07.1 §7.2, S5.1; M11.1-D3): PREF-M7.1-* rows exist; no PM-* row is left (PERM-29 retired); M3 move rows still exist', () => {
     const ids = new Set(rows.map((r) => r.id))
-    const want = [
-      ...['LIST', 'LIST-ARCH', 'LIST-BADID'].map((k) => `PM-${k}`),
-      ...['CREATE', 'CREATE-ARCH', 'UPDATE', 'UPDATE-ARCH', 'DELETE', 'DELETE-ARCH', 'RESTORE', 'RESTORE-ARCH'].map(
-        (k) => `PM-${k}`,
-      ),
-      ...['CROSS', 'MISSING', 'BAD', 'LIMIT'].map((k) => `PM-${k}`),
-      ...['VIEW', 'ASSIGNEES', 'WIDTH', 'CHART', 'BAD'].map((k) => `PREF-M7.1-${k}`),
-    ]
+    const want = ['VIEW', 'ASSIGNEES', 'WIDTH', 'CHART', 'BAD'].map((k) => `PREF-M7.1-${k}`)
     expect(want.filter((id) => !ids.has(id)), 'missing M7.1 rows').toEqual([])
-    const pm = rows.filter((r) => /^PM-/.test(r.id))
-    for (const perm of ['PERM-06', 'PERM-29'])
-      expect(pm.some((r) => new RegExp(`\\b${perm}\\b`).test(r.spec)), `${perm} has no M7.1 row`).toBe(true)
-    for (const r of pm) expect(r.with ?? [], `${r.id} needs the planMarkers world`).toContain('planMarkers')
-    // X44: every marker mutation audits one plan_marker row
-    for (const r of pm.filter((x) => x.mutates)) expect(r.audit, r.id).toMatchObject({ entity: 'plan_marker' })
-    // §7.10: exactly the four actions + the GET route; grid reorder adds no action (M7.1-D22)
-    expect(new Set(pm.map((r) => r.action))).toEqual(
-      new Set([
-        'GET /api/projects/[id]/plan-markers',
-        'createPlanMarker',
-        'updatePlanMarker',
-        'deletePlanMarker',
-        'restorePlanMarkerBatch',
-      ]),
-    )
-    // PERM-29 = plan edit (SPEC §3.2): the outsider (not in P or A) never reaches their markers; archived writes are 403.
-    // *-CROSS rows address Q, where the world's outsider is a MEMBER (allow) and lead/member are not (404).
-    for (const r of pm.filter((x) => !x.id.endsWith('-CROSS'))) expect(['404', '400'], `${r.id} W`).toContain(r.expect.W)
-    for (const r of pm.filter((x) => x.id.endsWith('-CROSS')))
-      expect(r.expect, r.id).toEqual({ M: 'allow', L: '404', Me: '404', W: 'allow' })
-    for (const r of pm.filter((x) => x.id.endsWith('-ARCH') && x.mutates))
-      expect(r.expect, r.id).toEqual({ M: '403', L: '403', Me: '403', W: '404' })
+    expect(rows.filter((r) => /^PM-/.test(r.id)).map((r) => r.id)).toEqual([])
+    expect(rows.filter((r) => /\bPERM-29\b/.test(r.spec)).map((r) => r.id)).toEqual([])
     // PREF rows: every role writes its own row, never audited
-    for (const r of rows.filter((x) => /^PREF-M7\.1-(VIEW|ASSIGNEES|WIDTH|CHART)$/.test(x.id))) {
+    for (const r of rows.filter((x) => /^PREF-M7\.1-(VIEW|ASSIGNEES|WIDTH|CHART)$|^PREF-M11\.1-LOAD-DISPLAY$/.test(x.id))) {
       expect(r.expect, r.id).toEqual({ M: 'allow', L: 'allow', Me: 'allow', W: 'allow' })
       expect(r.audit, r.id).toBe(false)
     }

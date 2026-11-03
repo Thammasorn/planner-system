@@ -75,21 +75,12 @@ describe('AZ-2 route coverage', () => {
       expect(taskRows, `no TASK-page row for ${name}`).toContain(name)
   })
 
-  it('M7.1 (plan/m07.1 S5.1): GET /api/projects/[id]/plan-markers is exported and has rows; the four marker actions have rows', async () => {
+  it('M11.1 (M11.1-D3): the plan-markers route and the four marker actions are gone; no route for the chart or calendar', async () => {
     const routes = await exportedRoutes()
-    expect(routes).toContain('GET /api/projects/[id]/plan-markers')
+    expect(routes.filter((r) => /plan-markers|chart|plan-calendar/.test(r))).toEqual([])
     const covered = new Set(rows.map((r) => r.action))
-    for (const name of [
-      'GET /api/projects/[id]/plan-markers',
-      'createPlanMarker',
-      'updatePlanMarker',
-      'deletePlanMarker',
-      'restorePlanMarkerBatch',
-    ])
-      expect(covered.has(name), `${name} has no authz row`).toBe(true)
-    // §7.10: no new route for the chart or the calendar (they read the grid chunk / project tasks / calendar)
-    const m71 = routes.filter((r) => /plan-markers|chart|plan-calendar/.test(r))
-    expect(m71).toEqual(['GET /api/projects/[id]/plan-markers'])
+    for (const name of ['createPlanMarker', 'updatePlanMarker', 'deletePlanMarker', 'restorePlanMarkerBatch'])
+      expect(covered.has(name), `${name} still has an authz row`).toBe(false)
   })
 
   it('M9 (plan/m09 S5.1): the 8 workload / people / load routes are exported and have rows; the header loader has rows', async () => {

@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cell } from '@/components/workload/test-data.test.helper'
 import { UndoProvider } from '@/components/undo/UndoProvider'
+import { PreferencesContext } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
+import { DEFAULT_PREFERENCES, type Preferences } from '@/lib/schemas/preferences'
 import { getJson } from '@/lib/api'
 import type { EmbedWorkloadResponse } from '@/lib/contracts/embed'
 import type { ProjectWorkloadProps } from '@/lib/schemas/page-content'
@@ -94,13 +96,13 @@ const cellOf = (name: string, week: string) =>
 beforeEach(() => fetchJson.mockReset())
 
 describe('projectWorkload block (FR-1303, AC-1303)', () => {
-  it('Mint 2.5/5 with the masked part as งานในโปรเจคอื่น; no hidden project name anywhere', async () => {
+  it('Mint 2.5/5 (shown as 50%, M11.1 default) with the masked part as งานในโปรเจคอื่น; no hidden project name anywhere', async () => {
     fetchJson.mockResolvedValue(answer())
     renderWithClient(<Block />)
     await screen.findByTestId('embed-workload-table')
     expect(fetchJson).toHaveBeenCalledWith(`/api/pages/${PAGE}/embed/workload`, expect.anything())
     const mint = cellOf('Mint', '2026-10-05')
-    expect(mint).toHaveTextContent('2.5/5')
+    expect(mint).toHaveTextContent('50%')
     fireEvent.pointerOver(mint)
     const tip = await screen.findByTestId('workload-tooltip')
     expect(within(tip).getByText(new RegExp(th.masking.otherProjects))).toBeInTheDocument()
@@ -121,11 +123,40 @@ describe('projectWorkload block (FR-1303, AC-1303)', () => {
     const onWrite = vi.fn()
     renderWithClient(<Block onWrite={onWrite} />)
     await screen.findByTestId('embed-workload-table')
-    expect(cellOf('Cindy', '2026-10-12')).toHaveTextContent('2.5/2')
+    expect(cellOf('Cindy', '2026-10-12')).toHaveTextContent('125%')
     fireEvent.click(screen.getByRole('button', { name: th.editor.liveBlocks.workload.view.COMMITTED }))
     expect(onWrite).toHaveBeenCalledWith({ view: 'COMMITTED' })
     await waitFor(() => expect(cellOf('Cindy', '2026-10-12')).toHaveTextContent(th.workload.cell.empty))
     expect(fetchJson).toHaveBeenCalledTimes(1)
+  })
+
+  it('M11.1 FR-1303/FR-1010: the "% | วัน/capacity" toggle writes the viewer preference, not the block props', async () => {
+    fetchJson.mockResolvedValue(answer())
+    const onWrite = vi.fn()
+    const setPreference = vi.fn()
+    function WithPrefs() {
+      const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFERENCES)
+      return (
+        <PreferencesContext
+          value={{
+            prefs,
+            setPreference: (key, value) => {
+              setPreference(key, value)
+              setPrefs((p) => ({ ...p, [key]: value }))
+            },
+          }}
+        >
+          <Block onWrite={onWrite} />
+        </PreferencesContext>
+      )
+    }
+    renderWithClient(<WithPrefs />)
+    await screen.findByTestId('embed-workload-table')
+    expect(cellOf('Mint', '2026-10-05')).toHaveTextContent('50%')
+    fireEvent.click(screen.getByRole('button', { name: th.loadDisplay.DAYS_long }))
+    expect(setPreference).toHaveBeenCalledWith('load.display', 'DAYS')
+    await waitFor(() => expect(cellOf('Mint', '2026-10-05')).toHaveTextContent('2.5/5'))
+    expect(onWrite).not.toHaveBeenCalled()
   })
 
   it('a read-only viewer switches the view locally without writing', async () => {

@@ -1078,7 +1078,6 @@ export const th = {
       // M7.1 (FR-815, FR-819)
       gridMoveRow: 'เลื่อนแถวงานขึ้น/ลง',
       gridIndentRow: 'ย่อเป็นงานย่อย/ดึงออก',
-      gridAddMarker: 'เพิ่มเส้นกำกับ (บนหัวคอลัมน์)',
       // M8 (FR-707, M8-D10)
       gridMilestoneOpen: 'เปิด milestone ที่เลือก (เปลี่ยนวันที่ได้)',
       // M10 (KEY-06, palette scope)
@@ -1851,6 +1850,17 @@ export const th = {
       fix: 'ไปแก้แผน',
     },
   },
+  // M11.1 (FR-813, FR-1002, M11.1-D4): load shown as % of capacity or days — one preference, a toggle on each screen
+  loadDisplay: {
+    label: 'แสดงภาระเป็น',
+    PERCENT: '%',
+    DAYS: 'วัน/capacity',
+    PERCENT_long: 'เปอร์เซ็นต์ของ capacity',
+    DAYS_long: 'วันต่อ capacity',
+    percent: (n: number) => `${n}%`,
+    /** tooltip line: "ใช้ 90% ของ capacity" */
+    used: (pct: number) => `ใช้ ${pct}% ของ capacity`,
+  },
   // M9 Workload ทีม (FR-1001…1007, FR-409/FR-303 load parts; plan/m09 S0.8). Build-time owner after S0: S4.
   workload: {
     title: 'Workload ทีม',
@@ -2003,8 +2013,7 @@ export const th = {
     },
   },
   // ---------------------------------------------------------------------------------------------------------------
-  // M7.1 — plan grid improvements (plan/m07.1 S0.7). Build-time owners after S0: S2 → planMarkers.errors, audit;
-  // S3 → grid, planMarkers (except errors); S4 → planView, planCalendar, loadChart.
+  // M7.1 — plan grid improvements (plan/m07.1 S0.7). M11.1 removed `planMarkers` (markers merged into milestones).
   // ---------------------------------------------------------------------------------------------------------------
   planView: {
     label: 'มุมมองแผนงาน',
@@ -2051,6 +2060,14 @@ export const th = {
     over: (days: string) => `เกิน capacity ${days} วัน`,
     risk: 'เสี่ยงล้น (รวมงานที่ยังไม่แน่นอน)',
     noCapacity: 'ไม่มี capacity ในสัปดาห์นี้',
+    /** M11.1 (FR-813): under the chart in % mode — the weeks whose line has a gap */
+    noCapacityOf: (name: string, weeks: string) => `${name} ${weeks}`,
+    noCapacityNote: (parts: string) => `ไม่มี capacity: ${parts}`,
+    /** M11.1: the 100 % reference line and the y axis unit in % mode */
+    fullCapacityPercent: '100% (เต็ม capacity)',
+    unitPercent: '% ของ capacity',
+    /** M11.1-D5: a point above 100 % (value label + hatched band; never colour alone) */
+    overFull: (pct: number) => `${pct}%`,
     empty: 'ยังไม่มีใครมีภาระในช่วงนี้',
     person: (name: string) => `ภาระของ ${name}`,
     week: (label: string) => `สัปดาห์ ${label}`,
@@ -2067,31 +2084,6 @@ export const th = {
     /** M7.1-D30: the pane's horizontal scroller (moves with the grid's columns) */
     scroller: 'ภาระรายคนตามคอลัมน์ของตารางแผนงาน',
   },
-  planMarkers: {
-    menu: (n: number) => `เส้นกำกับ (${n})`,
-    add: '+ เพิ่มเส้นกำกับ…',
-    addHere: 'เพิ่มเส้นกำกับที่ขอบขวา',
-    edit: 'แก้เส้นกำกับ',
-    delete: 'ลบเส้นกำกับ',
-    deleted: 'ลบเส้นกำกับแล้ว',
-    restore: 'กู้คืนเส้นกำกับ',
-    color: { RED: 'แดง', YELLOW: 'เหลือง', GREEN: 'เขียว' },
-    label: 'ข้อความ',
-    labelPlaceholder: 'เช่น UAT sign-off',
-    date: 'วันที่',
-    /** Flag tooltip / accessible name; `label` null → date only. */
-    flag: (label: string | null, date: string) => (label ? `${label} · ${date}` : `เส้นกำกับ ${date}`),
-    by: (date: string) => `แก้ล่าสุด ${date}`,
-    readOnly: 'ดูได้อย่างเดียว — แก้เส้นกำกับได้เมื่อแก้แผนได้',
-    limit: (max: number) => `ครบ ${max} เส้นแล้ว — ลบเส้นที่ไม่ใช้ก่อน`,
-    errors: {
-      limit: (max: number) => `โปรเจคหนึ่งมีเส้นกำกับได้ไม่เกิน ${max} เส้น`,
-      label: (max: number) => `ข้อความยาวได้ไม่เกิน ${max} ตัวอักษร`,
-      invalidDate: 'วันที่ไม่ถูกต้อง',
-      noChange: 'ไม่มีค่าที่จะแก้',
-      restoreExpired: 'กู้คืนไม่ได้ เพราะลบไปนานกว่า 30 วันแล้ว',
-    },
-  },
   // ---------------------------------------------------------------------------------------------------------------
   // M8 — milestones (plan/m08 S0.8). Build-time owners: S2 → errors; S3 → grid; S4 → overview, tasks, calendar,
   // palette, form, toast.
@@ -2107,12 +2099,26 @@ export const th = {
     progress: (done: number, total: number) => `เสร็จ ${done}/${total} งาน`,
     dateLine: (date: string, status: string) => `${date} · ${status}`,
     none: 'ไม่ผูก milestone',
+    /** M11.1 (M11.1-D2): the name of a migrated plan marker without a label — 0016's SQL uses the same literal. */
+    fromMarkerName: 'เส้นกำกับ',
+    /** M11.1 (FR-709, M11.1-D1): line / ◆ colour — always shown with its name, never colour alone (§8.9). */
+    color: {
+      label: 'สีเส้น',
+      name: { PURPLE: 'ม่วง', RED: 'แดง', YELLOW: 'เหลือง', GREEN: 'เขียว', BLUE: 'น้ำเงิน' },
+      /** tooltip / aria suffix: "สีแดง" */
+      named: (name: string) => `สี${name}`,
+      /** tooltip line: "สีแดง · เส้นทึบ" */
+      line: (name: string, pattern: string) => `สี${name} · ${pattern}`,
+      /** the line pattern per colour (legend / screen readers) */
+      pattern: { PURPLE: 'เส้นประจุด', RED: 'เส้นทึบ', YELLOW: 'เส้นประ', GREEN: 'เส้นจุด', BLUE: 'เส้นคู่' },
+    },
     fields: {
       project: 'โปรเจค',
       name: 'ชื่อ milestone',
       date: 'วันที่',
       description: 'คำอธิบาย',
       completed: 'เสร็จแล้ว',
+      color: 'สีเส้น',
     },
     form: {
       createTitle: 'สร้าง milestone',
@@ -2147,6 +2153,8 @@ export const th = {
       moved: (name: string, date: string) => `เลื่อน '${name}' เป็น ${date} แล้ว`,
       completed: (name: string) => `'${name}' เสร็จแล้ว`,
       reopened: (name: string) => `ยกเลิกเสร็จ '${name}' แล้ว`,
+      /** M11.1 (FR-709) */
+      recoloured: (name: string, colour: string) => `เปลี่ยนสีเส้น '${name}' เป็น${colour}แล้ว`,
       deleted: (name: string) => `ลบ milestone '${name}' แล้ว`,
       deletedUnlinked: (name: string, n: number) => `ลบ milestone '${name}' แล้ว — ${n} งานหลุดการผูก`,
       linked: (n: number, name: string) => `ผูก ${n} งานกับ '${name}' แล้ว`,
@@ -2158,6 +2166,7 @@ export const th = {
       update: 'แก้ milestone',
       move: 'เลื่อน milestone',
       complete: 'ติ๊กเสร็จ milestone',
+      recolour: 'เปลี่ยนสีเส้น milestone',
       delete: 'ลบ milestone',
       link: 'ผูก milestone',
     },
@@ -2655,15 +2664,6 @@ export const th = {
     taskBodySaved: (name: string) => `บันทึกเนื้อหางาน ${name}`,
     pageFullWidthOn: (title: string) => `เปิดเต็มความกว้าง ${quoted(title)}`,
     pageFullWidthOff: (title: string) => `ปิดเต็มความกว้าง ${quoted(title)}`,
-    // M7.1 (FR-819, X44) — date = Thai display date; label may be null
-    planMarkerCreated: (date: string, label: string | null) =>
-      `เพิ่มเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
-    planMarkerUpdated: (date: string, label: string | null) =>
-      `แก้เส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
-    planMarkerDeleted: (date: string, label: string | null) =>
-      `ลบเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
-    planMarkerRestored: (date: string, label: string | null) =>
-      `กู้คืนเส้นกำกับ ${date}${label ? ` ${quoted(label)}` : ''}`,
     // M8 (FR-1201, M8-D21) — entity 'milestone'; bindings are entity 'task'
     milestoneCreated: (name: string) => `สร้าง milestone ${name}`,
     milestoneUpdated: (name: string) => `แก้ milestone ${name}`,
@@ -2671,6 +2671,9 @@ export const th = {
       `เลื่อน milestone ${name} จาก ${from} เป็น ${to}`,
     milestoneCompleted: (name: string) => `ติ๊กเสร็จ milestone ${name}`,
     milestoneReopened: (name: string) => `ยกเลิกเสร็จ milestone ${name}`,
+    // M11.1 (FR-709): colour names from th.milestones.color.name
+    milestoneRecoloured: (name: string, from: string, to: string) =>
+      `เปลี่ยนสีเส้น milestone ${name} จาก${from}เป็น${to}`,
     milestoneDeleted: (name: string, n: number) => `ลบ milestone ${name} (หลุดการผูก ${n} งาน)`,
     milestoneRestored: (name: string) => `กู้คืน milestone ${name}`,
     milestoneSeeded: (name: string) => `นำเข้า milestone ตั้งต้น ${name}`,

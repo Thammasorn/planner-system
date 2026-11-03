@@ -77,15 +77,26 @@ export function fontVar(name: FontName): string {
 }
 
 /** M7.1 (X51) non-text colours, as in tokens.css: one categorical colour per chart series (person i →
- *  `--chart-{(i mod 8) + 1}`, M7.1-D4), the three plan-marker colours and the month boundary line. */
+ *  `--chart-{(i mod 8) + 1}`, M7.1-D4), the milestone line colours (M11.1) and the month boundary line. */
 export const CHART_SERIES_COUNT = 8
 export const CHART = {
   light: ['#2563eb', '#c2410c', '#0f766e', '#9333ea', '#be185d', '#4d7c0f', '#0369a1', '#b45309'],
   dark: ['#60a5fa', '#fb923c', '#2dd4bf', '#c084fc', '#f472b6', '#a3e635', '#38bdf8', '#fbbf24'],
 } as const
-export const MARKER = {
-  light: { 'marker-red': '#dc2626', 'marker-yellow': '#a16207', 'marker-green': '#15803d' },
-  dark: { 'marker-red': '#f87171', 'marker-yellow': '#facc15', 'marker-green': '#4ade80' },
+/** M11.1 (FR-709): milestone line colours (the M7.1 plan-marker colours + blue); PURPLE is `--milestone`. */
+export const MILESTONE_LINE = {
+  light: {
+    'milestone-red': '#dc2626',
+    'milestone-yellow': '#a16207',
+    'milestone-green': '#15803d',
+    'milestone-blue': '#2563eb',
+  },
+  dark: {
+    'milestone-red': '#f87171',
+    'milestone-yellow': '#facc15',
+    'milestone-green': '#4ade80',
+    'milestone-blue': '#60a5fa',
+  },
 } as const
 export const BORDER_MONTH = { light: '#7b8597', dark: '#7c8aa0' } as const
 
@@ -95,9 +106,9 @@ export function chartVar(index: number): string {
   return `var(--chart-${n})`
 }
 
-/** `var(--marker-red|yellow|green)` of a plan-marker colour. */
-export function markerVar(color: 'RED' | 'YELLOW' | 'GREEN'): string {
-  return `var(--marker-${color.toLowerCase()})`
+/** `var(--milestone)` (PURPLE) or `var(--milestone-red|yellow|green|blue)` of a milestone colour (M11.1, FR-709). */
+export function milestoneColorVar(color: 'PURPLE' | 'RED' | 'YELLOW' | 'GREEN' | 'BLUE'): string {
+  return color === 'PURPLE' ? 'var(--milestone)' : `var(--milestone-${color.toLowerCase()})`
 }
 
 /** M11 (M11-D35, FR-1410): the 10 option colours of SELECT / MULTI_SELECT chips, as in tokens.css. Order = the BR-93

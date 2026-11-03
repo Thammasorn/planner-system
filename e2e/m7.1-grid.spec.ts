@@ -13,9 +13,8 @@ import { eq, sql } from 'drizzle-orm'
 import type { ISODate } from '../src/domain/types'
 import { formatCd } from '../src/domain/units'
 import { th } from '../src/i18n/th'
-import { formatThaiDate } from '../src/lib/format'
 import { FOOTER_ROWS, HEADER_TOTAL_H, ROW_H } from '../src/lib/grid/columns'
-import { planMarkers, projects, user } from '../src/server/db/schema'
+import { milestones, projects, user } from '../src/server/db/schema'
 import type { Tx } from '../src/server/db/types'
 import {
   expect,
@@ -23,7 +22,6 @@ import {
   loginAs,
   projectIdByName,
   resetDb,
-  switchUser,
   test,
   type GoldenLogin,
   waitForServerAction,
@@ -46,10 +44,11 @@ const CRM_CINDY = 'ย้ายข้อมูลลูกค้า'
 const SIGN_OFF = 'UAT sign-off'
 
 const d1 = (cd: number) => formatCd(cd, { unit: 'DAYS', decimals: 1 })
-/** "<load> / …" of a chart table cell (the capacity part is not what these scenarios are about). */
+/** "<load> / …" of a chart table cell (the capacity part is not what these scenarios are about) — at the start (days)
+ *  or after the percent's "(" (M11.1: % of capacity is the default display, "50% (2.5 / 5.0 วัน)"). */
 const loadOf = (load: string) => {
   const [prefix] = th.loadChart.daysValue(load, '\u0000').split('\u0000')
-  return new RegExp(`^${escapeRe(prefix!)}`)
+  return new RegExp(`(^|\\()${escapeRe(prefix!)}`)
 }
 /** Long month label of the month row, '2026-10' → "ตุลาคม 2569". */
 const monthLong = (month: string) => {
@@ -83,16 +82,16 @@ function boundaryWidth(l: Locator): Promise<string> {
   return l.evaluate((el) => getComputedStyle(el, '::before').width)
 }
 
-/** Marker in the DB (extras of resetDb): `createdBy` = Cindy, as if she had added it. */
-async function insertMarker(
+/** A milestone in the DB (extras of resetDb): `createdBy` = Cindy, as if she had added it (M11.1: colour). */
+async function insertMilestone(
   tx: Tx,
-  o: { project: string; date: ISODate; color: 'RED' | 'YELLOW' | 'GREEN'; label: string | null },
+  o: { project: string; date: ISODate; color: 'PURPLE' | 'RED' | 'YELLOW' | 'GREEN' | 'BLUE'; name: string },
 ): Promise<void> {
   const [p] = await tx.select({ id: projects.id }).from(projects).where(eq(projects.name, o.project))
   const [u] = await tx.select({ id: user.id }).from(user).where(eq(user.nickname, 'Cindy'))
   await tx
-    .insert(planMarkers)
-    .values({ projectId: p!.id, date: o.date, color: o.color, label: o.label, createdBy: u!.id })
+    .insert(milestones)
+    .values({ projectId: p!.id, date: o.date, color: o.color, name: o.name, createdBy: u!.id })
 }
 async function archiveProject(tx: Tx, name: string): Promise<void> {
   await tx
@@ -368,27 +367,30 @@ test.describe('P4 ⟲ (AC-811, FR-818) month row and month boundaries · ivy', (
 })
 
 // ── P5 ───────────────────────────────────────────────────────────────────────────────────────────────────────
-test.describe('P5 ⟲ (AC-812, FR-819/820, BR-102) plan markers: add, share, edit, day zoom, calendar, delete + undo', () => {
-  test.describe.configure({ mode: 'serial' })
+// M11.1 (SPEC v3.4, D24 reversed): M7.1's plan markers were merged into milestones. What stays of AC-812 here is the
+// line layer (BR-102) drawn for milestones in their colour; choosing a colour and the migration are covered by
+// e2e/m11.1-milestone-colour-load-percent.spec.ts.
+test.describe('P5 ⟲ (AC-812 v3.4, BR-102, FR-709) milestone lines in the line layer; no "เส้นกำกับ" menu · cindy, ivy', () => {
   test.beforeAll(async () => {
-    await resetDb()
+    await resetDb(undefined, {
+      extras: async (tx) => {
+        await insertMilestone(tx, { project: POS, date: '2026-10-23', color: 'RED', name: SIGN_OFF })
+      },
+    })
   })
   const FRI = '2026-10-23'
-  const flagName = (label: string, date: ISODate) =>
-    th.planMarkers.flag(label, formatThaiDate(date, 'medium'))
 
-  test('cindy: right click on 19/10 → red "UAT sign-off" → solid line at its right edge through the grid + flag', async ({
+  test('cindy: a red milestone 23/10 → solid line at the right edge of 19/10 through header, body and footer; no ⚑ menu', async ({
     page,
   }) => {
     const grid = await openGrid(page, 'cindy', POS)
-    await expect(grid.markersMenuButton()).toContainText(th.planMarkers.menu(0))
-    await grid.addMarker('2026-10-19', { label: SIGN_OFF })
-    await expect(grid.markerFlag(SIGN_OFF)).toHaveAccessibleName(flagName(SIGN_OFF, FRI))
-    await expect(grid.markersMenuButton()).toContainText(th.planMarkers.menu(1))
-
+    await expect(grid.markersMenuButton()).toHaveCount(0)
+    await expect(grid.toolbar().getByText(th.milestones.fromMarkerName)).toHaveCount(0)
+    await grid.scrollToWeek('2026-10-19')
+    await expect(grid.diamond(SIGN_OFF)).toHaveAttribute('data-color', 'RED')
     for (const piece of ['header', 'body', 'footer'] as const) {
       await expect(grid.markerLines(piece)).toHaveCount(1)
-      await expect(grid.markerLines(piece)).toHaveAttribute('data-tone', 'RED')
+      await expect(grid.markerLines(piece)).toHaveAttribute('data-color', 'RED')
     }
     const line = grid.markerLines('body')
     expect(await line.evaluate((el) => getComputedStyle(el).borderLeftStyle)).toBe('solid')
@@ -400,29 +402,15 @@ test.describe('P5 ⟲ (AC-812, FR-819/820, BR-102) plan markers: add, share, edi
     ).toBeLessThanOrEqual(2)
     const rows = (await grid.rowLabels()).length
     expect(l.height, 'line through every row').toBeGreaterThanOrEqual(rows * ROW_H - 1)
+    // the header context menu has no "add a marker" item any more
+    await grid.columnHeader('2026-10-19').click({ button: 'right' })
+    await expect(grid.cellMenu()).toHaveCount(0)
   })
 
-  test('ivy (member): sees it after a reload, makes it green; day zoom → after Fri 23; calendar flag; delete + undo', async ({
+  test('ivy (member): day zoom → the line sits after Fri 23 (never at รวม); calendar shows ◆ in red', async ({
     page,
   }) => {
     const grid = await openGrid(page, 'ivy', POS)
-    await expect(grid.markerFlag(SIGN_OFF)).toBeVisible()
-    await grid.markerFlag(SIGN_OFF).click()
-    await expect(grid.markerPopover()).toBeVisible()
-    await expect(grid.markerColor('RED')).toHaveAttribute('aria-pressed', 'true')
-    const saved = waitForServerActionWith(page, 'GREEN')
-    await grid.markerColor('GREEN').click()
-    await saved
-    await expect(grid.markerColor('GREEN')).toHaveAttribute('aria-pressed', 'true')
-    await expect(grid.markerColor('GREEN')).toContainText('✓')
-    await page.keyboard.press('Escape')
-    await expect(grid.markerPopover()).toHaveCount(0)
-    await expect(grid.markerLines('body')).toHaveAttribute('data-tone', 'GREEN')
-    expect(await grid.markerLines('body').evaluate((el) => getComputedStyle(el).borderLeftStyle)).toBe(
-      'dotted',
-    )
-
-    // day zoom: the line sits at the right edge of Fri 23 Oct — never the week's รวม column (BR-102)
     await grid.zoom('day')
     await grid.scrollToWeek('2026-10-19')
     await expect(grid.dayHeader(FRI)).toBeAttached()
@@ -437,120 +425,31 @@ test.describe('P5 ⟲ (AC-812, FR-819/820, BR-102) plan markers: add, share, edi
     expect(dl.x, 'not at the right edge of รวม').toBeLessThan(total.x + total.width - 8)
     await grid.zoom('week')
 
-    // calendar: ⚑ on 23 Oct
     const cal = new PlanCalendarPage(page)
     await cal.switchTo('CALENDAR')
     await cal.gotoMonth('2026-10')
-    await expect(cal.markersOn(FRI)).toHaveCount(1)
-    await expect(cal.markersOn(FRI)).toContainText(SIGN_OFF)
-    await expect(cal.markersOn(FRI)).toHaveAttribute('data-color', 'GREEN')
-    await cal.switchTo('GRID')
-    await grid.waitReady(POS)
-
-    // delete: gone at once + "เลิกทำ" toast → back (X04, no confirm)
-    await grid.markerFlag(SIGN_OFF).click()
-    const deleted = waitForServerAction(page)
-    await grid.markerDelete().click()
-    await deleted
-    await expect(grid.markerFlag(SIGN_OFF)).toHaveCount(0)
-    await expect(grid.markerLines('body')).toHaveCount(0)
-    await expect(toastWith(page, th.planMarkers.deleted)).toBeVisible()
-    const restored = waitForServerAction(page)
-    await undoButtonOf(page, th.planMarkers.deleted).click()
-    await restored
-    await expect(grid.markerFlag(SIGN_OFF)).toBeVisible()
-    await expect(grid.markerLines('body')).toHaveAttribute('data-tone', 'GREEN')
-  })
-
-  test('cindy: Shift+F10 on a cell → "เพิ่มเส้นกำกับที่ขอบขวา" (Friday of that week); toolbar menu goes to a marker', async ({
-    page,
-  }) => {
-    const grid = await openGrid(page, 'cindy', POS)
-    const cell = await grid.reveal(await grid.rowKeyOf(R1, 'Cindy'), '2026-11-02')
-    await cell.click()
-    await grid.press('Shift+F10')
-    await expect(grid.cellMenu()).toBeVisible()
-    const created = waitForServerAction(page)
-    await grid.addMarkerItem().click()
-    await created
-    await expect(grid.markerPopover()).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(grid.markerPopover()).toHaveCount(0)
-    const red = th.planMarkers.color.RED
-    await expect(grid.markerFlag(red)).toHaveAccessibleName(flagName(red, '2026-11-06'))
-    await expect(grid.markersMenuButton()).toContainText(th.planMarkers.menu(2))
-
-    // "เส้นกำกับ (2) ▾" lists both by date; choosing one opens its popover (the keyboard path to every flag)
-    await grid.markersMenuButton().click()
-    const items = grid.markersMenu().getByRole('menuitem')
-    await expect(items).toHaveCount(3) // 2 markers + "+ เพิ่มเส้นกำกับ…"
-    await expect(items.nth(0)).toContainText(SIGN_OFF)
-    await expect(items.nth(1)).toContainText(red)
-    await expect(items.nth(2)).toHaveText(th.planMarkers.add)
-    await items.nth(0).click()
-    await expect(grid.markerPopover()).toBeVisible()
-    await expect(grid.markerLabel()).toHaveValue(SIGN_OFF)
-    await expect(grid.markerColor('GREEN')).toHaveAttribute('aria-pressed', 'true')
-    await page.keyboard.press('Escape')
+    await expect(cal.milestonesOn(FRI)).toHaveCount(1)
+    await expect(cal.milestonesOn(FRI)).toContainText(SIGN_OFF)
+    await expect(cal.milestonesOn(FRI)).toHaveAttribute('data-color', 'RED')
   })
 })
 
-// ── P6 + P3 (archived part) ──────────────────────────────────────────────────────────────────────────────────
-test.describe('P6 ⟲ (AC-812 §3.2/§3.3, AC-809 archived) markers are the project’s; archived = read-only · peter, cindy', () => {
+// ── P6 (AC-809 archived) ─────────────────────────────────────────────────────────────────────────────────────
+test.describe('P6 ⟲ (AC-809 archived) archived = read-only · cindy', () => {
   test.beforeAll(async () => {
     await resetDb(undefined, {
       extras: async (tx) => {
-        await insertMarker(tx, { project: POS, date: '2026-10-23', color: 'RED', label: SIGN_OFF })
         await archiveProject(tx, POS)
       },
     })
   })
 
-  test('peter (not a member): GET /api/projects/<POS>/plan-markers → 404 with nothing of POS; cindy → 200', async ({
-    page,
-  }) => {
-    const pos = await projectIdByName(POS)
-    await loginAs(page, 'peter')
-    const res = await page.request.get(`/api/projects/${pos}/plan-markers`)
-    expect(res.status()).toBe(404)
-    const body = await res.text()
-    expect(body.includes(SIGN_OFF)).toBe(false)
-    expect(body.includes(POS)).toBe(false)
-    expect(body.includes(pos)).toBe(false)
-
-    await switchUser(page, 'cindy')
-    const own = await page.request.get(`/api/projects/${pos}/plan-markers`)
-    expect(own.status(), 'archived projects stay readable').toBe(200)
-    expect(await own.text()).toContain(SIGN_OFF)
-  })
-
-  test('cindy on archived POS: no add entries, the flag opens read-only; no ⠿ and Alt+↑ does nothing', async ({
-    page,
-  }) => {
+  test('cindy on archived POS: no ⠿ and Alt+↑ does nothing', async ({ page }) => {
     const pos = await projectIdByName(POS)
     await loginAs(page, 'cindy')
     const grid = new GridPage(page)
     await grid.open(POS, pos)
     await expect(page.getByText(th.projects.archivedBanner).first()).toBeVisible()
-
-    // toolbar menu: the marker is listed, "+ เพิ่มเส้นกำกับ…" is not
-    await grid.markersMenuButton().click()
-    await expect(grid.markersMenu().getByRole('menuitem')).toHaveCount(1)
-    await expect(page.getByTestId('markers-menu-add')).toHaveCount(0)
-    await page.keyboard.press('Escape')
-    // header context menu: no "เพิ่มเส้นกำกับที่ขอบขวา"
-    await grid.columnHeader('2026-10-19').click({ button: 'right' })
-    await expect(grid.addMarkerItem()).toHaveCount(0)
-    await page.keyboard.press('Escape')
-    // the flag opens the read-only variant
-    await grid.markerFlag(SIGN_OFF).click()
-    const readOnly = page.getByRole('dialog', { name: th.planMarkers.readOnly })
-    await expect(readOnly).toBeVisible()
-    await expect(readOnly).toContainText(SIGN_OFF)
-    await expect(readOnly).toContainText(th.planMarkers.color.RED)
-    await expect(readOnly.getByRole('button', { name: th.planMarkers.delete })).toHaveCount(0)
-    await expect(readOnly.getByRole('textbox')).toHaveCount(0)
-    await page.keyboard.press('Escape')
 
     // FR-815: no ⠿ without edit rights; Alt+↑ is a no-op
     await expect(grid.root().locator('[data-drag-handle]')).toHaveCount(0)
@@ -742,11 +641,11 @@ test.describe('P9 ⟲ (AC-813, §8.13) viewports 390 / 768 / 1280 / 1920 / 2560 
   test.beforeAll(async () => {
     await resetDb(undefined, {
       extras: (tx) =>
-        insertMarker(tx, { project: POS, date: '2026-10-23', color: 'YELLOW', label: SIGN_OFF }),
+        insertMilestone(tx, { project: POS, date: '2026-10-23', color: 'YELLOW', name: SIGN_OFF }),
     })
   })
 
-  test('grid (shown / hidden assignees, month row, a marker, chart pane) and calendar render without overlap', async ({
+  test('grid (shown / hidden assignees, month row, a milestone line, chart pane) and calendar render without overlap', async ({
     page,
   }, testInfo) => {
     test.setTimeout(6 * 60_000)
@@ -776,8 +675,8 @@ test.describe('P9 ⟲ (AC-813, §8.13) viewports 390 / 768 / 1280 / 1920 / 2560 
         Math.min(HEADER_TOTAL_H + (6 + FOOTER_ROWS) * ROW_H, contentH),
       )
       await grid.scrollToWeek('2026-10-19')
-      await expect(grid.markerFlag(SIGN_OFF)).toBeAttached()
-      await expect(grid.markerLines('body')).toHaveAttribute('data-tone', 'YELLOW')
+      await expect(grid.diamond(SIGN_OFF)).toBeAttached()
+      await expect(grid.markerLines('body')).toHaveAttribute('data-color', 'YELLOW')
 
       for (const shown of [true, false]) {
         await grid.showAssignees(shown)

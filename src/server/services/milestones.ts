@@ -113,6 +113,7 @@ export async function toDTOs(
         ...toRef(r),
         projectId: r.projectId,
         description: r.description,
+        color: r.color,
         status: milestoneStatus(r, today),
         late: lat.byMilestone.get(r.id)?.late ?? false,
         lateTaskCount: lat.byMilestone.get(r.id)?.lateTaskCount ?? 0,
@@ -171,6 +172,7 @@ export async function listVisibleMilestones(
     projectColor: r.projectColor,
     name: r.name,
     date: r.date,
+    color: r.color,
     status: milestoneStatus(r, today),
     late: lat.byMilestone.get(r.id)?.late ?? false,
   }))
@@ -189,6 +191,7 @@ export async function create(
     name: input.name,
     date: input.date,
     description: input.description ?? null,
+    ...(input.color ? { color: input.color } : {}),
     createdBy: user.id,
   })
   return { milestone: await toDTO(tx, row, today) }
@@ -217,6 +220,10 @@ export async function update(
     set.description = p.description
     changed.push('description')
   }
+  if (p.color !== undefined && p.color !== row.color) {
+    set.color = p.color
+    changed.push('color')
+  }
   let completedOn: ISODate | null | undefined
   if (p.completed !== undefined) completedOn = p.completed ? (row.completedOn ?? today) : null
   if (p.completedOn !== undefined) {
@@ -235,6 +242,7 @@ export async function update(
     description: row.description,
     completed: row.completedOn !== null,
     completedOn: row.completedOn,
+    color: row.color,
   }
   const next = changed.length > 0 ? await repo.milestones.update(tx, row.id, set) : row
   return { milestone: await toDTO(tx, next, today), previous, changed }
@@ -313,8 +321,8 @@ export async function revertLinks(
   return { projectId: input.projectId, changed }
 }
 
-/** Pure: audit summary of an update (only date → milestoneMoved; only completion → milestoneCompleted/Reopened; else
- *  milestoneUpdated). */
+/** Pure: audit summary of an update (only date → milestoneMoved; only completion → milestoneCompleted/Reopened; only
+ *  colour → milestoneRecoloured (M11.1); else milestoneUpdated). */
 export function milestoneUpdateSummary(r: UpdateMilestoneResult): string {
   const name = r.milestone.name
   if (r.changed.length === 1 && r.changed[0] === 'date') {
@@ -322,6 +330,13 @@ export function milestoneUpdateSummary(r: UpdateMilestoneResult): string {
   }
   if (r.changed.length === 1 && r.changed[0] === 'completed') {
     return r.milestone.completedOn !== null ? th.audit.milestoneCompleted(name) : th.audit.milestoneReopened(name)
+  }
+  if (r.changed.length === 1 && r.changed[0] === 'color') {
+    return th.audit.milestoneRecoloured(
+      name,
+      th.milestones.color.name[r.previous.color],
+      th.milestones.color.name[r.milestone.color],
+    )
   }
   return th.audit.milestoneUpdated(name)
 }

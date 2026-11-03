@@ -1,10 +1,12 @@
 // src/components/load-chart/chart-model.ts — display model of the "กราฟภาระ" pane (SPEC FR-813, BR-104, M7.1-D4).
 // Pure: turns S1's integer-cd LoadSeries into the per-person colour/shape and the display values of the chart and the
-// table. Division happens only here, at the display edge (BR-104: cd / 100, pct / 100).
-import type { CellUnit, Cd } from '@/domain/types'
+// table. Division happens only here, at the display edge (BR-104: cd / 100; the percent is S1's integer pct).
+// M11.1 (FR-813, M11.1-D4/D5): the display follows `load.display` — PERCENT (default) or DAYS — not the grid unit.
+import type { Cd } from '@/domain/types'
 import { formatCd } from '@/domain/units'
 import { th } from '@/i18n/th'
 import { formatWeekHeader } from '@/lib/format'
+import { percentText, type LoadDisplay } from '@/lib/load/display'
 import { chartVar } from '@/lib/theme/tokens'
 import type { LoadSeries, LoadSeriesPoint } from './types'
 
@@ -37,11 +39,27 @@ export function chartPeople(series: readonly LoadSeries[]): ChartPerson[] {
   }))
 }
 
-/** y value of a point: DAYS → load in days; FRACTION → pct / 100 (cap 0 → no point). Not loaded → null (gap). */
-export function pointValue(p: LoadSeriesPoint, unit: CellUnit): number | null {
+/** y value of a point: DAYS → load in days; PERCENT → the integer pct (cap 0 → no point, a gap). Not loaded → null. */
+export function pointValue(p: LoadSeriesPoint, display: LoadDisplay): number | null {
   if (p.loadCd === null) return null
-  if (unit === 'DAYS') return p.loadCd / 100
-  return p.pct === null ? null : p.pct / 100
+  if (display === 'DAYS') return p.loadCd / 100
+  return p.pct
+}
+
+/** M11.1-D5: a PERCENT point above the 100 % line (labelled with its value, never colour alone). */
+export function isOverFull(p: LoadSeriesPoint, display: LoadDisplay): boolean {
+  return display === 'PERCENT' && p.loadCd !== null && p.pct !== null && p.pct > 100
+}
+
+/** PERCENT: "ไม่มี capacity: Cindy 12/10, 19/10 · Ivy 5/10" for loaded weeks with capacity 0 (their line has a gap). */
+export function noCapacityNote(series: readonly LoadSeries[], display: LoadDisplay): string | null {
+  if (display !== 'PERCENT') return null
+  const parts: string[] = []
+  for (const s of series) {
+    const weeks = s.points.filter((p) => p.loadCd !== null && p.capacityCd === 0).map((p) => formatWeekHeader(p.week))
+    if (weeks.length > 0) parts.push(th.loadChart.noCapacityOf(s.name, weeks.join(', ')))
+  }
+  return parts.length > 0 ? th.loadChart.noCapacityNote(parts.join(' · ')) : null
 }
 
 /** The dashed capacity line of the focused person (DAYS only): capacity in days, null when not loaded. */
@@ -63,16 +81,14 @@ export function alertText(p: LoadSeriesPoint): string | null {
 }
 
 /**
- * The value text of one point — tooltip line and table cell (§8.13: "Cindy 2.5 / 5.0 วัน"). FRACTION shows the ratio
- * with two decimals; cap 0 → "ไม่มี capacity"; not loaded → "ยังไม่ได้โหลด".
+ * The value text of one point — tooltip line and table cell (§8.13). PERCENT: "63% (3.8 / 6.0 วัน)", cap 0 →
+ * "ไม่มี capacity"; DAYS: "3.8 / 6.0 วัน"; not loaded → "ยังไม่ได้โหลด".
  */
-export function pointText(p: LoadSeriesPoint, unit: CellUnit): string {
+export function pointText(p: LoadSeriesPoint, display: LoadDisplay): string {
   if (p.loadCd === null || p.capacityCd === null) return th.loadChart.notLoaded
-  if (unit === 'FRACTION') {
-    if (p.pct === null) return th.loadChart.noCapacity
-    return `${(p.pct / 100).toFixed(2)} (${th.loadChart.daysValue(days1(p.loadCd), days1(p.capacityCd))})`
-  }
-  return th.loadChart.daysValue(days1(p.loadCd), days1(p.capacityCd))
+  const days = th.loadChart.daysValue(days1(p.loadCd), days1(p.capacityCd))
+  if (display === 'PERCENT') return p.pct === null ? th.loadChart.noCapacity : `${percentText(p.pct)} (${days})`
+  return days
 }
 
 /** `${seriesId}:${index}` of every OVER/RISK point → the larger ringed mark (M7.1-D4). */
@@ -91,11 +107,11 @@ export function weekLabels(weeks: readonly string[]): string[] {
 }
 
 /**
- * The short text of a table cell on the grid's column width (M7.1-D30): DAYS "2.5/5.0", FRACTION "0.50"; not loaded or
- * no capacity → "–". The full text (pointText) is the cell's accessible text and tooltip.
+ * The short text of a table cell on the grid's column width (M7.1-D30): DAYS "2.5/5.0", PERCENT "50%"; not loaded or
+ * no capacity (PERCENT) → "–". The full text (pointText) is the cell's accessible text and tooltip.
  */
-export function compactText(p: LoadSeriesPoint, unit: CellUnit): string {
+export function compactText(p: LoadSeriesPoint, display: LoadDisplay): string {
   if (p.loadCd === null || p.capacityCd === null) return '–'
-  if (unit === 'FRACTION') return p.pct === null ? '–' : (p.pct / 100).toFixed(2)
+  if (display === 'PERCENT') return p.pct === null ? '–' : percentText(p.pct)
   return `${days1(p.loadCd)}/${days1(p.capacityCd)}`
 }

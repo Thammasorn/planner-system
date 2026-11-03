@@ -19,7 +19,6 @@ import { rows as members } from './members'
 import { rows as milestones } from './milestones'
 import { rows as pages } from './pages'
 import { rows as people } from './people'
-import { rows as planMarkers } from './plan-markers'
 import { rows as positions } from './positions'
 import { rows as preferences } from './preferences'
 import { rows as projects } from './projects'
@@ -67,7 +66,6 @@ export const rows: AuthzRow[] = [
   ...gridDay,
   ...allocationsDay,
   // M7.1
-  ...planMarkers,
   // M8
   ...milestones,
   // M9

@@ -7,8 +7,8 @@ import { weekStart } from '@/domain/dates'
 import type { ISODate, PeriodKey } from '@/domain/types'
 import type { GridMilestone, GridResponse, GridRow } from '@/lib/contracts/grid'
 import type { MilestoneLateness } from '@/lib/contracts/milestones'
-import type { GridMarkerView } from '@/lib/contracts/plan-markers'
 import { columnIndexOfPeriod, type GridColumn } from './columns'
+import type { GridMarkerView } from './markers'
 
 /** D:<date> when that day column exists (expanded week / day zoom), else W:<weekStart(date)>; null when outside the timeline. */
 export function milestoneColumnKey(date: ISODate, cols: readonly GridColumn[]): PeriodKey | null {
@@ -65,7 +65,9 @@ export function sortedInsert(list: readonly GridMilestone[], m: GridMilestone): 
   return [...list.filter((x) => x.id !== m.id), m].sort(compareMilestones)
 }
 
-export type MilestoneGridPatch = Partial<Pick<GridMilestone, 'name' | 'date' | 'completedOn' | 'status'>>
+export type MilestoneGridPatch = Partial<
+  Pick<GridMilestone, 'name' | 'date' | 'completedOn' | 'status' | 'color'>
+>
 
 export function applyMilestonePatch(r: GridResponse, id: string, patch: MilestoneGridPatch): GridResponse {
   const cur = r.milestones.find((m) => m.id === id)
@@ -102,15 +104,8 @@ export function applyLateness(r: GridResponse, l: MilestoneLateness | null | und
   return { ...r, ...(rowsChanged ? { rows } : {}), ...(msChanged ? { milestones } : {}) }
 }
 
-/** FR-820 / D24: every milestone is also a dash-dot line in the marker layer (BR-102 edge of its ◆'s column); not
- *  interactive — edited through its ◆. Ids are prefixed so they never collide with plan-marker ids. */
+/** FR-709 / BR-102 (M11.1-D1): every milestone is also a line in the line layer (right edge of its ◆'s column) in its
+ *  colour and that colour's pattern; not interactive — edited through its ◆. */
 export function milestoneMarkerViews(ms: readonly GridMilestone[]): GridMarkerView[] {
-  return ms.map((m) => ({
-    id: `ms:${m.id}`,
-    source: 'MILESTONE',
-    tone: 'MILESTONE',
-    date: m.date,
-    label: m.name,
-    editable: false,
-  }))
+  return ms.map((m) => ({ id: m.id, date: m.date, color: m.color, label: m.name }))
 }

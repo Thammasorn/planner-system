@@ -31,6 +31,7 @@ describe('tooltipLines', () => {
       { kind: 'value', text: `${th.workload.tooltip.committed} ${days('5.00')}` },
       { kind: 'value', text: `${th.workload.tooltip.atRisk} ${days('0.00')}` },
       { kind: 'capacity', text: th.workload.tooltip.capacity('3.00', '5.00') },
+      { kind: 'value', text: th.loadDisplay.used(167) }, // M11.1: 5 of 3 days, half-up
       {
         kind: 'status',
         text: `${th.overload.glyph.OVER} ${th.overload.level.OVER} ${th.overload.excess('2.00')} (${th.overload.cause.CAPACITY})`,

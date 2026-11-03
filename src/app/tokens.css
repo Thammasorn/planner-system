@@ -5,8 +5,8 @@
    M6.1 (SPEC §8.12, M6.1-D21): typography / spacing / radius / layout tokens (declared once under :root — the same in
    dark) and the surface colours --border-subtle, --hover-bg, --text-secondary, --surface-muted (light + dark).
    DEVIATION (like X51): --text-secondary is #646A75 instead of #6B7280 (4.39:1 on --hover-bg < 4.5:1).
-   M7.1 (X51, plan/m07.1 S0.9): --chart-1…8 (categorical, one per person in the load chart), --marker-red/yellow/green
-   (plan markers) and --border-month (month boundary line) — non-text, ≥ 3:1 against --surface, --surface-muted,
+   M7.1 (X51, plan/m07.1 S0.9): --chart-1…8 (categorical, one per person in the load chart), --milestone-red/yellow/
+   green (M7.1's plan-marker colours, renamed in M11.1 when markers became milestones; + --milestone-blue) and --border-month (month boundary line) — non-text, ≥ 3:1 against --surface, --surface-muted,
    --nonworking, --holiday and --hover-bg in both themes (contrast.test.ts). DEVIATION (like X51): --border-month is
    #7b8597 / dark #7c8aa0 instead of the plan's #94A3B8 (2.56:1) / #64748B (2.64:1 on dark --holiday).
    M11 (M11-D35, FR-1410): --option-<name>-bg/-fg for the 10 database option colours (gray brown orange yellow green
@@ -51,9 +51,10 @@
   --chart-6: #4d7c0f;
   --chart-7: #0369a1;
   --chart-8: #b45309;
-  --marker-red: #dc2626;
-  --marker-yellow: #a16207;
-  --marker-green: #15803d;
+  --milestone-red: #dc2626;
+  --milestone-yellow: #a16207;
+  --milestone-green: #15803d;
+  --milestone-blue: #2563eb;
   --border-month: #7b8597;
   /* M11 database option colours (text pairs, ≥ 4.5:1) */
   --option-gray-bg: #ebedf0;
@@ -146,9 +147,10 @@
   --chart-6: #a3e635;
   --chart-7: #38bdf8;
   --chart-8: #fbbf24;
-  --marker-red: #f87171;
-  --marker-yellow: #facc15;
-  --marker-green: #4ade80;
+  --milestone-red: #f87171;
+  --milestone-yellow: #facc15;
+  --milestone-green: #4ade80;
+  --milestone-blue: #60a5fa;
   --border-month: #7c8aa0;
   /* M11 (M11-D35) */
   --option-gray-bg: #3a3d42;

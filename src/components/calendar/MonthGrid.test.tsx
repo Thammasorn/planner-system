@@ -295,6 +295,7 @@ describe('M8 ◆ on the calendar (FR-907, X24, M8-D16)', () => {
     projectColor: '#2F5597',
     name: 'UAT sign-off',
     date: '2026-10-02',
+    color: 'PURPLE' as const,
     status: 'DUE_SOON' as const,
     late: false,
   }

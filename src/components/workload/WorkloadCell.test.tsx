@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { WorkloadCell as WorkloadCellDTO } from '@/lib/contracts/workload'
+import type { LoadDisplay } from '@/lib/load/display'
 import { F23, P, cell } from './test-data.test.helper'
 import { WorkloadCell, isDeactivatedWeek } from './WorkloadCell'
 import { WorkloadTooltipHost } from './WorkloadTooltip'
@@ -13,7 +14,7 @@ const cindyF4 = cell(250, 0, 200, { byProject: [{ projectId: P.pos, total: 250, 
 function renderCell(
   c: WorkloadCellDTO,
   view: LoadView,
-  o: { deactivated?: boolean; onOpen?: () => void } = {},
+  o: { deactivated?: boolean; onOpen?: () => void; display?: LoadDisplay } = {},
 ) {
   return render(
     <WorkloadCell
@@ -24,6 +25,7 @@ function renderCell(
       projects={F23.projects}
       deactivated={o.deactivated ?? false}
       onOpen={o.onOpen}
+      display={o.display ?? 'DAYS'}
     />,
   )
 }
@@ -141,5 +143,52 @@ describe('WorkloadTooltipHost (FR-1002, M9-D8/D25)', () => {
     fireEvent.pointerOver(screen.getByRole('button'))
     const tip = await screen.findByTestId('workload-tooltip')
     expect(within(tip).getByText(new RegExp(th.overload.cause.DEACTIVATED))).toBeInTheDocument()
+  })
+})
+
+describe('WorkloadCell load display (M11.1 FR-1002/FR-1010, M11.1-D5)', () => {
+  it('PERCENT: "125%" for 2.5 on 2 days; tone and glyph unchanged; aria keeps days and adds the percent', () => {
+    renderCell(cindyF4, 'ALL', { display: 'PERCENT' })
+    const btn = screen.getByRole('button')
+    expect(btn).toHaveTextContent('125%')
+    expect(btn).not.toHaveTextContent('2.5/2')
+    expect(btn).toHaveAttribute('data-tone', 'over')
+    expect(btn).toHaveAttribute('data-display', 'PERCENT')
+    expect(btn).toHaveTextContent(th.overload.glyph.RISK)
+    expect(btn.getAttribute('aria-label')).toContain(th.loadDisplay.used(125))
+    expect(btn.getAttribute('aria-label')).toContain('2.50')
+  })
+
+  it('PERCENT: 4.5 of 5 → "90%"; load 0 → "–"; capacity 0 → the days text (no %)', () => {
+    const { unmount } = renderCell(cell(450, 450, 500), 'ALL', { display: 'PERCENT' })
+    expect(screen.getByRole('button')).toHaveTextContent('90%')
+    unmount()
+    const r2 = renderCell(cell(0, 0, 500), 'ALL', { display: 'PERCENT' })
+    expect(screen.getByRole('button')).toHaveTextContent(th.workload.cell.empty)
+    r2.unmount()
+    renderCell(cell(250, 250, 0), 'ALL', { display: 'PERCENT' })
+    const btn = screen.getByRole('button')
+    expect(btn).toHaveTextContent('2.5/0')
+    expect(btn).toHaveAttribute('data-no-capacity', 'true')
+    expect(btn.textContent).not.toContain('%')
+  })
+
+  it('DAYS: "4.5/5" as in M9', () => {
+    renderCell(cell(450, 450, 500), 'ALL', { display: 'DAYS' })
+    expect(screen.getByRole('button')).toHaveTextContent('4.5/5')
+  })
+
+  it('without a display prop the viewer preference applies (default PERCENT)', () => {
+    render(
+      <WorkloadCell
+        name="Cindy"
+        week="2026-10-12"
+        cell={cell(450, 450, 500)}
+        view="ALL"
+        projects={F23.projects}
+        deactivated={false}
+      />,
+    )
+    expect(screen.getByRole('button')).toHaveTextContent('90%')
   })
 })

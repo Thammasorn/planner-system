@@ -4,6 +4,7 @@ import type { ISODate } from '@/domain/types'
 import type { WorkloadCell, WorkloadResponse } from '@/lib/contracts/workload'
 import { formatWeekHeader } from '@/lib/format'
 import { th } from '@/i18n/th'
+import { loadPct } from '@/lib/load/display'
 import { causeText, twoDecimals } from './format'
 
 export interface TooltipLine {
@@ -33,6 +34,9 @@ export function tooltipLines(o: {
       text: cell.capacity === 0 ? t.noCapacity : t.capacity(twoDecimals(cell.capacity), twoDecimals(cell.standard)),
     },
   ]
+  // M11.1 (FR-1002): the tooltip keeps both — days above, the share of capacity here (total load, view ALL)
+  const pct = cell.total === 0 ? null : loadPct(cell.total, cell.capacity)
+  if (pct !== null) lines.push({ kind: 'value', text: th.loadDisplay.used(pct) })
   if (cell.level !== 'OK') {
     const level = cell.level
     lines.push({

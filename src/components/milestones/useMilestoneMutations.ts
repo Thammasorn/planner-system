@@ -13,6 +13,7 @@ import { useToday } from '@/hooks/useToday'
 import { th } from '@/i18n/th'
 import { ActionFailure, unwrap } from '@/lib/action-result'
 import type {
+  MilestoneColor,
   MilestoneDTO,
   MilestoneRef,
   ProjectMilestonesResponse,
@@ -43,6 +44,8 @@ export interface MilestoneMutations {
     name: string
     date: ISODate
     description?: string | null
+    /** M11.1 (FR-709): absent = PURPLE */
+    color?: MilestoneColor
   }): Promise<MilestoneDTO | null>
   /**
    * Rename / move / complete / reopen. The undo entry and toast follow what the server reports as changed: a date
@@ -104,6 +107,7 @@ export function applyPatch(m: MilestoneDTO, patch: MilestonePatch, today: ISODat
       patch.description === null || patch.description.trim() === '' ? null : patch.description
   if (patch.completed !== undefined) next.completedOn = patch.completed ? (m.completedOn ?? today) : null
   if (patch.completedOn !== undefined) next.completedOn = patch.completedOn
+  if (patch.color !== undefined) next.color = patch.color
   next.status = milestoneStatus(next, today)
   return next
 }
@@ -111,13 +115,20 @@ export function applyPatch(m: MilestoneDTO, patch: MilestonePatch, today: ISODat
 /** The patch that puts back (`from = previous`) or re-applies (`from = result.milestone`) every changed field. */
 function patchFrom(
   changed: UpdateMilestoneResult['changed'],
-  from: { name: string; date: ISODate; description: string | null; completedOn: ISODate | null },
+  from: {
+    name: string
+    date: ISODate
+    description: string | null
+    completedOn: ISODate | null
+    color: MilestoneColor
+  },
 ): MilestonePatch {
   const p: MilestonePatch = {}
   if (changed.includes('name')) p.name = from.name
   if (changed.includes('date')) p.date = from.date
   if (changed.includes('description')) p.description = from.description
   if (changed.includes('completed')) p.completedOn = from.completedOn
+  if (changed.includes('color')) p.color = from.color
   return p
 }
 
@@ -142,6 +153,7 @@ export function useMilestoneMutations(): MilestoneMutations {
           name: v.name,
           date: v.date,
           ...(v.description !== undefined ? { description: v.description } : {}),
+          ...(v.color !== undefined ? { color: v.color } : {}),
         }),
       ),
     onError: fail,
@@ -190,12 +202,17 @@ export function useMilestoneMutations(): MilestoneMutations {
       setMilestones(qc, pid, (ms) => upsert(ms, r.milestone))
       const moved = r.changed.includes('date')
       const completion = r.changed.includes('completed')
-      if (!moved && !completion) return // text edit: no undo entry (M3)
+      const recolour = r.changed.includes('color') // M11.1 (FR-709): undo + toast like other milestone edits
+      if (!moved && !completion && !recolour) return // text edit: no undo entry (M3)
       const back = patchFrom(r.changed, r.previous)
       const again = patchFrom(r.changed, r.milestone)
       const id = r.milestone.id
       const entry: UndoEntry = {
-        label: moved ? th.milestones.undoLabel.move : th.milestones.undoLabel.complete,
+        label: moved
+          ? th.milestones.undoLabel.move
+          : completion
+            ? th.milestones.undoLabel.complete
+            : th.milestones.undoLabel.recolour,
         undo: async () => {
           await unwrap(updateMilestone({ milestoneId: id, patch: back }))
           await settle(pid)
@@ -207,9 +224,11 @@ export function useMilestoneMutations(): MilestoneMutations {
       }
       const message = moved
         ? th.milestones.toast.moved(r.milestone.name, formatThaiDate(r.milestone.date))
-        : r.milestone.completedOn !== null
-          ? th.milestones.toast.completed(r.milestone.name)
-          : th.milestones.toast.reopened(r.milestone.name)
+        : completion
+          ? r.milestone.completedOn !== null
+            ? th.milestones.toast.completed(r.milestone.name)
+            : th.milestones.toast.reopened(r.milestone.name)
+          : th.milestones.toast.recoloured(r.milestone.name, th.milestones.color.name[r.milestone.color])
       undo.push(entry, { toast: message })
     },
     onSettled: (_r, _e, v) => void settle(v.m.projectId),

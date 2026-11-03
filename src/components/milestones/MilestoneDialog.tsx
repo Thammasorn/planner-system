@@ -79,7 +79,13 @@ export function MilestoneDialog({ open, projectId, onClose }: MilestoneDialogPro
               if (v.projectId === undefined) return
               setBusy(true)
               void ms
-                .create({ projectId: v.projectId, name: v.name, date: v.date, description: v.description })
+                .create({
+                  projectId: v.projectId,
+                  name: v.name,
+                  date: v.date,
+                  description: v.description,
+                  color: v.color,
+                })
                 .then((m) => {
                   setBusy(false)
                   if (m) onClose()
