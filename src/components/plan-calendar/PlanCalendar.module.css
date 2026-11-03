@@ -431,10 +431,10 @@
 
 .fromPlanTag {
   flex: none;
-  padding: 0 3px;
+  padding: 0 var(--space-1);
   border: 1px dashed currentColor;
   border-radius: var(--radius-sm);
   color: var(--mui-palette-text-secondary);
-  font-size: 0.85em;
+  font-size: var(--font-xs);
   line-height: 1.1;
 }
