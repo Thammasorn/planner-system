@@ -2052,6 +2052,13 @@ export const th = {
     loadError: 'โหลดปฏิทินไม่สำเร็จ',
     retry: 'ลองอีกครั้ง',
     toolbar: 'เครื่องมือปฏิทิน',
+    /** v3.6 (FR-812, BR-103a): a bar whose dates come from the plan (grid load) — visible tag + spoken source */
+    fromPlanTag: 'จากแผน',
+    fromPlan: 'วันที่จากแผนงาน',
+    startFromPlan: 'วันเริ่มจากแผนงาน',
+    endFromPlan: 'วันสิ้นสุดจากแผนงาน',
+    /** tooltip of a plan-derived bar: "<ชื่องาน · คน>\n<ที่มา>: <ช่วงวันที่>" */
+    planTitle: (text: string, source: string, range: string) => `${text}\n${source}: ${range}`,
   },
   loadChart: {
     toggle: 'กราฟภาระ',

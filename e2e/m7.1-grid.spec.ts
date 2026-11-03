@@ -465,12 +465,12 @@ test.describe('P6 ⟲ (AC-809 archived) archived = read-only · cindy', () => {
 })
 
 // ── P7 ───────────────────────────────────────────────────────────────────────────────────────────────────────
-test.describe('P7 ⟲ (AC-806, FR-810–812, BR-103) project calendar · cindy', () => {
+test.describe('P7 ⟲ (AC-806, FR-810–812, BR-103/103a) project calendar · cindy', () => {
   test.beforeAll(async () => {
     await resetDb()
   })
 
-  test('ปฏิทิน: dates for "Rollout สาขา" in the panel → Nov 2569 bar over two weeks with Mint ◐; ไม่มีวันที่; reload; ?view=grid', async ({
+  test('ปฏิทิน: plan bars; dates for "Rollout สาขา" in the panel → Nov 2569 bar over two weeks with Mint ◐; reload; ?view=grid', async ({
     page,
   }) => {
     const grid = await openGrid(page, 'cindy', POS)
@@ -483,16 +483,20 @@ test.describe('P7 ⟲ (AC-806, FR-810–812, BR-103) project calendar · cindy',
     await expect(cal.monthTitle()).toHaveText(planMonthTitle('2026-09'))
     // Monday first (FR-907)
     await expect(cal.monthGrid().getByRole('columnheader').first()).toHaveText(th.calendar.weekdays[0])
-    await expect(cal.noDates()).toContainText(th.planCalendar.noDates(3))
+    // v3.6 (BR-103a): every golden POS task has planned load, so none is "ไม่มีวันที่" — R1 / UAT show plan bars here
+    await expect(cal.noDates()).toContainText(th.planCalendar.noDates(0))
+    await expect(cal.bars(await taskIdOf(POS, UAT)).first()).toHaveAttribute('data-from-plan', 'true')
 
-    // set the dates in the task panel (the calendar is read-only)
-    await cal.noDateItem(ROLLOUT).click()
+    // set the dates in the task panel (the calendar is read-only): open Rollout from its plan bar (30/11 → 1/1/2570)
+    await cal.gotoMonth('2026-12')
+    const planBar = cal.bars(rollout).first()
+    await expect(planBar).toHaveAttribute('data-from-plan', 'true')
+    await cal.barButton(planBar).click()
     await expect(tasks.panelTitle(ROLLOUT)).toBeVisible()
     await tasks.panelProps().setDate('start', '2026-11-03')
     await tasks.panelProps().setDate('due', '2026-11-12')
-    await expect(cal.noDateItem(ROLLOUT)).toHaveCount(0)
-    await expect(cal.noDateItem(R1)).toBeVisible()
-    await expect(cal.noDates()).toContainText(th.planCalendar.noDates(2))
+    // explicit dates win over the plan: no Rollout bar left in December
+    await expect(cal.bars(rollout)).toHaveCount(0)
 
     await cal.gotoMonth('2026-11')
     const bars = cal.bars(rollout)
@@ -505,6 +509,7 @@ test.describe('P7 ⟲ (AC-806, FR-810–812, BR-103) project calendar · cindy',
     await expect(second).toHaveAttribute('data-cut-left', 'true')
     await expect(second).toContainText('◂')
     for (const bar of [first, second]) {
+      await expect(bar).not.toHaveAttribute('data-from-plan')
       await expect(bar).toContainText(`${ROLLOUT} · Mint`)
       await expect(bar).toHaveAttribute('data-tentative', 'true')
       await expect(bar).toContainText(th.projects.tentativeGlyph)

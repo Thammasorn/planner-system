@@ -1,11 +1,14 @@
 'use client'
-// One task as a bar-like button (calendar bar, "+N" popover row, agenda row, no-date row): ◐ / ◂ / text / 📄 / ⛔ / ▸
-// and ↗ (OpenAsPage, FR-685). Enter / click = panel; Shift+Space = the task page (SPEC §8.13, FR-811).
+// One task as a bar-like button (calendar bar, "+N" popover row, agenda row, no-date row): ◐ / ◂ / text / จากแผน /
+// 📄 / ⛔ / ▸ and ↗ (OpenAsPage, FR-685). Enter / click = panel; Shift+Space = the task page (SPEC §8.13, FR-811).
+// v3.6 (BR-103a): a bar with a side from the plan has `data-from-plan` (hatched fill + dashed edge) and the visible
+// "จากแผน" tag; tooltip / accessible name say which side and the range — never colour alone.
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { OpenAsPageLink } from '@/components/tasks/OpenAsPage'
 import { th } from '@/i18n/th'
 import { HOTKEYS, matchesHotkey } from '@/lib/keys'
-import { barLabel, barText, type BarInfo } from './labels'
+import { barSpan } from '@/lib/plan-calendar/bars'
+import { barLabel, barText, barTitle, type BarInfo } from './labels'
 import styles from './PlanCalendar.module.css'
 
 export interface TaskBarProps {
@@ -24,6 +27,8 @@ export interface TaskBarProps {
 export function TaskBar(p: TaskBarProps) {
   const t = p.info.task
   const tentative = p.info.certainty === 'TENTATIVE'
+  const span = barSpan(t)
+  const fromPlan = span !== null && (span.startFromPlan || span.endFromPlan)
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (!matchesHotkey(e.nativeEvent, HOTKEYS.openPage)) return
     e.preventDefault()
@@ -37,6 +42,7 @@ export function TaskBar(p: TaskBarProps) {
       data-open-host=""
       data-task-bar={t.id}
       data-tentative={tentative ? true : undefined}
+      data-from-plan={fromPlan ? true : undefined}
       data-done={t.completedOn !== null ? true : undefined}
       data-cut-left={p.cutLeft ? true : undefined}
       data-cut-right={p.cutRight ? true : undefined}
@@ -46,7 +52,7 @@ export function TaskBar(p: TaskBarProps) {
         className={styles.barButton}
         tabIndex={p.tabIndex}
         aria-label={barLabel(p.info, { left: p.cutLeft === true, right: p.cutRight === true })}
-        title={barText(p.info)}
+        title={barTitle(p.info)}
         onClick={(e) => {
           e.stopPropagation()
           p.onOpen(t.id)
@@ -68,6 +74,11 @@ export function TaskBar(p: TaskBarProps) {
           </span>
         ) : null}
         <span className={styles.barText}>{barText(p.info)}</span>
+        {fromPlan ? (
+          <span aria-hidden="true" className={styles.fromPlanTag} data-testid="from-plan-tag">
+            {th.planCalendar.fromPlanTag}
+          </span>
+        ) : null}
         {t.hasBody ? (
           <span aria-hidden="true" className={styles.barGlyph}>
             📄

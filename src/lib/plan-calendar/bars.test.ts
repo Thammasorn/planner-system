@@ -1,7 +1,15 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { addDays } from '@/domain/dates'
-import { CALENDAR_MAX_LANES, monthBars, noDateTasks, taskOrder, taskSpan, type CalendarTask } from './bars'
+import {
+  barSpan,
+  CALENDAR_MAX_LANES,
+  monthBars,
+  noDateTasks,
+  taskOrder,
+  taskSpan,
+  type CalendarTask,
+} from './bars'
 
 let seq = 0
 const task = (id: string, startDate: string | null, dueDate: string | null, o: Partial<CalendarTask> = {}): CalendarTask => ({
@@ -23,7 +31,87 @@ describe('taskSpan (BR-103)', () => {
     expect(taskSpan(task('a', null, null))).toBeNull()
   })
   it('a due date before the start is normalised', () => {
-    expect(taskSpan(task('a', '2026-11-12', '2026-11-03'))).toEqual({ start: '2026-11-03', end: '2026-11-12' })
+    expect(taskSpan(task('a', '2026-11-12', '2026-11-03'))).toEqual({
+      start: '2026-11-03',
+      end: '2026-11-12',
+    })
+  })
+})
+
+describe('barSpan (BR-103a: dates from the plan)', () => {
+  const plan = { start: '2026-11-02', end: '2026-12-18' }
+  it('no dates + plan → the plan span, both sides from the plan', () => {
+    expect(barSpan(task('a', null, null, { planSpan: plan }))).toEqual({
+      start: '2026-11-02',
+      end: '2026-12-18',
+      startFromPlan: true,
+      endFromPlan: true,
+    })
+    expect(taskSpan(task('a', null, null, { planSpan: plan }))).toEqual({
+      start: '2026-11-02',
+      end: '2026-12-18',
+    })
+  })
+  it('no dates and no plan → null (ไม่มีวันที่)', () => {
+    expect(barSpan(task('a', null, null, { planSpan: null }))).toBeNull()
+    expect(barSpan(task('a', null, null))).toBeNull()
+  })
+  it('both dates win over the plan', () => {
+    expect(barSpan(task('a', '2026-11-03', '2026-11-12', { planSpan: plan }))).toEqual({
+      start: '2026-11-03',
+      end: '2026-11-12',
+      startFromPlan: false,
+      endFromPlan: false,
+    })
+  })
+  it('only a start → end from the plan when the plan ends later; else one day', () => {
+    expect(barSpan(task('a', '2026-11-10', null, { planSpan: plan }))).toEqual({
+      start: '2026-11-10',
+      end: '2026-12-18',
+      startFromPlan: false,
+      endFromPlan: true,
+    })
+    expect(barSpan(task('a', '2026-12-20', null, { planSpan: plan }))).toEqual({
+      start: '2026-12-20',
+      end: '2026-12-20',
+      startFromPlan: false,
+      endFromPlan: false,
+    })
+  })
+  it('only a due date → start from the plan when the plan starts earlier; else one day', () => {
+    expect(barSpan(task('a', null, '2026-11-30', { planSpan: plan }))).toEqual({
+      start: '2026-11-02',
+      end: '2026-11-30',
+      startFromPlan: true,
+      endFromPlan: false,
+    })
+    expect(barSpan(task('a', null, '2026-11-02', { planSpan: plan }))).toEqual({
+      start: '2026-11-02',
+      end: '2026-11-02',
+      startFromPlan: false,
+      endFromPlan: false,
+    })
+  })
+  it('plan-derived tasks get bars and leave the "ไม่มีวันที่" list', () => {
+    const planned = task('p', null, null, { planSpan: { start: '2026-11-09', end: '2026-11-13' } })
+    const none = task('n', null, null)
+    expect(noDateTasks([planned, none]).map((t) => t.id)).toEqual(['n'])
+    const row = monthBars([planned, none], '2026-11', all)[2]!
+    expect(row.segments.map((s) => [s.taskId, s.startCol, s.endCol])).toEqual([['p', 0, 4]])
+  })
+  it('property: an explicit date is always one of the bar ends and start ≤ end', () => {
+    const day = fc.integer({ min: 0, max: 120 }).map((n) => addDays('2026-10-01', n))
+    fc.assert(
+      fc.property(fc.option(day), fc.option(day), fc.option(fc.tuple(day, day)), (s, d, p) => {
+        const planSpan = p ? { start: p[0] < p[1] ? p[0] : p[1], end: p[0] < p[1] ? p[1] : p[0] } : null
+        const b = barSpan({ startDate: s, dueDate: d, planSpan })
+        if (s === null && d === null && planSpan === null) return b === null
+        if (!b || b.start > b.end) return false
+        if (s !== null && d === null && b.start !== s) return false
+        if (d !== null && s === null && b.end !== d) return false
+        return true
+      }),
+    )
   })
 })
 

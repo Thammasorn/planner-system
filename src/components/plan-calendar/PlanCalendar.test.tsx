@@ -7,6 +7,7 @@ import { th } from '@/i18n/th'
 import { monthGrid } from '@/lib/calendar/month-grid'
 import type { CalendarResponse } from '@/lib/contracts/calendar'
 import type { MilestoneDTO, ProjectMilestonesResponse } from '@/lib/contracts/milestones'
+import type { PlanSpansResponse, TaskPlanSpan } from '@/lib/contracts/plan-spans'
 import type { TaskDTO } from '@/lib/contracts/tasks'
 import { formatThaiDate, formatThaiDateRange } from '@/lib/format'
 import { qk } from '@/lib/query-keys'
@@ -67,9 +68,17 @@ function tasks(extra: TaskDTO[] = []): TaskDTO[] {
   ]
 }
 
-function seed(o: { holidays?: CalendarResponse['holidays']; milestones?: MilestoneDTO[] } = {}) {
+function seed(
+  o: { holidays?: CalendarResponse['holidays']; milestones?: MilestoneDTO[]; spans?: TaskPlanSpan[] } = {},
+) {
   return (qc: QueryClient) => {
     const { from, to } = monthGrid('2026-11')
+    qc.setQueryData<PlanSpansResponse>(qk.projectPlanSpans(PID, from, to), {
+      projectId: PID,
+      from,
+      to,
+      spans: o.spans ?? [],
+    })
     qc.setQueryData<CalendarResponse>(qk.calendar(from, to), {
       from,
       to,
@@ -89,7 +98,13 @@ function seed(o: { holidays?: CalendarResponse['holidays']; milestones?: Milesto
 }
 
 function renderCalendar(
-  o: { extra?: TaskDTO[]; holidays?: CalendarResponse['holidays']; milestones?: MilestoneDTO[]; showCompleted?: boolean } = {},
+  o: {
+    extra?: TaskDTO[]
+    holidays?: CalendarResponse['holidays']
+    milestones?: MilestoneDTO[]
+    spans?: TaskPlanSpan[]
+    showCompleted?: boolean
+  } = {},
 ) {
   const onOpenTask = vi.fn()
   const r = renderTasks(
@@ -176,6 +191,58 @@ describe('PlanCalendar (FR-811/812, BR-103, AC-806)', () => {
     await user.click(within(side).getByRole('button', { name: /ปรับปรุงระบบ POS หน้าร้าน/ }))
     expect(onOpenTask).toHaveBeenCalledWith(POS)
     expect(within(side).getByRole('link', { name: th.tasks.openAsPage })).toHaveAttribute('href', `/t/${POS}`)
+  })
+
+  it('v3.6 BR-103a: a task with only planned load gets a hatched "จากแผน" bar (tooltip = source + range) and leaves ไม่มีวันที่', async () => {
+    const user = userEvent.setup()
+    const { onOpenTask } = renderCalendar({
+      spans: [{ taskId: POS, start: '2026-11-02', end: '2026-11-20' }],
+    })
+    const bars = barsOf(POS)
+    expect(bars.map((b) => b.closest('[role="gridcell"]')?.getAttribute('data-date'))).toEqual([
+      '2026-11-02',
+      '2026-11-09',
+      '2026-11-16',
+    ])
+    expect(bars[2]!.style.getPropertyValue('--span')).toBe('5') // Mon 16 → Fri 20
+    for (const b of bars) {
+      expect(b).toHaveAttribute('data-from-plan', 'true')
+      expect(within(b).getByTestId('from-plan-tag')).toHaveTextContent(th.planCalendar.fromPlanTag)
+    }
+    const btn = within(bars[0]!).getByRole('button')
+    const range = formatThaiDateRange('2026-11-02', '2026-11-20')
+    expect(btn).toHaveAttribute(
+      'title',
+      th.planCalendar.planTitle('ปรับปรุงระบบ POS หน้าร้าน · รอมอบหมาย', th.planCalendar.fromPlan, range),
+    )
+    expect(btn.getAttribute('aria-label')).toContain(`${range}, ${th.planCalendar.fromPlan}`)
+    // explicit-date bars stay plain
+    expect(barsOf(ROLL)[0]).not.toHaveAttribute('data-from-plan')
+    expect(within(barsOf(ROLL)[0]!).queryByTestId('from-plan-tag')).toBeNull()
+    const side = screen.getByRole('region', { name: th.planCalendar.noDatesLabel })
+    expect(within(side).getByRole('heading')).toHaveTextContent(th.planCalendar.noDates(0))
+    await user.click(btn)
+    expect(onOpenTask).toHaveBeenCalledWith(POS)
+  })
+
+  it('v3.6 BR-103a: only a due date → the start comes from the plan (spoken + tooltip say so); explicit pair ignores the plan', () => {
+    renderCalendar({
+      spans: [
+        { taskId: UAT, start: '2026-11-04', end: '2026-11-27' },
+        { taskId: ROLL, start: '2026-10-01', end: '2026-12-31' },
+      ],
+    })
+    const uat = barsOf(UAT)
+    expect(uat[0]!.closest('[role="gridcell"]')).toHaveAttribute('data-date', '2026-11-04')
+    expect(uat.at(-1)!.closest('[role="gridcell"]')).toHaveAttribute('data-date', '2026-11-09')
+    expect(uat.at(-1)!.style.getPropertyValue('--span')).toBe('3') // Mon 9 → Wed 11 = the explicit due date
+    expect(uat[0]).toHaveAttribute('data-from-plan', 'true')
+    const label = within(uat[0]!).getByRole('button').getAttribute('aria-label') ?? ''
+    expect(label).toContain(th.planCalendar.startFromPlan)
+    expect(within(uat[0]!).getByRole('button').getAttribute('title')).toContain(th.planCalendar.startFromPlan)
+    // ROLL has both dates: 3–12 พ.ย. wins over its plan
+    expect(barsOf(ROLL)).toHaveLength(2)
+    expect(barsOf(ROLL)[0]).not.toHaveAttribute('data-from-plan')
   })
 
   it('click a bar → the panel; Shift+Space on a bar → the task page', async () => {

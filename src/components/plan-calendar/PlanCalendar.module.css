@@ -406,3 +406,35 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* v3.6 (FR-812, BR-103a): dates from the plan — hatched lighter fill + dashed edge + the "จากแผน" tag (never colour
+   alone). Composes with tentative (its own dashed yellow border wins the border colour). */
+.bar[data-from-plan] {
+  border-inline-start-style: dashed;
+  outline: 1px dashed color-mix(in srgb, var(--bar-color) 70%, var(--mui-palette-text-primary));
+  outline-offset: -1px;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--bar-color) 8%, var(--mui-palette-background-paper)) 0 4px,
+    color-mix(in srgb, var(--bar-color) 18%, var(--mui-palette-background-paper)) 4px 6px
+  );
+}
+
+.agendaItem[data-from-plan] {
+  border-inline-start-style: dashed;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--bar-color) 6%, var(--mui-palette-background-paper)) 0 4px,
+    color-mix(in srgb, var(--bar-color) 14%, var(--mui-palette-background-paper)) 4px 6px
+  );
+}
+
+.fromPlanTag {
+  flex: none;
+  padding: 0 3px;
+  border: 1px dashed currentColor;
+  border-radius: var(--radius-sm);
+  color: var(--mui-palette-text-secondary);
+  font-size: 0.85em;
+  line-height: 1.1;
+}

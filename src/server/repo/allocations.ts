@@ -467,3 +467,33 @@ export async function firstPlannedWeekByAssignment(
     .orderBy(asc(allocations.taskAssignmentId), asc(allocations.weekStart))
   return new Map(rows.map((r) => [r.id, { week: r.week, cd: r.cd }]))
 }
+
+// ── v3.6 project calendar from the plan (SPEC FR-812, BR-103a) ──
+
+/** Per live assignment of the project's live tasks: the first and last week in `range` with counted load (BR-50;
+ *  person_days > 0 is a table check).
+ *  Assignments without load in range are absent. One grouped scan bounded by week_start (§6.5). */
+export async function plannedWeekBoundsForProject(
+  tx: DbOrTx,
+  projectId: string,
+  range: WeekRange,
+): Promise<{ assignmentId: string; taskId: string; userId: string; first: ISODate; last: ISODate }[]> {
+  if (compareISO(range.from, range.to) >= 0) return []
+  return tx
+    .select({
+      assignmentId: taskAssignments.id,
+      taskId: taskAssignments.taskId,
+      userId: taskAssignments.userId,
+      first: sql<ISODate>`min(${allocations.weekStart})::text`,
+      last: sql<ISODate>`max(${allocations.weekStart})::text`,
+    })
+    .from(allocations)
+    .innerJoin(
+      taskAssignments,
+      and(eq(taskAssignments.id, allocations.taskAssignmentId), isNull(taskAssignments.deletedAt)),
+    )
+    .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
+    .where(and(eq(tasks.projectId, projectId), inWeeks(range), countedSql))
+    .groupBy(taskAssignments.id, taskAssignments.taskId, taskAssignments.userId)
+    .orderBy(asc(taskAssignments.id))
+}

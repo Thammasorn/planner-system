@@ -49,3 +49,5 @@ export * as home from './home'
 export * as databaseCopy from './database-copy'
 export * as databases from './databases'
 export * as rowPages from './row-pages'
+// v3.6 (FR-812, BR-103a): the project calendar's plan-derived task spans
+export * as planSpans from './plan-spans'

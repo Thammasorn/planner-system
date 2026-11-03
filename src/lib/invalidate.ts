@@ -42,6 +42,7 @@ export function invalidateTasks(qc: QueryClient, projectId: string): Promise<voi
     qk.projectMilestones(projectId), // M8-D22: progress / lateness
     qk.home(), // M10 (X18): home "my tasks" card
     qk.pageEmbedTasksAll(), // M10 (X18, M10-D10): every taskView block
+    qk.projectPlanSpansAll(projectId), // v3.6 (BR-103a): assignee / delete / restore change the calendar's plan bars
   ])
 }
 

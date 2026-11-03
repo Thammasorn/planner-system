@@ -9,15 +9,14 @@ import { inMonth, monthGrid, monthTitle, type YearMonth } from '@/lib/calendar/m
 import { formatThaiDate } from '@/lib/format'
 import { agendaDays } from '@/lib/plan-calendar/agenda'
 import type { MilestoneDTO } from '@/lib/contracts/milestones'
-import type { TaskDTO } from '@/lib/contracts/tasks'
-import type { BarInfo } from './labels'
+import type { BarInfo, CalendarTaskDTO } from './labels'
 import { MilestoneFlags } from './MilestoneFlags'
 import { TaskBar } from './TaskBar'
 import styles from './PlanCalendar.module.css'
 
 export interface CalendarViewProps {
   month: YearMonth
-  tasks: readonly TaskDTO[]
+  tasks: readonly CalendarTaskDTO[]
   infos: ReadonlyMap<string, BarInfo>
   holidays: ReadonlyMap<ISODate, string>
   milestonesByDate: ReadonlyMap<ISODate, MilestoneDTO[]>

@@ -67,6 +67,12 @@ export const qk = {
   projectLoad: (projectId: string) => ['workload', 'project', projectId] as const,
   /** GET /api/clients/[id]/load — client page load (M9-D20). */
   clientLoad: (clientId: string) => ['workload', 'client', clientId] as const,
+  /** GET /api/projects/[id]/plan-spans?from&to — the project calendar's plan-derived bars (v3.6 FR-812, BR-103a);
+   *  under ['workload'] so every load invalidation (grid saves, invalidateLoad) refreshes it; invalidateTasks too. */
+  projectPlanSpans: (projectId: string, from: ISODate, to: ISODate) =>
+    ['workload', 'planSpans', projectId, from, to] as const,
+  /** Prefix of every plan-spans range of one project. */
+  projectPlanSpansAll: (projectId: string) => ['workload', 'planSpans', projectId] as const,
   /** GET /api/people/[userId]/time-off — person page วันลา tab (M9-D16); under ['calendar']. */
   personTimeOff: (userId: string) => ['calendar', 'person', userId] as const,
   // ── M10 (PLAN §3.5, X82, M10-D10/D21) ──

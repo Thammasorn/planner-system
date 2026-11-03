@@ -92,6 +92,19 @@ describe('invalidate (X18)', () => {
     expect(invalidated(qc, ['grid', 'project', 'x', {}])).toBe(false)
   })
 
+  it('v3.6 (BR-103a): plan spans of a project refresh on invalidateTasks(id) and on every load invalidation', async () => {
+    const qc = new QueryClient()
+    const p1 = qk.projectPlanSpans('p1', '2026-10-26', '2026-12-07')
+    const p2 = qk.projectPlanSpans('p2', '2026-10-26', '2026-12-07')
+    qc.setQueryData(p1, 1)
+    qc.setQueryData(p2, 1)
+    await invalidateTasks(qc, 'p1')
+    expect(invalidated(qc, p1)).toBe(true)
+    expect(invalidated(qc, p2)).toBe(false)
+    await invalidateLoad(qc)
+    expect(invalidated(qc, p2)).toBe(true)
+  })
+
   it('invalidateStatuses also invalidates projectStatuses(id)', async () => {
     const qc = seeded()
     await invalidateStatuses(qc, 'p1')

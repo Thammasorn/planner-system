@@ -1,7 +1,8 @@
 'use client'
 // src/components/plan-calendar/PlanCalendar.tsx — the project month calendar of the แผนงาน tab (SPEC FR-810–812,
 // FR-820, BR-103, §8.13; plan/m07.1 S4.2, M7.1-D19). Read-only: dates change in the panel / task page.
-// Data: M3's useProjectTasks (same as the งาน tab), holidays from GET /api/calendar, the project milestones (qk.projectMilestones, M11.1) — no new endpoint.
+// Data: M3's useProjectTasks (same as the งาน tab), holidays from GET /api/calendar, the project milestones (qk.projectMilestones, M11.1);
+// v3.6 (BR-103a): plan-derived spans from GET /api/projects/[id]/plan-spans for the month grid (qk.projectPlanSpans).
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
@@ -39,6 +40,7 @@ import {
   type YearMonth,
 } from '@/lib/calendar/month-grid'
 import type { CalendarResponse } from '@/lib/contracts/calendar'
+import type { PlanSpansResponse } from '@/lib/contracts/plan-spans'
 import type { PersonOption } from '@/lib/contracts/people'
 import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import { formatThaiDate } from '@/lib/format'
@@ -48,7 +50,7 @@ import { monthBars, noDateTasks, taskOrder, taskSpan } from '@/lib/plan-calendar
 import { qk } from '@/lib/query-keys'
 import { taskPreference } from '@/lib/schemas/preferences'
 import { taskCertainty } from '@/lib/tasks/certainty'
-import { assigneeIdsByTask, assigneeText, type BarInfo } from './labels'
+import { assigneeIdsByTask, assigneeText, type BarInfo, type CalendarTaskDTO } from './labels'
 import { MilestoneFlags } from './MilestoneFlags'
 import { NoDateList } from './NoDateList'
 import { PlanAgenda, type CalendarViewProps } from './PlanAgenda'
@@ -97,9 +99,24 @@ export function useCalendarModel(projectId: string, month: YearMonth) {
     queryFn: ({ signal }) => getJson<CalendarResponse>(`/api/calendar?from=${from}&to=${to}`, { signal }),
     placeholderData: keepPreviousData,
   })
+  const spansQ = useQuery({
+    queryKey: qk.projectPlanSpans(projectId, from, to),
+    queryFn: ({ signal }) =>
+      getJson<PlanSpansResponse>(`/api/projects/${projectId}/plan-spans?from=${from}&to=${to}`, { signal }),
+    placeholderData: keepPreviousData,
+  })
   const { prefs, setPreference } = usePreferences()
   const showCompleted = taskPreference(prefs, 'tasks.showCompleted')
-  const data = tasksQ.data
+  const rawData = tasksQ.data
+  // BR-103a: wait for the spans (a failed spans read falls back to explicit dates only, never blocks the calendar)
+  const spansReady = spansQ.data !== undefined || spansQ.isError
+  const spanData = spansQ.data
+  const data = useMemo(() => {
+    if (!rawData || !spansReady) return undefined
+    const byTask = new Map((spanData?.spans ?? []).map((x) => [x.taskId, { start: x.start, end: x.end }]))
+    const tasks: CalendarTaskDTO[] = rawData.tasks.map((t) => ({ ...t, planSpan: byTask.get(t.id) ?? null }))
+    return { ...rawData, tasks }
+  }, [rawData, spansReady, spanData])
 
   const people = useMemo(
     () => new Map<string, PersonOption>((peopleQ.data ?? []).map((p) => [p.id, p])),

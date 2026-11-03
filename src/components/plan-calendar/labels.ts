@@ -5,7 +5,7 @@ import type { PersonOption } from '@/lib/contracts/people'
 import type { TaskDTO } from '@/lib/contracts/tasks'
 import { displayName } from '@/lib/display-name'
 import { formatThaiDateRange, formatThaiDate } from '@/lib/format'
-import { taskSpan } from '@/lib/plan-calendar/bars'
+import { barSpan, type BarSpan } from '@/lib/plan-calendar/bars'
 
 /** Names shown on a bar: none → "รอมอบหมาย"; ≤ 2 → "Cindy, Ivy"; more → "Cindy, Ivy +1" (FR-811). */
 export function assigneeText(userIds: readonly string[], people: ReadonlyMap<string, PersonOption>): string {
@@ -40,10 +40,33 @@ export function assigneeIdsByTask(tasks: readonly TaskDTO[]): Map<string, string
   return out
 }
 
+/** A task of the calendar: the DTO + its plan-derived span (v3.6 BR-103a; from GET …/plan-spans). */
+export type CalendarTaskDTO = TaskDTO & { planSpan?: { start: string; end: string } | null }
+
 export interface BarInfo {
-  task: TaskDTO
+  task: CalendarTaskDTO
   assignees: string
   certainty: Certainty
+}
+
+/** Which side of the bar came from the plan, spoken / shown (BR-103a); null = explicit dates only. */
+export function planSource(span: BarSpan | null): string | null {
+  if (!span) return null
+  if (span.startFromPlan && span.endFromPlan) return th.planCalendar.fromPlan
+  if (span.startFromPlan) return th.planCalendar.startFromPlan
+  if (span.endFromPlan) return th.planCalendar.endFromPlan
+  return null
+}
+
+function rangeText(span: BarSpan): string {
+  return span.start === span.end ? formatThaiDate(span.start) : formatThaiDateRange(span.start, span.end)
+}
+
+/** Tooltip: the bar text; a plan-derived bar adds its source and range on a second line. */
+export function barTitle(b: BarInfo): string {
+  const span = barSpan(b.task)
+  const source = planSource(span)
+  return span && source ? th.planCalendar.planTitle(barText(b), source, rangeText(span)) : barText(b)
 }
 
 /** The bar's visible text: "ชื่องาน · ชื่อผู้รับผิดชอบ". */
@@ -54,8 +77,10 @@ export function barText(b: BarInfo): string {
 /** Accessible name of a bar / agenda row: text, dates, then each state glyph spelled out (§8.9, never colour alone). */
 export function barLabel(b: BarInfo, cut: { left?: boolean; right?: boolean } = {}): string {
   const parts = [barText(b)]
-  const span = taskSpan(b.task)
-  if (span) parts.push(span.start === span.end ? formatThaiDate(span.start) : formatThaiDateRange(span.start, span.end))
+  const span = barSpan(b.task)
+  if (span) parts.push(rangeText(span))
+  const source = planSource(span)
+  if (source) parts.push(source)
   if (b.certainty === 'TENTATIVE') parts.push(th.projects.certainty.TENTATIVE)
   if (b.task.completedOn !== null) parts.push(th.planCalendar.done)
   if (b.task.hasBody) parts.push(th.tasks.hasBody)

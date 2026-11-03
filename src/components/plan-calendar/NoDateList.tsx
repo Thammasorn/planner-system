@@ -1,5 +1,5 @@
 'use client'
-// "ไม่มีวันที่ (N)" (FR-812, BR-103): tasks with neither date — parents too — in task order; click = panel (to set a
+// "ไม่มีวันที่ (N)" (FR-812, BR-103/103a): tasks with neither date nor planned load — parents too — in task order; click = panel (to set a
 // date there), ↗ = the task page. Beside the calendar, under it below 900 px and under the phone agenda.
 import { OpenAsPageLink } from '@/components/tasks/OpenAsPage'
 import { th } from '@/i18n/th'

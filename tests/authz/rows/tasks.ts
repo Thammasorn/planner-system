@@ -5,6 +5,7 @@
 // Not visible → 404, visible but not allowed → 403 (X41); every write on archived A → 403 for M/L/Me (X42).
 // Cross-project inputs (BR-33, M3-D23): visible to the manager → 400 VALIDATION, otherwise 404 (no existence leak).
 import { expect } from 'vitest'
+import { GET as getPlanSpans } from '@/app/api/projects/[id]/plan-spans/route'
 import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
@@ -30,6 +31,8 @@ import { defineRow, type AuthzRow } from '../types'
 import { pinToday } from './_m5'
 
 const TASKS = ['tasks'] as const
+/** The November 2026 month grid (Mondays, `to` exclusive). */
+const PLAN_SPAN_Q = 'from=2026-10-26&to=2026-12-07'
 const ALL = { M: 'allow', L: 'allow', Me: 'allow', W: 'allow' } as const
 /** PERM-06 / PERM-11: the team of P (and A) may; the outsider never sees it (404). */
 const TEAM = { M: 'allow', L: 'allow', Me: 'allow', W: '404' } as const
@@ -78,6 +81,35 @@ export const rows: AuthzRow[] = [
     with: TASKS,
     expect: { M: '404', L: '404', Me: '404', W: '404' },
     run: () => callRoute(getProjectTasks, '/api/projects/not-a-uuid/tasks', { id: 'not-a-uuid' }),
+  }),
+  // v3.6 (FR-812, BR-103a): the project calendar's plan-derived spans — same visibility as the task list
+  defineRow({
+    id: 'T-PLANSPANS',
+    spec: 'PERM-06 + FR-812 v3.6 — GET /api/projects/{P}/plan-spans',
+    action: 'GET /api/projects/[id]/plan-spans',
+    mutates: false,
+    with: TASKS,
+    expect: TEAM,
+    run: (w) => callRoute(getPlanSpans, `/api/projects/${w.P.id}/plan-spans?${PLAN_SPAN_Q}`, { id: w.P.id }),
+  }),
+  defineRow({
+    id: 'T-PLANSPANS-ARCH',
+    spec: 'PERM-06 + X42 — archived A stays readable',
+    action: 'GET /api/projects/[id]/plan-spans',
+    mutates: false,
+    with: TASKS,
+    expect: TEAM,
+    run: (w) => callRoute(getPlanSpans, `/api/projects/${w.A.id}/plan-spans?${PLAN_SPAN_Q}`, { id: w.A.id }),
+  }),
+  defineRow({
+    id: 'T-PLANSPANS-BAD',
+    spec: 'X86 — a malformed project id is a 404 like an invisible project',
+    action: 'GET /api/projects/[id]/plan-spans',
+    mutates: false,
+    with: TASKS,
+    expect: { M: '404', L: '404', Me: '404', W: '404' },
+    run: () =>
+      callRoute(getPlanSpans, `/api/projects/not-a-uuid/plan-spans?${PLAN_SPAN_Q}`, { id: 'not-a-uuid' }),
   }),
   defineRow({
     id: 'T-MY',

@@ -1,5 +1,6 @@
 // src/lib/plan-calendar/bars.ts — task bars of the project month calendar (SPEC FR-811/812, BR-103, M7.1-D19). Pure;
-// dates are ISO strings (src/domain/dates.ts), the month grid is M5's (6 Monday-first weeks).
+// dates are ISO strings (src/domain/dates.ts), the month grid is M5's (6 Monday-first weeks). v3.6 (BR-103a): a side
+// without an explicit date comes from the task's planned load (`planSpan`, server-computed — src/domain/plan-span.ts).
 import { addDays, compareISO, diffDays, maxISO, minISO } from '@/domain/dates'
 import type { ISODate } from '@/domain/types'
 import { monthGrid, type YearMonth } from '@/lib/calendar/month-grid'
@@ -13,6 +14,16 @@ export interface CalendarTask {
   startDate: ISODate | null
   dueDate: ISODate | null
   completedOn: ISODate | null
+  /** v3.6 (BR-103a): first → last day with live planned load of the task's own assignees; absent/null = no plan */
+  planSpan?: { start: ISODate; end: ISODate } | null
+}
+
+/** A bar's span and which side came from the plan rather than an explicit date (BR-103a). */
+export interface BarSpan {
+  start: ISODate
+  end: ISODate
+  startFromPlan: boolean
+  endFromPlan: boolean
 }
 
 /** More lanes than this per week row → "+N" on the affected days. */
@@ -38,12 +49,39 @@ export interface WeekBars {
   overflow: Map<ISODate, string[]>
 }
 
-/** BR-103: start = startDate ?? dueDate, end = dueDate ?? startDate; null without either. A reversed pair is swapped. */
-export function taskSpan(t: Pick<CalendarTask, 'startDate' | 'dueDate'>): { start: ISODate; end: ISODate } | null {
-  const a = t.startDate ?? t.dueDate
-  const b = t.dueDate ?? t.startDate
-  if (a === null || b === null) return null
-  return { start: minISO(a, b), end: maxISO(a, b) }
+/**
+ * BR-103 + BR-103a. Both dates → that range (a reversed pair is swapped). Neither → the plan span (both sides "from
+ * plan"), or null without a plan. One date → the missing side is filled from the plan when the plan reaches past the
+ * explicit date (only start → end = plan end; only due → start = plan start), otherwise a one-day bar on that date.
+ * An explicit date always wins over the plan.
+ */
+export function barSpan(t: Pick<CalendarTask, 'startDate' | 'dueDate' | 'planSpan'>): BarSpan | null {
+  const plan = t.planSpan ?? null
+  if (t.startDate !== null && t.dueDate !== null) {
+    return {
+      start: minISO(t.startDate, t.dueDate),
+      end: maxISO(t.startDate, t.dueDate),
+      startFromPlan: false,
+      endFromPlan: false,
+    }
+  }
+  if (t.startDate !== null) {
+    const fill = plan !== null && compareISO(plan.end, t.startDate) > 0
+    return { start: t.startDate, end: fill ? plan.end : t.startDate, startFromPlan: false, endFromPlan: fill }
+  }
+  if (t.dueDate !== null) {
+    const fill = plan !== null && compareISO(plan.start, t.dueDate) < 0
+    return { start: fill ? plan.start : t.dueDate, end: t.dueDate, startFromPlan: fill, endFromPlan: false }
+  }
+  return plan ? { start: plan.start, end: plan.end, startFromPlan: true, endFromPlan: true } : null
+}
+
+/** The bar's [start, end] (BR-103/103a); null = "ไม่มีวันที่". */
+export function taskSpan(
+  t: Pick<CalendarTask, 'startDate' | 'dueDate' | 'planSpan'>,
+): { start: ISODate; end: ISODate } | null {
+  const s = barSpan(t)
+  return s ? { start: s.start, end: s.end } : null
 }
 
 /** BR-105 order: DFS by position (the task list's order); tasks outside the tree (orphans) after it, in input order. */
@@ -66,7 +104,7 @@ function shown(t: CalendarTask, showCompleted: boolean): boolean {
   return showCompleted || t.completedOn === null
 }
 
-/** "ไม่มีวันที่ (N)": tasks with neither date, in tree order (parents too — FR-812). */
+/** "ไม่มีวันที่ (N)": tasks with neither date nor planned load, in tree order (parents too — FR-812, BR-103a). */
 export function noDateTasks<T extends CalendarTask>(
   tasks: readonly T[],
   o: { showCompleted?: boolean; order?: readonly string[] } = {},

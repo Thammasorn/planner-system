@@ -6,7 +6,7 @@ import { renderTasks } from '@/components/tasks/render.test.helper'
 import { th } from '@/i18n/th'
 import type { MilestoneDTO } from '@/lib/contracts/milestones'
 import type { TaskDTO } from '@/lib/contracts/tasks'
-import type { BarInfo } from './labels'
+import type { BarInfo, CalendarTaskDTO } from './labels'
 import { PlanAgenda } from './PlanAgenda'
 
 const A = '00000000-0000-4000-8000-000000000001'
@@ -36,14 +36,21 @@ const MARKER: MilestoneDTO = {
   progress: { done: 0, total: 0 },
 }
 
-function renderAgenda(o: { showCompleted?: boolean; tasks?: TaskDTO[]; month?: string } = {}) {
+function renderAgenda(
+  o: {
+    showCompleted?: boolean
+    tasks?: CalendarTaskDTO[]
+    month?: string
+    infos?: Map<string, BarInfo>
+  } = {},
+) {
   const onOpen = vi.fn()
   const onOpenPage = vi.fn()
   renderTasks(
     <PlanAgenda
       month={o.month ?? '2026-11'}
       tasks={o.tasks ?? TASKS}
-      infos={infos}
+      infos={o.infos ?? infos}
       holidays={new Map([['2026-11-04', 'วันหยุดทดสอบ']])}
       milestonesByDate={new Map([['2026-11-20', [MARKER]]])}
       showCompleted={o.showCompleted ?? true}
@@ -83,6 +90,22 @@ describe('PlanAgenda (< 600 px, FR-812)', () => {
     await user.click(within(row).getByRole('button'))
     expect(onOpen).toHaveBeenCalledWith(A)
     expect(within(row).getByRole('link', { name: th.tasks.openAsPage })).toHaveAttribute('href', `/t/${A}`)
+  })
+
+  it('v3.6 BR-103a: a plan-only task is listed on its plan days with the "จากแผน" tag', () => {
+    const planned: CalendarTaskDTO = { ...TASKS[2]!, planSpan: { start: '2026-11-09', end: '2026-11-13' } }
+    const own = new Map(infos)
+    own.set(C, { task: planned, assignees: th.planCalendar.unassigned, certainty: 'CONFIRMED' })
+    renderAgenda({ tasks: [planned], infos: own })
+    const start = screen
+      .getByTestId('plan-agenda-2026-11-09')
+      .querySelector<HTMLElement>(`[data-task-bar="${C}"]`)!
+    expect(start).toHaveAttribute('data-from-plan', 'true')
+    expect(within(start).getByTestId('from-plan-tag')).toHaveTextContent(th.planCalendar.fromPlanTag)
+    expect(
+      screen.getByTestId('plan-agenda-2026-11-13').querySelector(`[data-task-bar="${C}"]`),
+    ).toHaveAttribute('data-cut-left', 'true')
+    expect(screen.queryByTestId('plan-agenda-2026-11-16')).toBeNull()
   })
 
   it('empty month → ไม่มีงานในเดือนนี้', () => {
