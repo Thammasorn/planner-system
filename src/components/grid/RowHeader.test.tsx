@@ -142,11 +142,20 @@ describe('RowHeader ↗ = task page link (M6.1-D17)', () => {
   })
 })
 
-describe('RowHeader indentation (token scale)', () => {
-  it('indents the task cell by depth in --space-4 steps after the --space-2 gutter', () => {
-    const { header } = renderRow({ ...merged, depth: 2 })
-    const taskCell = header.querySelector<HTMLElement>('[data-task-cell]')!
-    expect(taskCell.style.paddingLeft).toBe('calc(var(--space-2) + 2 * var(--space-4))')
+describe('RowHeader indentation (v3.9 lead layout)', () => {
+  it('indents by depth AFTER the ⠿ gutter: a 32 px spacer at depth 2, none at depth 0', () => {
+    const { header } = renderRow({ ...merged, depth: 2 }, { draggable: true })
+    const lead = header.querySelector<HTMLElement>('[data-lead]')!
+    const kids = Array.from(lead.children)
+    expect(kids[0]).toHaveAttribute('data-drag-handle')
+    expect(kids[1]).toHaveAttribute('data-indent', '2')
+    expect((kids[1] as HTMLElement).style.width).toBe('32px')
+    expect(kids[2]).toHaveAttribute('data-toggle-spacer')
+    expect(lead.style.width).toBe(`${14 + 32 + 16}px`)
+    document.body.innerHTML = ''
+    const top = renderRow(merged, { draggable: true }).header
+    expect(top.querySelector('[data-indent]')).toBeNull()
+    expect(top.querySelector<HTMLElement>('[data-lead]')!.style.width).toBe(`${14 + 16}px`)
   })
 })
 
@@ -187,10 +196,10 @@ describe('RowHeader caret slot (v3.8): sibling names line up, children indent on
   /** What sits before the name: the task cell's indent and its children up to the name. */
   function lead(row: ViewRow): { indent: string; slots: string[] } {
     const { header } = renderRow(row)
-    const cell = header.querySelector<HTMLElement>('[data-task-cell]')!
+    const cell = header.querySelector<HTMLElement>('[data-lead]')!
     const slots: string[] = []
     for (const el of Array.from(cell.children)) {
-      if (el.classList.contains('name') || el.textContent === row.task.name) break
+      if (el.hasAttribute('data-indent')) continue
       slots.push(
         el.hasAttribute('data-toggle-spacer')
           ? 'slot'
@@ -199,7 +208,7 @@ describe('RowHeader caret slot (v3.8): sibling names line up, children indent on
             : el.tagName,
       )
     }
-    const out = { indent: cell.style.paddingLeft, slots }
+    const out = { indent: cell.style.width, slots }
     document.body.innerHTML = ''
     return out
   }
@@ -212,7 +221,7 @@ describe('RowHeader caret slot (v3.8): sibling names line up, children indent on
     const child: ViewRow = { ...merged, key: 'a:a-child', task: task({ id: 't-child', depth: 1 }), depth: 1 }
     const c = lead(child)
     expect(c.slots).toEqual(p.slots)
-    expect(c.indent).toBe('calc(var(--space-2) + 1 * var(--space-4))')
-    expect(p.indent).toBe('calc(var(--space-2) + 0 * var(--space-4))')
+    expect(c.indent).toBe('32px')
+    expect(p.indent).toBe('16px')
   })
 })

@@ -345,6 +345,24 @@
   padding-right: var(--space-2);
 }
 
+.taskCell {
+  padding-left: var(--space-1);
+}
+
+/* v3.9 (src/lib/grid/row-layout.ts): [⠿ gutter][depth indent][caret slot] before the name, no gaps inside */
+.lead {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+}
+
+.indent {
+  flex: none;
+  display: inline-block;
+  height: 100%;
+}
+
 .assigneeCell {
   padding-left: var(--space-2);
   border-left: 1px solid var(--border-subtle);
@@ -364,6 +382,7 @@
 /* ⠿ FR-815: visible on hover / focus within the row and always on touch */
 .dragHandle {
   composes: iconButton;
+  width: 14px;
   min-width: 14px;
   padding: 0;
   cursor: grab;
@@ -490,11 +509,11 @@
   cursor: pointer;
 }
 
-/* v3.8: the ▸/▾ slot has one fixed width; leaf rows reserve it with .toggleSpacer so sibling names align */
+/* v3.8/v3.9: the ▸/▾ slot has one narrow fixed width (row-layout CARET_W); leaf rows reserve it with .toggleSpacer */
 .toggle,
 .toggleSpacer {
-  width: 20px;
-  min-width: 20px;
+  width: 16px;
+  min-width: 16px;
   padding: 0;
 }
 

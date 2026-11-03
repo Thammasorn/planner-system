@@ -30,12 +30,12 @@ import { ASSIGNEE_COL_W, FROZEN_COL_W, FROZEN_COLS, TASK_COL_W } from '@/lib/gri
 import { formatThaiDate } from '@/lib/format'
 import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick } from '@/lib/nav/task-href'
+import { taskLeadLayout } from '@/lib/grid/row-layout'
 import { isRowSelected } from '@/lib/grid/row-select'
 import { sumPeopleCount, type GridViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
 import styles from './grid.module.css'
 
-/** Indent per depth level and the left gutter, from the §8.12 spacing scale (FR-1605). */
 /** ↗: no row selection; a plain click records the grid's own scroll box (it scrolls inside, not the window). */
 function rememberGridScroll(e: MouseEvent<HTMLElement>): void {
   e.stopPropagation()
@@ -44,7 +44,6 @@ function rememberGridScroll(e: MouseEvent<HTMLElement>): void {
   if (box) rememberBoxScroll(box)
 }
 
-const indent = (depth: number): string => `calc(var(--space-2) + ${depth} * var(--space-4))`
 
 export interface RowHeaderProps {
   store: GridStore
@@ -152,6 +151,7 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const late = ms !== null && task.lateForMilestone
   const states = rowStateTexts(row, p.personActive, ms)
   const ownsTask = row.kind !== 'assignee'
+  const lead = taskLeadLayout(row.depth, { check: false, handle: Boolean(p.draggable) })
 
   return (
     <div
@@ -183,48 +183,57 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
           {th.grid.row.states(states.join(' · '))}
         </span>
       ) : null}
-      <div className={styles.taskCell} style={{ width: TASK_COL_W, paddingLeft: indent(row.depth) }} data-task-cell="">
+      <div className={styles.taskCell} style={{ width: TASK_COL_W }} data-task-cell="">
         {selected && multi ? (
           <span className={styles.rowCheck} title={th.grid.row.selectedMark} data-row-check="">
             <span aria-hidden="true">✓</span>
             <span className={styles.srOnly}>{th.grid.row.selectedMark}</span>
           </span>
         ) : null}
-        {ownsTask && p.draggable ? (
-          // the keyboard path is Alt+↑/↓/→/← on the selected row (M7.1-D17); the button names the gesture
-          <button
-            type="button"
-            tabIndex={tab}
-            className={styles.dragHandle}
-            aria-label={th.grid.reorder.handle}
-            data-drag-handle=""
-            onClick={stop}
-            onDoubleClick={stop}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              p.onDragHandle?.(e, task.id)
-            }}
-          >
-            ⠿
-          </button>
-        ) : null}
-        {hasToggle ? (
-          <button
-            type="button"
-            className={styles.toggle}
-            tabIndex={tab}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? th.grid.row.expand : th.grid.row.collapse}
-            onClick={(e) => {
-              stop(e)
-              p.onToggle(task.id)
-            }}
-          >
-            {collapsed ? '▸' : '▾'}
-          </button>
-        ) : ownsTask ? (
-          // v3.8: leaf rows keep the caret slot so sibling names line up (only real children indent further)
-          <span className={styles.toggleSpacer} aria-hidden="true" data-toggle-spacer="" />
+        {ownsTask ? (
+          // v3.9 lead (src/lib/grid/row-layout.ts): [⠿ gutter][depth indent][caret slot] — the indent sits after the
+          // gutter, the caret slot is narrow, so a top-level leaf name sits right after ⠿ + one empty caret slot
+          <span className={styles.lead} style={{ width: lead.leadW }} data-lead="">
+            {p.draggable ? (
+              // the keyboard path is Alt+↑/↓/→/← on the selected row (M7.1-D17); the button names the gesture
+              <button
+                type="button"
+                tabIndex={tab}
+                className={styles.dragHandle}
+                aria-label={th.grid.reorder.handle}
+                data-drag-handle=""
+                onClick={stop}
+                onDoubleClick={stop}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  p.onDragHandle?.(e, task.id)
+                }}
+              >
+                ⠿
+              </button>
+            ) : null}
+            {lead.indentW > 0 ? (
+              <span className={styles.indent} style={{ width: lead.indentW }} aria-hidden="true" data-indent={row.depth} />
+            ) : null}
+            {hasToggle ? (
+              <button
+                type="button"
+                className={styles.toggle}
+                tabIndex={tab}
+                aria-expanded={!collapsed}
+                aria-label={collapsed ? th.grid.row.expand : th.grid.row.collapse}
+                onClick={(e) => {
+                  stop(e)
+                  p.onToggle(task.id)
+                }}
+              >
+                {collapsed ? '▸' : '▾'}
+              </button>
+            ) : (
+              // leaf rows keep the caret slot so sibling names line up (only real children indent further)
+              <span className={styles.toggleSpacer} aria-hidden="true" data-toggle-spacer="" />
+            )}
+          </span>
         ) : null}
         {ownsTask ? (
           <span className={styles.name} title={task.name}>
