@@ -35,6 +35,8 @@ export interface TaskBodyProps {
   onHasBodyChange?: (hasBody: boolean) => void
   /** `focus()` moves the caret into the body (Enter in the task page title, FR-683). */
   focusRef?: Ref<{ focus(): void }>
+  /** 'compact': the panel's body-heading element the save status is portalled into (inline when absent). */
+  statusSlot?: HTMLElement | null
 }
 
 export function TaskBody(p: TaskBodyProps): JSX.Element {
@@ -163,7 +165,7 @@ export function TaskBody(p: TaskBodyProps): JSX.Element {
           leaseAcquire="focus"
           variant={p.variant}
           ensurePageId={ensurePageId}
-          saveStatusSlot={inHeader ? statusSlot : null}
+          saveStatusSlot={inHeader ? statusSlot : (p.statusSlot ?? null)}
           leaseSlot={inHeader ? leaseSlot : null}
           onDocumentChange={onDocumentChange}
           onSaved={onSaved}

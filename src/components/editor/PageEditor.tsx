@@ -356,7 +356,7 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
             }}
           >
             <SlashMenu editor={editor} ctx={slashCtx} />
-            <AppSideMenuController />
+            <AppSideMenuController overlap={variant === 'compact'} />
             <FormattingToolbarController formattingToolbar={AppFormattingToolbar} />
             <GridSuggestionMenuController
               triggerCharacter=":"

@@ -106,6 +106,7 @@ function PanelBody(p: RowPanelProps & { row: DbRowDTO }): JSX.Element {
   const prev = i > 0 ? p.order[i - 1] : undefined
   const next = i >= 0 && i < p.order.length - 1 ? p.order[i + 1] : undefined
   const t = th.database.panel
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null)
   const nameOf = (id: string) => {
     const ref = people(id)
     return ref ? displayName(ref) : th.database.cells.unknownPerson
@@ -180,8 +181,16 @@ function PanelBody(p: RowPanelProps & { row: DbRowDTO }): JSX.Element {
       <PanelTitle row={row} />
       <RowProperties row={row} {...(p.viewId ? { viewId: p.viewId } : {})} />
       <section className={s.section} aria-label={t.body}>
-        <h3 className={s.sectionTitle}>{t.body}</h3>
-        {isTempId(row.id) ? <div className={s.bodySkeleton} /> : <PanelRowBody rowId={row.id} />}
+        <div className={s.sectionHead}>
+          <h3 className={s.sectionTitle}>{t.body}</h3>
+          {/* the body's save status sits on the heading row, right-aligned (not above the editor) */}
+          <span ref={setStatusSlot} className={s.sectionStatus} />
+        </div>
+        {isTempId(row.id) ? (
+          <div className={s.bodySkeleton} />
+        ) : (
+          <PanelRowBody rowId={row.id} statusSlot={statusSlot} />
+        )}
       </section>
       <div className={s.meta}>
         <span>{t.createdBy(nameOf(row.createdBy), when(row.createdAt))}</span>
@@ -243,7 +252,7 @@ function PanelTitle({ row }: { row: DbRowDTO }): JSX.Element {
   )
 }
 
-function PanelRowBody({ rowId }: { rowId: string }): JSX.Element {
+function PanelRowBody({ rowId, statusSlot }: { rowId: string; statusSlot: HTMLElement | null }): JSX.Element {
   const api = useDbApi()
   const q = useQuery({
     queryKey: qk.rowBody(rowId),
@@ -251,5 +260,5 @@ function PanelRowBody({ rowId }: { rowId: string }): JSX.Element {
       getJson<RowBodyView>(`/api/database-rows/${encodeURIComponent(rowId)}/body`, { signal }),
   })
   if (!q.data) return <div className={s.bodySkeleton} aria-busy="true" />
-  return <RowBody view={q.data} variant="compact" canEdit={api.canEdit} />
+  return <RowBody view={q.data} variant="compact" canEdit={api.canEdit} statusSlot={statusSlot} />
 }

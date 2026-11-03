@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -129,6 +129,7 @@ function PanelBody({
   const rows = useMemo(() => buildTaskRows(data.tasks), [data.tasks])
   const task = rows.find((r) => r.id === taskId)
   const body = useTaskBodyView(taskId, undefined, task !== undefined)
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null)
 
   if (!task) {
     return (
@@ -181,12 +182,28 @@ function PanelBody({
       <TaskProperties projectId={projectId} task={task} data={data} variant="panel" />
 
       <Divider sx={{ borderColor: 'var(--border-subtle)' }} />
+      {/* the body heading row carries the save status, right-aligned (not floating above the editor) */}
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, mb: -1 }}>
+        <Typography
+          component="h3"
+          sx={{
+            m: 0,
+            color: 'var(--text-secondary)',
+            fontSize: 'var(--font-sm)',
+            fontWeight: 'var(--weight-medium)',
+          }}
+        >
+          {th.taskPage.bodyLabel}
+        </Typography>
+        <Box component="span" ref={setStatusSlot} sx={{ flex: 'none' }} />
+      </Box>
       {/* FR-684: the compact body replaces "หมายเหตุ" — same editor and data as the task page */}
       {body.data ? (
         <TaskBody
           view={body.data}
           variant="compact"
           canEdit={canEdit}
+          statusSlot={statusSlot}
           onHasBodyChange={(hasBody) => patchTaskHasBody(qc, projectId, task.id, hasBody)}
         />
       ) : body.isError ? (

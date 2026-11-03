@@ -40,6 +40,8 @@ export interface RowBodyProps {
   onHasBodyChange?: (hasBody: boolean) => void
   /** `focus()` moves the caret into the body (Enter in the row page title, M11-D27). */
   focusRef?: Ref<{ focus(): void }>
+  /** 'compact': the panel's body-heading element the save status is portalled into (inline when absent). */
+  statusSlot?: HTMLElement | null
 }
 
 export function RowBody(p: RowBodyProps): JSX.Element {
@@ -174,7 +176,7 @@ export function RowBody(p: RowBodyProps): JSX.Element {
           leaseAcquire="focus"
           variant={p.variant}
           ensurePageId={ensurePageId}
-          saveStatusSlot={inHeader ? statusSlot : null}
+          saveStatusSlot={inHeader ? statusSlot : (p.statusSlot ?? null)}
           leaseSlot={inHeader ? leaseSlot : null}
           onDocumentChange={onDocumentChange}
           onSaved={onSaved}

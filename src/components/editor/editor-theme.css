@@ -48,8 +48,13 @@
 .app-editor[data-variant='compact'] .bn-root .bn-block-outer {
   line-height: var(--leading-ui);
 }
-/* The whole compact box is the click target of an empty body (first focus creates its row, FR-681). The side menu
-   keeps the start gutter; the end gutter is small in the narrow panel. 120 px = COMPACT_MIN_HEIGHT (EditorClient). */
+/* The whole compact box is the click target of an empty body (first focus creates its row, FR-681). In the narrow
+   panels (row / task) the body text starts flush with the property labels above (owner bug 2026-11-03): no start
+   gutter — the side menu (+ / ⠿) is positioned `fixed` (AppSideMenuController `overlap`) and overlaps the panel's
+   left padding instead of being clipped by its scroll box. 120 px = COMPACT_MIN_HEIGHT (EditorClient). */
+.app-editor[data-variant='compact'] {
+  --editor-gutter: 0;
+}
 .app-editor[data-variant='compact'] .bn-root .bn-editor.bn-editor {
   min-height: 120px;
   padding-inline: var(--editor-gutter) var(--space-2);
