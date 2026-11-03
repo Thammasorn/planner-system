@@ -183,6 +183,29 @@ describe('TableView', () => {
     ).toBeInTheDocument()
   })
 
+  it('typing into a new row’s title survives its temp id becoming the server id (e2e D8)', async () => {
+    const api = makeApi()
+    const tmp = 'tmp_new_row'
+    const server = '00000000-0000-4000-8000-00000000abcd'
+    act(() => api.setDb({ ...api.db, rows: [...api.db.rows, row(tmp, '', 'zz')] }))
+    try {
+      renderDb(block(), { api })
+      const titles = screen.getAllByRole('gridcell').filter((c) => c.getAttribute('data-type') === 'TITLE')
+      await userEvent.dblClick(titles.at(-1)!)
+      const input = await screen.findByRole('textbox', { name: th.database.types.TITLE })
+      await userEvent.type(input, 'นโ')
+      // the create answers mid-typing
+      dbIdMap.set(tmp, server)
+      act(() =>
+        api.setDb({ ...api.db, rows: api.db.rows.map((r) => (r.id === tmp ? { ...r, id: server } : r)) }),
+      )
+      await userEvent.type(screen.getByRole('textbox', { name: th.database.types.TITLE }), 'ยบาย{Enter}')
+      expect(callsOf(api, 'updateRow').at(-1)!.slice(0, 2)).toEqual([server, { title: 'นโยบาย' }])
+    } finally {
+      dbIdMap.clear()
+    }
+  })
+
   describe('virtualisation (> 50 rows)', () => {
     const many: DbRowDTO[] = Array.from({ length: 60 }, (_, i) =>
       row(`v${i}`, `แถว ${i}`, `a${String(i).padStart(3, '0')}`),

@@ -44,7 +44,7 @@ import {
 import type { DbCtx } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { CellValue, DbColumnDTO, DbRowDTO } from '@/lib/contracts/databases'
-import { previousId, sameDbId } from '@/lib/database/optimistic'
+import { previousId, sameDbId, stableDbKeys } from '@/lib/database/optimistic'
 import { rowPageHref } from '@/lib/database/row-param'
 import { CellDisplay } from '../cells/CellDisplay'
 import { CellEditor, type EditorDone } from '../cells/CellEditor'
@@ -295,6 +295,8 @@ export function TableView(p: TableViewProps): JSX.Element {
       [...headRefs.current.entries()].find(([id, el]) => sameDbId(id, colId) && el.isConnected)?.[1] ?? null,
     [],
   )
+  // a new row keeps its DOM (and the title editor with what was typed so far) when its temp id becomes the server id
+  const rowKey = stableDbKeys()
   const menuColumnPresent = menu !== null && db.columns.some((c) => sameDbId(c.id, menu.colId))
   if (menu && menuColumnPresent && !menu.seen) setMenu({ ...menu, seen: true })
   else if (menu && !menuColumnPresent && menu.seen) setMenu(null)
@@ -457,7 +459,7 @@ export function TableView(p: TableViewProps): JSX.Element {
                 ) : null}
                 {shown.map(({ row, index }) => (
                   <RowView
-                    key={row.id}
+                    key={rowKey(row.id)}
                     row={row}
                     index={index}
                     cols={cols}

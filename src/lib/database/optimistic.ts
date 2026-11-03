@@ -10,6 +10,15 @@ type Positioned = { id: string; position: string }
 export const dbIdMap = new Map<string, string>()
 export const resolveDbId = (id: string): string => dbIdMap.get(id) ?? id
 /** `a` and `b` name the same object (one of them may still be the temp id). */
+/**
+ * A React key that survives the temp id → server id swap: the temp id an object was created with (or its own id).
+ * Keying rows by it keeps their DOM — and an open cell editor with what was typed so far — when the create answers.
+ */
+export function stableDbKeys(): (id: string) => string {
+  const back = new Map<string, string>()
+  for (const [tmp, real] of dbIdMap) back.set(real, tmp)
+  return (id) => back.get(id) ?? id
+}
 export const sameDbId = (a: string, b: string): boolean => a === b || resolveDbId(a) === resolveDbId(b)
 
 export function findById<T extends { id: string }>(list: readonly T[], id: string): T | undefined {
