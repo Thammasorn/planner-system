@@ -285,7 +285,9 @@ export function TableView(p: TableViewProps): JSX.Element {
   // stored once, then re-mounted when the column's temp id became the server id (`key`), leaving the Popover a detached
   // anchor (rect 0,0). The anchor is now the header of the column id resolved at every positioning (MUI calls the
   // function), so it follows any re-mount; the menu closes when the column disappears.
-  const [menu, setMenu] = useState<{ colId: string; focusName: boolean } | null>(null)
+  // `seen`: a just-created column reaches the cache a moment after createColumn answers its temp id, so the menu only
+  // closes for a missing column once it has seen that column (deleted / undone) — never while it is still on its way
+  const [menu, setMenu] = useState<{ colId: string; focusName: boolean; seen?: boolean } | null>(null)
   const [addAnchor, setAddAnchor] = useState<HTMLElement | null>(null)
   const headRefs = useRef(new Map<string, HTMLElement>())
   const headerOf = useCallback(
@@ -293,7 +295,9 @@ export function TableView(p: TableViewProps): JSX.Element {
       [...headRefs.current.entries()].find(([id, el]) => sameDbId(id, colId) && el.isConnected)?.[1] ?? null,
     [],
   )
-  if (menu && !db.columns.some((c) => sameDbId(c.id, menu.colId))) setMenu(null)
+  const menuColumnPresent = menu !== null && db.columns.some((c) => sameDbId(c.id, menu.colId))
+  if (menu && menuColumnPresent && !menu.seen) setMenu({ ...menu, seen: true })
+  else if (menu && !menuColumnPresent && menu.seen) setMenu(null)
   const openMenu = (colId: string, focusName: boolean) => setMenu({ colId, focusName })
 
   // ── drag: columns (database order, FR-1413) and rows (manual order, FR-1426) ──

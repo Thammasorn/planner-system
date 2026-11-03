@@ -9,7 +9,7 @@ import { th } from '@/i18n/th'
 import { DatabaseBlockContent } from '../DatabaseBlockView'
 import { callsOf, makeApi } from '../fixtures.test.helper'
 import { renderDb } from '../render.test.helper'
-import { isMenuKey } from './RowMenu'
+import { inTextField, isMenuKey } from './RowMenu'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/server/actions/databases', () => ({}))
@@ -107,5 +107,18 @@ describe('row context menu', () => {
     expect(isMenuKey({ key: 'F10', shiftKey: true })).toBe(true)
     expect(isMenuKey({ key: 'ContextMenu', shiftKey: false })).toBe(true)
     expect(isMenuKey({ key: 'F10', shiftKey: false })).toBe(false)
+  })
+})
+
+describe('inTextField (the block inside the page editor)', () => {
+  it('a cell inside a contenteditable=false node view of the editor is not a text field; inputs are', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<div role="textbox" contenteditable="true"><div contenteditable="false"><div role="row"><span id="cell">100</span><input id="inp" /></div></div><p id="para">text</p></div>'
+    document.body.append(root)
+    expect(inTextField(root.querySelector('#cell'))).toBe(false)
+    expect(inTextField(root.querySelector('#inp'))).toBe(true)
+    expect(inTextField(root.querySelector('#para'))).toBe(true)
+    root.remove()
   })
 })

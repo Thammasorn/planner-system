@@ -51,12 +51,18 @@ export interface RowMenuApi {
   menu: JSX.Element | null
 }
 
-/** Text fields (an open cell editor, the quick-add input) keep the browser's own menu (copy / paste / spelling). */
-function inTextField(t: EventTarget | null): boolean {
-  return (
-    t instanceof HTMLElement &&
-    t.closest('input:not([type="checkbox"]), textarea, [contenteditable="true"], [role="textbox"]') !== null
-  )
+/**
+ * Text fields (an open cell editor, the quick-add input) keep the browser's own menu (copy / paste / spelling). The
+ * database block itself sits inside the page editor (`[contenteditable="true"][role="textbox"]`) behind a
+ * `contenteditable="false"` node view: the search stops at that boundary, so the editor around the block never counts.
+ */
+export function inTextField(t: EventTarget | null): boolean {
+  if (!(t instanceof Element)) return false
+  const field = t.closest('input:not([type="checkbox"]), textarea, [contenteditable], [role="textbox"]')
+  if (field === null) return false
+  if (field.matches('input, textarea')) return true
+  if (field.getAttribute('contenteditable') === 'false') return false
+  return true
 }
 
 /** Shift+F10 or the ContextMenu key. */

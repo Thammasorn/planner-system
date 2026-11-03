@@ -506,7 +506,9 @@ function RangeBar(p: BarProps & { seg: BarSegment }): JSX.Element | null {
   const begin = (mode: 'move' | 'start' | 'end') => (e: ReactPointerEvent<HTMLElement>) => {
     if (!p.canDrag || e.button !== 0) return
     e.stopPropagation()
-    if (mode !== 'move') e.preventDefault()
+    // no compatibility mousedown: the block lives inside the page editor, whose mousedown would start a native drag of
+    // the block (→ pointercancel mid-gesture) or a text selection
+    e.preventDefault()
     const grab = dayAt(e.clientX, e.clientY, p.gridRef.current) ?? range.start
     const x0 = e.clientX
     const y0 = e.clientY
@@ -562,6 +564,7 @@ function RangeBar(p: BarProps & { seg: BarSegment }): JSX.Element | null {
       data-cut-left={p.seg.continuesLeft || undefined}
       data-cut-right={p.seg.continuesRight || undefined}
       onContextMenu={(e) => rowMenu.onContextMenu(e, row.id)}
+      onDragStart={(e) => e.preventDefault()}
     >
       {p.canDrag && !p.seg.continuesLeft ? (
         <span

@@ -159,6 +159,30 @@ describe('TableView', () => {
     }
   })
 
+  it('the new column’s menu opens even when the column reaches the cache after createColumn answered (e2e D2c)', async () => {
+    const api = makeApi()
+    let arrive: () => void = () => {}
+    api.createColumn = (type) => {
+      const id = 'tmp_late_column'
+      arrive = () =>
+        api.setDb({
+          ...api.db,
+          columns: [
+            ...api.db.columns,
+            { id, type, name: 'ตัวเลือกใหม่', config: { options: [] }, position: 'zz', version: 1 },
+          ],
+        })
+      return Promise.resolve(id)
+    }
+    renderDb(block(), { api })
+    await userEvent.click(screen.getByRole('button', { name: th.database.table.addColumn }))
+    await userEvent.click(screen.getByRole('menuitem', { name: th.database.types.SELECT }))
+    act(() => arrive())
+    expect(
+      await screen.findByRole('dialog', { name: th.database.columnMenu.label('ตัวเลือกใหม่') }),
+    ).toBeInTheDocument()
+  })
+
   describe('virtualisation (> 50 rows)', () => {
     const many: DbRowDTO[] = Array.from({ length: 60 }, (_, i) =>
       row(`v${i}`, `แถว ${i}`, `a${String(i).padStart(3, '0')}`),
