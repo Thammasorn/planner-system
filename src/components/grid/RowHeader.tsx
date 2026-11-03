@@ -222,6 +222,9 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
           >
             {collapsed ? '▸' : '▾'}
           </button>
+        ) : ownsTask ? (
+          // v3.8: leaf rows keep the caret slot so sibling names line up (only real children indent further)
+          <span className={styles.toggleSpacer} aria-hidden="true" data-toggle-spacer="" />
         ) : null}
         {ownsTask ? (
           <span className={styles.name} title={task.name}>

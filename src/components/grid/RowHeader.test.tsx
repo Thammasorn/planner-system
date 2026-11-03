@@ -85,9 +85,10 @@ describe('RowHeader ↗ = task page link (M6.1-D17)', () => {
 
   it('parent task row: ↗ links its own task', () => {
     const { header } = renderRow(parent)
-    expect(
-      within(header).getByRole('link', { name: th.grid.row.openTaskPage('POS เฟส 2') }),
-    ).toHaveAttribute('href', '/t/t-parent')
+    expect(within(header).getByRole('link', { name: th.grid.row.openTaskPage('POS เฟส 2') })).toHaveAttribute(
+      'href',
+      '/t/t-parent',
+    )
   })
 
   it('assignee rows have no ↗ (the task row above carries it)', () => {
@@ -179,5 +180,39 @@ describe('RowHeader milestone label + late marker (M8 S3.7, FR-706, AC-702)', ()
     const { header } = renderRow(merged, { milestone: null })
     expect(header.querySelector('[data-ms-link]')).toBeNull()
     expect(header.querySelector('[data-ms-late]')).toBeNull()
+  })
+})
+
+describe('RowHeader caret slot (v3.8): sibling names line up, children indent one step', () => {
+  /** What sits before the name: the task cell's indent and its children up to the name. */
+  function lead(row: ViewRow): { indent: string; slots: string[] } {
+    const { header } = renderRow(row)
+    const cell = header.querySelector<HTMLElement>('[data-task-cell]')!
+    const slots: string[] = []
+    for (const el of Array.from(cell.children)) {
+      if (el.classList.contains('name') || el.textContent === row.task.name) break
+      slots.push(
+        el.hasAttribute('data-toggle-spacer')
+          ? 'slot'
+          : el.tagName === 'BUTTON' && el.hasAttribute('aria-expanded')
+            ? 'slot'
+            : el.tagName,
+      )
+    }
+    const out = { indent: cell.style.paddingLeft, slots }
+    document.body.innerHTML = ''
+    return out
+  }
+
+  it('a parent (▸/▾) and a leaf sibling have the same lead; a child = one indent step further', () => {
+    const p = lead(parent)
+    const leaf = lead(merged)
+    expect(leaf).toEqual(p)
+    expect(p.slots).toEqual(['slot'])
+    const child: ViewRow = { ...merged, key: 'a:a-child', task: task({ id: 't-child', depth: 1 }), depth: 1 }
+    const c = lead(child)
+    expect(c.slots).toEqual(p.slots)
+    expect(c.indent).toBe('calc(var(--space-2) + 1 * var(--space-4))')
+    expect(p.indent).toBe('calc(var(--space-2) + 0 * var(--space-4))')
   })
 })

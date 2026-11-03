@@ -490,6 +490,19 @@
   cursor: pointer;
 }
 
+/* v3.8: the ▸/▾ slot has one fixed width; leaf rows reserve it with .toggleSpacer so sibling names align */
+.toggle,
+.toggleSpacer {
+  width: 20px;
+  min-width: 20px;
+  padding: 0;
+}
+
+.toggleSpacer {
+  flex: none;
+  display: inline-block;
+}
+
 .toggle:hover,
 .iconButton:hover {
   background: var(--brand-light);
