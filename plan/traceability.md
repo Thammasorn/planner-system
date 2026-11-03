@@ -12,6 +12,8 @@
 
 > **Updated 2026-11-03 (SPEC v3.6, owner request — no plan file; decision in `PROGRESS.md` › Decisions, SPEC D29):** new ids BR-103a, AC-814; rows FR-811, FR-812, BR-103, AC-806 updated (calendar bars from planned load when a task has no dates); e2e index `e2e/m11.3-calendar-plan.spec.ts`. Row counts below are pre-v3.6 (BR +1, AC +1).
 
+> **Updated 2026-11-03 (SPEC v3.8, M11.4 — no plan file; sub-plan in `PROGRESS.md`):** new ids FR-668, FR-669, AC-617, AC-618 (team tasks ตาราง + ปฏิทิน, D32); new route `GET /api/tasks/plan-spans`; `GET /api/tasks` cards gain `startDate` / `completedOn` / `plannedCd` + milestone `color`; preference `tasks.view` gains `TABLE` / `CALENDAR`, new key `tasks.table`; e2e index `e2e/m11.4-team-views.spec.ts`. Row counts below are pre-v3.6 (add FR +2, AC +2 for v3.8).
+
 > **Updated 2026-11-03 (SPEC v3.7, owner requests — no plan file; decisions in `PROGRESS.md` › Decisions, SPEC D30/D31):** new ids FR-1417 (per-cell date ranges), FR-1424a (row context menu), AC-1415; rows FR-1410, FR-1442, FR-1452 (panel never scrolls the page), FR-1453 + FR-1475 (nested databases ≤ 3 levels, D30), FR-1474 (nested search hits), BR-90 (option names unique; DATE range shape), BR-92…95, BR-97, AC-1414 updated. Row counts below are pre-v3.6 (FR +2, AC +1 for v3.7).
 
 ## 0. How to read and how to regenerate
@@ -128,6 +130,8 @@ SPEC §4. FR-1101a–f are r7 sub-rows of FR-1101 (one per home card; m10 tracks
 | FR-664 | `+ เพิ่มงาน` per column | M3 | m03 §5.S2.3, §5.S3.16 | int · ui (files per step: `src/server/services/tasks.int.test.ts`) · `src/components/tasks/QuickAdd.test.tsx` (v3.1 row) | §4.6.3 |
 | FR-665 | `/tasks`: visible projects only; columns = categories; filters | M3 | m03 §5.S2.16, §5.S1.4, §5.S3.19 | int `src/server/services/team-tasks.int.test.ts` · `tests/authz/masking.int.test.ts` (m03 §5.S4.3) · `e2e/m3-tasks.spec.ts` › E20 · `src/components/tasks/team/TeamTasks.test.tsx` (v3.1 row) | §4.6.3, X75 |
 | FR-666 | Category drag → first status of that category, or refuse | M3 | m03 §5.S1.4, §5.S3.19 | unit · ui · `e2e/m3-tasks.spec.ts` › E20 | §4.6.3 |
+| FR-668 | v3.8: /tasks ตาราง — view toggle ลิสต์·บอร์ด·ตาราง·ปฏิทิน (`tasks.view` + `?view=`), columns name/project/status/assignees/start/due/milestone/blockers/load, header sort asc→desc→none, show/hide + resize + group by project (`tasks.table`), keyboard grid, row click = panel, Shift+Space/↗ = page, row menu (open, open as page, delete + undo), all pages loaded (≤ 2,000) | M11.4 | M11.4 (PROGRESS.md › M11.4 — no plan file) | unit `src/lib/tasks/team-table.test.ts` · ui `src/components/tasks/team/TeamTable.test.tsx` · int `src/server/services/team-tasks.int.test.ts` (startDate, completedOn, plannedCd, milestone colour) · authz `tests/authz/rows/preferences.ts` (tasks.view TABLE/CALENDAR, tasks.table) · `e2e/m11.4-team-views.spec.ts` › TV1–TV3 | §4.6.3 (v3.8), D32 |
+| FR-669 | v3.8: /tasks ปฏิทิน — the project calendar across visible projects (BR-103/103a bars, project dot + colour, ไม่มีวันที่, +N, phone agenda), click = panel, ↗ = page; spans from `GET /api/tasks/plan-spans` (visible, non-archived projects only; ids + dates only) | M11.4 | M11.4 (PROGRESS.md › M11.4 — no plan file) | unit `src/lib/tasks/team-calendar.test.ts` · ui `src/components/tasks/team/TeamCalendar.test.tsx` · int `src/server/services/plan-spans.int.test.ts` (team spans) · authz `tests/authz/rows/tasks.ts` (team plan-spans rows) · mask `tests/authz/masking.int.test.ts` (Peter, no POS ids) · `e2e/m11.4-team-views.spec.ts` › TC1, TC2 | §4.6.3 (v3.8), §7.8, §3.3, BR-103a, D32 |
 | FR-667 | Person tab + `/my` reuse the component (`/my` keeps X22 grouping) | M3 · M9 | m03 §5.S3.12<br>m09 §5.S4.8, §5.S4.10 | M3: `e2e/m3-tasks.spec.ts` › E13<br>M9: ui `TeamTasks.fixedUser.test.tsx` · mask (via M3's `/api/tasks`) · `e2e/m9-workload.spec.ts` › W10 · ui `TeamTasks.fixedUser.test.tsx`, `src/components/tasks/MyTasks.test.tsx` · `e2e/m9-workload.spec.ts` › W9, W10 | §4.6.3, X22, X77 |
 | FR-680 | Every task has a document body (M4 editor, all blocks except sub-page) | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, D18 |
 | FR-681 | Body = pages row kind TASK 1:1 (task_id unique), created on first edit | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) | §4.6.4, §6.2 |
@@ -382,6 +386,8 @@ SPEC §4 `- AC-…` bullets. M5 has no SPEC AC ids (§4.9); its §12 e2e bullets
 | AC-613 | Drag to "เสร็จ" sets `completed_on`; undo clears it | M3 | m03 §5.S2.6, §5.S3.16 | `e2e/m3-tasks.spec.ts` › E17 · int `src/server/services/task-status.int.test.ts` › BR-80 | §4.6.3 |
 | AC-614 | Delete used status with move; undo restores | M3 | m03 §5.S2.14, §5.S3.18 | `e2e/m3-tasks.spec.ts` › E18 · int `› delete/restore` · int `src/server/services/task-statuses.int.test.ts` › AC-614 | §4.6.3 |
 | AC-615 | Blocker badge, cycle refused, ✓ after done, status unchanged | M3 | m03 §5.S1.6, §5.S2.15, §5.S3.17 | `e2e/m3-tasks.spec.ts` › E19 · int · unit (files per step: `src/domain/blockers.test.ts`, `src/domain/certainty.test.ts`, `src/domain/status.test.ts`, `src/server/services/task-blockers.int.test.ts`) · int `src/server/services/task-blockers.int.test.ts` › AC-615 · unit `src/domain/blockers.test.ts` | §4.6.3 |
+| AC-617 | v3.8: ตาราง via toggle (`?view=table`, survives reload), name sort asc/desc/none, status edit saved, hidden ภาระรวม survives reload, right-click delete + undo | M11.4 | PROGRESS.md › M11.4 | `e2e/m11.4-team-views.spec.ts` › TV1, TV2 · ui `TeamTable.test.tsx` | §4.6.3 (v3.8), D32 |
+| AC-618 | v3.8: plan-only task → "จากแผน" bar with project dot on /tasks ปฏิทิน; Peter sees only his projects and the spans payload has no POS id | M11.4 | PROGRESS.md › M11.4 | `e2e/m11.4-team-views.spec.ts` › TC1, TC2 · mask `tests/authz/masking.int.test.ts` | §4.6.3 (v3.8), §3.3, D32 |
 | AC-616 | Non-member of POS (Peter) sees no POS data in `/tasks` | M3 | m03 §5.S2.16, §5.S3.19 | `e2e/m3-tasks.spec.ts` › E20 (Peter, M3-D34) · `tests/authz/masking.int.test.ts` (m03 §5.S4.3) (world `outsider`) · int `src/server/services/team-tasks.int.test.ts` | §4.6.3, M3-D34 |
 | AC-621 | Write rich body in panel, open as page, same content after reload | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
 | AC-622 | Edit all properties on the task page; list/board/grid agree | M6.1 | m06.1 (plan pending — PLAN §1.8) | TBD (`plan/m06.1-task-page-ui.md`) · `e2e/m6.1-task-page.spec.ts` | §4.6.4 |
@@ -912,3 +918,14 @@ Every spec also runs the M0 auto-fixture guards (`e2e/fixtures.ts`: no external 
 - **m12 perf ids (m12 §1.1 vs §5.S3/§7.4).** m12 §1.1 cites "§7.4 P5/P6/P7/P8 (gate)" for NFR-02b/04/05/06 and "P3 server p95" for NFR-06, but `scripts/perf-check.ts` defines only P1–P4 (+ b/c/d/e) and the browser budgets are PF1–PF6 (`e2e/perf/m12-perf.spec.ts`, m12 §5.S3.4): NFR-02b = PF1, NFR-04 = PF2, NFR-05 = PF3, NFR-06 = PF4 + P3b (search). §5 above uses the §5.S3 ids.
 - **r7 rows files superseded.** r7 §G listed `tests/authz/rows/grid.ts`; the plans put grid reads in `allocations.ts` (M6 GR-*) and `grid-day.ts` (M7 GR-D-*). `leave-types.ts` (M5) and `allocations-day.ts` (M7) are new. This file follows the plans.
 
+### `e2e/m11.4-team-views.spec.ts`
+
+ACs covered: AC-617, AC-618 — scenario ids as built (M11.4 has no plan file; see `PROGRESS.md`).
+
+| Area | ACs | Other ids |
+|---|---|---|
+| TV1 toggle → ตาราง (URL + preference), header sort, hide column persisted | AC-617 | FR-668 |
+| TV2 status edit via keyboard Enter, right-click delete + undo | AC-617 | FR-668, FR-626, FR-609 |
+| TV3 row click → task panel beside the table | AC-617 | FR-668, FR-611 |
+| TC1 plan-only "จากแผน" bar with project dot, click → panel | AC-618 | FR-669, BR-103a |
+| TC2 Peter: only his projects; /api/tasks and /api/tasks/plan-spans carry no POS id | AC-618 | FR-669, §3.3 |

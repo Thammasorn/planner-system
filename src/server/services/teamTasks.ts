@@ -1,12 +1,14 @@
 // src/server/services/teamTasks.ts — `/tasks` (SPEC v3.1 FR-665, §7.8, X75, M3-D33). camelCase file name is the
 // documented exception (X80). Visibility is filtered in SQL through authz.visibleProjectIds (never on the client);
 // archived projects are excluded; keyset pagination of 200 over (coalesce(due, infinity), project_id, position, id).
+// M11.4 (FR-668): cards also carry startDate, completedOn + plannedCd (own live assignees, BR-50, today ± 3 years);
+// milestone refs carry their colour.
 import { and, asc, eq, exists, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import type { Certainty } from '@/domain/types'
+import { addDays, weekStart } from '@/domain/dates'
+import type { Certainty, ISODate } from '@/domain/types'
 import { th } from '@/i18n/th'
-import type { MilestoneRef } from '@/lib/contracts/milestones'
-import type { TaskCard, TaskStatusDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
+import type { TaskStatusDTO, TeamMilestoneRef, TeamTaskCard, TeamTasksResponse } from '@/lib/contracts/tasks'
 import type { TeamTasksQuery } from '@/lib/schemas/tasks'
 import { z } from '@/lib/z'
 import * as authz from '../authz'
@@ -17,6 +19,7 @@ import * as repo from '../repo'
 import { LIVE_MILESTONE_ON } from '../repo/milestones'
 import type { SessionUser } from '../session'
 import { toRef } from './milestones'
+import { lookaroundRange } from './plan-spans'
 import { toStatusDTO } from './taskStatuses'
 
 export const TEAM_TASKS_PAGE = 200
@@ -42,7 +45,13 @@ function decodeCursor(s: string): Cursor {
 
 const sortKey = sql`(coalesce(${tasks.dueDate}, 'infinity'::date), ${tasks.projectId}, ${tasks.position}, ${tasks.id})`
 
-export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQuery): Promise<TeamTasksResponse> {
+/** `today` = serverToday() from the caller (services never read the clock, M1-D4): it centres the plannedCd horizon. */
+export async function listTeamTasks(
+  tx: DbOrTx,
+  user: SessionUser,
+  q: TeamTasksQuery,
+  today: ISODate,
+): Promise<TeamTasksResponse> {
   const visible = await authz.visibleProjectIds(tx, user)
   if (q.projectId !== undefined && !(await authz.projectAccess(tx, user, q.projectId))) throw new NotFoundError()
   if (q.milestoneId !== undefined) {
@@ -99,6 +108,7 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
       id: tasks.id,
       projectId: tasks.projectId,
       name: tasks.name,
+      startDate: tasks.startDate,
       dueDate: tasks.dueDate,
       completedOn: tasks.completedOn,
       position: tasks.position,
@@ -135,19 +145,30 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
     rows.length > TEAM_TASKS_PAGE && last
       ? encodeCursor([last.dueDate, last.projectId, last.position, last.id])
       : null
-  const cards: TaskCard[] = page.map((r) => ({
+  // M11.4 (FR-668): Σ counted load (BR-50) of each card's own live assignees, one grouped query bounded by the X66
+  // horizon around this week (§6.5: every allocations read carries a week_start range)
+  const thisWeek = weekStart(today)
+  const planned = await repo.allocations.sumCountedByTask(
+    tx,
+    page.map((r) => r.id),
+    lookaroundRange({ from: thisWeek, to: addDays(thisWeek, 7) }),
+  )
+  const cards: TeamTaskCard[] = page.map((r) => ({
     id: r.id,
     projectId: r.projectId,
     name: r.name,
     parentPath: [r.grandparentName, r.parentName].filter((n): n is string => n !== null),
     status: { id: r.statusId, name: r.statusName, color: r.statusColor, category: r.statusCategory },
     assigneeIds: r.assigneeIds,
+    startDate: r.startDate,
     dueDate: r.dueDate,
     certainty: r.certainty,
     completed: r.completedOn !== null,
+    completedOn: r.completedOn,
     blockers: { open: r.blockersOpen, total: r.blockersTotal },
     hasBody: r.hasBody,
     milestoneId: r.milestoneId,
+    plannedCd: planned.get(r.id) ?? 0,
   }))
   const projectIds = [...new Set(cards.map((c) => c.projectId))]
   const projectRows = await repo.projects.listProjects(tx, { ids: new Set(projectIds) })
@@ -155,10 +176,10 @@ export async function listTeamTasks(tx: DbOrTx, user: SessionUser, q: TeamTasksQ
   const statusesByProject: Record<string, TaskStatusDTO[]> = {}
   for (const s of statusRows) (statusesByProject[s.projectId] ??= []).push(toStatusDTO(s))
   // M8-D15: live milestones of the projects present in this page only (one query)
-  const milestonesByProject: Record<string, MilestoneRef[]> = {}
+  const milestonesByProject: Record<string, TeamMilestoneRef[]> = {}
   for (const m of await repo.milestones.listLiveForProjectIds(tx, projectIds)) {
     const list = (milestonesByProject[m.projectId] ??= [])
-    list.push(toRef(m))
+    list.push({ ...toRef(m), color: m.color }) // M11.4 (FR-668): ◆ colour in the table
   }
   return {
     cards,

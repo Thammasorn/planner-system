@@ -19,3 +19,12 @@ export interface PlanSpansResponse {
   /** in task-id order */
   spans: TaskPlanSpan[]
 }
+
+/** GET /api/tasks/plan-spans?from&to[&projectId] (M11.4, FR-669): the team calendar's plan-derived spans — live tasks of
+ *  every visible, non-archived project (the /api/tasks set before its filters); ids + dates only, no names. */
+export interface TeamPlanSpansResponse {
+  from: ISODate
+  to: ISODate
+  /** in task-id order */
+  spans: TaskPlanSpan[]
+}

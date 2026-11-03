@@ -9,6 +9,8 @@ import { GET as getPlanSpans } from '@/app/api/projects/[id]/plan-spans/route'
 import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
+import { GET as getTeamPlanSpans } from '@/app/api/tasks/plan-spans/route'
+import type { TeamPlanSpansResponse } from '@/lib/contracts/plan-spans'
 import type { SidebarResponse } from '@/lib/contracts/sidebar'
 import type { MyTaskBucketsResponse } from '@/lib/contracts/tasks'
 import {
@@ -24,7 +26,7 @@ import {
   uncompleteTask,
   updateTask,
 } from '@/server/actions/tasks'
-import { makeTask, type TestUser } from '../../helpers/factories'
+import { makeAllocation, makeAssignment, makeTask, type TestUser } from '../../helpers/factories'
 import type { World } from '../../helpers/world'
 import { callRoute } from '../_support/http'
 import { defineRow, type AuthzRow } from '../types'
@@ -33,6 +35,13 @@ import { pinToday } from './_m5'
 const TASKS = ['tasks'] as const
 /** The November 2026 month grid (Mondays, `to` exclusive). */
 const PLAN_SPAN_Q = 'from=2026-10-26&to=2026-12-07'
+const TEAM_PLAN_SPANS_ROUTE = 'GET /api/tasks/plan-spans'
+
+/** A manager assignment on `taskId` with 100 cd in the week of 2026-11-09 (the world's own assignees stay as they are). */
+async function planWeek(w: World, taskId: string): Promise<void> {
+  const a = await makeAssignment({ task: { id: taskId }, user: w.manager })
+  await makeAllocation({ assignment: a, period: '2026-11-09', cd: 100 })
+}
 const ALL = { M: 'allow', L: 'allow', Me: 'allow', W: 'allow' } as const
 /** PERM-06 / PERM-11: the team of P (and A) may; the outsider never sees it (404). */
 const TEAM = { M: 'allow', L: 'allow', Me: 'allow', W: '404' } as const
@@ -110,6 +119,61 @@ export const rows: AuthzRow[] = [
     expect: { M: '404', L: '404', Me: '404', W: '404' },
     run: () =>
       callRoute(getPlanSpans, `/api/projects/not-a-uuid/plan-spans?${PLAN_SPAN_Q}`, { id: 'not-a-uuid' }),
+  }),
+  // M11.4 (FR-669): the team calendar's plan-derived spans — every role; visibility filtered in SQL (PERM-06)
+  defineRow({
+    id: 'T-TEAMSPANS',
+    spec: 'PERM-06 + FR-669 M11.4 — GET /api/tasks/plan-spans (spans of visible, non-archived projects only)',
+    action: TEAM_PLAN_SPANS_ROUTE,
+    mutates: false,
+    with: TASKS,
+    setup: async (w) => {
+      await planWeek(w, w.tasks.pLeaf.id)
+      await planWeek(w, w.tasks.qTask.id)
+      await planWeek(w, w.tasks.aTask.id)
+    },
+    expect: ALL,
+    run: async (w, _ctx, actor) => {
+      const res = await callRoute(getTeamPlanSpans, `/api/tasks/plan-spans?${PLAN_SPAN_Q}`)
+      if (res.status === 200) {
+        const body = (await res.clone().json()) as TeamPlanSpansResponse
+        const want =
+          actor.id === w.manager.id
+            ? [w.tasks.pLeaf.id, w.tasks.qTask.id]
+            : actor.id === w.outsider.id
+              ? [w.tasks.qTask.id]
+              : [w.tasks.pLeaf.id]
+        expect(body.spans.map((s) => s.taskId).sort(), 'visible non-archived tasks only').toEqual(want.sort())
+      }
+      return res
+    },
+  }),
+  defineRow({
+    id: 'T-TEAMSPANS-P',
+    spec: 'PERM-06 + FR-669 — GET /api/tasks/plan-spans?projectId={P}: the outsider gets 404',
+    action: TEAM_PLAN_SPANS_ROUTE,
+    mutates: false,
+    with: TASKS,
+    expect: TEAM,
+    run: (w) => callRoute(getTeamPlanSpans, `/api/tasks/plan-spans?${PLAN_SPAN_Q}&projectId=${w.P.id}`),
+  }),
+  defineRow({
+    id: 'T-TEAMSPANS-Q',
+    spec: 'PERM-06 + FR-669 — GET /api/tasks/plan-spans?projectId={Q}: P’s team gets 404',
+    action: TEAM_PLAN_SPANS_ROUTE,
+    mutates: false,
+    with: TASKS,
+    expect: { M: 'allow', L: '404', Me: '404', W: 'allow' },
+    run: (w) => callRoute(getTeamPlanSpans, `/api/tasks/plan-spans?${PLAN_SPAN_Q}&projectId=${w.Q.id}`),
+  }),
+  defineRow({
+    id: 'T-TEAMSPANS-BAD',
+    spec: 'FR-669 — a range that is not a month grid (not Mondays / > 42 days) → 400 VALIDATION',
+    action: TEAM_PLAN_SPANS_ROUTE,
+    mutates: false,
+    with: TASKS,
+    expect: { M: '400', L: '400', Me: '400', W: '400' },
+    run: () => callRoute(getTeamPlanSpans, '/api/tasks/plan-spans?from=2026-11-03&to=2026-12-07'),
   }),
   defineRow({
     id: 'T-MY',

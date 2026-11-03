@@ -1,9 +1,18 @@
 // M3 S2.16 — /tasks reads (SPEC v3.1 FR-665, §7.8, X75, M3-D33/D34, AC-616) on the golden seed and the world.
+import { randomUUID } from 'node:crypto'
 import { eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { addMilestones, seedGolden } from '../../../scripts/lib/fixtures'
 import { asUser, toSessionUser } from '../../../tests/helpers/as-user'
-import { makeStatuses, makeTask } from '../../../tests/helpers/factories'
+import {
+  makeAllocation,
+  makeAssignment,
+  makeDayAllocations,
+  makeMilestone,
+  makeStatuses,
+  makeTask,
+  makeUser,
+} from '../../../tests/helpers/factories'
 import { createWorld } from '../../../tests/helpers/world'
 import { db } from '../db/client'
 import { projects, user } from '../db/schema'
@@ -11,6 +20,8 @@ import type { SessionUser } from '../session'
 import { listTeamTasks } from './teamTasks'
 
 const Q0 = { blocked: false, includeDone: false } as const
+/** Wednesday 2026-11-04 — plannedCd horizon = weekStart ± 3 years (X66). */
+const TODAY = '2026-11-04'
 
 async function golden(nickname: string): Promise<SessionUser> {
   const [u] = await db.select().from(user).where(eq(user.nickname, nickname))
@@ -28,7 +39,7 @@ async function golden(nickname: string): Promise<SessionUser> {
   }
 }
 const list = (u: SessionUser, q: Parameters<typeof listTeamTasks>[2] = Q0) =>
-  db.transaction((tx) => listTeamTasks(tx, u, q))
+  db.transaction((tx) => listTeamTasks(tx, u, q, TODAY))
 
 describe('listTeamTasks (golden)', () => {
   it('AC-616: Peter sees exactly DW + Store tasks and nothing of POS / Mobile / CRM', async () => {
@@ -93,8 +104,9 @@ describe('listTeamTasks (world)', () => {
       completed: false,
     })
     expect(Object.keys(all.cards[0]!).sort()).toEqual(
-      // M6.1 adds hasBody (FR-691, M6.1-D11); M8 adds milestoneId (SPEC §7.8, M8-D15)
-      ['assigneeIds', 'blockers', 'certainty', 'completed', 'dueDate', 'hasBody', 'id', 'milestoneId', 'name', 'parentPath', 'projectId', 'status'].sort(),
+      // M6.1 adds hasBody (FR-691, M6.1-D11); M8 adds milestoneId (SPEC §7.8, M8-D15); M11.4 adds completedOn,
+      // plannedCd and startDate (FR-668)
+      ['assigneeIds', 'blockers', 'certainty', 'completed', 'completedOn', 'dueDate', 'hasBody', 'id', 'milestoneId', 'name', 'parentPath', 'plannedCd', 'projectId', 'startDate', 'status'].sort(),
     )
     // outsider: Q only
     const out = await list(toSessionUser(w.outsider), { ...Q0, includeDone: true })
@@ -172,5 +184,69 @@ describe('listTeamTasks — milestones (M8-D15, §7.8, §3.3)', () => {
     const outsider = await list(toSessionUser(w.outsider), { ...Q0, milestoneId: w.milestones.q.id })
     expect(outsider.cards.map((c) => c.id)).toEqual([w.tasks.qTask.id])
     expect(outsider.cards[0]!.milestoneId).toBe(w.milestones.q.id)
+  })
+})
+
+describe('listTeamTasks — table columns (M11.4, FR-668)', () => {
+  it('startDate; plannedCd = Σ counted load of own live assignees (BR-50, deleted excluded, parent own-only, horizon)', async () => {
+    const w = await createWorld({ with: ['tasks'] })
+    const t = await makeTask({ project: w.P, name: 'load', createdBy: w.manager, startDate: '2026-11-02' })
+    const a1 = await makeAssignment({ task: t, user: w.lead })
+    const a2 = await makeAssignment({ task: t, user: w.member })
+    await makeAllocation({ assignment: a1, period: '2026-11-09', cd: 300 })
+    await makeDayAllocations({ assignment: a1, days: { '2026-11-04': 50, '2026-11-05': 100 } })
+    await makeAllocation({ assignment: a2, period: '2025-01-06', cd: 25 }) // in the past, still inside the horizon
+    const gone = await makeAssignment({
+      task: t,
+      user: await makeUser(),
+      deleted: { daysAgo: 1, batch: randomUUID() },
+    })
+    await makeAllocation({ assignment: gone, period: '2026-11-16', cd: 100 })
+    // beyond weekStart(today) + 3 years (X66 horizon) → not summed
+    await makeAllocation({ assignment: a2, period: '2031-01-06', cd: 100 })
+
+    // completed 2026-09-28 (its week): only rows of weeks ≤ the completed week count (BR-50)
+    const done = await makeAssignment({ task: w.tasks.pDone, user: w.lead })
+    await makeAllocation({ assignment: done, period: '2026-09-21', cd: 100 })
+    await makeAllocation({ assignment: done, period: '2026-09-28', cd: 50 })
+    await makeAllocation({ assignment: done, period: '2026-10-12', cd: 100 })
+
+    // a parent never sums its children (own assignees only)
+    const child = await makeAssignment({ task: w.tasks.pChildA, user: w.lead })
+    await makeAllocation({ assignment: child, period: '2026-11-23', cd: 100 })
+
+    const all = await list(toSessionUser(w.manager), { ...Q0, includeDone: true })
+    const card = (id: string) => all.cards.find((c) => c.id === id)!
+    expect(card(t.id)).toMatchObject({ startDate: '2026-11-02', plannedCd: 475 })
+    expect(card(w.tasks.pDone.id)).toMatchObject({
+      plannedCd: 150,
+      completed: true,
+      completedOn: '2026-09-28',
+    })
+    expect(card(w.tasks.pChildA.id).plannedCd).toBe(100)
+    expect(card(w.tasks.pParent.id).plannedCd).toBe(0)
+    expect(card(w.tasks.pLeaf.id)).toMatchObject({ plannedCd: 0, startDate: null, completedOn: null })
+    for (const c of all.cards) expect(Number.isInteger(c.plannedCd)).toBe(true)
+  })
+
+  it('milestonesByProject refs carry the milestone colour', async () => {
+    const w = await createWorld({ with: ['milestones'] })
+    const red = await makeMilestone({
+      project: w.P,
+      name: 'สีแดง',
+      date: '2026-12-01',
+      createdBy: w.manager,
+      color: 'RED',
+    })
+    const r = await list(toSessionUser(w.member))
+    const refs = r.milestonesByProject[w.P.id]!
+    expect(refs.find((m) => m.id === red.id)).toEqual({
+      id: red.id,
+      name: 'สีแดง',
+      date: '2026-12-01',
+      completedOn: null,
+      color: 'RED',
+    })
+    expect(refs.find((m) => m.id === w.milestones.p.id)?.color).toBe('PURPLE')
   })
 })

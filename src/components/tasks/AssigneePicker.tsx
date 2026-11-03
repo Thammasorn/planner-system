@@ -18,6 +18,8 @@ export interface AssigneePickerProps {
   autoFocus?: boolean
   /** Popover use: Escape closes the picker in one press. */
   onClose?: () => void
+  /** M11.4 (/tasks ตาราง): called with each picked person, after the assign is sent (mirror it on other caches). */
+  onAssigned?: (userId: string) => void
 }
 
 /**
@@ -32,6 +34,7 @@ export function AssigneePicker({
   canManage,
   autoFocus,
   onClose,
+  onAssigned,
 }: AssigneePickerProps) {
   const people = usePeopleOptions()
   const m = useTaskMutations(projectId)
@@ -52,7 +55,10 @@ export function AssigneePicker({
       loading={people.isLoading}
       loadError={people.isError}
       onRetry={() => void people.refetch()}
-      onSelect={(p) => m.assign([taskId], p.id)}
+      onSelect={(p) => {
+        m.assign([taskId], p.id)
+        onAssigned?.(p.id)
+      }}
     />
   )
 }

@@ -5,7 +5,7 @@ import type { PersonOption } from '@/lib/contracts/people'
 import type { TaskDTO } from '@/lib/contracts/tasks'
 import { displayName } from '@/lib/display-name'
 import { formatThaiDateRange, formatThaiDate } from '@/lib/format'
-import { barSpan, type BarSpan } from '@/lib/plan-calendar/bars'
+import { barSpan, type BarSpan, type CalendarTask } from '@/lib/plan-calendar/bars'
 
 /** Names shown on a bar: none → "รอมอบหมาย"; ≤ 2 → "Cindy, Ivy"; more → "Cindy, Ivy +1" (FR-811). */
 export function assigneeText(userIds: readonly string[], people: ReadonlyMap<string, PersonOption>): string {
@@ -43,10 +43,19 @@ export function assigneeIdsByTask(tasks: readonly TaskDTO[]): Map<string, string
 /** A task of the calendar: the DTO + its plan-derived span (v3.6 BR-103a; from GET …/plan-spans). */
 export type CalendarTaskDTO = TaskDTO & { planSpan?: { start: string; end: string } | null }
 
+/** What a bar reads of its task — the project calendar passes CalendarTaskDTO, /tasks' ปฏิทิน (M11.4) its cards. */
+export interface BarTask extends CalendarTask {
+  name: string
+  hasBody: boolean
+  blockers: { open: number; total: number }
+}
+
 export interface BarInfo {
-  task: CalendarTaskDTO
+  task: BarTask
   assignees: string
   certainty: Certainty
+  /** M11.4 (FR-669): the team calendar colours each bar by its project (dot + `--bar-color`) and names it */
+  project?: { name: string; color: string }
 }
 
 /** Which side of the bar came from the plan, spoken / shown (BR-103a); null = explicit dates only. */
@@ -66,7 +75,8 @@ function rangeText(span: BarSpan): string {
 export function barTitle(b: BarInfo): string {
   const span = barSpan(b.task)
   const source = planSource(span)
-  return span && source ? th.planCalendar.planTitle(barText(b), source, rangeText(span)) : barText(b)
+  const text = b.project ? `${barText(b)} · ${b.project.name}` : barText(b)
+  return span && source ? th.planCalendar.planTitle(text, source, rangeText(span)) : text
 }
 
 /** The bar's visible text: "ชื่องาน · ชื่อผู้รับผิดชอบ". */
@@ -77,6 +87,7 @@ export function barText(b: BarInfo): string {
 /** Accessible name of a bar / agenda row: text, dates, then each state glyph spelled out (§8.9, never colour alone). */
 export function barLabel(b: BarInfo, cut: { left?: boolean; right?: boolean } = {}): string {
   const parts = [barText(b)]
+  if (b.project) parts.push(th.teamTasks.calendar.projectOf(b.project.name))
   const span = barSpan(b.task)
   if (span) parts.push(rangeText(span))
   const source = planSource(span)

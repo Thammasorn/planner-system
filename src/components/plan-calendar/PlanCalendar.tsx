@@ -281,7 +281,8 @@ export function PlanCalendar({ projectId, projectColor, toolbarStart, onOpenTask
   )
 }
 
-function CalendarGrid(p: CalendarViewProps & { onMonthChange: (m: YearMonth) => void }) {
+/** The month grid itself — exported for /tasks' ปฏิทิน (M11.4, FR-669), which brings its own data and toolbar. */
+export function CalendarGrid(p: CalendarViewProps & { onMonthChange: (m: YearMonth) => void }) {
   const { month, today } = p
   const { from, to, weeks } = useMemo(() => monthGrid(month), [month])
   const rows = useMemo(

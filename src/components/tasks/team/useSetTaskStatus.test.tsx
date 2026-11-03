@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { useUndo } from '@/components/undo/useUndo'
 import { th } from '@/i18n/th'
-import type { SetTaskStatusResult, TaskCard } from '@/lib/contracts/tasks'
+import type { SetTaskStatusResult, TeamTaskCard } from '@/lib/contracts/tasks'
 import { PID, S, STATUSES, T } from '../fixtures.test.data'
 import { ok, renderTasks } from '../render.test.helper'
 import { useSetTaskStatus } from './useSetTaskStatus'
@@ -17,7 +17,7 @@ vi.mock('@/server/actions/tasks', () => ({
 }))
 
 const done = STATUSES.find((s) => s.id === S.done)!
-const card: TaskCard = {
+const card: TeamTaskCard = {
   id: T.a,
   projectId: PID,
   name: 'งาน A',
@@ -30,6 +30,9 @@ const card: TaskCard = {
   blockers: { open: 0, total: 0 },
   hasBody: false,
   milestoneId: null,
+  startDate: null,
+  completedOn: null,
+  plannedCd: 0,
 }
 const prev = { statusId: S.todo, completedOn: null }
 

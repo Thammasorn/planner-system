@@ -9,6 +9,8 @@ import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
+import TableChartOutlined from '@mui/icons-material/TableChartOutlined'
 import ViewKanbanOutlined from '@mui/icons-material/ViewKanbanOutlined'
 import ViewListOutlined from '@mui/icons-material/ViewListOutlined'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -16,39 +18,71 @@ import { th } from '@/i18n/th'
 import type { MilestoneRef } from '@/lib/contracts/milestones'
 import type { PersonOption } from '@/lib/contracts/people'
 import { displayName } from '@/lib/display-name'
-import { TASK_GROUP_BY, TASK_SORT, taskPreference } from '@/lib/schemas/preferences'
+import { TASK_GROUP_BY, TASK_SORT, taskPreference, type TaskView } from '@/lib/schemas/preferences'
 import type { BoardMilestoneFilter } from '@/lib/tasks/board'
-
-type View = 'LIST' | 'BOARD'
 
 /** Non-empty sentinel for "ทุกคน": an empty value with `displayEmpty` leaves the outlined label un-notched, drawn
  *  over the placeholder (M8 review). Member ids are UUIDs, so it never collides. */
 const ALL_ASSIGNEES = 'ALL'
 
-/** ลิสต์ · บอร์ด toggle (FR-660, `tasks.view`), shared by the project tasks tab and /tasks. */
-export function ViewToggle() {
+const VIEW_ICONS: Record<TaskView, typeof ViewListOutlined> = {
+  LIST: ViewListOutlined,
+  BOARD: ViewKanbanOutlined,
+  TABLE: TableChartOutlined,
+  CALENDAR: CalendarMonthOutlined,
+}
+
+/** The project งาน tab only has ลิสต์ · บอร์ด (FR-660): /tasks' ตาราง / ปฏิทิน (M11.4) read as ลิสต์ there. */
+export function projectTaskView(view: TaskView): 'LIST' | 'BOARD' {
+  return view === 'BOARD' ? 'BOARD' : 'LIST'
+}
+
+/**
+ * The view toggle (FR-660, `tasks.view`): ลิสต์ · บอร์ด on the project tasks tab; /tasks adds ตาราง · ปฏิทิน (M11.4,
+ * FR-668/669) and passes its own `value` / `onChange` (it also mirrors the view in the URL).
+ */
+export function ViewToggle({
+  views = ['LIST', 'BOARD'],
+  value,
+  onChange,
+}: {
+  views?: readonly TaskView[]
+  value?: TaskView
+  onChange?: (v: TaskView) => void
+} = {}) {
   const { prefs, setPreference } = usePreferences()
-  const view = taskPreference(prefs, 'tasks.view')
+  const stored = taskPreference(prefs, 'tasks.view')
+  const current = value ?? (views.includes(stored) ? stored : 'LIST')
   return (
     <ToggleButtonGroup
       exclusive
       size="small"
-      value={view}
+      value={current}
       aria-label={th.tasks.view.label}
-      onChange={(_e, v: View | null) => {
-        if (v) setPreference('tasks.view', v)
+      onChange={(_e, v: TaskView | null) => {
+        if (!v) return
+        if (onChange) onChange(v)
+        else setPreference('tasks.view', v)
       }}
     >
-      <ToggleButton value="LIST">
-        <ViewListOutlined fontSize="small" sx={{ mr: 0.5 }} aria-hidden="true" />
-        {th.tasks.view.list}
-      </ToggleButton>
-      <ToggleButton value="BOARD">
-        <ViewKanbanOutlined fontSize="small" sx={{ mr: 0.5 }} aria-hidden="true" />
-        {th.tasks.view.board}
-      </ToggleButton>
+      {views.map((v) => {
+        const Icon = VIEW_ICONS[v]
+        return (
+          <ToggleButton key={v} value={v}>
+            <Icon fontSize="small" sx={{ mr: 0.5 }} aria-hidden="true" />
+            {VIEW_LABELS[v]}
+          </ToggleButton>
+        )
+      })}
     </ToggleButtonGroup>
   )
+}
+
+const VIEW_LABELS: Record<TaskView, string> = {
+  LIST: th.tasks.view.list,
+  BOARD: th.tasks.view.board,
+  TABLE: th.tasks.view.table,
+  CALENDAR: th.tasks.view.calendar,
 }
 
 function PrefSwitch({
@@ -95,7 +129,7 @@ export function TaskToolbar({
   onMilestone?: (v: BoardMilestoneFilter) => void
 }) {
   const { prefs, setPreference } = usePreferences()
-  const view = taskPreference(prefs, 'tasks.view')
+  const view = projectTaskView(taskPreference(prefs, 'tasks.view'))
   const groupId = useId()
   const sortId = useId()
   const assigneeLabelId = useId()

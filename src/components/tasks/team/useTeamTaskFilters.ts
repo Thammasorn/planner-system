@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { TASK_VIEWS, type TaskView } from '@/lib/schemas/preferences'
 import {
   teamTasksQueryFromSearchParams,
   teamTasksQuerySchema,
@@ -34,6 +35,22 @@ export function teamFiltersToSearchParams(f: TeamTaskFilters, cursor?: string): 
   })
 }
 
+/** M11.4: `?view=list|board|table|calendar` (lowercase in the URL; wins over the stored `tasks.view`). */
+export function parseTeamView(sp: URLSearchParams): TaskView | undefined {
+  const raw = sp.get('view')?.toUpperCase()
+  return TASK_VIEWS.find((v) => v === raw)
+}
+
+/** The page URL for these filters + view; other params (`?task=` of the panel) are kept. */
+export function teamTasksUrl(f: TeamTaskFilters, view: TaskView | undefined, current: URL): string {
+  const qs = teamFiltersToSearchParams(f)
+  if (view) qs.set('view', view.toLowerCase())
+  const task = current.searchParams.get('task')
+  if (task) qs.set('task', task)
+  const s = qs.toString()
+  return `${current.pathname}${s ? `?${s}` : ''}${current.hash}`
+}
+
 /**
  * /tasks filter state (M3-D33/D41): read from the URL once on mount, mirrored with history.replaceState only when
  * `syncUrl` (M9's person tab passes false), never stored in preferences. Changing the project clears `milestoneId`
@@ -44,20 +61,25 @@ export function useTeamTaskFilters({ syncUrl }: { syncUrl: boolean }) {
   const [filters, setFiltersState] = useState<TeamTaskFilters>(() =>
     syncUrl ? parseTeamFilters(new URLSearchParams(sp.toString())) : EMPTY_TEAM_FILTERS,
   )
+  const [view, setViewState] = useState<TaskView | undefined>(() =>
+    syncUrl ? parseTeamView(new URLSearchParams(sp.toString())) : undefined,
+  )
+  const write = (f: TeamTaskFilters, v: TaskView | undefined) => {
+    if (syncUrl) window.history.replaceState(null, '', teamTasksUrl(f, v, new URL(window.location.href)))
+  }
   const setFilters = (next: TeamTaskFilters) => {
     setFiltersState(next)
-    if (!syncUrl) return
-    const qs = teamFiltersToSearchParams(next).toString()
-    window.history.replaceState(
-      null,
-      '',
-      `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`,
-    )
+    write(next, view)
+  }
+  /** M11.4: the chosen view, mirrored in the URL (the caller also saves `tasks.view`). */
+  const setView = (v: TaskView) => {
+    setViewState(v)
+    write(filters, v)
   }
   const patch = (p: Partial<TeamTaskFilters>) => {
     const projectChanged = 'projectId' in p && p.projectId !== filters.projectId
     setFilters({ ...filters, ...p, ...(projectChanged ? { milestoneId: undefined } : {}) })
   }
   const clear = () => setFilters(EMPTY_TEAM_FILTERS)
-  return { filters, setFilters, patch, clear }
+  return { filters, setFilters, patch, clear, view, setView }
 }

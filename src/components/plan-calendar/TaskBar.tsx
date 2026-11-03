@@ -35,10 +35,12 @@ export function TaskBar(p: TaskBarProps) {
     e.stopPropagation()
     p.onOpenPage(t.id)
   }
+  const project = p.info.project
+  const style = project ? ({ ...p.style, '--bar-color': project.color } as CSSProperties) : p.style
   return (
     <div
       className={p.className}
-      style={p.style}
+      style={style}
       data-open-host=""
       data-task-bar={t.id}
       data-tentative={tentative ? true : undefined}
@@ -73,6 +75,7 @@ export function TaskBar(p: TaskBarProps) {
             {th.projects.tentativeGlyph}
           </span>
         ) : null}
+        {project ? <span aria-hidden="true" className={styles.projectDot} data-testid="bar-project-dot" /> : null}
         <span className={styles.barText}>{barText(p.info)}</span>
         {fromPlan ? (
           <span aria-hidden="true" className={styles.fromPlanTag} data-testid="from-plan-tag">

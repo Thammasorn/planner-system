@@ -9,7 +9,7 @@ import type { BoardMilestoneFilter } from '@/lib/tasks/board'
 import { ProjectBoard } from './board/ProjectBoard'
 import { TaskList } from './TaskList'
 import { TaskPanel } from './TaskPanel'
-import { TaskToolbar } from './TaskToolbar'
+import { projectTaskView, TaskToolbar } from './TaskToolbar'
 import { useProjectTasks } from './useProjectTasks'
 
 /**
@@ -18,7 +18,7 @@ import { useProjectTasks } from './useProjectTasks'
  */
 export function TasksView({ projectId }: { projectId: string }) {
   const { prefs } = usePreferences()
-  const view = taskPreference(prefs, 'tasks.view')
+  const view = projectTaskView(taskPreference(prefs, 'tasks.view')) // M11.4: ตาราง / ปฏิทิน are /tasks-only
   const q = useProjectTasks(projectId)
   const people = usePeopleOptions()
   const [assigneeId, setAssigneeId] = useState<string | null>(null)

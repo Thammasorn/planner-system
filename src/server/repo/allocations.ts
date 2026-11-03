@@ -470,16 +470,50 @@ export async function firstPlannedWeekByAssignment(
 
 // ── v3.6 project calendar from the plan (SPEC FR-812, BR-103a) ──
 
+/** One live assignment's first / last week with counted load in a range (FR-812, BR-103a). */
+export interface PlannedWeekBounds {
+  assignmentId: string
+  taskId: string
+  userId: string
+  first: ISODate
+  last: ISODate
+}
+
 /** Per live assignment of the project's live tasks: the first and last week in `range` with counted load (BR-50;
- *  person_days > 0 is a table check).
+ *  person_days > 0 is a table check). The project may be archived (the project calendar reads archived projects).
  *  Assignments without load in range are absent. One grouped scan bounded by week_start (§6.5). */
 export async function plannedWeekBoundsForProject(
   tx: DbOrTx,
   projectId: string,
   range: WeekRange,
-): Promise<{ assignmentId: string; taskId: string; userId: string; first: ISODate; last: ISODate }[]> {
+): Promise<PlannedWeekBounds[]> {
+  return plannedWeekBounds(tx, eq(tasks.projectId, projectId), range, false)
+}
+
+/** M11.4 (FR-669): the same bounds for the live tasks of `projectIds` (or every project for 'ALL') whose project is
+ *  neither archived nor deleted — the /api/tasks project set. An empty id list → []. */
+export async function plannedWeekBoundsForProjects(
+  tx: DbOrTx,
+  projectIds: readonly string[] | 'ALL',
+  range: WeekRange,
+): Promise<PlannedWeekBounds[]> {
+  if (projectIds !== 'ALL' && projectIds.length === 0) return []
+  return plannedWeekBounds(
+    tx,
+    projectIds === 'ALL' ? undefined : inArray(tasks.projectId, [...new Set(projectIds)]),
+    range,
+    true,
+  )
+}
+
+async function plannedWeekBounds(
+  tx: DbOrTx,
+  scope: SQL | undefined,
+  range: WeekRange,
+  activeProjectsOnly: boolean,
+): Promise<PlannedWeekBounds[]> {
   if (compareISO(range.from, range.to) >= 0) return []
-  return tx
+  const base = tx
     .select({
       assignmentId: taskAssignments.id,
       taskId: taskAssignments.taskId,
@@ -493,7 +527,35 @@ export async function plannedWeekBoundsForProject(
       and(eq(taskAssignments.id, allocations.taskAssignmentId), isNull(taskAssignments.deletedAt)),
     )
     .innerJoin(tasks, and(eq(tasks.id, taskAssignments.taskId), isNull(tasks.deletedAt)))
-    .where(and(eq(tasks.projectId, projectId), inWeeks(range), countedSql))
+  const scoped = activeProjectsOnly
+    ? base.innerJoin(
+        projects,
+        and(eq(projects.id, tasks.projectId), isNull(projects.archivedAt), isNull(projects.deletedAt)),
+      )
+    : base
+  return scoped
+    .where(and(scope, inWeeks(range), countedSql))
     .groupBy(taskAssignments.id, taskAssignments.taskId, taskAssignments.userId)
     .orderBy(asc(taskAssignments.id))
+}
+
+/** M11.4 (FR-668, the ตาราง "ภาระ" column): Σ counted load (BR-50) per task over its OWN live assignments in `range`
+ *  (a parent never sums its children). One grouped query; tasks without counted load are absent (= 0). */
+export async function sumCountedByTask(
+  tx: DbOrTx,
+  taskIds: readonly string[],
+  range: WeekRange,
+): Promise<Map<string, Cd>> {
+  if (taskIds.length === 0 || compareISO(range.from, range.to) >= 0) return new Map()
+  const rows = await tx
+    .select({ id: taskAssignments.taskId, cd: cdSum })
+    .from(allocations)
+    .innerJoin(
+      taskAssignments,
+      and(eq(taskAssignments.id, allocations.taskAssignmentId), isNull(taskAssignments.deletedAt)),
+    )
+    .innerJoin(tasks, eq(tasks.id, taskAssignments.taskId))
+    .where(and(inArray(taskAssignments.taskId, [...new Set(taskIds)]), inWeeks(range), countedSql))
+    .groupBy(taskAssignments.taskId)
+  return new Map(rows.map((r) => [r.id, r.cd]))
 }

@@ -26,6 +26,7 @@ import { GET as getProjectStatuses } from '@/app/api/projects/[id]/statuses/rout
 import { GET as getProjectTasks } from '@/app/api/projects/[id]/tasks/route'
 import { GET as getSidebar } from '@/app/api/sidebar/route'
 import { GET as getMyTasks } from '@/app/api/tasks/my/route'
+import { GET as getTeamPlanSpans } from '@/app/api/tasks/plan-spans/route'
 import { GET as getTeamTasks } from '@/app/api/tasks/route'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { weekRange } from '@/domain/dates'
@@ -55,6 +56,7 @@ import type {
 import type { MilestoneTargetsResponse } from '@/lib/contracts/milestones'
 import type { PageTitlesResponse, PageTreeResponse, PageView } from '@/lib/contracts/pages'
 import type { PeopleOptionsResponse } from '@/lib/contracts/people'
+import type { TeamPlanSpansResponse } from '@/lib/contracts/plan-spans'
 import type { EmbedTasksResponse, EmbedWorkloadResponse } from '@/lib/contracts/embed'
 import type { HomeLeaveEntry, HomeResponse } from '@/lib/contracts/home'
 import type { SearchAllResponse, SearchIndexResponse, SearchResponse } from '@/lib/contracts/search'
@@ -468,6 +470,53 @@ describe('masking — golden (r6a M2-17, r8 §4.3)', () => {
     const my = await okJson<MyTaskBucketsResponse>(await callRoute(getMyTasks, '/api/tasks/my'))
     assertNoLeak(my, hidden)
     expect(myTasksOf(my).length, 'Peter has open DW / Store tasks on /my').toBeGreaterThan(0)
+  })
+
+  it('Peter: GET /api/tasks/plan-spans (Nov 2026, POS has plans) carries no POS / Mobile / CRM task id, project id or name (M11.4)', async () => {
+    const peter = await goldenUser('Peter')
+    const hiddenProjects: GoldenProject[] = ['POS Upgrade', 'Mobile App Revamp', 'CRM Migration']
+    const hiddenProjectIds = await Promise.all(hiddenProjects.map((n) => goldenProjectId(n)))
+    const taskIdsOf = async (projectIds: string[]) =>
+      (
+        await db
+          .select({ id: tasksTable.id })
+          .from(tasksTable)
+          .where(and(inArray(tasksTable.projectId, projectIds), isNull(tasksTable.deletedAt)))
+      ).map((r) => r.id)
+    const hiddenTaskIds = await taskIdsOf(hiddenProjectIds)
+    const q = 'from=2026-10-26&to=2026-12-07'
+    // sanity: POS does have spans this month for someone who may see it
+    asUser(await goldenUser('Cindy'))
+    const cindy = await okJson<TeamPlanSpansResponse>(
+      await callRoute(getTeamPlanSpans, `/api/tasks/plan-spans?${q}`),
+    )
+    expect(
+      cindy.spans.some((s) => hiddenTaskIds.includes(s.taskId)),
+      'POS spans exist for Cindy',
+    ).toBe(true)
+
+    asUser(peter)
+    const body = await okJson<TeamPlanSpansResponse>(
+      await callRoute(getTeamPlanSpans, `/api/tasks/plan-spans?${q}`),
+    )
+    const visibleTaskIds = await taskIdsOf(
+      await Promise.all(
+        (['Data Warehouse', 'Store Analytics Dashboard'] as const).map((n) => goldenProjectId(n)),
+      ),
+    )
+    expect(body.spans.length, 'Store tasks have spans').toBeGreaterThan(0)
+    for (const s of body.spans) expect(visibleTaskIds).toContain(s.taskId)
+    assertNoLeak(body, [
+      ...hiddenProjects,
+      ...hiddenProjectIds,
+      ...hiddenTaskIds,
+      ...goldenTaskNames(hiddenProjects),
+    ])
+    // the POS projectId filter answers 404 without anything of POS
+    const pos = await goldenProjectId('POS Upgrade')
+    const res = await callRoute(getTeamPlanSpans, `/api/tasks/plan-spans?${q}&projectId=${pos}`)
+    expect(res.status).toBe(404)
+    assertNoLeak(await res.json(), [...hiddenTaskIds, ...goldenTaskNames(hiddenProjects), 'POS Upgrade'])
   })
 })
 

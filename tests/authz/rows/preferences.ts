@@ -130,4 +130,57 @@ export const rows: AuthzRow[] = [
       return setPreference({ key: 'load.display', value: 'percent' } as never)
     },
   }),
+  // ── M11.4 (FR-668/669): tasks.view TABLE | CALENDAR and the tasks.table key ──
+  defineRow({
+    id: 'PREF-M11.4-VIEW',
+    spec: 'X05 + M11.4 FR-668/669 setPreference tasks.view TABLE / CALENDAR (own row, not audited)',
+    action: 'setPreference',
+    mutates: true,
+    audit: false,
+    expect: ALL,
+    run: async (_w, _ctx, actor) => {
+      const table = await setAndStored(actor, { key: 'tasks.view', value: 'TABLE' })
+      if (!table.ok) return table
+      return setAndStored(actor, { key: 'tasks.view', value: 'CALENDAR' })
+    },
+  }),
+  defineRow({
+    id: 'PREF-M11.4-TABLE',
+    spec: 'X05 + M11.4 FR-668 setPreference tasks.table { hidden, widths, groupByProject } (own row, not audited)',
+    action: 'setPreference',
+    mutates: true,
+    audit: false,
+    expect: ALL,
+    run: (_w, _ctx, actor) =>
+      setAndStored(actor, {
+        key: 'tasks.table',
+        value: {
+          hidden: ['milestone', 'load'],
+          widths: { name: 320, project: 64, dueDate: 640 },
+          groupByProject: true,
+        },
+      }),
+  }),
+  defineRow({
+    id: 'PREF-M11.4-TABLE-BAD',
+    spec: "X05 + M11.4 FR-668 setPreference tasks.table width 10 / hidden ['name'] / tasks.view MONTH → VALIDATION",
+    action: 'setPreference',
+    mutates: false,
+    expect: { M: '400', L: '400', Me: '400', W: '400' },
+    run: async () => {
+      const bad = [
+        { key: 'tasks.table', value: { hidden: [], widths: { project: 10 }, groupByProject: false } },
+        { key: 'tasks.table', value: { hidden: ['name'], widths: {}, groupByProject: false } },
+        { key: 'tasks.table', value: { hidden: [], widths: { status: 700 }, groupByProject: false } },
+        { key: 'tasks.table', value: { hidden: ['nope'], widths: {}, groupByProject: false } },
+        { key: 'tasks.view', value: 'MONTH' },
+      ]
+      let last: ActionResult<object> | undefined
+      for (const input of bad) {
+        last = await setPreference(input as never)
+        if (last.ok || String(last.code) !== 'VALIDATION') return last
+      }
+      return last!
+    },
+  }),
 ]

@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -29,12 +29,12 @@ import { th } from '@/i18n/th'
 import { getJson } from '@/lib/api'
 import { compareThai } from '@/lib/collate'
 import type { PersonOption } from '@/lib/contracts/people'
-import type { TaskCard as TaskCardDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
+import type { TeamTaskCard as TaskCardDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
 import { formatThaiDate } from '@/lib/format'
 import { projectTasksHref } from '@/lib/nav/task-href'
 import { useScrollRestore } from '@/lib/nav/useScrollRestore'
 import { qk } from '@/lib/query-keys'
-import { taskPreference } from '@/lib/schemas/preferences'
+import { taskPreference, type TaskView } from '@/lib/schemas/preferences'
 import { buildCategoryColumns, resolveCategoryDrop } from '@/lib/tasks/board'
 import { personOf } from '../AssigneeChips'
 import { BlockerBadge } from '../blockers/BlockerBadge'
@@ -43,15 +43,23 @@ import { TaskBoard } from '../board/TaskBoard'
 import { TaskCard } from '../board/TaskCard'
 import { StatusChip } from '../status/StatusChip'
 import { StatusMenu } from '../status/StatusMenu'
+import { openTaskPanel, useTaskParam } from '../task-param'
+import { TaskPanel } from '../TaskPanel'
 import { ViewToggle } from '../TaskToolbar'
 import { errorMessage } from '../useTaskMutations'
 import { teamFiltersToSearchParams, useTeamTaskFilters } from './useTeamTaskFilters'
 import { useSetTaskStatus } from './useSetTaskStatus'
+import { TeamCalendar } from './TeamCalendar'
+import { TeamTable } from './TeamTable'
+import { useTeamTaskEdits } from './useTeamTaskEdits'
 
 const CATEGORIES: readonly TaskStatusCategory[] = ['TODO', 'IN_PROGRESS', 'WAITING', 'DONE']
 type ProjectRef = TeamTasksResponse['projects'][number]
 
 const taskHref = (c: TaskCardDTO) => projectTasksHref(c.projectId, c.id)
+const ALL_VIEWS: readonly TaskView[] = ['LIST', 'BOARD', 'TABLE', 'CALENDAR']
+/** M11.4: ตาราง / ปฏิทิน load every page (sort and month placement need the whole set) up to this many cards. */
+export const TEAM_FULL_VIEW_CAP = 2000
 
 export interface TeamTasksProps {
   /** M3-D41: mirror the filters in the URL (/tasks). M9 call sites pass false with `fixedUserId`. */
@@ -59,7 +67,7 @@ export interface TeamTasksProps {
   /** M9-D15 (FR-667 person tab, /my list/board): every request carries `userId`; the person filter is hidden. */
   fixedUserId?: string
   /** M9-D15 (/my): overrides `tasks.view` without writing the preference; the view toggle is hidden. */
-  forcedView?: 'LIST' | 'BOARD'
+  forcedView?: TaskView
   /** M9-D15: a note above the list (e.g. th.people.tasks.hiddenHint). */
   hint?: string
 }
@@ -73,13 +81,21 @@ export interface TeamTasksProps {
  * M9 (FR-667 person tab, /my ลิสต์/บอร์ด — X77, M9-D15): `fixedUserId`, `forcedView`, `hint`.
  */
 export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: TeamTasksProps) {
-  const { filters: chosen, patch, clear } = useTeamTaskFilters({ syncUrl })
+  const { filters: chosen, patch, clear, view: urlView, setView } = useTeamTaskFilters({ syncUrl })
   const filters = useMemo(
     () => (fixedUserId ? { ...chosen, userId: fixedUserId } : chosen),
     [chosen, fixedUserId],
   )
-  const { prefs } = usePreferences()
-  const view = forcedView ?? taskPreference(prefs, 'tasks.view')
+  const { prefs, setPreference } = usePreferences()
+  // M11.4 (FR-668/669): the URL's `?view=` wins over the stored `tasks.view`; choosing writes both
+  const view = forcedView ?? urlView ?? taskPreference(prefs, 'tasks.view')
+  const chooseView = (v: TaskView) => {
+    setView(v)
+    setPreference('tasks.view', v)
+  }
+  const fullView = view === 'TABLE' || view === 'CALENDAR'
+  const edits = useTeamTaskEdits()
+  const panelTaskId = useTaskParam()
   const people = usePeopleOptions()
   const router = useRouter()
   const status = useSetTaskStatus()
@@ -93,6 +109,13 @@ export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: Tea
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   })
   useScrollRestore(q.data !== undefined) // FR-686: back from /t lands where ↗ left the list
+  // M11.4: ตาราง / ปฏิทิน need the whole filtered set — fetch the remaining pages (≤ TEAM_FULL_VIEW_CAP cards)
+  const loadedCards = q.data?.pages.reduce((n, pg) => n + pg.cards.length, 0) ?? 0
+  const capped = fullView && q.hasNextPage && loadedCards >= TEAM_FULL_VIEW_CAP
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q
+  useEffect(() => {
+    if (fullView && hasNextPage && !isFetchingNextPage && loadedCards < TEAM_FULL_VIEW_CAP) void fetchNextPage()
+  }, [fullView, hasNextPage, isFetchingNextPage, loadedCards, fetchNextPage])
   // projects seen so far, so the project filter keeps its options while narrowed (state adjusted during render)
   const [seen, setSeen] = useState<ReadonlyMap<string, ProjectRef>>(new Map())
   const pages = useMemo(() => q.data?.pages ?? [], [q.data])
@@ -120,6 +143,8 @@ export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: Tea
     return ref ? { name: ref.name, late: false } : null
   }
   const projectMilestones = useProjectMilestones(filters.projectId ?? null)
+  // M11.4: the panel (`?task=`) beside ตาราง / ปฏิทิน reads the opened task's project (kept while the card is loaded)
+  const panelProjectId = panelTaskId ? cards.find((c) => c.id === panelTaskId)?.projectId : undefined
   const projectOf = (id: string): ProjectRef => seen.get(id) ?? { id, name: '', color: '' }
   const projectName = (id: string) => projectOf(id).name
   const peopleById = useMemo(
@@ -157,7 +182,7 @@ export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: Tea
   return (
     <Box sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-        {forcedView ? null : <ViewToggle />}
+        {forcedView ? null : <ViewToggle views={ALL_VIEWS} value={view} onChange={chooseView} />}
         {fixedUserId ? null : (
           <Box sx={{ width: { xs: '100%', sm: 220 } }}>
             <PersonPicker
@@ -246,6 +271,44 @@ export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: Tea
         <Alert severity="error">{errorMessage(q.error)}</Alert>
       ) : cards.length === 0 ? (
         <EmptyState title={fixedUserId ? th.people.tasks.empty : th.teamTasks.empty} />
+      ) : fullView ? (
+        <Box
+          sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: 'flex-start' }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+            {q.hasNextPage && !capped ? (
+              <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }} aria-live="polite">
+                {th.teamTasks.loadingAll}
+              </Typography>
+            ) : null}
+            {capped ? (
+              <Alert severity="info" sx={{ mb: 1 }} data-testid="team-tasks-capped">
+                {th.teamTasks.capped(loadedCards)}
+              </Alert>
+            ) : null}
+            {view === 'TABLE' ? (
+              <TeamTable
+                cards={cards}
+                projectOf={projectOf}
+                statusesByProject={statusesByProject}
+                milestonesByProject={milestonesByProject}
+                people={peopleById}
+                onOpen={(c) => openTaskPanel(c.id)}
+                onPickStatus={pickStatus}
+                edits={edits}
+              />
+            ) : (
+              <TeamCalendar
+                cards={cards}
+                projectOf={projectOf}
+                people={peopleById}
+                projectId={filters.projectId}
+                onOpen={(c) => openTaskPanel(c.id)}
+              />
+            )}
+          </Box>
+          {panelProjectId ? <TaskPanel projectId={panelProjectId} /> : null}
+        </Box>
       ) : view === 'BOARD' ? (
         <TaskBoard<TaskCardDTO>
           columns={buildCategoryColumns(cards, { hideDone: false })}
@@ -276,7 +339,7 @@ export function TeamTasks({ syncUrl = true, fixedUserId, forcedView, hint }: Tea
           onToggleDone={status.toggleDone}
         />
       )}
-      {q.hasNextPage ? (
+      {q.hasNextPage && !fullView ? (
         <Button
           onClick={() => void q.fetchNextPage()}
           disabled={q.isFetchingNextPage}

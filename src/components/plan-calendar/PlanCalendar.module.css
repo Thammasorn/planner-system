@@ -438,3 +438,13 @@
   font-size: var(--font-xs);
   line-height: 1.1;
 }
+
+/* M11.4 (FR-669): the team calendar's project dot — colour from the bar's own `--bar-color`; the project name is in
+   the bar's title / accessible name (never colour alone). */
+.projectDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bar-color);
+}

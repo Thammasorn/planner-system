@@ -25,6 +25,10 @@ export const qk = {
   teamTasksAll: () => ['tasks', 'team'] as const,
   /** GET /api/tasks with the parsed filters (M3, v3.1, X75). */
   teamTasks: (filters: TeamTasksQuery) => ['tasks', 'team', filters] as const,
+  /** GET /api/tasks/plan-spans?from&to[&projectId] — the team calendar's plan bars (M11.4, FR-669); under
+   *  ['tasks', 'team'] so invalidateTasks (teamTasksAll) and invalidateLoad (qkPrefix.teamTasks) both refresh it. */
+  teamPlanSpans: (from: ISODate, to: ISODate, projectId: string | null) =>
+    ['tasks', 'team', 'planSpans', from, to, projectId] as const,
   /** GET /api/tasks/[id]/body — the task body view (M6.1-D7). Under 'tasks' but never invalidated by task writes. */
   taskBody: (taskId: string) => ['tasks', 'body', taskId] as const,
   /** GET /api/pages/tree — children of one node (parentId) or the space root (null) (M4). */

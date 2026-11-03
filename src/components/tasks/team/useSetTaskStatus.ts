@@ -5,7 +5,8 @@ import { useUndo } from '@/components/undo/useUndo'
 import type { UndoEntry } from '@/components/undo/useUndo'
 import { th } from '@/i18n/th'
 import { unwrap } from '@/lib/action-result'
-import type { SetTaskStatusResult, TaskCard, TaskStatusDTO, TeamTasksResponse } from '@/lib/contracts/tasks'
+import type { SetTaskStatusResult, TaskStatusDTO, TeamTaskCard as TaskCard, TeamTasksResponse } from '@/lib/contracts/tasks'
+import { useToday } from '@/hooks/useToday'
 import { invalidateLoad, invalidateTasks } from '@/lib/invalidate'
 import { statusToastMessage } from '../statusToast'
 import { qk } from '@/lib/query-keys'
@@ -26,6 +27,7 @@ type Vars =
 export function useSetTaskStatus() {
   const qc = useQueryClient()
   const undo = useUndo()
+  const today = useToday()
   const settle = async (projectId: string) => {
     await Promise.all([invalidateTasks(qc, projectId), invalidateLoad(qc)])
   }
@@ -57,10 +59,12 @@ export function useSetTaskStatus() {
           ...c,
           status: { id, name, color, category },
           completed: category === 'DONE',
+          completedOn: category === 'DONE' ? (c.completedOn ?? today) : null,
         }))
       } else if (v.kind === 'children') {
-        for (const id of v.descendantIds) patchCards(id, (c) => ({ ...c, completed: true }))
-      } else patchCards(v.card.id, (c) => ({ ...c, completed: !c.completed }))
+        for (const id of v.descendantIds) patchCards(id, (c) => ({ ...c, completed: true, completedOn: c.completedOn ?? today }))
+      } else
+        patchCards(v.card.id, (c) => ({ ...c, completed: !c.completed, completedOn: c.completed ? null : today }))
     },
     onError: (err, v) => {
       toast.error(errorMessage(err))

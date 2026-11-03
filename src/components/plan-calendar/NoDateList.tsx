@@ -3,8 +3,7 @@
 // date there), ↗ = the task page. Beside the calendar, under it below 900 px and under the phone agenda.
 import { OpenAsPageLink } from '@/components/tasks/OpenAsPage'
 import { th } from '@/i18n/th'
-import type { TaskDTO } from '@/lib/contracts/tasks'
-import { barLabel, barText, type BarInfo } from './labels'
+import { barLabel, barText, type BarInfo, type BarTask } from './labels'
 import styles from './PlanCalendar.module.css'
 
 export function NoDateList({
@@ -12,7 +11,7 @@ export function NoDateList({
   infos,
   onOpen,
 }: {
-  tasks: readonly TaskDTO[]
+  tasks: readonly BarTask[]
   infos: ReadonlyMap<string, BarInfo>
   onOpen: (taskId: string) => void
 }) {

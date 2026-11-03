@@ -3,7 +3,7 @@
 // (M6 `SetTaskStatusResult.released`, M8 `TaskDTO.milestoneId`/`lateForMilestone`, `ProjectTasksResponse.milestones`,
 // `TaskCard.milestoneId`, `TeamTasksResponse.milestonesByProject` — added in M8 S0.3). Keep every result an object.
 import type { Cd, Certainty, ISODate, TaskStatusCategory } from '@/domain/types'
-import type { MilestoneRef } from './milestones'
+import type { MilestoneColor, MilestoneRef } from './milestones'
 
 export type TaskDepth = 0 | 1 | 2
 
@@ -265,14 +265,27 @@ export interface TaskCard {
   milestoneId: string | null
 }
 
+/** M11.4 (FR-668/669): a /tasks card — TaskCard + what the ตาราง / ปฏิทิน views read. */
+export interface TeamTaskCard extends TaskCard {
+  /** the explicit start date (table column, calendar bar BR-103) */
+  startDate: ISODate | null
+  /** BR-51 completion day (Asia/Bangkok) — null while open (the calendar's done styling) */
+  completedOn: ISODate | null
+  /** Σ counted planned load (BR-50) of the task's OWN live assignees in today ± 3 years (X66 horizon), integer cd */
+  plannedCd: Cd
+}
+
+/** M11.4 (FR-668): a milestone ref with its colour (◆ in the table). */
+export type TeamMilestoneRef = MilestoneRef & { color: MilestoneColor }
+
 /** GET /api/tasks (X75, M3-D33). */
 export interface TeamTasksResponse {
-  cards: TaskCard[]
+  cards: TeamTaskCard[]
   /** Only visible projects present in `cards`. */
   projects: { id: string; name: string; color: string }[]
   /** Same projects only (status menus, FR-666). */
   statusesByProject: Record<string, TaskStatusDTO[]>
   /** M8 (M8-D15): live milestones of the same projects only (date then id). */
-  milestonesByProject: Record<string, MilestoneRef[]>
+  milestonesByProject: Record<string, TeamMilestoneRef[]>
   nextCursor: string | null
 }

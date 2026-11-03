@@ -53,6 +53,9 @@ const page: TeamTasksResponse = {
       blockers: { open: 0, total: 0 },
       hasBody: true,
       milestoneId: null,
+      startDate: null,
+      completedOn: null,
+      plannedCd: 0,
     },
   ],
   projects: [{ id: PID, name: 'POS Upgrade', color: '#B45309' }],
@@ -154,7 +157,7 @@ describe('M8 (FR-663, M8-D15): milestone filter + ◆ on /tasks', () => {
       { id: CRM, name: 'CRM', color: '#2F5597' },
     ],
     statusesByProject: { [CRM]: noWaiting },
-    milestonesByProject: { [CRM]: [{ id: GOLIVE, name: 'Go-live', date: '2026-10-30', completedOn: null }] },
+    milestonesByProject: { [CRM]: [{ id: GOLIVE, name: 'Go-live', date: '2026-10-30', completedOn: null, color: 'PURPLE' }] },
   }
   const filter = () => screen.getByRole('combobox', { name: th.milestones.tasks.filter })
 

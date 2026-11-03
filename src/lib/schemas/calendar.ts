@@ -18,3 +18,18 @@ export const calendarQuerySchema = z
   })
 
 export type CalendarQuery = z.output<typeof calendarQuerySchema>
+
+/** GET /api/tasks/plan-spans (M11.4, FR-669): the month-grid range of calendarQuerySchema + an optional project. */
+export const teamPlanSpansQuerySchema = z
+  .object({ from: z.iso.date(), to: z.iso.date(), projectId: z.uuid().optional() })
+  .superRefine((v, ctx) => {
+    if (!isISODate(v.from) || !isISODate(v.to)) return
+    const ok =
+      isoWeekday(v.from) === 1 &&
+      isoWeekday(v.to) === 1 &&
+      compareISO(v.to, v.from) > 0 &&
+      diffDays(v.from, v.to) <= CALENDAR_MAX_DAYS
+    if (!ok) ctx.addIssue({ code: 'custom', path: ['to'], message: th.errors.VALIDATION })
+  })
+
+export type TeamPlanSpansQuery = z.output<typeof teamPlanSpansQuerySchema>

@@ -3,15 +3,17 @@
 // (1) per live assignment the first / last week with counted load (BR-50) in the visible month-grid range ± 3 years
 // (the X66 horizon), (2) the stored rows of just those edge weeks; the pure planDaySpan turns them into days using each
 // assignee's schedule (WEEK → first/last working day; DAY → its date). Own assignees only — a parent never takes its
-// children's plan (FR-812).
+// children's plan (FR-812). M11.4 (FR-669): getTeamPlanSpans — the same assembly over every visible, active project.
 import { addDays, weekStart } from '@/domain/dates'
 import { LATE_LOOKAHEAD_DAYS } from '@/domain/milestone'
 import { planDaySpan, type PlanRow } from '@/domain/plan-span'
 import type { ISODate, Schedule } from '@/domain/types'
-import type { PlanSpansResponse, TaskPlanSpan } from '@/lib/contracts/plan-spans'
+import type { PlanSpansResponse, TaskPlanSpan, TeamPlanSpansResponse } from '@/lib/contracts/plan-spans'
 import * as authz from '../authz'
 import type { DbOrTx } from '../db/types'
+import { NotFoundError } from '../errors'
 import * as repo from '../repo'
+import type { PlannedWeekBounds } from '../repo/allocations'
 import type { SessionUser } from '../session'
 
 /** How far around the visible month the plan is searched for span edges (= BR-71's 3-year look-ahead, X66). */
@@ -25,6 +27,28 @@ export async function getProjectPlanSpans(
 ): Promise<PlanSpansResponse> {
   await authz.requireProject(tx, user, projectId, 'view')
   const bounds = await repo.allocations.plannedWeekBoundsForProject(tx, projectId, lookaroundRange(q))
+  return { projectId, from: q.from, to: q.to, spans: await spansFromBounds(tx, bounds) }
+}
+
+/** M11.4 (FR-669) — the team calendar: live tasks of every visible project that is neither archived nor deleted (the
+ *  /api/tasks set before its filters), optionally one project. Visibility from authz.visibleProjectIds (in SQL);
+ *  a `projectId` the viewer cannot access → 404 (an accessible but archived one simply yields no spans). */
+export async function getTeamPlanSpans(
+  tx: DbOrTx,
+  user: SessionUser,
+  q: { from: ISODate; to: ISODate; projectId?: string | undefined },
+): Promise<TeamPlanSpansResponse> {
+  const visible = await authz.visibleProjectIds(tx, user)
+  if (q.projectId !== undefined && !(await authz.projectAccess(tx, user, q.projectId))) throw new NotFoundError()
+  const scope: readonly string[] | 'ALL' =
+    q.projectId !== undefined ? [q.projectId] : visible === 'ALL' ? 'ALL' : [...visible]
+  const bounds = await repo.allocations.plannedWeekBoundsForProjects(tx, scope, lookaroundRange(q))
+  return { from: q.from, to: q.to, spans: await spansFromBounds(tx, bounds) }
+}
+
+/** Shared assembly: the edge-week rows of the bounded assignments + their schedules → one span per task, id order. */
+async function spansFromBounds(tx: DbOrTx, bounds: readonly PlannedWeekBounds[]): Promise<TaskPlanSpan[]> {
+  if (bounds.length === 0) return []
   const edgeWeeks = [...new Set(bounds.flatMap((b) => [b.first, b.last]))]
   const rows = await repo.allocations.listForWeeks(
     tx,
@@ -56,7 +80,7 @@ export async function getProjectPlanSpans(
     if (s) spans.push({ taskId, start: s.start, end: s.end })
   }
   spans.sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0))
-  return { projectId, from: q.from, to: q.to, spans }
+  return spans
 }
 
 /** The week range [from, to) searched for a month-grid range: ± PLAN_SPAN_LOOKAROUND_DAYS, on Mondays. */

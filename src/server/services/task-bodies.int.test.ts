@@ -68,7 +68,7 @@ describe('hasBody (FR-691, M6.1-D11)', () => {
     asUser(w.member)
     const upd = await updateTask({ taskId: w.tasks.pLeaf.id, patch: { dueDate: '2026-10-16' } })
     expect(upd).toMatchObject({ ok: true, task: { hasBody: true } })
-    const team = await listTeamTasks(db, S(w.member), { blocked: false, includeDone: false })
+    const team = await listTeamTasks(db, S(w.member), { blocked: false, includeDone: false }, TODAY)
     const card = (id: string) => team.cards.find((c) => c.id === id)
     expect(card(w.tasks.pLeaf.id)?.hasBody).toBe(true)
     expect(card(w.tasks.pChildB.id)?.hasBody).toBe(false)

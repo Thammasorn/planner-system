@@ -10,7 +10,36 @@ const SIDEBAR_EXPANDED = z.array(z.string().max(80)).max(500)
 /** M3 task-list keys (plan/m03 S0.13, X74, M3-D6). */
 export const TASK_GROUP_BY = ['none', 'status', 'assignee', 'certainty', 'milestone'] as const // 'milestone': M8 (M8-D13)
 export const TASK_SORT = ['manual', 'due'] as const
-export const TASK_VIEWS = ['LIST', 'BOARD'] as const
+/** FR-660 (project tab: LIST | BOARD) + M11.4 FR-668/669 (/tasks also TABLE | CALENDAR — the project tab reads those
+ *  two as LIST). The /tasks URL mirrors it as `?view=table|calendar|board|list` (wins over the stored value). */
+export const TASK_VIEWS = ['LIST', 'BOARD', 'TABLE', 'CALENDAR'] as const
+export type TaskView = (typeof TASK_VIEWS)[number]
+/** M11.4 (FR-668): the /tasks table's columns; `name` is always shown. */
+export const TEAM_TABLE_COLUMNS = [
+  'name',
+  'project',
+  'status',
+  'assignees',
+  'startDate',
+  'dueDate',
+  'milestone',
+  'blockers',
+  'load',
+] as const
+export type TeamTableColumn = (typeof TEAM_TABLE_COLUMNS)[number]
+export const TEAM_TABLE_WIDTH_MIN = 64
+export const TEAM_TABLE_WIDTH_MAX = 640
+/** M11.4 (FR-668): hidden columns, resized widths (px) and "จัดกลุ่มตามโปรเจค" of the /tasks table. */
+export const TEAM_TABLE_PREF = z.object({
+  hidden: z.array(z.enum(TEAM_TABLE_COLUMNS).exclude(['name'])).max(TEAM_TABLE_COLUMNS.length),
+  widths: z.partialRecord(
+    z.enum(TEAM_TABLE_COLUMNS),
+    z.number().int().min(TEAM_TABLE_WIDTH_MIN).max(TEAM_TABLE_WIDTH_MAX),
+  ),
+  groupByProject: z.boolean(),
+})
+export type TeamTablePref = z.infer<typeof TEAM_TABLE_PREF>
+export const TEAM_TABLE_PREF_DEFAULT: TeamTablePref = { hidden: [], widths: {}, groupByProject: false }
 
 /** M6 grid / load keys (plan/m06 S0.5, M6-D21, X59). `load.view` is reused by M9's workload. */
 export const GRID_UNITS = ['DAYS', 'FRACTION'] as const
@@ -42,6 +71,8 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('tasks.view'), value: z.enum(TASK_VIEWS) }),
   z.object({ key: z.literal('tasks.board.leafOnly'), value: z.boolean() }),
   z.object({ key: z.literal('tasks.board.hideDone'), value: z.boolean() }),
+  // M11.4 (FR-668)
+  z.object({ key: z.literal('tasks.table'), value: TEAM_TABLE_PREF }),
   // M6
   z.object({ key: z.literal('grid.unit'), value: z.enum(GRID_UNITS) }),
   z.object({ key: z.literal('load.view'), value: z.enum(LOAD_VIEWS) }),
@@ -74,6 +105,8 @@ export const preferencesSchema = z.object({
   'tasks.view': z.enum(TASK_VIEWS).optional().catch(undefined),
   'tasks.board.leafOnly': z.boolean().optional().catch(undefined),
   'tasks.board.hideDone': z.boolean().optional().catch(undefined),
+  // M11.4 key (FR-668): optional like the M3 keys (absent or invalid = TEAM_TABLE_PREF_DEFAULT).
+  'tasks.table': TEAM_TABLE_PREF.optional().catch(undefined),
   // M6 keys (M6-D21): optional like the M3 keys (absent or invalid = GRID_PREFERENCE_DEFAULTS), so stored rows and
   // DEFAULT_PREFERENCES stay valid unchanged. Read with gridPreference(prefs, key).
   'grid.unit': z.enum(GRID_UNITS).optional().catch(undefined),
