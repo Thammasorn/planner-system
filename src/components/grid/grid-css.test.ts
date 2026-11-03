@@ -180,3 +180,19 @@ describe('grid.module.css (§8.9)', () => {
     expect(zOf('.footerTotal'), '.footerTotal').toBeGreaterThan(line)
   })
 })
+
+describe('v3.9: the task cell never paints outside its column (chips over the ผู้รับผิดชอบ column)', () => {
+  const body = (sel: string) =>
+    rules
+      .filter((r) => r.selector === sel)
+      .map((r) => r.body)
+      .join(';')
+  it('task cell clips on x; the name + chips box shrinks (min-width 0) and hides overflow', () => {
+    expect(body('.taskCell')).toMatch(/overflow-x:\s*clip/)
+    expect(body('.taskMain')).toMatch(/min-width:\s*0/)
+    expect(body('.taskMain')).toMatch(/overflow:\s*hidden/)
+    expect(body('.taskMain')).toMatch(/flex:\s*1 1 0/)
+    expect(body('.msTaskLink')).toMatch(/min-width:\s*0/)
+    expect(body('.msLateChip')).toMatch(/min-width:\s*0/)
+  })
+})

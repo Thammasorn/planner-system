@@ -16,9 +16,23 @@
 // M9 (plan/m09 S3.4, M9-D28): in the person grid a merged row also shows the task's parent path (muted breadcrumb) and a
 // second action "เปิดในแผนงานโปรเจค" (onOpenInProject → /projects/<pid>/plan?task=) next to the ↗ task-page link
 // (SPEC v3.2 M6.1-D17 keeps ↗ = /t/<id>); PlanGrid passes no drag, no "+ คน" and no assignee column there.
-import { memo, useCallback, useEffect, useId, useRef, type MouseEvent, type PointerEvent } from 'react'
+// v3.9 (owner feedback): the name + chips sit in one clipped box (.taskMain) whose measured width picks a chip level
+// (src/lib/grid/task-chips.ts): first "→◆name" → "◆", then the late / blocker chips → icon-only (⚠ / ⊘ + count, full
+// text in tooltip + aria-label). The task cell clips at its own edge, so nothing paints over the ผู้รับผิดชอบ column.
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react'
 import Tooltip from '@mui/material/Tooltip'
 import ViewTimelineOutlined from '@mui/icons-material/ViewTimelineOutlined'
+import BlockOutlined from '@mui/icons-material/BlockOutlined'
+import CheckOutlined from '@mui/icons-material/CheckOutlined'
 import Link from '@/components/Link'
 import { StatusGlyph } from '@/components/common/StatusGlyph'
 import { UserName } from '@/components/common/UserName'
@@ -31,6 +45,7 @@ import { formatThaiDate } from '@/lib/format'
 import { rememberBoxScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick } from '@/lib/nav/task-href'
 import { taskLeadLayout } from '@/lib/grid/row-layout'
+import { taskChipLevel, type ChipLevel, type TaskChips } from '@/lib/grid/task-chips'
 import { inCheckMode, isRowSelected } from '@/lib/grid/row-select'
 import { sumPeopleCount, type GridViewRow } from '@/lib/grid/rows'
 import { useGridSel, type GridStore } from './gridStore'
@@ -125,6 +140,60 @@ export function rowStateTexts(
   return out
 }
 
+/** Rough width of the tentative glyph / completed text next to the name (px), counted against the chips' budget. */
+const TENTATIVE_W = 20
+const COMPLETED_W = 52
+
+/**
+ * The chip level of one row: a ResizeObserver on the name + chips box (its width does not depend on its content —
+ * flex 1 1 0, min-width 0 — so collapsing never feeds back). State changes only when the level changes.
+ */
+function useChipLevel(chips: TaskChips): [(el: HTMLElement | null) => void, ChipLevel] {
+  const [width, setWidth] = useState(0)
+  const ref = useCallback((el: HTMLElement | null) => {
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[entries.length - 1]?.contentRect.width ?? 0
+      setWidth((prev) => (Math.round(w) === prev ? prev : Math.round(w)))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, taskChipLevel(width, chips)]
+}
+
+/** Icon-only blocker chip (level 2): ⊘ + open count (✓ when cleared); the full text is its aria-label + tooltip. */
+function CompactBlocker(p: { open: number; total: number; names: readonly string[] }) {
+  const badge = blockerBadge({ open: p.open, total: p.total })
+  if (badge === null) return null
+  const waiting = badge.kind === 'WAITING'
+  const text = waiting ? th.tasks.blockers.badgeWaiting(badge.open) : th.tasks.blockers.badgeCleared
+  return (
+    <Tooltip
+      title={p.names.length > 0 ? `${text} · ${th.tasks.blockers.badgeTooltip(p.names.join(', '))}` : text}
+      describeChild
+    >
+      <span
+        className={styles.chipIcon}
+        role="img"
+        aria-label={text}
+        data-blocker-badge={badge.kind}
+        data-chip-compact=""
+        data-waiting={waiting ? 'true' : undefined}
+      >
+        {waiting ? (
+          <>
+            <BlockOutlined aria-hidden="true" fontSize="inherit" />
+            <span aria-hidden="true">{badge.open}</span>
+          </>
+        ) : (
+          <CheckOutlined aria-hidden="true" fontSize="inherit" />
+        )}
+      </span>
+    </Tooltip>
+  )
+}
+
 export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
   const { row } = p
   const task = row.task
@@ -186,6 +255,15 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
     </button>
   ) : null
   const lead = taskLeadLayout(row.depth, { check: Boolean(p.selectable), handle: Boolean(p.draggable) })
+  const hasBlocker = ownsTask && task.blockers.total > 0
+  const [mainRef, chipLevel] = useChipLevel({
+    ms: ms !== null,
+    late,
+    blocker: hasBlocker,
+    extra:
+      (ownsTask && task.certainty === 'TENTATIVE' ? TENTATIVE_W : 0) +
+      (ownsTask && task.completed ? COMPLETED_W : 0),
+  })
 
   return (
     <div
@@ -297,76 +375,102 @@ export const RowHeader = memo(function RowHeader(p: RowHeaderProps) {
             )}
           </span>
         ) : null}
-        {ownsTask && renameDraft !== null ? (
-          <RenameInput
-            name={task.name}
-            draft={renameDraft}
-            onEnd={(next, how) => {
-              p.onRenameEnd?.(task.id, next)
-              // Enter / Esc keep the keyboard on the row (blur went elsewhere on purpose)
-              if (how !== 'blur') headerEl.current?.focus({ preventScroll: true })
-            }}
-          />
-        ) : ownsTask ? (
-          <span className={styles.name} title={task.name} data-task-name="">
-            {task.name}
-          </span>
-        ) : null}
-        {p.breadcrumb && p.breadcrumb.length > 0 ? (
-          <span className={styles.breadcrumb} data-breadcrumb="">
-            {p.breadcrumb.join(' › ')}
-          </span>
-        ) : null}
-        {ms ? (
-          <span
-            className={styles.msTaskLink}
-            title={th.milestones.grid.taskLinkLabel(ms.name)}
-            aria-hidden="true"
-            data-ms-link=""
-          >
-            {th.milestones.grid.taskLink(ms.name)}
-          </span>
-        ) : null}
-        {late && ms ? (
-          <Tooltip title={th.milestones.lateHint(formatThaiDate(ms.date, 'medium'))} describeChild>
-            <span className={styles.msLateChip} data-ms-late="">
-              <span aria-hidden="true">⚠ </span>
-              {th.milestones.late}
+        <span className={styles.taskMain} ref={mainRef} data-task-main="" data-chip-level={chipLevel}>
+          {ownsTask && renameDraft !== null ? (
+            <RenameInput
+              name={task.name}
+              draft={renameDraft}
+              onEnd={(next, how) => {
+                p.onRenameEnd?.(task.id, next)
+                // Enter / Esc keep the keyboard on the row (blur went elsewhere on purpose)
+                if (how !== 'blur') headerEl.current?.focus({ preventScroll: true })
+              }}
+            />
+          ) : ownsTask ? (
+            <span className={styles.name} title={task.name} data-task-name="">
+              {task.name}
             </span>
-          </Tooltip>
-        ) : null}
-        {people !== null ? (
-          <span className={styles.muted} aria-hidden="true" data-sum-people={people}>
-            {th.grid.sumMode.people(people)}
-          </span>
-        ) : null}
-        {ownsTask && task.certainty === 'TENTATIVE' ? (
-          <Tooltip
-            title={
-              task.certaintySource === 'task'
-                ? th.grid.row.sourceTask
-                : task.certaintySource === 'ancestor'
-                  ? th.grid.row.sourceAncestor(task.certaintySourceName ?? '')
-                  : th.grid.row.tentative
-            }
-            describeChild
-          >
-            <span className={styles.muted}>
-              <StatusGlyph kind="tentative" />
-              {task.certaintySource === 'task' ? '*' : null}
+          ) : null}
+          {p.breadcrumb && p.breadcrumb.length > 0 ? (
+            <span className={styles.breadcrumb} data-breadcrumb="">
+              {p.breadcrumb.join(' › ')}
             </span>
-          </Tooltip>
-        ) : null}
-        {ownsTask && task.completed ? <span className={styles.muted}>{th.grid.row.completed}</span> : null}
-        {ownsTask && task.blockers.total > 0 ? (
-          <BlockerBadge
-            open={task.blockers.open}
-            total={task.blockers.total}
-            names={p.blockerNames}
-            focusable={false}
-          />
-        ) : null}
-        {unassigned && !showAssignees ? <span className={styles.muted}>{th.grid.row.unassigned}</span> : null}
+          ) : null}
+          {ms ? (
+            <span
+              className={styles.msTaskLink}
+              title={th.milestones.grid.taskLinkLabel(ms.name)}
+              aria-hidden="true"
+              data-ms-link=""
+              data-chip-compact={chipLevel >= 1 ? '' : undefined}
+            >
+              {chipLevel >= 1 ? '◆' : th.milestones.grid.taskLink(ms.name)}
+            </span>
+          ) : null}
+          {late && ms ? (
+            <Tooltip
+              title={
+                chipLevel >= 2
+                  ? `${th.milestones.late} · ${th.milestones.lateHint(formatThaiDate(ms.date, 'medium'))}`
+                  : th.milestones.lateHint(formatThaiDate(ms.date, 'medium'))
+              }
+              describeChild
+            >
+              {chipLevel >= 2 ? (
+                <span
+                  className={styles.msLateChip}
+                  role="img"
+                  aria-label={th.milestones.late}
+                  data-ms-late=""
+                  data-chip-compact=""
+                >
+                  <span aria-hidden="true">⚠</span>
+                </span>
+              ) : (
+                <span className={styles.msLateChip} data-ms-late="">
+                  <span aria-hidden="true">⚠ </span>
+                  {th.milestones.late}
+                </span>
+              )}
+            </Tooltip>
+          ) : null}
+          {people !== null ? (
+            <span className={styles.muted} aria-hidden="true" data-sum-people={people}>
+              {th.grid.sumMode.people(people)}
+            </span>
+          ) : null}
+          {ownsTask && task.certainty === 'TENTATIVE' ? (
+            <Tooltip
+              title={
+                task.certaintySource === 'task'
+                  ? th.grid.row.sourceTask
+                  : task.certaintySource === 'ancestor'
+                    ? th.grid.row.sourceAncestor(task.certaintySourceName ?? '')
+                    : th.grid.row.tentative
+              }
+              describeChild
+            >
+              <span className={styles.muted}>
+                <StatusGlyph kind="tentative" />
+                {task.certaintySource === 'task' ? '*' : null}
+              </span>
+            </Tooltip>
+          ) : null}
+          {ownsTask && task.completed ? <span className={styles.muted}>{th.grid.row.completed}</span> : null}
+          {hasBlocker && chipLevel >= 2 ? (
+            <CompactBlocker open={task.blockers.open} total={task.blockers.total} names={p.blockerNames} />
+          ) : hasBlocker ? (
+            <BlockerBadge
+              open={task.blockers.open}
+              total={task.blockers.total}
+              names={p.blockerNames}
+              focusable={false}
+            />
+          ) : null}
+          {unassigned && !showAssignees ? (
+            <span className={styles.muted}>{th.grid.row.unassigned}</span>
+          ) : null}
+        </span>
         {ownsTask ? (
           <span className={styles.actions} onClick={stop} onDoubleClick={stop}>
             {/* M6.1-D17: the page link. The click only stops propagation (no row selection), so Next's Link

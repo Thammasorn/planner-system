@@ -347,6 +347,49 @@
 
 .taskCell {
   padding-left: var(--space-1);
+  /* v3.9: never paint over the ผู้รับผิดชอบ column — clip horizontally at the column edge (focus rings keep the y axis) */
+  overflow-x: clip;
+}
+
+/* v3.9: name + chips (src/lib/grid/task-chips.ts picks data-chip-level from this box's width); its width comes from the
+   flex layout only (basis 0), so collapsing the chips never changes it */
+.taskMain {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 100%;
+  overflow: hidden;
+}
+
+/* the name keeps ~60 px before anything else; the lower-priority chips shrink first (milestone label most) */
+.taskMain > .name {
+  flex: 0 1 auto;
+  min-width: min(60px, 100%);
+}
+
+/* icon-only blocker chip (⊘ + count): same outline as BlockerBadge, never colour alone (icon + aria-label + tooltip) */
+.chipIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  height: 22px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.chipIcon[data-waiting='true'] {
+  border-color: var(--mui-palette-error-main);
+}
+
+.chipIcon[data-waiting='true'] svg {
+  color: var(--mui-palette-error-main);
 }
 
 /* v3.9 (src/lib/grid/row-layout.ts): [⠿ gutter][depth indent][caret slot] before the name, no gaps inside */
@@ -1530,7 +1573,8 @@
 
 /* M8 (FR-706, AC-702, §8.3 "→◆UAT"): the task's milestone and the "เลย milestone" chip in the task column */
 .msTaskLink {
-  flex: none;
+  flex: 0 1000 auto;
+  min-width: 0;
   max-width: 96px;
   overflow: hidden;
   white-space: nowrap;
@@ -1540,7 +1584,10 @@
 }
 
 .msLateChip {
-  flex: none;
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 var(--space-1);
   border: 1px solid var(--load-over-fg);
   border-radius: var(--radius-sm);
