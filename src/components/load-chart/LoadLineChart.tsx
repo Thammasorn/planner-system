@@ -49,10 +49,16 @@ export interface LoadLineChartProps {
 
 /** Plot box inside the chart height: a top margin for the highest point, the x tick labels at the bottom. */
 export const AXIS_H = 22
-/** The y-axis title band at the top of the frozen area (one xs line); the plot starts below it (owner feedback
- *  2026-11-03: the title overlapped the "100%" label when the scale tops out at 100 %). */
-export const AXIS_TITLE_H = 16
-export const PLOT_TOP = AXIS_TITLE_H + 8
+/** v3.8 (owner 2026-11-03 "chart too tall"): no y-axis title band inside the chart any more — the unit ("% ของ
+ *  capacity" / "วัน") is the hint in the panel's header row. The top margin keeps the highest tick label (centred on
+ *  PLOT_TOP, one xs line) and an over-full point's value label inside the chart. */
+export const PLOT_TOP = 14
+/** The plot itself (~150 px: 2 × --space-… is not a layout length, so a constant like the grid's ROW_H). */
+export const PLOT_H = 150
+/** The chart's total height (plot + top margin + x labels). */
+export const CHART_H = PLOT_TOP + PLOT_H + AXIS_H
+/** ~3 y ticks (0 · middle · top) — fewer lines on the shorter plot. */
+export const Y_TICKS = 2
 /** The "100% (เต็ม capacity)" label sits just below its line (never on the title band, never on the tick column). */
 export const REF_LABEL_GAP = 4
 
@@ -83,7 +89,7 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
           if (c !== null && c > max) max = c
         }
       }
-    return niceScale(max)
+    return niceScale(max, Y_TICKS)
   }, [series, display, focusedPerson])
   const y = (v: number) => yOf(v, scale.max, PLOT_TOP, plotH)
 
@@ -127,9 +133,6 @@ export const LoadLineChart = memo(function LoadLineChart(p: LoadLineChartProps) 
           onPointerLeave={() => setHoverKey(null)}
         >
           <div className={styles.frozen} aria-hidden="true">
-            <span className={styles.axisUnit} style={{ height: AXIS_TITLE_H }} data-axis-title="">
-              {display === 'DAYS' ? th.loadChart.unitDays : th.loadChart.unitPercent}
-            </span>
             {scale.ticks.map((t) => (
               <span key={t} className={styles.yTick} style={{ top: y(t) }}>
                 {fmtTick(t)}

@@ -7,7 +7,7 @@ import type { GridMarkerView } from '@/lib/grid/markers'
 import { theme } from '@/lib/theme/theme'
 import { chartPeople } from './chart-model'
 import { FROZEN, testLayout, W } from './layout.test.data'
-import { AXIS_TITLE_H, LoadLineChart, PLOT_TOP, type LoadLineChartProps } from './LoadLineChart'
+import { AXIS_H, CHART_H, LoadLineChart, PLOT_H, PLOT_TOP, type LoadLineChartProps } from './LoadLineChart'
 import type { LoadSeries } from './types'
 
 const SERIES: LoadSeries[] = [
@@ -42,7 +42,7 @@ function renderChart(over: Partial<LoadLineChartProps> = {}) {
     people: chartPeople(SERIES),
     display: 'DAYS',
     focused: null,
-    height: 240,
+    height: CHART_H,
     ...over,
   }
   return render(
@@ -235,9 +235,8 @@ describe('LoadLineChart on the grid’s columns (FR-813, M7.1-D30)', () => {
   })
 })
 
-describe('y-axis title vs the 100 % label (owner feedback 2026-11-03: they overlapped at the top-left)', () => {
-  /** jsdom has no layout: boxes from the inline geometry (title = [0, AXIS_TITLE_H), label = [top, top + 12) — one
-   *  xs line, line-height 1 — in the frozen area; both left-aligned, so only the vertical bands matter). */
+describe('the shorter chart (v3.8): no y-axis title band, 3 y ticks, the 100 % label never clipped', () => {
+  /** jsdom has no layout: boxes from the inline geometry (one xs line = 12 px, line-height 1). */
   const XS_LINE = 12
   const capped = (pct: number): LoadSeries[] => [
     {
@@ -246,28 +245,33 @@ describe('y-axis title vs the 100 % label (owner feedback 2026-11-03: they overl
       points: [{ week: W[0], loadCd: pct * 5, capacityCd: 500, pct, level: pct > 100 ? 'OVER' : 'OK' }],
     },
   ]
+
+  it('the plot is ~150 px and the unit title is gone from the chart (it is the header hint)', () => {
+    expect(PLOT_H).toBeGreaterThanOrEqual(140)
+    expect(PLOT_H).toBeLessThanOrEqual(160)
+    const { container } = renderChart({ display: 'DAYS' })
+    expect(container.querySelector('[data-axis-title]')).toBeNull()
+    expect(container.querySelector('[data-testid="load-line-chart"]')).toHaveStyle({ height: `${CHART_H}px` })
+  })
+
   for (const top of [40, 100, 130, 260])
-    it(`PERCENT, highest point ${top} %: the boxes do not intersect and the label sits below its line`, () => {
+    it(`PERCENT, highest point ${top} %: 3 ticks; the label sits below its line, inside the plot`, () => {
       const { container } = renderChart({
         series: capped(top),
         people: chartPeople(capped(top)),
         display: 'PERCENT',
       })
-      const title = container.querySelector<HTMLElement>('[data-axis-title]')!
+      const ticks = container.querySelectorAll('[class*="yTick"]')
+      expect(ticks).toHaveLength(3)
       const label = container.querySelector<HTMLElement>('[data-ref-label]')!
       const line = container.querySelector('[data-ref-line="100"]')!
-      expect(parseFloat(title.style.height)).toBe(AXIS_TITLE_H)
       const labelTop = parseFloat(label.style.top)
-      expect(labelTop).toBeGreaterThanOrEqual(AXIS_TITLE_H) // title [0, 16) ∩ label [top, top + 12) = ∅
       expect(labelTop).toBeGreaterThan(Number(line.getAttribute('y1')))
-      expect(labelTop + XS_LINE).toBeLessThanOrEqual(240 - 22) // inside the plot, above the x labels
-      expect(Number(line.getAttribute('y1'))).toBeGreaterThanOrEqual(PLOT_TOP)
+      expect(labelTop).toBeGreaterThanOrEqual(PLOT_TOP) // never above the plot (the header row is there)
+      expect(labelTop + XS_LINE).toBeLessThanOrEqual(CHART_H - AXIS_H) // above the x labels
     })
 
-  it('DAYS: the title only; the highest y tick (centred on PLOT_TOP) stays below the title band', () => {
-    const { container } = renderChart({ display: 'DAYS' })
-    expect(container.querySelector('[data-ref-label]')).toBeNull()
-    expect(container.querySelector('[data-axis-title]')).toHaveTextContent(th.loadChart.unitDays)
-    expect(PLOT_TOP - XS_LINE / 2).toBeGreaterThanOrEqual(AXIS_TITLE_H)
+  it('the highest y tick (centred on PLOT_TOP) is not clipped at the top', () => {
+    expect(PLOT_TOP - XS_LINE / 2).toBeGreaterThanOrEqual(0)
   })
 })

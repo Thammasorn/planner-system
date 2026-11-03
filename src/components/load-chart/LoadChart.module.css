@@ -5,7 +5,7 @@
 .panel {
   display: flex;
   flex-direction: column;
-  /* head 32 + legend 28 + the 240 px chart (x labels included) + 3 × 4 px fit the pane's 320 px with its borders */
+  /* v3.8: head 32 (title · unit · legend chips · controls in one row) + the 186 px chart (x labels included) */
   gap: var(--space-1);
   min-width: 0;
   padding: var(--space-1) 0;
@@ -15,7 +15,6 @@
 }
 
 .head,
-.legend,
 .caption,
 .empty {
   padding-inline: var(--space-3);
@@ -25,7 +24,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-1) var(--space-3);
   min-height: 32px;
 }
 
@@ -43,8 +42,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-2);
+  min-width: 0;
   margin: 0;
-  padding-block: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -52,7 +52,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  min-height: 28px;
+  min-height: 24px;
   padding: 0 var(--space-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -84,7 +84,6 @@
 }
 
 .chart {
-  height: 240px;
   min-width: 0;
 }
 
@@ -162,19 +161,6 @@
 /* M11.2 (/workload): no "รวม" column → no cover */
 .follow[data-no-total] .cover {
   display: none;
-}
-
-.axisUnit {
-  position: absolute;
-  top: 0;
-  left: var(--space-3);
-  right: var(--space-2);
-  overflow: hidden;
-  font-size: var(--font-xs);
-  line-height: 1;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--mui-palette-text-secondary);
 }
 
 .yTick,
