@@ -9,7 +9,8 @@ import { viewLoad } from '@/domain/certainty'
 import type { ISODate, LoadView } from '@/domain/types'
 import type { LoadSeries } from '@/components/load-chart/types'
 import type { PeriodSlot } from '@/lib/grid/chart-geometry'
-import { buildColumns, WEEK_W, type GridColumn } from '@/lib/grid/columns'
+import { buildColumns, densityWidths, WEEK_W, type GridColumn } from '@/lib/grid/columns'
+import type { GridDensity } from '@/lib/schemas/preferences'
 import { monthLabel, monthSpans, monthStartKeys, type MonthKey } from '@/lib/grid/months'
 import type { WorkloadGroup } from '@/lib/contracts/workload'
 import { loadPct } from '@/lib/load/display'
@@ -29,12 +30,13 @@ export interface TableGeometry {
 }
 
 /** The geometry before the table is measured (and in jsdom): person column + WEEK_W per week, unmeasured view. */
-export function nominalGeometry(weekCount: number): TableGeometry {
+export function nominalGeometry(weekCount: number, density: GridDensity = 'NORMAL'): TableGeometry {
+  const w = density === 'COMPACT' ? densityWidths('COMPACT').week : WEEK_W
   return {
     personW: PERSON_COL_W,
-    contentW: PERSON_COL_W + weekCount * WEEK_W,
+    contentW: PERSON_COL_W + weekCount * w,
     viewW: 0,
-    cols: Array.from({ length: weekCount }, (_, i) => ({ left: PERSON_COL_W + i * WEEK_W, width: WEEK_W })),
+    cols: Array.from({ length: weekCount }, (_, i) => ({ left: PERSON_COL_W + i * w, width: w })),
   }
 }
 

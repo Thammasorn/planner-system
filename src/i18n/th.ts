@@ -1676,6 +1676,10 @@ export const th = {
       label: 'เครื่องมือกริด',
       zoom: 'มุมมอง',
       zoomWeek: 'สัปดาห์',
+      /** v3.8 (FR-822): week-column density */
+      density: 'ความกว้างคอลัมน์',
+      densityNormal: 'ปกติ',
+      densityCompact: 'แคบ',
       zoomDay: 'วัน',
       today: 'วันนี้',
       prev: 'สัปดาห์ก่อนหน้า',

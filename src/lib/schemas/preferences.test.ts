@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  gridDensity,
   DEFAULT_PREFERENCES,
   preferenceInput,
   preferencesSchema,
@@ -130,6 +131,7 @@ describe('M7.1 preference keys (FR-810/813/814/816, X59)', () => {
       ['grid.showAssignees', [true, false], ['yes', 1]],
       ['grid.taskColumnWidth', [120, 240, 640], [119, 641, 240.5, '240']],
       ['grid.chart', [true, false], ['on', null]],
+      ['grid.density', ['NORMAL', 'COMPACT'], ['compact', 'WIDE', null]],
     ]
     for (const [key, goods, bads] of cases) {
       for (const value of goods)
@@ -179,5 +181,16 @@ describe('palette.lastProjectId (M10-D27, X05/X59)', () => {
     expect(paletteLastProjectId(DEFAULT_PREFERENCES)).toBeNull()
     expect(paletteLastProjectId(preferencesSchema.parse({ 'palette.lastProjectId': 42 }))).toBeNull()
     expect(paletteLastProjectId(preferencesSchema.parse({ 'palette.lastProjectId': V4 }))).toBe(V4)
+  })
+})
+
+describe('v3.8 grid.density (FR-822)', () => {
+  it('unset = NORMAL on desktop, COMPACT on a phone; a stored value wins; junk reads as unset', () => {
+    const none = preferencesSchema.parse({})
+    expect(gridDensity(none, false)).toBe('NORMAL')
+    expect(gridDensity(none, true)).toBe('COMPACT')
+    expect(gridDensity(preferencesSchema.parse({ 'grid.density': 'NORMAL' }), true)).toBe('NORMAL')
+    expect(gridDensity(preferencesSchema.parse({ 'grid.density': 'COMPACT' }), false)).toBe('COMPACT')
+    expect(preferencesSchema.parse({ 'grid.density': 'x' })['grid.density']).toBeUndefined()
   })
 })

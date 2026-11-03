@@ -23,8 +23,10 @@ import type { ReactNode } from 'react'
 import type { CellUnit, LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { GridZoom } from '@/lib/contracts/grid'
+import type { GridDensity } from '@/lib/schemas/preferences'
 import { GRID_UNITS, LOAD_VIEWS } from '@/lib/schemas/preferences'
 import type { SaveState } from './useSaveAllocations'
+import { DensityToggle } from './DensityToggle'
 import { ZoomToggle } from './ZoomToggle'
 import styles from './grid.module.css'
 
@@ -39,6 +41,9 @@ export interface GridToolbarProps {
   onView: (v: LoadView) => void
   onUnit: (u: CellUnit) => void
   onShowCompleted: (on: boolean) => void
+  /** v3.8 (FR-822): [ปกติ | แคบ] week columns */
+  density?: GridDensity
+  onDensity?: (d: GridDensity) => void
   /** M7 (FR-802) */
   zoom?: GridZoom
   onZoom?: (z: GridZoom) => void
@@ -62,6 +67,7 @@ export function GridToolbar(p: GridToolbarProps) {
       <div className={styles.toolbarGroup} data-toolbar-group="view">
         {p.start}
         <ZoomToggle zoom={p.zoom ?? 'WEEK'} onChange={p.onZoom ?? (() => {})} />
+        {p.onDensity ? <DensityToggle density={p.density ?? 'NORMAL'} onChange={p.onDensity} /> : null}
         <div className={styles.toolbarNav} data-testid="toolbar-nav">
           <IconButton
             size="small"

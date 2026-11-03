@@ -22,6 +22,8 @@ import type { ISODate, LoadView } from '@/domain/types'
 import { th } from '@/i18n/th'
 import type { WorkloadPerson, WorkloadResponse } from '@/lib/contracts/workload'
 import { formatWeekHeader } from '@/lib/format'
+import { weekHeaderText } from '@/lib/grid/columns'
+import type { GridDensity } from '@/lib/schemas/preferences'
 import { monthHeaderCells, sameGeometry, workloadMonthStarts, type TableGeometry } from '@/lib/workload/chart'
 import { WorkloadCell, isDeactivatedWeek } from './WorkloadCell'
 import { WorkloadTooltipHost, type WorkloadTooltipTarget } from './WorkloadTooltip'
@@ -37,6 +39,8 @@ export interface WorkloadTableProps {
   scrollerRef?: Ref<HTMLDivElement>
   /** M11.2: the measured header geometry, on every change (resize, data, fonts) */
   onGeometry?: (g: TableGeometry) => void
+  /** v3.8 (FR-822): week-column density shared with the plan grid (default NORMAL) */
+  density?: GridDensity
 }
 
 /** .monthHeader's horizontal padding (2 × --space-2): the label never outgrows its span. */
@@ -65,7 +69,15 @@ const MOVES: Readonly<Record<string, readonly [number, number]>> = {
   ArrowRight: [0, 1],
 }
 
-export function WorkloadTable({ data, view, selected, onOpen, scrollerRef, onGeometry }: WorkloadTableProps) {
+export function WorkloadTable({
+  data,
+  view,
+  selected,
+  onOpen,
+  scrollerRef,
+  onGeometry,
+  density = 'NORMAL',
+}: WorkloadTableProps) {
   const people = useMemo(() => data.groups.flatMap((g) => g.people), [data.groups])
   const byId = useMemo(() => new Map(people.map((p) => [p.userId, p])), [people])
   const rowOf = useMemo(() => new Map(people.map((p, i) => [p.userId, i])), [people])
@@ -139,6 +151,7 @@ export function WorkloadTable({ data, view, selected, onOpen, scrollerRef, onGeo
         className={styles.table}
         aria-label={th.workload.tableLabel}
         data-testid="workload-table"
+        data-density={density}
         style={geometry ? ({ '--wl-person-w': `${geometry.personW}px` } as CSSProperties) : undefined}
       >
         <thead>
@@ -177,8 +190,10 @@ export function WorkloadTable({ data, view, selected, onOpen, scrollerRef, onGeo
                 data-week={w}
                 data-today={w === thisWeek ? 'true' : undefined}
                 data-month-start={monthStarts.has(`W:${w}`) ? '' : undefined}
+                aria-label={density === 'COMPACT' ? formatWeekHeader(w) : undefined}
+                title={density === 'COMPACT' ? formatWeekHeader(w) : undefined}
               >
-                {formatWeekHeader(w)}
+                {weekHeaderText(w, density)}
                 {w === thisWeek ? <VisuallyHidden>{` ${th.workload.window.thisWeek}`}</VisuallyHidden> : null}
               </th>
             ))}

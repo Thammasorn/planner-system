@@ -48,7 +48,7 @@
 
 .weekHeader {
   padding: var(--space-1) var(--space-2);
-  min-width: 64px;
+  min-width: 52px; /* v3.8 (FR-822): the plan grid's WEEK_W */
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -185,7 +185,7 @@
   justify-content: center;
   gap: var(--space-1);
   width: 100%;
-  min-width: 64px;
+  min-width: 52px;
   min-height: 32px;
   padding: var(--space-1);
   cursor: pointer;
@@ -320,4 +320,13 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+/* v3.8 (FR-822) แคบ: the plan grid's 36 px week columns — day-only headers, --font-xs values */
+.table[data-density='COMPACT'] .weekHeader,
+.table[data-density='COMPACT'] .cell {
+  min-width: 36px;
+  padding-left: calc(var(--space-1) / 2);
+  padding-right: calc(var(--space-1) / 2);
+  font-size: var(--font-xs);
 }

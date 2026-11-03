@@ -28,8 +28,10 @@ import {
   TASK_COL_W,
   totalColIndex,
   TOTAL_COL_W,
+  weekHeaderText,
   type GridColumn,
 } from '@/lib/grid/columns'
+import type { GridDensity } from '@/lib/schemas/preferences'
 import { DayHeaderCell, WeekTotalHeaderCell } from './DayGroupHeader'
 import styles from './grid.module.css'
 
@@ -55,6 +57,8 @@ export interface GridHeaderProps {
   monthStarts?: ReadonlySet<string>
   /** M9 (M9-D28): the Monday marked as the focus week (person grid `?week=`) */
   focusWeek?: string
+  /** v3.8 (FR-822): COMPACT shows the day only ("7"); the full date stays in aria-label / title */
+  density?: GridDensity
 }
 
 const NO_HOLIDAYS: ReadonlyMap<string, string> = new Map()
@@ -72,6 +76,7 @@ const HeaderCell = memo(function HeaderCell({
   onToggleWeek,
   monthStart,
   focus,
+  density,
 }: {
   col: GridColumn
   c: number
@@ -84,8 +89,10 @@ const HeaderCell = memo(function HeaderCell({
   onToggleWeek: (week: string) => void
   monthStart: boolean
   focus: boolean
+  density: GridDensity
 }) {
   const label = formatWeekHeader(col.weekStart)
+  const text = weekHeaderText(col.weekStart, density)
   // the aria-label replaces the content, so it carries the today / holiday texts itself (§8.9, FR-807)
   const name = [
     th.grid.header.week(label),
@@ -105,6 +112,7 @@ const HeaderCell = memo(function HeaderCell({
       role="columnheader"
       aria-colindex={periodColIndex(c)}
       aria-label={name}
+      title={text === label ? undefined : label}
       aria-description={focus ? th.people.grid.focusWeek : undefined}
       className={styles.colHeader}
       style={{ left, width, height: HEADER_H }}
@@ -130,10 +138,10 @@ const HeaderCell = memo(function HeaderCell({
             onToggleWeek(col.weekStart)
           }}
         >
-          {label}
+          {text}
         </button>
       ) : (
-        <span>{label}</span>
+        <span>{text}</span>
       )}
       {holiday ? <StatusGlyph kind="holiday" /> : null}
       {today ? <VisuallyHidden>{th.grid.header.today}</VisuallyHidden> : null}
@@ -243,6 +251,7 @@ export function GridHeader(p: GridHeaderProps) {
             onToggleWeek={p.onToggleWeek ?? noop}
             monthStart={monthStart}
             focus={p.focusWeek === col.weekStart}
+            density={p.density ?? 'NORMAL'}
           />
         )
       })}

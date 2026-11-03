@@ -38,9 +38,9 @@ describe('monthSpans (FR-818, M7.1-D10)', () => {
   it('weeks 2026-09-14…2026-11-02 → ก.ย. (14/9, 21/9, 28/9), ต.ค. (5/10…26/10), พ.ย. (2/11)', () => {
     const cs = cols('2026-09-14', 8)
     expect(monthSpans(cs)).toEqual([
-      { key: '2026-09', startIdx: 0, endIdx: 2, left: 0, width: 3 * 64 },
-      { key: '2026-10', startIdx: 3, endIdx: 6, left: 3 * 64, width: 4 * 64 },
-      { key: '2026-11', startIdx: 7, endIdx: 7, left: 7 * 64, width: 64 },
+      { key: '2026-09', startIdx: 0, endIdx: 2, left: 0, width: 3 * 52 },
+      { key: '2026-10', startIdx: 3, endIdx: 6, left: 3 * 52, width: 4 * 52 },
+      { key: '2026-11', startIdx: 7, endIdx: 7, left: 7 * 52, width: 52 },
     ])
   })
   it('week 28/9 expanded → day 2026-10-01 starts ต.ค. and the รวม column stays in ต.ค.', () => {
@@ -60,7 +60,7 @@ describe('monthSpans (FR-818, M7.1-D10)', () => {
   it('range → only the spans intersecting it, each with its full extent', () => {
     const cs = cols('2026-09-14', 8)
     expect(monthSpans(cs, { first: 4, last: 5 })).toEqual([
-      { key: '2026-10', startIdx: 3, endIdx: 6, left: 192, width: 256 },
+      { key: '2026-10', startIdx: 3, endIdx: 6, left: 156, width: 208 },
     ])
     expect(monthSpans(cs, { first: 2, last: 3 }).map((s) => s.key)).toEqual(['2026-09', '2026-10'])
     // clamped to the column list

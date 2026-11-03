@@ -3,9 +3,11 @@
 // M7 adds the day / "รวม" columns of expanded weeks without changing a signature (G26).
 import { addWeeks, daysOfWeek, diffDays, weekStart } from '@/domain/dates'
 import type { ISODate, PeriodKey } from '@/domain/types'
+import type { GridDensity } from '@/lib/schemas/preferences'
 import { ASSIGNEE_W, TASK_W_DEFAULT } from './frozen'
 
-export const WEEK_W = 64
+/** Week column width at the default density (v3.8: 64 → 52 px, FR-822). */
+export const WEEK_W = 52
 /** M7.1-D8: the frozen area is two columns; their widths come from src/lib/grid/frozen.ts#frozenWidths(). */
 export const TOTAL_W = 72
 /** CSS widths of the frozen cells: VirtualGrid sets --grid-task-w / --grid-assignee-w from frozenWidths() (M7.1-D8). */
@@ -47,7 +49,11 @@ export const SCROLLER_BORDER_H = 2
  */
 export function gridContentHeight(bodyH: number, scrollbarH = 0): number {
   return (
-    Math.max(bodyH, HEADER_TOTAL_H) + FOOTER_ROWS * ROW_H + FOOTER_BORDER_H + SCROLLER_BORDER_H + Math.max(0, scrollbarH)
+    Math.max(bodyH, HEADER_TOTAL_H) +
+    FOOTER_ROWS * ROW_H +
+    FOOTER_BORDER_H +
+    SCROLLER_BORDER_H +
+    Math.max(0, scrollbarH)
   )
 }
 
@@ -90,6 +96,29 @@ export function timelineWeeks(today: ISODate): ISODate[] {
 export const DAY_W = 44
 export const WEEK_TOTAL_W = 52
 export const WIDTH = { week: WEEK_W, day: DAY_W, weekTotal: WEEK_TOTAL_W } as const
+/** v3.8 (FR-822) แคบ: more weeks on a narrow screen; values in --font-xs, the week header shows the day only. */
+export const WIDTH_COMPACT = { week: 36, day: 36, weekTotal: 36 } as const
+
+/** Column widths of a density (the one source for the grid, its load chart and the /workload table). */
+export function densityWidths(density: GridDensity = 'NORMAL'): {
+  week: number
+  day: number
+  weekTotal: number
+} {
+  return density === 'COMPACT' ? WIDTH_COMPACT : WIDTH
+}
+
+/** The week header text: "28/9" (NORMAL) or "28" (COMPACT — the month row above gives the month; the full date stays
+ *  in the header's aria-label / title). */
+export function weekHeaderText(weekStart: ISODate, density: GridDensity = 'NORMAL'): string {
+  const d = Number(weekStart.slice(8, 10))
+  return density === 'COMPACT' ? String(d) : `${d}/${Number(weekStart.slice(5, 7))}`
+}
+
+/** A cell value at a density: COMPACT drops a zero fraction ("5.0" → "5", "1.00" → "1"; "2.5" stays). */
+export function densityValue(text: string, density: GridDensity = 'NORMAL'): string {
+  return density === 'COMPACT' ? text.replace(/^(-?\d+)\.0+$/, '$1') : text
+}
 
 /**
  * Collapsed week → one { kind: 'W', role: 'week', key: `W:${w}`, width: WEEK_W }. M7 (M7-D10): an expanded week → its
@@ -101,7 +130,9 @@ export function buildColumns(
   weeks: readonly ISODate[],
   expanded: ReadonlySet<ISODate>,
   dayDatesByWeek: ReadonlyMap<ISODate, readonly ISODate[]>,
+  density: GridDensity = 'NORMAL',
 ): GridColumn[] {
+  const W = densityWidths(density)
   let offset = 0
   const out: GridColumn[] = []
   const push = (c: Omit<GridColumn, 'offset'>) => {
@@ -110,13 +141,13 @@ export function buildColumns(
   }
   for (const w of weeks) {
     if (!expanded.has(w)) {
-      push({ key: `W:${w}`, kind: 'W', role: 'week', weekStart: w, date: w, width: WEEK_W })
+      push({ key: `W:${w}`, kind: 'W', role: 'week', weekStart: w, date: w, width: W.week })
       continue
     }
     const dates = dayDatesByWeek.get(w) ?? daysOfWeek(w).slice(0, 5)
     for (const d of dates)
-      push({ key: `D:${d}`, kind: 'D', role: 'day', weekStart: w, date: d, width: DAY_W })
-    push({ key: `W:${w}`, kind: 'W', role: 'weekTotal', weekStart: w, date: w, width: WEEK_TOTAL_W })
+      push({ key: `D:${d}`, kind: 'D', role: 'day', weekStart: w, date: d, width: W.day })
+    push({ key: `W:${w}`, kind: 'W', role: 'weekTotal', weekStart: w, date: w, width: W.weekTotal })
   }
   return out
 }

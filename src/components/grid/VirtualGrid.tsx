@@ -251,7 +251,9 @@ export function VirtualGrid(p: VirtualGridProps) {
       const w = scrollRef.current?.clientWidth ?? 0
       if (w <= 0) return 0
       const f = frozenWidths(w, p.taskWidth, showAssignees)
-      return Math.max(1, Math.floor((w - f.task - f.assignee - TOTAL_W) / WEEK_W))
+      // v3.8 (FR-822): the week width of the current density
+      const weekW = cols.find((c) => c.role === 'week')?.width ?? WEEK_W
+      return Math.max(1, Math.floor((w - f.task - f.assignee - TOTAL_W) / weekW))
     },
     element: () => scrollRef.current,
     frozen: () => ({ task: fw.task, assignee: fw.assignee, gridWidth: viewW }),

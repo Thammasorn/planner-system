@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import Skeleton from '@mui/material/Skeleton'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
@@ -26,6 +27,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { addDays, addWeeks, weekStart } from '@/domain/dates'
 import type { ISODate, LoadView } from '@/domain/types'
 import { LoadDisplayToggle } from '@/components/load/LoadDisplayToggle'
+import { DensityToggle } from '@/components/grid/DensityToggle'
 import { usePreferences } from '@/hooks/usePreferences'
 import { useSidebar } from '@/hooks/useSidebar'
 import { useToday } from '@/hooks/useToday'
@@ -35,7 +37,7 @@ import { compareThai } from '@/lib/collate'
 import type { WorkloadPerson } from '@/lib/contracts/workload'
 import type { TableGeometry } from '@/lib/workload/chart'
 import { formatThaiDate } from '@/lib/format'
-import { gridPreference } from '@/lib/schemas/preferences'
+import { gridDensity, gridPreference } from '@/lib/schemas/preferences'
 import { OverloadList } from './OverloadList'
 import { isDeactivatedWeek } from './WorkloadCell'
 import { WorkloadCellPanel } from './WorkloadCellPanel'
@@ -51,6 +53,8 @@ type PanelTarget = { userId: string; name: string; week: ISODate; deactivated: b
 export function WorkloadPage({ initialView }: { initialView: LoadView }) {
   const { prefs, setPreference } = usePreferences()
   const view = prefs['load.view'] === undefined ? initialView : gridPreference(prefs, 'load.view')
+  const narrow = useMediaQuery('(max-width:599.95px)')
+  const density = gridDensity(prefs, narrow)
   const today = useToday()
   const [params, patch] = useWorkloadUrlState()
   const q = useWorkloadTable(params)
@@ -116,6 +120,8 @@ export function WorkloadPage({ initialView }: { initialView: LoadView }) {
         </ToggleButtonGroup>
         {/* M11.1 (FR-1002/FR-1010): "% | วัน/capacity" — the shared load.display preference */}
         <LoadDisplayToggle />
+        {/* v3.8 (FR-822): [ปกติ | แคบ] week columns — the plan grid's grid.density preference */}
+        <DensityToggle density={density} onChange={(d) => setPreference('grid.density', d)} />
         <FormControl size="small" sx={SELECT_SX}>
           <InputLabel id="wl-position">{th.workload.filters.position}</InputLabel>
           <Select
@@ -226,6 +232,7 @@ export function WorkloadPage({ initialView }: { initialView: LoadView }) {
               onOpen={openPanel}
               scrollerRef={lead}
               onGeometry={setGeometry}
+              density={density}
             />
             <WorkloadLoadChart data={q.data} view={view} geometry={geometry} follow={follow} sync={sync} />
           </Box>

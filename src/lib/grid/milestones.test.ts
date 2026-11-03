@@ -92,12 +92,12 @@ describe('dateForCellClick (M8-D11)', () => {
 })
 
 describe('columnAtX', () => {
-  it('binary search on offsets (week width 64)', () => {
+  it('binary search on offsets (week width WEEK_W)', () => {
     const cols = weekCols()
     expect(cols.map((c) => c.offset)).toEqual([0, WEEK_W, 2 * WEEK_W])
     expect(columnAtX(cols, 0)).toBe(0)
-    expect(columnAtX(cols, 63)).toBe(0)
-    expect(columnAtX(cols, 64)).toBe(1)
+    expect(columnAtX(cols, WEEK_W - 1)).toBe(0)
+    expect(columnAtX(cols, WEEK_W)).toBe(1)
     expect(columnAtX(cols, 1000)).toBe(2)
     expect(columnAtX(cols, -20)).toBe(0)
   })

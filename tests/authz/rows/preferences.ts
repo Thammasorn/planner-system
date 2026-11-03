@@ -27,6 +27,8 @@ const M7_1_KEYS: { id: string; input: PreferenceInput }[] = [
   { id: 'PREF-M7.1-ASSIGNEES', input: { key: 'grid.showAssignees', value: false } },
   { id: 'PREF-M7.1-WIDTH', input: { key: 'grid.taskColumnWidth', value: 420 } },
   { id: 'PREF-M7.1-CHART', input: { key: 'grid.chart', value: true } },
+  // v3.8 (FR-822): same rule for the density key
+  { id: 'PREF-V38-DENSITY', input: { key: 'grid.density', value: 'COMPACT' } },
 ]
 
 export const rows: AuthzRow[] = [

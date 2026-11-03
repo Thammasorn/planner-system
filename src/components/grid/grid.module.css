@@ -1454,3 +1454,12 @@
   outline: 2px solid var(--brand-blue);
   outline-offset: -2px;
 }
+
+/* v3.8 (FR-822) แคบ: 36 px period columns — values in --font-xs with a tighter padding (nothing clipped: "12.5") */
+.root[data-density='COMPACT'] .cell,
+.root[data-density='COMPACT'] .footerCell,
+.root[data-density='COMPACT'] .colHeader {
+  font-size: var(--font-xs);
+  padding-left: calc(var(--space-1) / 2);
+  padding-right: calc(var(--space-1) / 2);
+}

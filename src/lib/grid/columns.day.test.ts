@@ -19,7 +19,7 @@ describe('buildColumns — expanded weeks (S3.1)', () => {
     ])
     expect(cols.map((c) => c.kind)).toEqual(['W', 'D', 'D', 'D', 'D', 'D', 'W', 'W'])
     expect(cols.map((c) => c.role)).toEqual(['week', 'day', 'day', 'day', 'day', 'day', 'weekTotal', 'week'])
-    expect(cols.map((c) => c.width)).toEqual([64, 44, 44, 44, 44, 44, 52, 64])
+    expect(cols.map((c) => c.width)).toEqual([52, 44, 44, 44, 44, 44, 52, 52])
     let offset = 0
     for (const c of cols) {
       expect(c.offset).toBe(offset)
@@ -52,7 +52,7 @@ describe('buildColumns — expanded weeks (S3.1)', () => {
   it('nothing expanded → M6 output (regression)', () => {
     const cols = buildColumns(weeks, new Set(), new Map([['2026-09-28', ['2026-09-28']]]))
     expect(cols).toEqual(
-      weeks.map((w, i) => ({ key: `W:${w}`, kind: 'W', role: 'week', weekStart: w, date: w, width: 64, offset: 64 * i })),
+      weeks.map((w, i) => ({ key: `W:${w}`, kind: 'W', role: 'week', weekStart: w, date: w, width: 52, offset: 52 * i })),
     )
   })
 })

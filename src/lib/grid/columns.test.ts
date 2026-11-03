@@ -21,6 +21,9 @@ import {
   timelineWeeks,
   TOTAL_W,
   WEEK_W,
+  densityWidths,
+  densityValue,
+  weekHeaderText,
 } from './columns'
 import { frozenWidths } from './frozen'
 
@@ -54,7 +57,7 @@ describe('header / frozen bookkeeping (M7.1-D8, M7.1-D10, X85)', () => {
 })
 
 describe('columns (FR-801, M6-D15, M6-D35)', () => {
-  it('builds 313 week columns of 64 px from today − 156 w to today + 157 w (exclusive)', () => {
+  it('builds 313 week columns of 52 px from today − 156 w to today + 157 w (exclusive)', () => {
     expect(cols).toHaveLength(313)
     expect(cols.every((c) => c.kind === 'W' && c.role === 'week' && c.width === WEEK_W)).toBe(true)
     expect(cols[0]?.key).toBe('W:2023-10-02')
@@ -63,7 +66,7 @@ describe('columns (FR-801, M6-D15, M6-D35)', () => {
   })
 
   it('offsets are cumulative from 0 and date = weekStart', () => {
-    expect(cols.slice(0, 3).map((c) => c.offset)).toEqual([0, 64, 128])
+    expect(cols.slice(0, 3).map((c) => c.offset)).toEqual([0, 52, 104])
     expect(cols[5]?.date).toBe(cols[5]?.weekStart)
   })
 
@@ -108,9 +111,9 @@ describe('stickyTotalWidth (SPEC §8.12 / D19: รวม abuts the last whole co
   })
   it('absorbs the leftover at 1920 px (week zoom, scroll aligned to a column)', () => {
     const vw = 1620 // ≈ the plan grid at 1920 × 1080 after the sidebar
-    const whole = Math.floor((vw - NAME_W - TOTAL_W) / WEEK_W) // 20
+    const whole = Math.floor((vw - NAME_W - TOTAL_W) / WEEK_W) // 24
     const w = stickyTotalWidth(cols, 10 * WEEK_W, vw, NAME_W)
-    expect(w).toBe(vw - NAME_W - whole * WEEK_W) // 1620 − 260 − 1280 = 80
+    expect(w).toBe(vw - NAME_W - whole * WEEK_W) // 1620 − 260 − 1248 = 112
     expect(NAME_W + whole * WEEK_W + w).toBe(vw) // name + whole weeks + รวม fill the container exactly
   })
   it('equals TOTAL_W when the columns fit exactly', () => {
@@ -147,9 +150,33 @@ describe('stickyTotalWidth (SPEC §8.12 / D19: รวม abuts the last whole co
 describe('gridContentHeight (§8.12 / D19: the scroller hugs a short plan)', () => {
   it('header + rows + footer + borders (+ scrollbar)', () => {
     expect(gridContentHeight(HEADER_TOTAL_H + 4 * ROW_H)).toBe(HEADER_TOTAL_H + (4 + FOOTER_ROWS) * ROW_H + 4)
-    expect(gridContentHeight(HEADER_TOTAL_H + 4 * ROW_H, 15)).toBe(HEADER_TOTAL_H + (4 + FOOTER_ROWS) * ROW_H + 19)
+    expect(gridContentHeight(HEADER_TOTAL_H + 4 * ROW_H, 15)).toBe(
+      HEADER_TOTAL_H + (4 + FOOTER_ROWS) * ROW_H + 19,
+    )
   })
   it('an empty body still has the header', () => {
     expect(gridContentHeight(0)).toBe(HEADER_TOTAL_H + FOOTER_ROWS * ROW_H + 4)
+  })
+})
+
+describe('v3.8 density (FR-822)', () => {
+  it('NORMAL = 52 / 44 / 52 px, COMPACT = 36 px for week, day and รวม columns', () => {
+    expect(densityWidths('NORMAL')).toEqual({ week: 52, day: 44, weekTotal: 52 })
+    expect(densityWidths('COMPACT')).toEqual({ week: 36, day: 36, weekTotal: 36 })
+    const c = buildColumns(['2026-09-28', '2026-10-05'], new Set(['2026-10-05']), new Map(), 'COMPACT')
+    expect(c.map((x) => x.width)).toEqual([36, 36, 36, 36, 36, 36, 36])
+    expect(c.map((x) => x.offset).slice(0, 3)).toEqual([0, 36, 72])
+  })
+  it('week header: "28/9" normal, the day only when compact', () => {
+    expect(weekHeaderText('2026-09-28')).toBe('28/9')
+    expect(weekHeaderText('2026-12-07', 'COMPACT')).toBe('7')
+  })
+  it('compact values drop a zero fraction only', () => {
+    expect(densityValue('5.0', 'COMPACT')).toBe('5')
+    expect(densityValue('1.00', 'COMPACT')).toBe('1')
+    expect(densityValue('2.5', 'COMPACT')).toBe('2.5')
+    expect(densityValue('12.5', 'COMPACT')).toBe('12.5')
+    expect(densityValue('', 'COMPACT')).toBe('')
+    expect(densityValue('5.0')).toBe('5.0')
   })
 })

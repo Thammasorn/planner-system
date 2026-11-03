@@ -22,6 +22,7 @@
 // BR-40 glyphs in both contexts (M9-D13, X06); ◆ read-only with a project-name prefix (M9-D29).
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import { useQueryClient } from '@tanstack/react-query'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import {
@@ -63,6 +64,7 @@ import { findDayWeekConflicts, splitByConflicts, type ConflictPair } from '@/lib
 import { collapseChanges, dayTargetsOf, type CollapseTarget } from '@/lib/grid/collapse'
 import {
   buildColumns,
+  densityValue,
   chunksForRange,
   columnIndexOfPeriod,
   FROZEN_COL_W,
@@ -92,9 +94,7 @@ import {
   initialColumnLeft,
   initialHoldStep,
 } from '@/lib/grid/initial-scroll'
-import {
-  markerEdges,
-} from '@/lib/grid/markers'
+import { markerEdges } from '@/lib/grid/markers'
 import type { GridModel } from '@/lib/grid/merge'
 import { monthStartKeys } from '@/lib/grid/months'
 import type { CellWrite } from '@/lib/grid/queue'
@@ -125,7 +125,7 @@ import {
 import { rememberVersion } from '@/lib/grid/versions'
 import type { GridCtx } from '@/lib/query-keys'
 import { qk } from '@/lib/query-keys'
-import { gridPreference, taskPreference } from '@/lib/schemas/preferences'
+import { gridDensity, gridPreference, taskPreference, type GridDensity } from '@/lib/schemas/preferences'
 import {
   flattenTree,
   indentTarget,
@@ -278,7 +278,13 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     [raw],
   )
   const dayDates = useMemo(() => dayDatesOf(daySig), [daySig])
-  const cols = useMemo(() => buildColumns(weeks, expandedSet, dayDates), [weeks, expandedSet, dayDates])
+  // v3.8 (FR-822): [ปกติ | แคบ] week columns (grid.density; unset → แคบ on phones)
+  const narrow = useMediaQuery('(max-width:599.95px)')
+  const density = gridDensity(prefs, narrow)
+  const cols = useMemo(
+    () => buildColumns(weeks, expandedSet, dayDates, density),
+    [weeks, expandedSet, dayDates, density],
+  )
   const focusIdx = useMemo(() => (openWeek ? firstColOfWeek(cols, openWeek) : -1), [cols, openWeek])
   const initialIdx = useMemo(
     () => (focusIdx >= 0 ? focusIdx : Math.max(0, firstColOfWeek(cols, addWeeks(thisWeek, -4)))),
@@ -309,7 +315,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     const canEdit = raw.context.canEdit && props.canEdit && !archived
     // M8-D8: archived projects never manage milestones (the server already says so; the page prop may know first)
     const canManage = raw.context.canManage && !archived
-    return canEdit === raw.context.canEdit && archived === raw.context.archived && canManage === raw.context.canManage
+    return canEdit === raw.context.canEdit &&
+      archived === raw.context.archived &&
+      canManage === raw.context.canManage
       ? raw
       : { ...raw, context: { ...raw.context, canEdit, archived, canManage } }
   }, [raw, props.canEdit, archived])
@@ -384,7 +392,10 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         const person = model.people[u]
         if (person) statuses.set(u, periodStatus(dayLoads.get(u)?.[per.key], person, per.key))
       }
-      out.set(per.key, footerPeriodCell(statuses, view, (u) => model.people[u]?.name ?? ''))
+      out.set(
+        per.key,
+        footerPeriodCell(statuses, view, (u) => model.people[u]?.name ?? ''),
+      )
     }
     return out
   }, [model, footer.people, dayLoads, view])
@@ -397,7 +408,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   // M9: the person grid passes the task's project (→ /projects/<pid>/plan?task=, M9-D28)
   const projectOfTask = useMemo(() => {
     const out = new Map<string, string>()
-    for (const r of model?.rows ?? []) if (r.kind === 'task' && r.projectId !== undefined) out.set(r.id, r.projectId)
+    for (const r of model?.rows ?? [])
+      if (r.kind === 'task' && r.projectId !== undefined) out.set(r.id, r.projectId)
     return out
   }, [model])
   const openTask = useCallback(
@@ -769,6 +781,14 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     },
     [cols, exp, setPreference],
   )
+  const onDensity = useCallback(
+    (d: GridDensity) => {
+      const first = cols[gridRef.current?.firstVisibleColumn() ?? -1]
+      keepWeek.current = first?.weekStart ?? null
+      setPreference('grid.density', d)
+    },
+    [cols, setPreference],
+  )
 
   // ── cell menu (Shift+F10 / ContextMenu / right click) + ↕ (M7-D23) ──
   const [menu, setMenu] = useState<{
@@ -790,7 +810,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     )
   }, [store])
   /** v3.8: a right click / ContextMenu key on a row header (set below, once the row menu exists) */
-  const rowMenuOpenRef = useRef<((header: HTMLElement, e: ReactMouseEvent<HTMLDivElement>) => void) | null>(null)
+  const rowMenuOpenRef = useRef<((header: HTMLElement, e: ReactMouseEvent<HTMLDivElement>) => void) | null>(
+    null,
+  )
   const onContextMenu = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {
       const t = e.target as HTMLElement
@@ -829,7 +851,6 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   )
   const closeMenu = useCallback(() => setMenu(null), [])
   const closeSumHint = useCallback(() => setSumHint(null), [])
-
 
   const onSelectRow = useCallback(
     (r: number, how?: 'toggle' | 'range') => {
@@ -1196,9 +1217,31 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
 
   // ── tooltip content ──
   const msTip = gm.tooltipFor
-  const tipData = useRef({ model, viewRows: cellRows, totals, projTotals, unit, view, cols, footerDays, footerWeeks, msTip })
+  const tipData = useRef({
+    model,
+    viewRows: cellRows,
+    totals,
+    projTotals,
+    unit,
+    view,
+    cols,
+    footerDays,
+    footerWeeks,
+    msTip,
+  })
   useLayoutEffect(() => {
-    tipData.current = { model, viewRows: cellRows, totals, projTotals, unit, view, cols, footerDays, footerWeeks, msTip }
+    tipData.current = {
+      model,
+      viewRows: cellRows,
+      totals,
+      projTotals,
+      unit,
+      view,
+      cols,
+      footerDays,
+      footerWeeks,
+      msTip,
+    }
   })
   const contentFor = useCallback((el: HTMLElement): string[] | null => {
     const d = tipData.current
@@ -1221,7 +1264,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         const off = d.model.context.deactivatedOn
         const deactivated = off !== null && off <= period.slice(2)
         return [
-          th.overload.footerStatus(th.overload.level[s.status.level], days1(s.load.total) || '0', days1(s.capCd) || '0'),
+          th.overload.footerStatus(
+            th.overload.level[s.status.level],
+            days1(s.load.total) || '0',
+            days1(s.capCd) || '0',
+          ),
           th.overload.excess(twoDecimals(s.status.excessCd)),
           causeText(s.status.cause, deactivated),
         ]
@@ -1285,7 +1332,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     // the row whose cells this row shows (M7.1: a single-assignee sum row = its merged assignment row)
     const row = cellRows[i]
     if (!vrow || !row || !model) return null
-    if (row.kind === 'project' || row.kind === 'masked') return renderHeaderRow(i, row, vCols, top, totalWidth)
+    if (row.kind === 'project' || row.kind === 'masked')
+      return renderHeaderRow(i, row, vCols, top, totalWidth)
     if (!isTaskViewRow(vrow)) return null
     const person = personOf(row)
     const personName = person?.name ?? null
@@ -1416,7 +1464,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
               width={v.size}
               rowKey={row.key}
               periodKey={col.key}
-              text={text}
+              text={densityValue(text, density)}
               label={label}
               editability={editability}
               resolution={cell?.resolution}
@@ -1471,7 +1519,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   ) => {
     if (!model) return null
     const name = row.kind === 'project' ? row.project.name : row.masked.label
-    const loads = row.kind === 'project' ? (projTotals.get(row.project.id) ?? row.project.totals) : row.masked.totals
+    const loads =
+      row.kind === 'project' ? (projTotals.get(row.project.id) ?? row.project.totals) : row.masked.totals
     const tentative = row.kind === 'project' && row.project.certainty === 'TENTATIVE'
     return (
       <div
@@ -1518,7 +1567,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
               width={v.size}
               rowKey={row.key}
               periodKey={col.key}
-              text={text}
+              text={densityValue(text, density)}
               label={label}
               editability="readOnlyRow"
               resolution={undefined}
@@ -1594,7 +1643,13 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   }, [menu, onMenuCollapse])
 
   return (
-    <div id={rootId} className={styles.root} ref={rootRef} data-chart-open={chartOpen ? 'true' : undefined}>
+    <div
+      id={rootId}
+      className={styles.root}
+      ref={rootRef}
+      data-chart-open={chartOpen ? 'true' : undefined}
+      data-density={density}
+    >
       <GridToolbar
         start={props.toolbarStart}
         view={view}
@@ -1606,6 +1661,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         onToday={() => scrollToColumn(todayIdx)}
         zoom={zoom}
         onZoom={onZoom}
+        density={density}
+        onDensity={onDensity}
         onView={(v) => setPreference('load.view', v)}
         onUnit={(u) => setPreference('grid.unit', u)}
         onShowCompleted={(on) => setPreference('tasks.showCompleted', on)}
@@ -1672,6 +1729,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
                 resizeHandle={resizeHandle}
                 monthStarts={monthStarts}
                 {...(openWeek ? { focusWeek: openWeek } : {})}
+                density={density}
               />
               <MarkerLines piece="header" edges={shown} pad={paddingOf(cols, vCols)} />
             </div>
@@ -1709,7 +1767,9 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
             onIncludeOthers={setIncludeOthers}
             dayCells={footerDays}
             weekCells={footerWeeks}
-            {...(isPerson ? { loadLabel: th.people.grid.footerLoad, showOthersSwitch: false, loadDisplay } : {})}
+            {...(isPerson
+              ? { loadLabel: th.people.grid.footerLoad, showOthersSwitch: false, loadDisplay }
+              : {})}
             monthStarts={monthStarts}
             overlay={
               <MarkerLines piece="footer" edges={renderedEdges(edges, vCols)} pad={paddingOf(cols, vCols)} />

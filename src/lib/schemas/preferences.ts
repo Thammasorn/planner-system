@@ -58,6 +58,10 @@ const TASK_COLUMN_WIDTH = z.number().int().min(TASK_COLUMN_WIDTH_MIN).max(TASK_C
  *  chart, /workload, /people, the person page and the projectWorkload block. */
 export const LOAD_DISPLAYS = ['PERCENT', 'DAYS'] as const
 export type LoadDisplay = (typeof LOAD_DISPLAYS)[number]
+/** v3.8 (FR-822): week-column density of the plan grid and the /workload table — ปกติ 52 px · แคบ 36 px. Unset = NORMAL,
+ *  phones (< 600 px) COMPACT (gridDensity). */
+export const GRID_DENSITIES = ['NORMAL', 'COMPACT'] as const
+export type GridDensity = (typeof GRID_DENSITIES)[number]
 
 export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('theme'), value: z.enum(THEMES) }),
@@ -87,6 +91,8 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('palette.lastProjectId'), value: z.uuid().nullable() }),
   // M11.1 (M11.1-D4)
   z.object({ key: z.literal('load.display'), value: z.enum(LOAD_DISPLAYS) }),
+  // v3.8 (FR-822)
+  z.object({ key: z.literal('grid.density'), value: z.enum(GRID_DENSITIES) }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -122,6 +128,8 @@ export const preferencesSchema = z.object({
   'palette.lastProjectId': z.uuid().nullable().optional().catch(undefined),
   // M11.1 key (M11.1-D4): optional like the others (absent or invalid = PERCENT); read with loadDisplay(prefs).
   'load.display': z.enum(LOAD_DISPLAYS).optional().catch(undefined),
+  // v3.8 key (FR-822): optional (absent = by screen width, see gridDensity)
+  'grid.density': z.enum(GRID_DENSITIES).optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 
@@ -184,6 +192,11 @@ export function planPreference<K extends PlanPreferenceKey>(
   key: K,
 ): NonNullable<Preferences[K]> {
   return prefs[key] ?? PLAN_PREFERENCE_DEFAULTS[key]
+}
+
+/** v3.8 (FR-822): the stored density, else COMPACT on a narrow screen (< 600 px) and NORMAL otherwise. */
+export function gridDensity(prefs: Preferences, narrow: boolean): GridDensity {
+  return prefs['grid.density'] ?? (narrow ? 'COMPACT' : 'NORMAL')
 }
 
 /** M10-D27: the project last used by the palette's "สร้าง task" flow, or null. */

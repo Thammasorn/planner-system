@@ -51,8 +51,8 @@ describe('markerEdges (BR-102 stacking)', () => {
       cs,
     )
     expect(edges.map((e) => [e.colIndex, e.x, e.views.map((v) => v.id)])).toEqual([
-      [2, 3 * 64, ['early', 'late', 'late2']],
-      [3, 4 * 64, ['next']],
+      [2, 3 * 52, ['early', 'late', 'late2']],
+      [3, 4 * 52, ['next']],
     ])
   })
   it('markers outside cols are dropped', () => {
