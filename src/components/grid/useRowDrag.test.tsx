@@ -148,4 +148,58 @@ describe('useRowDrag (FR-815, M7.1-D16)', () => {
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}')
     expect(m.moveTask).not.toHaveBeenCalled()
   })
+
+  const rowEl = (key: string) => document.querySelector<HTMLElement>(`[role="row"][data-row-key="${key}"]`)!
+
+  it('v3.9: a ghost follows the pointer, rows below the drop point slide down, nesting highlights the parent', async () => {
+    renderPos()
+    await waitFor(() => expect(handleOf('a:a-mint-rollout')).not.toBeNull())
+    fireEvent.pointerDown(handleOf('a:a-mint-rollout')!, {
+      button: 0,
+      pointerId: 5,
+      clientX: 20,
+      clientY: yOf(2),
+    })
+    // the lower half of "ปรับปรุงระบบ POS" (row 0), one indent to the right → a child of it
+    fireEvent.pointerMove(window, { pointerId: 5, clientX: 36, clientY: yOf(0) + 8 })
+    const indicator = await screen.findByTestId('drop-indicator')
+    expect(indicator).toHaveAttribute('data-index', '1')
+    expect(indicator).toHaveAttribute('data-depth', '1')
+    expect(indicator).toHaveTextContent(th.grid.reorder.dropInside('ปรับปรุงระบบ POS หน้าร้าน'))
+    expect(rowEl('a:a-cindy-pos')).toHaveAttribute('data-drop-parent', 'true')
+    expect(rowEl('a:a-cindy-pos').style.transform).toBe('')
+    expect(rowEl('a:a-ivy-uat').style.transform).toBe(`translateY(${ROW_H}px)`)
+    expect(rowEl('a:a-ivy-uat')).toHaveAttribute('data-drag-anim', 'true')
+    const ghost = screen.getByTestId('row-drag-ghost')
+    expect(ghost).toHaveTextContent('Rollout สาขา')
+    expect(ghost.style.transform).toMatch(/^translate\(/)
+    // inside the opened gap the target holds (no flicker)
+    fireEvent.pointerMove(window, { pointerId: 5, clientX: 36, clientY: yOf(1) })
+    expect(screen.getByTestId('drop-indicator')).toHaveAttribute('data-index', '1')
+    fireEvent.pointerUp(window, { pointerId: 5, clientX: 36, clientY: yOf(1) })
+    await waitFor(() =>
+      expect(m.moveTask).toHaveBeenCalledWith({ taskId: 't-rollout', parentId: 't-pos', afterId: null }),
+    )
+    expect(screen.queryByTestId('row-drag-ghost')).toBeNull()
+  })
+
+  it('v3.9: Esc glides the ghost home (rows slide back), then it is gone; nothing moves', async () => {
+    renderPos()
+    await waitFor(() => expect(handleOf('a:a-mint-rollout')).not.toBeNull())
+    fireEvent.pointerDown(handleOf('a:a-mint-rollout')!, {
+      button: 0,
+      pointerId: 6,
+      clientX: 20,
+      clientY: yOf(2),
+    })
+    fireEvent.pointerMove(window, { pointerId: 6, clientX: 20, clientY: yOf(0) - 8 })
+    await screen.findByTestId('drop-indicator')
+    expect(rowEl('a:a-cindy-pos').style.transform).toBe(`translateY(${ROW_H}px)`)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByTestId('row-drag-ghost')).toHaveAttribute('data-returning', 'true')
+    expect(rowEl('a:a-cindy-pos').style.transform).toBe('')
+    expect(screen.queryByTestId('drop-indicator')).toBeNull()
+    await waitFor(() => expect(screen.queryByTestId('row-drag-ghost')).toBeNull())
+    expect(m.moveTask).not.toHaveBeenCalled()
+  })
 })

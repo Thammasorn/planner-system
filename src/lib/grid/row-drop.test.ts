@@ -4,7 +4,15 @@ import type { GridResponse, GridRow, GridTaskRow } from '@/lib/contracts/grid'
 import type { FlatItem } from '@/lib/tree/projection'
 import { gridResponse, POS_PEOPLE, POS_TASKS, type FxTask } from './fixtures.test.data'
 import { mergeChunks } from './merge'
-import { applyRowMove, AUTOSCROLL_MAX_PX, autoscrollStep, dropTarget, pointerRowIndex, taskBlocks } from './row-drop'
+import {
+  applyRowMove,
+  AUTOSCROLL_MAX_PX,
+  autoscrollStep,
+  dropAt,
+  logicalRowPos,
+  pointerRowIndex,
+  taskBlocks,
+} from './row-drop'
 import { buildViewRows } from './rows'
 
 const INDENT = 24
@@ -19,7 +27,10 @@ const viewOf = (tasks: FxTask[], o: Partial<typeof open> & { showAssignees?: boo
 
 const POS_JACK: FxTask[] = POS_TASKS.map((t) =>
   t.id === 't-uat'
-    ? { ...t, assignees: [...t.assignees, { taId: 'a-jack-uat', userId: 'jack', cells: { '2026-09-28': 100 } }] }
+    ? {
+        ...t,
+        assignees: [...t.assignees, { taId: 'a-jack-uat', userId: 'jack', cells: { '2026-09-28': 100 } }],
+      }
     : t,
 )
 
@@ -39,45 +50,86 @@ describe('taskBlocks (BR-105: assignee rows belong to the task above)', () => {
     ])
   })
   it('hidden assignee column → sum rows, one per block', () => {
-    expect(taskBlocks(viewOf(POS_JACK, { showAssignees: false })).map((b) => b.lastIndex - b.firstIndex)).toEqual([0, 0, 0])
+    expect(
+      taskBlocks(viewOf(POS_JACK, { showAssignees: false })).map((b) => b.lastIndex - b.firstIndex),
+    ).toEqual([0, 0, 0])
   })
 })
 
-describe('dropTarget (FR-815, M7.1-D16)', () => {
+describe('dropAt (FR-815, v3.9: upper half = before, lower half = after, dx = depth)', () => {
   const base = { items: itemsOf(POS_JACK), indentPx: INDENT, dx: 0 }
+  const up = (i: number) => i + 0.25
+  const low = (i: number) => i + 0.75
 
-  it('move "Rollout สาขา" to the top → { parentId: null, afterId: null }', () => {
+  it('move "Rollout สาขา" onto the upper half of the first row → { parentId: null, afterId: null }', () => {
     const viewRows = viewOf(POS_TASKS)
     expect(
-      dropTarget({ ...base, items: itemsOf(POS_TASKS), viewRows, activeTaskId: 't-rollout', pointerIndex: 0 }),
-    ).toEqual({ placement: { parentId: null, afterId: null }, depth: 0, indicatorIndex: 0, valid: true })
+      dropAt({ ...base, items: itemsOf(POS_TASKS), viewRows, activeTaskId: 't-rollout', rowPos: up(0) }),
+    ).toEqual({
+      placement: { parentId: null, afterId: null },
+      depth: 0,
+      indicatorIndex: 0,
+      valid: true,
+      parentId: null,
+    })
   })
-  it('drop over Ivy’s assignee row = after the "ทำ UAT" block (dragging down)', () => {
+  it('the lower half of a multi-row block (Ivy’s + Jack’s rows of "ทำ UAT") = after that block', () => {
     const viewRows = viewOf(POS_JACK)
-    expect(dropTarget({ ...base, viewRows, activeTaskId: 't-pos', pointerIndex: 2 })).toEqual({
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-pos', rowPos: low(2) })).toEqual({
       placement: { parentId: null, afterId: 't-uat' },
       depth: 0,
       indicatorIndex: 4,
       valid: true,
+      parentId: null,
+    })
+    // the upper half of the same block = before it (here: where t-pos already is → no move, no line)
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-pos', rowPos: up(1) })).toMatchObject({
+      placement: null,
+      indicatorIndex: -1,
+      valid: true,
     })
   })
-  it('dragging up over an assignee row also lands after that block (here: no-op for Rollout)', () => {
+  it('dragging up: the upper half of "ทำ UAT" = after "ปรับปรุง POS"; its lower half = in place', () => {
     const viewRows = viewOf(POS_JACK)
-    const r = dropTarget({ ...base, viewRows, activeTaskId: 't-rollout', pointerIndex: 3 })
-    expect(r).toEqual({ placement: null, depth: 0, indicatorIndex: 4, valid: true })
-    // over the task row itself (dragging up) → before it
-    expect(dropTarget({ ...base, viewRows, activeTaskId: 't-rollout', pointerIndex: 1 }).placement).toEqual({
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-rollout', rowPos: up(1) }).placement).toEqual({
       parentId: null,
       afterId: 't-pos',
     })
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-rollout', rowPos: low(3) })).toMatchObject({
+      placement: null,
+      indicatorIndex: -1,
+    })
   })
-  it('dx = +1 indent under a leaf → parentId = that leaf', () => {
+  it('dx = +1 indent below a leaf → parentId = that leaf (the would-be parent is reported)', () => {
     const viewRows = viewOf(POS_JACK)
-    expect(dropTarget({ ...base, viewRows, activeTaskId: 't-uat', pointerIndex: 1, dx: INDENT })).toEqual({
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-uat', rowPos: low(0), dx: INDENT })).toEqual({
       placement: { parentId: 't-pos', afterId: null },
+      depth: 1,
+      indicatorIndex: 4,
+      valid: true,
+      parentId: 't-pos',
+    })
+  })
+  it('the lower half of an expanded parent lands inside it, before its first child (no dx needed)', () => {
+    const tree: FxTask[] = [
+      { id: 'p', name: 'p', assignees: [] },
+      { id: 'q', name: 'q', parentId: 'p', depth: 1, assignees: [] },
+      { id: 'z', name: 'z', assignees: [] },
+    ]
+    const r = dropAt({
+      viewRows: viewOf(tree),
+      items: itemsOf(tree),
+      activeTaskId: 'z',
+      rowPos: low(0),
+      dx: 0,
+      indentPx: INDENT,
+    })
+    expect(r).toEqual({
+      placement: { parentId: 'p', afterId: null },
       depth: 1,
       indicatorIndex: 1,
       valid: true,
+      parentId: 'p',
     })
   })
   it('a subtree of height 2 cannot be indented (BR-30) → no move', () => {
@@ -87,43 +139,77 @@ describe('dropTarget (FR-815, M7.1-D16)', () => {
       { id: 'b', name: 'b', parentId: 'a', depth: 1, assignees: [] },
       { id: 'c', name: 'c', parentId: 'b', depth: 2, assignees: [] },
     ]
-    const r = dropTarget({ viewRows: viewOf(tree), items: itemsOf(tree), activeTaskId: 'a', pointerIndex: 1, dx: INDENT, indentPx: INDENT })
+    const r = dropAt({
+      viewRows: viewOf(tree),
+      items: itemsOf(tree),
+      activeTaskId: 'a',
+      rowPos: low(0),
+      dx: INDENT,
+      indentPx: INDENT,
+    })
     expect(r.placement).toBeNull()
     expect(r.depth).toBe(0)
   })
-  it('no drop inside the active subtree: pointer over a descendant → no move', () => {
+  it('no drop inside the active subtree: pointer over a descendant → no move, no line', () => {
     const tree: FxTask[] = [
       { id: 'a', name: 'a', assignees: [] },
       { id: 'b', name: 'b', parentId: 'a', depth: 1, assignees: [] },
       { id: 'z', name: 'z', assignees: [] },
     ]
-    const r = dropTarget({ viewRows: viewOf(tree), items: itemsOf(tree), activeTaskId: 'a', pointerIndex: 1, dx: 0, indentPx: INDENT })
+    const r = dropAt({
+      viewRows: viewOf(tree),
+      items: itemsOf(tree),
+      activeTaskId: 'a',
+      rowPos: low(1),
+      dx: 0,
+      indentPx: INDENT,
+    })
     expect(r.placement).toBeNull()
-    expect(r.indicatorIndex).toBe(0)
+    expect(r.indicatorIndex).toBe(-1)
   })
-  it('a child dragged out to the root after its parent block', () => {
+  it('a child moved after its sibling, and dragged out to the root after its parent block', () => {
     const tree: FxTask[] = [
       { id: 'a', name: 'a', assignees: [] },
       { id: 'b', name: 'b', parentId: 'a', depth: 1, assignees: [] },
       { id: 'c', name: 'c', parentId: 'a', depth: 1, assignees: [] },
       { id: 'z', name: 'z', assignees: [] },
     ]
-    const r = dropTarget({ viewRows: viewOf(tree), items: itemsOf(tree), activeTaskId: 'b', pointerIndex: 2, dx: 0, indentPx: INDENT })
-    expect(r).toEqual({ placement: { parentId: 'a', afterId: 'c' }, depth: 1, indicatorIndex: 3, valid: true })
-    const out = dropTarget({ viewRows: viewOf(tree), items: itemsOf(tree), activeTaskId: 'c', pointerIndex: 2, dx: -INDENT, indentPx: INDENT })
+    const r = dropAt({
+      viewRows: viewOf(tree),
+      items: itemsOf(tree),
+      activeTaskId: 'b',
+      rowPos: low(2),
+      dx: 0,
+      indentPx: INDENT,
+    })
+    expect(r).toEqual({
+      placement: { parentId: 'a', afterId: 'c' },
+      depth: 1,
+      indicatorIndex: 3,
+      valid: true,
+      parentId: 'a',
+    })
+    const out = dropAt({
+      viewRows: viewOf(tree),
+      items: itemsOf(tree),
+      activeTaskId: 'c',
+      rowPos: up(3),
+      dx: -INDENT,
+      indentPx: INDENT,
+    })
     expect(out.placement).toEqual({ parentId: null, afterId: 'a' })
   })
-  it('pointer past either edge → first / last block; unknown task → invalid', () => {
+  it('pointer past either edge → after the last / before the first block; unknown task → none', () => {
     const viewRows = viewOf(POS_JACK)
-    expect(dropTarget({ ...base, viewRows, activeTaskId: 't-pos', pointerIndex: 99 }).placement).toEqual({
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-pos', rowPos: 99 }).placement).toEqual({
       parentId: null,
       afterId: 't-rollout',
     })
-    expect(dropTarget({ ...base, viewRows, activeTaskId: 't-rollout', pointerIndex: -4 }).placement).toEqual({
+    expect(dropAt({ ...base, viewRows, activeTaskId: 't-rollout', rowPos: -4 }).placement).toEqual({
       parentId: null,
       afterId: null,
     })
-    expect(dropTarget({ ...base, viewRows, activeTaskId: 'nope', pointerIndex: 0 })).toEqual({
+    expect(dropAt({ ...base, viewRows, activeTaskId: 'nope', rowPos: 0 })).toEqual({
       placement: null,
       depth: 0,
       indicatorIndex: -1,
@@ -138,14 +224,13 @@ describe('dropTarget (FR-815, M7.1-D16)', () => {
     ]
     const viewRows = viewOf(tree, { showCompleted: false })
     expect(viewRows.map((r) => r.task.id)).toEqual(['a', 'b'])
-    expect(dropTarget({ viewRows, items: itemsOf(tree), activeTaskId: 'b', pointerIndex: 1, dx: 0, indentPx: INDENT }).placement).toBeNull()
-    expect(dropTarget({ viewRows, items: itemsOf(tree), activeTaskId: 'b', pointerIndex: 0, dx: 0, indentPx: INDENT }).placement).toEqual({
-      parentId: null,
-      afterId: null,
-    })
+    const at = (rowPos: number) =>
+      dropAt({ viewRows, items: itemsOf(tree), activeTaskId: 'b', rowPos, dx: 0, indentPx: INDENT })
+    expect(at(low(0)).placement).toBeNull()
+    expect(at(up(0)).placement).toEqual({ parentId: null, afterId: null })
   })
-  it('invalid projection (no depth fits) → valid false', () => {
-    // dragging a height-2 subtree between a parent and its child: the next row forces depth ≥ 1, the cap allows 0
+  it('invalid (no depth fits) → valid false, the line still shows where', () => {
+    // a height-2 subtree between a parent and its child: the next row forces depth ≥ 1, the cap allows 0
     const tree: FxTask[] = [
       { id: 'p', name: 'p', assignees: [] },
       { id: 'q', name: 'q', parentId: 'p', depth: 1, assignees: [] },
@@ -153,20 +238,83 @@ describe('dropTarget (FR-815, M7.1-D16)', () => {
       { id: 'b', name: 'b', parentId: 'a', depth: 1, assignees: [] },
       { id: 'c', name: 'c', parentId: 'b', depth: 2, assignees: [] },
     ]
-    const r = dropTarget({ viewRows: viewOf(tree), items: itemsOf(tree), activeTaskId: 'a', pointerIndex: 1, dx: 0, indentPx: INDENT })
-    expect(r.valid).toBe(false)
-    expect(r.placement).toBeNull()
+    const r = dropAt({
+      viewRows: viewOf(tree),
+      items: itemsOf(tree),
+      activeTaskId: 'a',
+      rowPos: low(0),
+      dx: 0,
+      indentPx: INDENT,
+    })
+    expect(r).toMatchObject({ valid: false, placement: null, indicatorIndex: 1 })
+  })
+  it('property: every valid placement is one applyRowMove can represent (same rows, same count)', () => {
+    const tree: FxTask[] = [
+      { id: 'a', name: 'a', assignees: [] },
+      { id: 'b', name: 'b', parentId: 'a', depth: 1, assignees: [] },
+      { id: 'c', name: 'c', parentId: 'b', depth: 2, assignees: [] },
+      { id: 'd', name: 'd', assignees: [] },
+      { id: 'e', name: 'e', parentId: 'd', depth: 1, assignees: [] },
+    ]
+    const resp = gridResponse({ from: '2026-08-31', tasks: tree, people })
+    const viewRows = viewOf(tree)
+    fc.assert(
+      fc.property(
+        fc.constantFrom('a', 'b', 'c', 'd', 'e'),
+        fc.double({ min: -1, max: 6, noNaN: true }),
+        fc.integer({ min: -3, max: 3 }),
+        (id, rowPos, steps) => {
+          const r = dropAt({
+            viewRows,
+            items: itemsOf(tree),
+            activeTaskId: id,
+            rowPos,
+            dx: steps * INDENT,
+            indentPx: INDENT,
+          })
+          if (!r.placement) return
+          const moved = applyRowMove(resp, { taskId: id, ...r.placement })
+          expect(moved).not.toBe(resp)
+          expect(moved.rows).toHaveLength(resp.rows.length)
+        },
+      ),
+    )
   })
 })
 
-const ids = (rows: GridRow[]) => rows.map((r) => (r.kind === 'task' ? `t:${r.id}` : r.kind === 'assignee' ? `a:${r.taskAssignmentId}` : r.kind))
-const taskOf = (resp: GridResponse, id: string) => resp.rows.find((r): r is GridTaskRow => r.kind === 'task' && r.id === id)!
+describe('logicalRowPos (v3.9 gap)', () => {
+  it('above the gap unchanged, inside it null, below it one row up; no gap = identity', () => {
+    expect(logicalRowPos(1.5, 3)).toBe(1.5)
+    expect(logicalRowPos(3.2, 3)).toBeNull()
+    expect(logicalRowPos(4.5, 3)).toBe(3.5)
+    expect(logicalRowPos(4.5, -1)).toBe(4.5)
+  })
+})
+
+const ids = (rows: GridRow[]) =>
+  rows.map((r) =>
+    r.kind === 'task' ? `t:${r.id}` : r.kind === 'assignee' ? `a:${r.taskAssignmentId}` : r.kind,
+  )
+const taskOf = (resp: GridResponse, id: string) =>
+  resp.rows.find((r): r is GridTaskRow => r.kind === 'task' && r.id === id)!
 
 describe('applyRowMove (M7.1-D18)', () => {
   const TREE: FxTask[] = [
     { id: 'p', name: 'p', assignees: [] },
-    { id: 'c1', name: 'c1', parentId: 'p', depth: 1, assignees: [{ taId: 'x1', userId: 'cindy', cells: { '2026-09-28': 100 } }] },
-    { id: 'c2', name: 'c2', parentId: 'p', depth: 1, assignees: [{ taId: 'x2', userId: 'ivy', cells: { '2026-09-28': 200 } }] },
+    {
+      id: 'c1',
+      name: 'c1',
+      parentId: 'p',
+      depth: 1,
+      assignees: [{ taId: 'x1', userId: 'cindy', cells: { '2026-09-28': 100 } }],
+    },
+    {
+      id: 'c2',
+      name: 'c2',
+      parentId: 'p',
+      depth: 1,
+      assignees: [{ taId: 'x2', userId: 'ivy', cells: { '2026-09-28': 200 } }],
+    },
     { id: 'z', name: 'z', assignees: [{ taId: 'xz', userId: 'mint', cells: { '2026-09-28': 50 } }] },
   ]
   const resp = () => gridResponse({ from: '2026-09-28', tasks: TREE, people })
@@ -174,7 +322,15 @@ describe('applyRowMove (M7.1-D18)', () => {
   it('moves "Rollout สาขา" (with its assignee row) to the top', () => {
     const r = gridResponse({ from: '2026-08-31', tasks: POS_JACK, people })
     const out = applyRowMove(r, { taskId: 't-rollout', parentId: null, afterId: null })
-    expect(ids(out.rows)).toEqual(['t:t-rollout', 'a:a-mint-rollout', 't:t-pos', 'a:a-cindy-pos', 't:t-uat', 'a:a-ivy-uat', 'a:a-jack-uat'])
+    expect(ids(out.rows)).toEqual([
+      't:t-rollout',
+      'a:a-mint-rollout',
+      't:t-pos',
+      'a:a-cindy-pos',
+      't:t-uat',
+      'a:a-ivy-uat',
+      'a:a-jack-uat',
+    ])
     expect(ids(r.rows)[0]).toBe('t:t-pos') // input untouched
   })
   it('re-parents a leaf under another task: parentId, depth, hasChildren and totals rewritten', () => {

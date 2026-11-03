@@ -417,12 +417,20 @@
   position: absolute;
   left: 0;
   height: 2px;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
+}
+
+/* v3.9: the line starts at the projected depth's caret x (the indent level shows) */
+.dropLine {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 2px;
   background: var(--brand-blue);
 }
 
-.dropIndicator[data-valid='false'] {
+.dropIndicator[data-valid='false'] .dropLine {
   background: repeating-linear-gradient(90deg, var(--load-over-fg) 0 6px, transparent 6px 10px);
 }
 
@@ -434,17 +442,100 @@
   gap: var(--space-1);
   transform: translateY(-50%);
   font-size: var(--font-xs);
-  color: var(--load-over-fg);
   white-space: nowrap;
 }
 
-.dropMarker::before {
-  content: '';
+.dropLeadSpace {
+  flex: none;
+  display: inline-block;
+}
+
+.dropDot {
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   border: 2px solid var(--brand-blue);
   background: var(--surface);
+}
+
+.dropText {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--brand-blue);
+}
+
+.dropIndicator[data-valid='false'] .dropDot {
+  border-color: var(--load-over-fg);
+}
+
+.dropIndicator[data-valid='false'] .dropText {
+  color: var(--load-over-fg);
+}
+
+/* v3.9: rows slide out of the way while a row is dragged (transform only — no layout); none with reduced motion */
+.row[data-drag-anim='true'] {
+  transition: transform 150ms ease;
+}
+
+/* v3.9: the would-be parent of the dragged row */
+.row[data-drop-parent='true'] .rowHeader {
+  background: var(--hover-bg);
+  box-shadow: inset 3px 0 0 var(--brand-blue);
+}
+
+/* v3.9: the lifted copy of the dragged row, following the pointer (useRowDrag positions it) */
+.dragGhost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  box-sizing: border-box;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--brand-blue);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 var(--space-1) var(--space-3) var(--border-subtle);
+  font-weight: var(--weight-bold);
+  font-size: var(--font-sm);
+  opacity: 0.95;
+  rotate: 1deg;
+  cursor: grabbing;
+}
+
+.dragGhost[data-valid='false'] {
+  border-color: var(--load-over-fg);
+  cursor: not-allowed;
+}
+
+.dragGhost[data-returning='true'] {
+  rotate: 0deg;
+  opacity: 0.6;
+}
+
+.dragGhostGrip {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.dragGhostNo {
+  flex: none;
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row[data-drag-anim='true'] {
+    transition: none;
+  }
+
+  .dragGhost {
+    rotate: 0deg;
+  }
 }
 
 /* v3.9 ☐ multi-select (row-layout CHECK_W slot): on hover / focus within the row, always in check mode */

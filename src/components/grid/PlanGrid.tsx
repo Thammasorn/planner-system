@@ -137,7 +137,8 @@ import {
   type Placement,
 } from '@/lib/tree/ops'
 import { ColumnResizeHandle } from './ColumnResizeHandle'
-import { DropIndicator } from './DropIndicator'
+import { DropIndicator, RowDragGhost } from './DropIndicator'
+import { taskLeadLayout } from '@/lib/grid/row-layout'
 import { MarkerLines, paddingOf, renderedEdges } from './MarkerLayer'
 import { MonthHeader } from './MonthHeader'
 import { PersonRowHeader } from './PersonRowHeader'
@@ -171,6 +172,9 @@ import { loadDisplay as loadDisplayOf } from '@/lib/load/display'
 import { VirtualGrid, type VirtualGridHandle } from './VirtualGrid'
 import styles from './grid.module.css'
 
+
+/** v3.9: the dragged row's ghost is at most this wide (it carries the task name only). */
+const GHOST_MAX_W = 320
 /** M6 props. Later milestones only ADD optional props (C37): M7 `initialZoom?: GridZoom`; M9 `label?: string`
  *  (aria-label override) and `focusWeek?: ISODate`. `onOpenTask` already takes the optional `projectId` M9's person
  *  grid passes; the project plan page ignores it. */
@@ -580,6 +584,13 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     items: canReorder ? treeItems : null,
     onDrop: onRowDrop,
   })
+  const dragName = drag.state
+    ? (projectViewRows.find((r) => r.task.id === drag.state?.taskId)?.task.name ?? '')
+    : ''
+  const dragParentId = drag.state?.valid ? drag.state.parentId : null
+  const dragParentName = dragParentId
+    ? (projectViewRows.find((r) => r.task.id === dragParentId)?.task.name ?? null)
+    : null
 
   // ── M8 ◆ row (FR-705/707, M8-D8–D11) + the milestone line layer (BR-102; M11.1: in each milestone's colour, no flags) ──
   const scrollEl = useMemo<RefObject<HTMLElement | null>>(
@@ -1347,6 +1358,11 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
   const personOf = (row: CellRow) =>
     row.kind === 'merged' || row.kind === 'assignee' ? model?.people[row.assignee.userId] : undefined
 
+  // v3.9: rows at and below the drop point slide one row down while a row is dragged (the opened gap)
+  const dragShift = (i: number): string | undefined => {
+    const g = drag.state?.gapIndex ?? -1
+    return g >= 0 && i >= g ? `translateY(${ROW_H}px)` : undefined
+  }
   const renderRow = (i: number, vCols: readonly VirtualItem[], top: number, totalWidth: number) => {
     if (i === viewRows.length && !isPerson) {
       return (
@@ -1355,7 +1371,8 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           role="row"
           aria-rowindex={HEADER_ROWS + i + 1}
           className={styles.quickAddRow}
-          style={{ top, height: ROW_H, width: totalWidth }}
+          style={{ top, height: ROW_H, width: totalWidth, transform: dragShift(i) }}
+          data-drag-anim={drag.state ? 'true' : undefined}
         >
           <div
             role="rowheader"
@@ -1402,13 +1419,22 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
         role="row"
         aria-rowindex={HEADER_ROWS + i + 1}
         className={styles.row}
-        style={{ top, height: ROW_H, width: totalWidth }}
+        style={{ top, height: ROW_H, width: totalWidth, transform: dragShift(i) }}
         data-row-key={vrow.key}
         data-kind={vrow.kind}
         data-parent={vrow.task.hasChildren ? 'true' : undefined}
         data-tentative={row.task.certainty === 'TENTATIVE' ? 'true' : undefined}
         data-completed={row.task.completed ? 'true' : undefined}
         data-dragging={drag.state?.taskId === row.task.id ? 'true' : undefined}
+        data-drag-anim={drag.state ? 'true' : undefined}
+        data-drop-parent={
+          drag.state &&
+          drag.state.indicatorIndex >= 0 &&
+          drag.state.parentId === row.task.id &&
+          row.kind !== 'assignee'
+            ? 'true'
+            : undefined
+        }
       >
         <RowHeader
           store={store}
@@ -1750,6 +1776,15 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
           {th.grid.loadError}
         </Alert>
       ) : null}
+      {drag.state ? (
+        <RowDragGhost
+          attach={drag.attachGhost}
+          name={dragName}
+          width={Math.min(drag.state.origin.width, GHOST_MAX_W)}
+          valid={drag.state.valid}
+          returning={drag.state.returning}
+        />
+      ) : null}
       {canAddTask ? (
         <SelectionBar
           store={store}
@@ -1815,12 +1850,14 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
               top={HEADER_TOTAL_H}
               height={bodyHeight}
             />
-            {drag.state ? (
+            {drag.state && !drag.state.returning ? (
               <DropIndicator
                 indicatorIndex={drag.state.indicatorIndex}
                 depth={drag.state.depth}
                 valid={drag.state.valid}
                 width={totalWidth}
+                leadX={taskLeadLayout(drag.state.depth, { check: canAddTask, handle: true }).caretX}
+                parentName={dragParentName}
               />
             ) : null}
           </>
