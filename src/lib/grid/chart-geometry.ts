@@ -99,17 +99,74 @@ export function yOf(v: number, max: number, top: number, height: number): number
   return top + height - (max > 0 ? (v / max) * height : 0)
 }
 
-/** SVG path through the points in order; a null y breaks the line (a gap, never 0 — M7.1-D5). */
+/**
+ * SVG path through the points in order; a null y breaks the line (a gap, never 0 — M7.1-D5). v3.8 (owner 2026-11-03,
+ * "smooth like ECharts"): each run of ≥ 3 points is a monotone cubic (Fritsch–Carlson tangents, the same as d3's
+ * curveMonotoneX), so the curve passes exactly through every point (the week column centres), never overshoots —
+ * no dip below 0, no bump above a real peak — and a run of equal values stays flat. A run of 2 points is a straight
+ * segment, a lone point a bare move (its marker shows it). Points are assumed in increasing x.
+ */
 export function linePath(points: readonly { x: number; y: number | null }[]): string {
   let d = ''
-  let pen = false
+  let run: { x: number; y: number }[] = []
+  const flush = () => {
+    d += runPath(run)
+    run = []
+  }
   for (const p of points) {
-    if (p.y === null) {
-      pen = false
-      continue
-    }
-    d += `${pen ? 'L' : 'M'}${round(p.x)} ${round(p.y)}`
-    pen = true
+    if (p.y === null) flush()
+    else run.push({ x: p.x, y: p.y })
+  }
+  flush()
+  return d
+}
+
+/** Fritsch–Carlson tangents of a run (d3 curveMonotoneX: slope3 inside, slope2 at the ends). */
+export function monotoneTangents(run: readonly { x: number; y: number }[]): number[] {
+  const n = run.length
+  if (n < 2) return run.map(() => 0)
+  const h: number[] = []
+  const s: number[] = []
+  for (let i = 0; i < n - 1; i++) {
+    const dx = run[i + 1]!.x - run[i]!.x
+    h.push(dx)
+    s.push(dx === 0 ? 0 : (run[i + 1]!.y - run[i]!.y) / dx)
+  }
+  const m: number[] = new Array<number>(n).fill(0)
+  for (let i = 1; i < n - 1; i++) {
+    const s0 = s[i - 1]!
+    const s1 = s[i]!
+    const h0 = h[i - 1]!
+    const h1 = h[i]!
+    const p = h0 + h1 === 0 ? 0 : (s0 * h1 + s1 * h0) / (h0 + h1)
+    m[i] = (Math.sign(s0) + Math.sign(s1)) * Math.min(Math.abs(s0), Math.abs(s1), 0.5 * Math.abs(p))
+  }
+  if (n === 2) {
+    m[0] = s[0]!
+    m[1] = s[0]!
+  } else {
+    m[0] = (3 * s[0]! - m[1]!) / 2
+    m[n - 1] = (3 * s[n - 2]! - m[n - 2]!) / 2
+    // an end tangent against its secant (possible when the inner one is steep) would overshoot: clamp to 0
+    if (Math.sign(m[0]) !== Math.sign(s[0]!)) m[0] = 0
+    if (Math.sign(m[n - 1]!) !== Math.sign(s[n - 2]!)) m[n - 1] = 0
+  }
+  return m
+}
+
+function runPath(run: readonly { x: number; y: number }[]): string {
+  const first = run[0]
+  if (!first) return ''
+  let d = `M${round(first.x)} ${round(first.y)}`
+  if (run.length === 2) return `${d}L${round(run[1]!.x)} ${round(run[1]!.y)}`
+  const m = monotoneTangents(run)
+  for (let i = 0; i < run.length - 1; i++) {
+    const a = run[i]!
+    const b = run[i + 1]!
+    const dx = (b.x - a.x) / 3
+    d +=
+      `C${round(a.x + dx)} ${round(a.y + dx * m[i]!)} ` +
+      `${round(b.x - dx)} ${round(b.y - dx * m[i + 1]!)} ${round(b.x)} ${round(b.y)}`
   }
   return d
 }

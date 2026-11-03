@@ -146,5 +146,74 @@ describe('niceScale / yOf / linePath', () => {
       ]),
     ).toBe('M10 5L20 6M40 7L50 8')
     expect(linePath([])).toBe('')
+    expect(linePath([{ x: 10, y: 5 }])).toBe('M10 5')
+  })
+})
+
+/** Parses an M/L/C path into its runs: each run = start point + segments (2 control points + end point). */
+type Pt = { x: number; y: number }
+function parseRuns(d: string): { start: Pt; segs: { c1: Pt; c2: Pt; end: Pt }[] }[] {
+  const runs: { start: Pt; segs: { c1: Pt; c2: Pt; end: Pt }[] }[] = []
+  for (const [, cmd, args] of d.matchAll(/([MLC])([^MLC]*)/g)) {
+    const n = args!.trim().split(/\s+/).map(Number)
+    const pt = (i: number): Pt => ({ x: n[i]!, y: n[i + 1]! })
+    if (cmd === 'M') runs.push({ start: pt(0), segs: [] })
+    else if (cmd === 'L') runs.at(-1)!.segs.push({ c1: runs.at(-1)!.start, c2: pt(0), end: pt(0) })
+    else runs.at(-1)!.segs.push({ c1: pt(0), c2: pt(2), end: pt(4) })
+  }
+  return runs
+}
+
+describe('linePath — smooth monotone curves (v3.8, curveMonotoneX)', () => {
+  const pts = [
+    { x: 10, y: 100 },
+    { x: 30, y: 40 },
+    { x: 50, y: 40 },
+    { x: 70, y: 90 },
+    { x: 90, y: 0 },
+    { x: 110, y: 20 },
+  ]
+
+  it('is a cubic through every point at its x (the column centres)', () => {
+    const d = linePath(pts)
+    expect(d).toMatch(/^M10 100C/)
+    const [run] = parseRuns(d)
+    expect([run!.start, ...run!.segs.map((s) => s.end)]).toEqual(pts)
+  })
+
+  it('between two equal values the curve stays at that value (flat run, no wobble)', () => {
+    const [run] = parseRuns(linePath(pts))
+    const flat = run!.segs[1]! // 30,40 → 50,40
+    expect(flat.c1.y).toBe(40)
+    expect(flat.c2.y).toBe(40)
+  })
+
+  it('a gap still breaks the path into separate curves', () => {
+    const d = linePath([...pts.slice(0, 3), { x: 60, y: null }, ...pts.slice(3)])
+    expect(parseRuns(d)).toHaveLength(2)
+  })
+
+  it('property: no control point y outside [min, max] of its segment ends (no overshoot below 0 / above a peak)', () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: 0, max: 300 }), { minLength: 3, maxLength: 20 }), (ys) => {
+        const input = ys.map((y, i) => ({ x: 20 + i * 52, y }))
+        const runs = parseRuns(linePath(input))
+        expect(runs).toHaveLength(1)
+        let prev = runs[0]!.start
+        expect(prev).toEqual(input[0])
+        runs[0]!.segs.forEach((s, i) => {
+          expect(s.end).toEqual(input[i + 1])
+          const lo = Math.min(prev.y, s.end.y)
+          const hi = Math.max(prev.y, s.end.y)
+          for (const c of [s.c1, s.c2]) {
+            expect(c.y).toBeGreaterThanOrEqual(lo)
+            expect(c.y).toBeLessThanOrEqual(hi)
+            expect(c.x).toBeGreaterThan(prev.x)
+            expect(c.x).toBeLessThan(s.end.x)
+          }
+          prev = s.end
+        })
+      }),
+    )
   })
 })
