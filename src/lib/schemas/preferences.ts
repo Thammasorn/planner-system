@@ -61,6 +61,11 @@ export type LoadDisplay = (typeof LOAD_DISPLAYS)[number]
 /** v3.8 (FR-822): week-column density of the plan grid and the /workload table — ปกติ 52 px · แคบ 36 px. Unset = NORMAL,
  *  phones (< 600 px) COMPACT (gridDensity). */
 export const GRID_DENSITIES = ['NORMAL', 'COMPACT'] as const
+/** v3.9 (FR-823): width of the task panel beside the plan grid (side-by-side mode, ≥ 1440 px screens). */
+export const PANEL_WIDTH_MIN = 360
+export const PANEL_WIDTH_MAX = 720
+export const PANEL_WIDTH_DEFAULT = 440
+const PANEL_WIDTH = z.number().int().min(PANEL_WIDTH_MIN).max(PANEL_WIDTH_MAX)
 export type GridDensity = (typeof GRID_DENSITIES)[number]
 
 export const preferenceInput = z.discriminatedUnion('key', [
@@ -93,6 +98,8 @@ export const preferenceInput = z.discriminatedUnion('key', [
   z.object({ key: z.literal('load.display'), value: z.enum(LOAD_DISPLAYS) }),
   // v3.8 (FR-822)
   z.object({ key: z.literal('grid.density'), value: z.enum(GRID_DENSITIES) }),
+  // v3.9 (FR-823)
+  z.object({ key: z.literal('panel.width'), value: PANEL_WIDTH }),
 ])
 export type PreferenceInput = z.infer<typeof preferenceInput>
 export type PreferenceKey = PreferenceInput['key']
@@ -130,6 +137,8 @@ export const preferencesSchema = z.object({
   'load.display': z.enum(LOAD_DISPLAYS).optional().catch(undefined),
   // v3.8 key (FR-822): optional (absent = by screen width, see gridDensity)
   'grid.density': z.enum(GRID_DENSITIES).optional().catch(undefined),
+  // v3.9 key (FR-823): optional (absent = PANEL_WIDTH_DEFAULT)
+  'panel.width': PANEL_WIDTH.optional().catch(undefined),
 })
 export type Preferences = z.infer<typeof preferencesSchema>
 

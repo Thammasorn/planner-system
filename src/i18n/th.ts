@@ -826,6 +826,8 @@ export const th = {
     panel: {
       label: 'รายละเอียดงาน',
       close: 'ปิด',
+      /** v3.9 (FR-823): ⇔ on the panel beside the plan grid */
+      resize: 'ปรับความกว้างแผงงาน',
       notFound: 'ไม่พบงาน',
       name: 'ชื่องาน',
       startDate: 'วันเริ่ม',

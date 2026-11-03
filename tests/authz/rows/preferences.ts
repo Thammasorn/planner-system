@@ -29,6 +29,8 @@ const M7_1_KEYS: { id: string; input: PreferenceInput }[] = [
   { id: 'PREF-M7.1-CHART', input: { key: 'grid.chart', value: true } },
   // v3.8 (FR-822): same rule for the density key
   { id: 'PREF-V38-DENSITY', input: { key: 'grid.density', value: 'COMPACT' } },
+  // v3.9 (FR-823): same rule for the task panel width
+  { id: 'PREF-V39-PANEL-WIDTH', input: { key: 'panel.width', value: 520 } },
 ]
 
 export const rows: AuthzRow[] = [

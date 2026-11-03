@@ -11,7 +11,7 @@ import { PID, response, T } from './fixtures.test.data'
 import { renderTasks } from './render.test.helper'
 import { openTaskPanel } from './task-param'
 import { TaskList } from './TaskList'
-import { TaskPanel } from './TaskPanel'
+import { clampPanelWidth, TaskPanel } from './TaskPanel'
 
 const a = vi.hoisted(() => ({ updateTask: vi.fn() }))
 vi.mock('@/server/actions/tasks', () => ({
@@ -265,5 +265,53 @@ describe('TaskPanel (FR-601, FR-611, BR-36)', () => {
     expect(within(panel()).queryByTestId('plan-buttons')).toBeNull()
     open(T.a)
     expect(screen.queryAllByTestId('plan-buttons')).toHaveLength(0)
+  })
+})
+
+describe('TaskPanel beside the plan grid (v3.9 FR-823, adaptive)', () => {
+  function openAdaptive(id: string) {
+    window.history.replaceState(null, '', '/projects/p/plan')
+    renderTasks(<TaskPanel projectId={PID} adaptive />, {
+      data: response(),
+      seed: (qc) => qc.setQueryData(qk.taskBody(id), bodyView(id)),
+    })
+    act(() => openTaskPanel(id))
+  }
+
+  it('wide screens: beside the grid with a ⇔ width handle (keyboard operable); widths clamp to 360–720', () => {
+    openAdaptive(T.c)
+    expect(panel()).not.toHaveAttribute('data-overlay')
+    const handle = within(panel()).getByRole('separator', { name: th.tasks.panel.resize })
+    expect(handle).toHaveAttribute('aria-valuenow', '440')
+    expect(clampPanelWidth(100)).toBe(360)
+    expect(clampPanelWidth(900)).toBe(720)
+    expect(clampPanelWidth(500.4)).toBe(500)
+  })
+
+  it('below 1440 px: floats over the grid (no width handle)', () => {
+    const mm = vi.fn((q: string) => ({
+      matches: q.includes('max-width:1439'),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false,
+    }))
+    vi.stubGlobal('matchMedia', mm)
+    try {
+      openAdaptive(T.c)
+      expect(panel()).toHaveAttribute('data-overlay', 'true')
+      expect(within(panel()).queryByTestId('task-panel-resize')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('the task list keeps the plain panel (no overlay, no handle)', () => {
+    open(T.c)
+    expect(panel()).not.toHaveAttribute('data-overlay')
+    expect(within(panel()).queryByTestId('task-panel-resize')).toBeNull()
   })
 })

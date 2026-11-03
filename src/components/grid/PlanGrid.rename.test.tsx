@@ -161,4 +161,14 @@ describe('plan grid inline rename (v3.9, FR-823)', () => {
     await user.keyboard('{F2}x')
     expect(screen.queryByTestId('grid-rename-input')).toBeNull()
   })
+
+  it('Esc after a plain click clears the row and bubbles (so the open panel closes in the same keystroke)', async () => {
+    renderPos()
+    await screen.findByTestId('cell-a:a-ivy-uat-W:2026-10-05')
+    fireEvent.click(nameOf('a:a-ivy-uat')!)
+    expect(header('a:a-ivy-uat')).toHaveAttribute('aria-selected', 'true')
+    const notPrevented = fireEvent.keyDown(header('a:a-ivy-uat'), { key: 'Escape', code: 'Escape' })
+    expect(notPrevented).toBe(true)
+    expect(header('a:a-ivy-uat')).toHaveAttribute('aria-selected', 'false')
+  })
 })

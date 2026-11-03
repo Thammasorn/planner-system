@@ -132,6 +132,7 @@ describe('M7.1 preference keys (FR-810/813/814/816, X59)', () => {
       ['grid.taskColumnWidth', [120, 240, 640], [119, 641, 240.5, '240']],
       ['grid.chart', [true, false], ['on', null]],
       ['grid.density', ['NORMAL', 'COMPACT'], ['compact', 'WIDE', null]],
+      ['panel.width', [360, 440, 720], [359, 721, 440.5, '440']],
     ]
     for (const [key, goods, bads] of cases) {
       for (const value of goods)

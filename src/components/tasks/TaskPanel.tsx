@@ -17,11 +17,13 @@ import Link from '@/components/Link'
 import { InlineEditText } from '@/components/common/InlineEditText'
 import { TaskBody } from '@/components/editor/TaskBody'
 import { useHotkeys } from '@/hooks/useHotkeys'
+import { usePreferences } from '@/hooks/usePreferences'
 import { th } from '@/i18n/th'
 import type { ProjectTasksResponse } from '@/lib/contracts/tasks'
 import { patchTaskHasBody } from '@/lib/invalidate'
 import { rememberScroll } from '@/lib/nav/scroll-memory'
 import { isPlainClick, taskPageHref } from '@/lib/nav/task-href'
+import { PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '@/lib/schemas/preferences'
 import { buildTaskRows } from '@/lib/tasks/tree'
 import { closeTaskPanel, useTaskParam } from './task-param'
 import { TaskProperties } from './TaskProperties'
@@ -30,6 +32,8 @@ import { useTaskBodyView } from './useTaskBodyView'
 import { errorMessage, useTaskMutations } from './useTaskMutations'
 
 const PANEL_SELECTOR = '[data-testid="task-panel"]'
+/** v3.9 (FR-823): below this viewport width an `adaptive` panel overlays the plan grid instead of squeezing it. */
+export const OVERLAY_BELOW_PX = 1440
 
 /** The task's list row or board card, else the list/board's current roving tab stop. */
 function focusTask(taskId: string): void {
@@ -60,7 +64,7 @@ function closePanel(taskId: string): void {
  * "ไม่พบงาน". Header: parent path, name, "เปิดเป็นหน้า" (→ /t/<id>), ✕; then the shared TaskProperties and the compact
  * body (same editor and data as the task page). Width `--panel-width`; a full-screen sheet below md.
  */
-export function TaskPanel({ projectId }: { projectId: string }) {
+export function TaskPanel({ projectId, adaptive = false }: { projectId: string; adaptive?: boolean }) {
   const taskId = useTaskParam()
   const q = useProjectTasks(projectId)
   const onEscape = () => {
@@ -72,6 +76,14 @@ export function TaskPanel({ projectId }: { projectId: string }) {
   // Below md there is no room beside the list: the panel becomes a full-screen sheet over it (SPEC §7 browser
   // support) and takes focus, so Esc / ✕ / Tab work from inside it and closing returns focus to the row.
   const sheet = useMediaQuery(useTheme().breakpoints.down('md'))
+  // v3.9 (FR-823, `adaptive` = the plan grid): below 1440 px the panel floats over the grid (shadow; the grid keeps its
+  // width); from 1440 px it sits beside it and its width is resizable (⇔ on its left edge, `panel.width` preference)
+  const narrow = useMediaQuery(`(max-width:${OVERLAY_BELOW_PX - 0.05}px)`)
+  const overlay = adaptive && narrow && !sheet
+  const resizable = adaptive && !narrow && !sheet
+  const { prefs, setPreference } = usePreferences()
+  const [dragW, setDragW] = useState<number | null>(null)
+  const width = dragW ?? prefs['panel.width'] ?? PANEL_WIDTH_DEFAULT
   const ref = useRef<HTMLElement>(null)
   const ready = q.data !== undefined
   useEffect(() => {
@@ -86,13 +98,16 @@ export function TaskPanel({ projectId }: { projectId: string }) {
       data-testid="task-panel"
       data-sheet={sheet ? 'true' : undefined}
       tabIndex={sheet ? -1 : undefined}
+      data-overlay={overlay ? 'true' : undefined}
       sx={{
-        width: { xs: '100%', md: 'var(--panel-width)' },
+        width: { xs: '100%', md: resizable ? `${width}px` : 'var(--panel-width)' },
         flex: 'none',
         alignSelf: 'flex-start',
-        position: { xs: 'fixed', md: 'sticky' },
+        position: { xs: 'fixed', md: overlay ? 'fixed' : 'sticky' },
         inset: { xs: 0, md: 'auto' },
-        zIndex: { xs: 'appBar', md: 'auto' },
+        right: overlay ? { md: 'var(--space-4)' } : undefined,
+        zIndex: { xs: 'appBar', md: overlay ? 'drawer' : 'auto' },
+        boxShadow: overlay ? 8 : undefined,
         top: { md: 'calc(var(--header-height) + var(--space-2))' },
         maxHeight: { md: 'calc(100vh - var(--header-height) - var(--space-6))' },
         overflowY: 'auto',
@@ -104,8 +119,77 @@ export function TaskPanel({ projectId }: { projectId: string }) {
         outline: 'none',
       }}
     >
+      {resizable ? (
+        <PanelResizeHandle
+          width={width}
+          onDrag={setDragW}
+          onDone={(w) => {
+            setDragW(null)
+            setPreference('panel.width', w)
+          }}
+        />
+      ) : null}
       <PanelBody key={taskId} projectId={projectId} taskId={taskId} data={q.data} />
     </Box>
+  )
+}
+
+/** Clamp a panel width to the `panel.width` preference range (whole px). */
+export function clampPanelWidth(w: number): number {
+  return Math.round(Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, w)))
+}
+
+/** ⇔ on the panel's left edge (pointer drag; ←/→ ±16 px from the keyboard); saves on release. */
+function PanelResizeHandle(p: { width: number; onDrag: (w: number) => void; onDone: (w: number) => void }) {
+  return (
+    <Box
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={th.tasks.panel.resize}
+      aria-valuemin={PANEL_WIDTH_MIN}
+      aria-valuemax={PANEL_WIDTH_MAX}
+      aria-valuenow={p.width}
+      tabIndex={0}
+      data-testid="task-panel-resize"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.preventDefault()
+        const el = e.currentTarget
+        el.setPointerCapture?.(e.pointerId)
+        const x0 = e.clientX
+        const w0 = p.width
+        let w = w0
+        const move = (ev: PointerEvent) => {
+          w = clampPanelWidth(w0 + (x0 - ev.clientX))
+          p.onDrag(w)
+        }
+        const up = () => {
+          el.removeEventListener('pointermove', move)
+          el.removeEventListener('pointerup', up)
+          el.removeEventListener('pointercancel', up)
+          p.onDone(w)
+        }
+        el.addEventListener('pointermove', move)
+        el.addEventListener('pointerup', up)
+        el.addEventListener('pointercancel', up)
+      }}
+      onKeyDown={(e) => {
+        const step = e.key === 'ArrowLeft' ? 16 : e.key === 'ArrowRight' ? -16 : 0
+        if (step === 0) return
+        e.preventDefault()
+        p.onDone(clampPanelWidth(p.width + step))
+      }}
+      sx={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 'var(--space-2)',
+        cursor: 'col-resize',
+        touchAction: 'none',
+        '&:hover, &:focus-visible': { bgcolor: 'var(--brand-light)', outline: 'none' },
+      }}
+    />
   )
 }
 

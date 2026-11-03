@@ -123,7 +123,7 @@ export function PlanView({
           </Box>
         )}
       </Box>
-      <TaskPanel projectId={projectId} />
+      <TaskPanel projectId={projectId} adaptive />
     </Box>
   )
 }

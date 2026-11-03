@@ -109,6 +109,12 @@ export function useGridKeyboard(
     // nothing left to cancel (no edit, no row / cell selection): this Esc is not the grid's — it bubbles unhandled
     // to the window hotkeys, so the TaskPanel beside the grid closes (§8.6, M6-D18)
     if (action.kind === 'cancel' && mode === 'nav' && s.rowSelection === null && !s.hasSelection) return
+    // v3.9: Esc on a plain-click row selection (which opened the panel) clears it AND bubbles, so the panel closes in
+    // the same keystroke; a ☐ / Mod / Shift selection is cleared first (its own Esc)
+    if (action.kind === 'cancel' && mode === 'nav' && s.rowSelection !== null && !s.rowChecked) {
+      a.store.set({ rowSelection: null })
+      return
+    }
     e.preventDefault()
     a.store.set({ active: true })
     switch (action.kind) {
