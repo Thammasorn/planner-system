@@ -65,6 +65,7 @@ import { PageEditorContext, type PageEditorContextValue } from './PageEditorCont
 import { SaveStatus } from './SaveStatus'
 import { type AppEditor, schema } from './schema'
 import { SlashMenu, type SlashCtx } from './slash-menu'
+import { AppSideMenuController } from './side-menu'
 import { UploadOnlyFilePanel } from './UploadOnlyFilePanel'
 import { type Autosave, useAutosave } from './useAutosave'
 import { useLazyPageId } from './useLazyPageId'
@@ -332,6 +333,7 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
             aria-label={th.editor.label}
             slashMenu={false}
             formattingToolbar={false}
+            sideMenu={false}
             emojiPicker={false}
             filePanel={false}
             comments={false}
@@ -349,6 +351,7 @@ export default function PageEditor(props: PageEditorShellProps): JSX.Element {
             }}
           >
             <SlashMenu editor={editor} ctx={slashCtx} />
+            <AppSideMenuController />
             <FormattingToolbarController formattingToolbar={AppFormattingToolbar} />
             <GridSuggestionMenuController
               triggerCharacter=":"

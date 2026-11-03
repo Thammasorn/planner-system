@@ -17,6 +17,8 @@ describe('DatabaseHeader', () => {
     const input = screen.getByRole('textbox', { name: th.database.titleLabel })
     expect(input).toHaveAttribute('placeholder', th.database.titlePlaceholder)
     expect(input).toHaveFocus()
+    // the title is the block's first line for the editor's side menu (side-menu-offset.ts)
+    expect(input).toHaveAttribute('data-side-menu-anchor')
   })
 
   it('Enter saves the trimmed title once; Esc reverts without saving', async () => {
@@ -34,6 +36,8 @@ describe('DatabaseHeader', () => {
   it('read-only viewers see the text (untitled placeholder text when empty)', () => {
     renderDb(<DatabaseHeader blockId="b1" titleId="t" />, { api: makeApi({ title: '' }, { canEdit: false }) })
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: th.database.untitled })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: th.database.untitled })).toHaveAttribute(
+      'data-side-menu-anchor',
+    )
   })
 })

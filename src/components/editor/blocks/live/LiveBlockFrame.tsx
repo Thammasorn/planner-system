@@ -9,6 +9,7 @@
 import Box from '@mui/material/Box'
 import type { JSX, ReactNode } from 'react'
 import { th } from '@/i18n/th'
+import { sideMenuAnchor } from '@/lib/editor/side-menu-offset'
 import { useIslandEvents } from './island-events'
 
 export interface LiveBlockFrameProps {
@@ -47,7 +48,12 @@ export function LiveBlockFrame({ title, projectName, actions, children }: LiveBl
         component="header"
         sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 32 }}
       >
-        <Box sx={{ fontSize: 'var(--font-md)', fontWeight: 600, flex: 1 }}>{title}</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* the title line the side menu centres on (side-menu-offset.ts) */}
+          <Box component="span" {...sideMenuAnchor} sx={{ fontSize: 'var(--font-md)', fontWeight: 600 }}>
+            {title}
+          </Box>
+        </Box>
         {actions}
       </Box>
       <Box sx={{ minWidth: 0 }}>{children}</Box>

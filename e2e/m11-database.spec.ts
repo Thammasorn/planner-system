@@ -9,7 +9,7 @@
  *
  * Golden: POS Upgrade (members Cindy, Ivy, Mint; Peter is not a member), its "Project Charter"; Data Warehouse.
  */
-import type { Page, TestInfo } from '@playwright/test'
+import type { Locator, Page, TestInfo } from '@playwright/test'
 import { th } from '../src/i18n/th'
 import { expect, loginAs, openGuardedPage, resetDb, switchUser, test, waitForServerAction } from './fixtures'
 import { DatabaseBlock, rowPanel } from './pages/database'
@@ -67,6 +67,26 @@ async function seedPosDatabase(o: { extraViews?: SeedView[] } = {}): Promise<voi
         ],
       }),
   })
+}
+
+/**
+ * Owner bug 2026-11-03: hovering a block shows BlockNote's side menu (+ / ⠿) vertically centred on the block's title
+ * line — within 3 px — for database and equation blocks as for headings and paragraphs (side-menu-offset.ts).
+ */
+async function expectSideMenuCentredOn(page: Page, line: Locator): Promise<void> {
+  await line.scrollIntoViewIfNeeded()
+  const box = await line.boundingBox()
+  if (!box) throw new Error('title line not laid out')
+  await page.mouse.move(box.x + Math.min(24, box.width / 2), box.y + box.height / 2, { steps: 4 })
+  const handle = page.getByRole('button', { name: th.editor.blocknote.side_menu.drag_handle_label, exact: true })
+  await expect(handle).toBeVisible()
+  await expect
+    .poll(async () => {
+      const h = await handle.boundingBox()
+      const l = await line.boundingBox()
+      return h && l ? Math.abs(h.y + h.height / 2 - (l.y + l.height / 2)) : Infinity
+    })
+    .toBeLessThanOrEqual(3)
 }
 
 /** `edit`: the test types into the editor — wait until it is editable (read-only until the first lease answer, so
@@ -132,6 +152,7 @@ test.describe('D1 create a table database from the slash menu (AC-1401)', () => 
     await page.keyboard.type(RISKS)
     await page.keyboard.press('Enter')
     await renamed
+    await expectSideMenuCentredOn(page, db.title())
     // "+ แถวใหม่" opens the new row's title; Enter in the last row confirms and starts the next row (FR-1422)
     await db.newRowButton().click()
     for (const [i, name] of ['เสี่ยง 1', 'เสี่ยง 2', 'เสี่ยง 3'].entries()) {
@@ -653,6 +674,7 @@ test.describe('E1/E3 equations (AC-1501, AC-1503)', () => {
     await screen.editor.waitSaved()
     await page.reload()
     await expect(page.getByTestId('equation').first().locator('.katex')).toBeVisible()
+    await expectSideMenuCentredOn(page, page.getByTestId('equation').first())
     const fonts = requests.filter((u) => /KaTeX_|katex/i.test(u))
     for (const u of fonts) expect(new URL(u).pathname.startsWith('/_next/static/')).toBe(true)
     // invalid: ⚠ "สมการไม่ถูกต้อง" + the source

@@ -15,6 +15,7 @@ import { applyView, makeCollator } from '@/domain/database'
 import type { DbCtx } from '@/domain/types'
 import { th } from '@/i18n/th'
 import { findById } from '@/lib/database/optimistic'
+import { sideMenuAnchor } from '@/lib/editor/side-menu-offset'
 import { consumeDatabaseJustCreated } from '@/lib/editor/database-block-state'
 import { closeRowPanel, openRowPanel, rowPageHref, useRowParam } from '@/lib/database/row-param'
 import { useDbApi } from './data/contract'
@@ -50,7 +51,7 @@ export function DatabaseSkeleton(): JSX.Element {
       aria-label={th.database.loading}
       aria-busy="true"
     >
-      <Skeleton variant="text" width="40%" height={36} />
+      <Skeleton variant="text" width="40%" height={36} {...sideMenuAnchor} />
       <Skeleton variant="text" width="30%" />
       <Skeleton variant="rounded" height={136} />
     </div>
@@ -70,7 +71,7 @@ export function DatabaseNotFound({ databaseId }: { databaseId: string }): JSX.El
       <span className={s.placeholderIcon}>
         <SearchOff fontSize="inherit" aria-hidden="true" />
       </span>
-      <span>{th.database.notFound}</span>
+      <span {...sideMenuAnchor}>{th.database.notFound}</span>
     </div>
   )
 }

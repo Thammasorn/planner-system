@@ -4,6 +4,7 @@
 // popover editor (Cmd/Ctrl+Enter confirms, Enter is a new line, Esc cancels); invalid LaTeX → the error state.
 // Deleting the block / Cmd+Z is the editor's own behaviour (the block stays selectable).
 import { createReactBlockSpec } from '@blocknote/react'
+import { sideMenuAnchor } from '@/lib/editor/side-menu-offset'
 import { usePageEditor } from '../../PageEditorContext'
 import { EditableEquation } from '../../math/EditableEquation'
 import { takeBlockEquationOpen } from '../../math/open-request'
@@ -18,18 +19,21 @@ export const createEquationBlock = createReactBlockSpec(
     render: function EquationRender({ block, editor }) {
       const ctx = usePageEditor()
       return (
-        <EditableEquation
-          latex={block.props.latex}
-          display
-          testId="equation"
-          editable={ctx ? ctx.editable : editor.isEditable}
-          takeAutoOpen={() => takeBlockEquationOpen(block.id)}
-          onChange={(latex) => {
-            const current = editor.getBlock(block.id)
-            if (current) editor.updateBlock(current, { props: { latex } })
-          }}
-          onClosed={() => editor.focus()}
-        />
+        // the rendered formula is the block's "first line" for the side menu (side-menu-offset.ts)
+        <div {...sideMenuAnchor}>
+          <EditableEquation
+            latex={block.props.latex}
+            display
+            testId="equation"
+            editable={ctx ? ctx.editable : editor.isEditable}
+            takeAutoOpen={() => takeBlockEquationOpen(block.id)}
+            onChange={(latex) => {
+              const current = editor.getBlock(block.id)
+              if (current) editor.updateBlock(current, { props: { latex } })
+            }}
+            onClosed={() => editor.focus()}
+          />
+        </div>
       )
     },
     // copy to other apps: the source (FR-1506); internal copies keep the block via blocknote/html

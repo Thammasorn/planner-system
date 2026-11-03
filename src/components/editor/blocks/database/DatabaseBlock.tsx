@@ -12,6 +12,7 @@ import { DatabaseBlockView } from '@/components/database/DatabaseBlockView'
 import { th } from '@/i18n/th'
 import type { DatabaseResponse } from '@/lib/contracts/databases'
 import { rememberDatabaseTitle, useDatabaseBlockPhase } from '@/lib/editor/database-block-state'
+import { sideMenuAnchor } from '@/lib/editor/side-menu-offset'
 import { qk } from '@/lib/query-keys'
 import { usePageEditor } from '../../PageEditorContext'
 import { IslandFrame } from './IslandFrame'
@@ -31,7 +32,11 @@ export function DatabaseBlock({ blockId, databaseId, editorEditable }: DatabaseB
 
   if (databaseId === '' || phase === 'copying') {
     const text =
-      phase === 'copying' ? th.database.copying : phase === 'creating' ? th.database.creating : th.database.notFound
+      phase === 'copying'
+        ? th.database.copying
+        : phase === 'creating'
+          ? th.database.creating
+          : th.database.notFound
     return (
       <IslandFrame>
         <div
@@ -44,7 +49,9 @@ export function DatabaseBlock({ blockId, databaseId, editorEditable }: DatabaseB
           aria-busy={phase !== null}
         >
           {phase !== null ? <Skeleton variant="rounded" className="app-db-placeholder__skeleton" /> : null}
-          <span role="status">{text}</span>
+          <span role="status" {...sideMenuAnchor}>
+            {text}
+          </span>
         </div>
       </IslandFrame>
     )

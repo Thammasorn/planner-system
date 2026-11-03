@@ -6,6 +6,7 @@
 import { type JSX, type ReactNode, useEffect, useRef, useState } from 'react'
 import { DB_LIMITS } from '@/domain/database'
 import { th } from '@/i18n/th'
+import { sideMenuAnchor } from '@/lib/editor/side-menu-offset'
 import { consumeDatabaseJustCreated } from '@/lib/editor/database-block-state'
 import { useDbApi } from './data/contract'
 import s from './DatabaseBlock.module.css'
@@ -55,6 +56,7 @@ export function DatabaseHeader(p: DatabaseHeaderProps): JSX.Element {
           placeholder={th.database.titlePlaceholder}
           aria-label={th.database.titleLabel}
           data-testid="db-title"
+          {...sideMenuAnchor}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -76,6 +78,7 @@ export function DatabaseHeader(p: DatabaseHeaderProps): JSX.Element {
           id={p.titleId}
           className={`${s.titleText}${stored === '' ? ` ${s.untitled}` : ''}`}
           data-testid="db-title"
+          {...sideMenuAnchor}
         >
           {stored === '' ? th.database.untitled : stored}
         </h3>
