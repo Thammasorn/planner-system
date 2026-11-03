@@ -274,6 +274,46 @@ test.describe('D2b option editor: type + Enter creates once, an existing name in
   })
 })
 
+test.describe('D2c the column menu opens under its header, also for a just-created column (owner bug 2026-11-03)', () => {
+  test.beforeAll(async () => {
+    await seedPosDatabase()
+  })
+
+  /** The menu's top-left lies within the header's horizontal span, just below it (never the viewport corner). */
+  async function expectUnder(page: Page, header: Locator): Promise<void> {
+    const dialog = page.getByRole('dialog').filter({ has: page.getByRole('textbox', { name: T.columnMenu.rename }) })
+    await expect(dialog).toBeVisible()
+    await expect
+      .poll(async () => {
+        const h = await header.boundingBox()
+        const d = await dialog.boundingBox()
+        if (!h || !d) return 'not laid out'
+        const inSpan = d.x >= h.x - 1 && d.x <= h.x + h.width
+        const below = d.y >= h.y + h.height - 2 && d.y <= h.y + h.height + 24
+        return inSpan && below ? 'under' : `menu ${d.x},${d.y} vs header ${h.x},${h.y} ${h.width}×${h.height}`
+      })
+      .toBe('under')
+  }
+
+  test('“+” → ตัวเลือก: the new column’s menu sits under its header after the server answers; reopening it too', async ({
+    page,
+  }) => {
+    await loginAs(page, 'cindy')
+    const { db } = await openSeeded(page)
+    const created = waitForServerAction(page)
+    await db.root.getByRole('button', { name: T.table.addColumn, exact: true }).click()
+    await page.getByRole('menuitem', { name: T.types.SELECT, exact: true }).click()
+    await created // the temp id is now the server id (the header re-mounted)
+    const header = db.table().getByRole('columnheader').last() // new columns are appended
+    await expectUnder(page, header)
+    const name = (await header.innerText()).trim()
+    await page.keyboard.press('Escape')
+    await db.columnMenuButton(name).click()
+    await expectUnder(page, header)
+    await page.keyboard.press('Escape')
+  })
+})
+
 test.describe('D4 kanban moves with undo (AC-1404)', () => {
   test.beforeAll(async () => {
     await seedPosDatabase({ extraViews: [{ type: 'KANBAN', name: BY_PERSON, by: 'คน' }] })

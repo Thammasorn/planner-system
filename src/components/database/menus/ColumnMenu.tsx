@@ -17,7 +17,7 @@ import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import MenuItem from '@mui/material/MenuItem'
 import MenuList from '@mui/material/MenuList'
-import Popover from '@mui/material/Popover'
+import Popover, { type PopoverProps } from '@mui/material/Popover'
 import TextField from '@mui/material/TextField'
 import { type JSX, useState } from 'react'
 import { DB_LIMITS } from '@/domain/database'
@@ -31,7 +31,8 @@ import { OptionsEditor } from './OptionsEditor'
 import s from './menus.module.css'
 
 export interface ColumnMenuProps {
-  anchorEl: HTMLElement | null
+  /** An element, or a function MUI calls at every positioning (TableView: the column's live header). */
+  anchorEl: PopoverProps['anchorEl'] | null
   columnId: string
   view: DbViewDTO
   onClose: () => void
@@ -49,7 +50,7 @@ export function ColumnMenu(p: ColumnMenuProps): JSX.Element | null {
   if (!column) return null
   return (
     <Popover
-      open={p.anchorEl !== null}
+      open={p.anchorEl != null}
       anchorEl={p.anchorEl}
       onClose={p.onClose}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}

@@ -143,7 +143,18 @@ export function ViewTabs(p: ViewTabsProps): JSX.Element {
         ))}
       </Menu>
       <Menu
-        anchorEl={menu?.anchor ?? null}
+        // the tab re-mounts when a new view's temp id becomes its server id: fall back to its live element so the
+        // menu never positions against a detached node (top-left corner) — same fix as the column menu
+        anchorEl={
+          menu
+            ? () =>
+                menu.anchor.isConnected
+                  ? menu.anchor
+                  : ([...(listRef.current?.querySelectorAll<HTMLElement>('[data-view-id]') ?? [])].find(
+                      (el) => sameDbId(el.dataset.viewId ?? '', menu.id),
+                    ) ?? menu.anchor)
+            : null
+        }
         open={menu !== null && menuView !== undefined}
         onClose={() => setMenu(null)}
       >

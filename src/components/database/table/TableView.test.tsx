@@ -1,10 +1,11 @@
 // FR-1420…1429 (plan/m11 S3.5): table rendering, virtualisation, selection + delete, new rows inheriting filters,
 // footer counts, read-only, column header menu / add column.
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { th } from '@/i18n/th'
 import type { DbRowDTO } from '@/lib/contracts/databases'
+import { dbIdMap } from '@/lib/database/optimistic'
 import { DatabaseBlockContent } from '../DatabaseBlockView'
 import { C, callsOf, makeApi, O, row, TABLE_VIEW } from '../fixtures.test.helper'
 import { renderDb } from '../render.test.helper'
@@ -100,6 +101,62 @@ describe('TableView', () => {
     const name = await screen.findByRole('textbox', { name: th.database.columnMenu.rename })
     expect(name).toHaveValue(api.db.columns.at(-1)!.name)
     expect(name).toHaveFocus()
+  })
+
+  it('owner bug 2026-11-03: the new column’s menu stays under its header through the temp → server id swap', async () => {
+    // jsdom has no layout: every column header sits at x 300, y 100 (34 high); anything else is at 0,0
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const head = this.getAttribute('role') === 'columnheader' && this.isConnected
+      const r = head
+        ? { top: 100, left: 300, width: 180, height: 34 }
+        : { top: 0, left: 0, width: 0, height: 0 }
+      return {
+        ...r,
+        bottom: r.top + r.height,
+        right: r.left + r.width,
+        x: r.left,
+        y: r.top,
+        toJSON: () => r,
+      }
+    })
+    try {
+      const api = makeApi()
+      renderDb(block(), { api })
+      await userEvent.click(screen.getByRole('button', { name: th.database.table.addColumn }))
+      await userEvent.click(screen.getByRole('menuitem', { name: th.database.types.NUMBER }))
+      const dialog = await screen.findByRole('dialog', {
+        name: th.database.columnMenu.label(api.db.columns.at(-1)!.name),
+      })
+      // the server answers: the column (and its header element) gets a new id
+      const tmp = api.db.columns.at(-1)!.id
+      const server = '00000000-0000-4000-8000-0000000fffff'
+      dbIdMap.set(tmp, server)
+      act(() =>
+        api.setDb({
+          ...api.db,
+          columns: api.db.columns.map((c) => (c.id === tmp ? { ...c, id: server } : c)),
+        }),
+      )
+      expect(screen.getByRole('dialog')).toBe(dialog)
+      // any later positioning (window resize, content change) must still find the live header, never a detached one
+      act(() => {
+        dialog.style.left = '0px'
+        dialog.style.top = '0px'
+        window.dispatchEvent(new Event('resize'))
+      })
+      await waitFor(() => {
+        expect(dialog.style.left).toBe('300px')
+        expect(dialog.style.top).toBe('134px')
+      })
+      // the column disappears (rolled back / deleted elsewhere) → the menu closes
+      act(() => api.setDb({ ...api.db, columns: api.db.columns.filter((c) => c.id !== server) }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    } finally {
+      rect.mockRestore()
+      dbIdMap.clear()
+    }
   })
 
   describe('virtualisation (> 50 rows)', () => {

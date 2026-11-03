@@ -26,7 +26,7 @@ import {
 import Link from '@/components/Link'
 import { DB_LIMITS } from '@/domain/database'
 import { th } from '@/i18n/th'
-import { findById } from '@/lib/database/optimistic'
+import { findById, resolveDbId } from '@/lib/database/optimistic'
 import { rowPageHref } from '@/lib/database/row-param'
 import { useDbApi } from '../data/contract'
 
@@ -147,7 +147,14 @@ export function useRowMenu(o: {
               anchorPosition: { top: target.at.y, left: target.at.x },
             }
           : {
-              anchorEl: target.at.el,
+              // a row created with a temp id re-mounts under its server id: never position against a detached node
+              anchorEl: () => {
+                const el = (target.at as { el: HTMLElement }).el
+                return el.isConnected
+                  ? el
+                  : (document.querySelector<HTMLElement>(`[data-row-id="${resolveDbId(target.rowId)}"]`) ??
+                      el)
+              },
               anchorOrigin: { vertical: 'bottom' as const, horizontal: 'left' as const },
             })}
         disableRestoreFocus

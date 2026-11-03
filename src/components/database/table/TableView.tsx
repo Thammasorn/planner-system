@@ -27,7 +27,6 @@ import {
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -282,19 +281,20 @@ export function TableView(p: TableViewProps): JSX.Element {
   })
 
   // ── column header menus (FR-1411/1412) ──
+  // Owner bug 2026-11-03: the menu of a just-created column opened at the viewport's top-left. Its header element was
+  // stored once, then re-mounted when the column's temp id became the server id (`key`), leaving the Popover a detached
+  // anchor (rect 0,0). The anchor is now the header of the column id resolved at every positioning (MUI calls the
+  // function), so it follows any re-mount; the menu closes when the column disappears.
   const [menu, setMenu] = useState<{ colId: string; focusName: boolean } | null>(null)
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [addAnchor, setAddAnchor] = useState<HTMLElement | null>(null)
   const headRefs = useRef(new Map<string, HTMLElement>())
-  useEffect(() => {
-    if (!menu || menuAnchor) return
-    const el = [...headRefs.current.entries()].find(([id]) => sameDbId(id, menu.colId))?.[1]
-    if (el) setMenuAnchor(el)
-  }, [menu, menuAnchor, cols])
-  const openMenu = (colId: string, focusName: boolean) => {
-    setMenuAnchor(null)
-    setMenu({ colId, focusName })
-  }
+  const headerOf = useCallback(
+    (colId: string): HTMLElement | null =>
+      [...headRefs.current.entries()].find(([id, el]) => sameDbId(id, colId) && el.isConnected)?.[1] ?? null,
+    [],
+  )
+  if (menu && !db.columns.some((c) => sameDbId(c.id, menu.colId))) setMenu(null)
+  const openMenu = (colId: string, focusName: boolean) => setMenu({ colId, focusName })
 
   // ── drag: columns (database order, FR-1413) and rows (manual order, FR-1426) ──
   const sensors = useDbSensors()
@@ -523,14 +523,11 @@ export function TableView(p: TableViewProps): JSX.Element {
       </div>
       {menu ? (
         <ColumnMenu
-          anchorEl={menuAnchor}
+          anchorEl={() => headerOf(menu.colId) ?? gridRef.current ?? document.body}
           columnId={menu.colId}
           view={view}
           focusName={menu.focusName}
-          onClose={() => {
-            setMenu(null)
-            setMenuAnchor(null)
-          }}
+          onClose={() => setMenu(null)}
           {...(p.onFilterColumn ? { onFilter: p.onFilterColumn } : {})}
           onInserted={(id) => openMenu(id, true)}
         />
