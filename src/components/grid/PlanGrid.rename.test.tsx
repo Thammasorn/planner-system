@@ -162,7 +162,7 @@ describe('plan grid inline rename (v3.9, FR-823)', () => {
     expect(screen.queryByTestId('grid-rename-input')).toBeNull()
   })
 
-  it('Esc after a plain click clears the row and bubbles (so the open panel closes in the same keystroke)', async () => {
+  it('Esc after a plain click with no panel open clears the row', async () => {
     renderPos()
     await screen.findByTestId('cell-a:a-ivy-uat-W:2026-10-05')
     fireEvent.click(nameOf('a:a-ivy-uat')!)
@@ -170,5 +170,19 @@ describe('plan grid inline rename (v3.9, FR-823)', () => {
     const notPrevented = fireEvent.keyDown(header('a:a-ivy-uat'), { key: 'Escape', code: 'Escape' })
     expect(notPrevented).toBe(true)
     expect(header('a:a-ivy-uat')).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('Esc with the panel open bubbles (the panel closes in that keystroke) and the row stays selected for the keyboard', async () => {
+    renderPos()
+    await screen.findByTestId('cell-a:a-ivy-uat-W:2026-10-05')
+    fireEvent.click(nameOf('a:a-ivy-uat')!)
+    window.history.replaceState(null, '', '?task=t-uat')
+    try {
+      const notPrevented = fireEvent.keyDown(header('a:a-ivy-uat'), { key: 'Escape', code: 'Escape' })
+      expect(notPrevented).toBe(true)
+      expect(header('a:a-ivy-uat')).toHaveAttribute('aria-selected', 'true')
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
   })
 })

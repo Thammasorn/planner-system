@@ -24,6 +24,11 @@ export function useTaskParam(): string | null {
   return useSyncExternalStore(subscribe, read, () => null)
 }
 
+/** A panel is open right now (for non-React readers such as the grid's key handler). */
+export function isTaskPanelOpen(): boolean {
+  return read() !== null
+}
+
 function write(id: string | null, mode: 'push' | 'replace'): void {
   const url = new URL(window.location.href)
   if (id === null) url.searchParams.delete('task')

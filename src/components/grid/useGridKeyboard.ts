@@ -5,6 +5,7 @@
 // only, no-ops in day zoom — PlanGrid decides), Shift+F10 / ContextMenu open the cell menu.
 // M7.1 (FR-815, M7.1-D17): Alt+↑/↓/→/← on a selected task row header move / indent / outdent it (M3's mutations).
 import type { KeyboardEvent, RefObject } from 'react'
+import { isTaskPanelOpen } from '@/components/tasks/task-param'
 import { gridKeyAction } from '@/lib/grid/keymap'
 import { movePos } from '@/lib/grid/selection'
 import type { GridAccess, GridEditing } from './useGridEditing'
@@ -109,10 +110,11 @@ export function useGridKeyboard(
     // nothing left to cancel (no edit, no row / cell selection): this Esc is not the grid's — it bubbles unhandled
     // to the window hotkeys, so the TaskPanel beside the grid closes (§8.6, M6-D18)
     if (action.kind === 'cancel' && mode === 'nav' && s.rowSelection === null && !s.hasSelection) return
-    // v3.9: Esc on a plain-click row selection (which opened the panel) clears it AND bubbles, so the panel closes in
-    // the same keystroke; a ☐ / Mod / Shift selection is cleared first (its own Esc)
+    // v3.9: Esc on a plain-click row selection bubbles, so an open panel closes in this keystroke, and the row stays
+    // selected: focus is back on it, Space / F2 / Delete keep working (FR-823). With no panel, Esc clears the selection;
+    // a ☐ / Mod / Shift selection is cleared first (its own Esc)
     if (action.kind === 'cancel' && mode === 'nav' && s.rowSelection !== null && !s.rowChecked) {
-      a.store.set({ rowSelection: null })
+      if (!isTaskPanelOpen()) a.store.set({ rowSelection: null })
       return
     }
     e.preventDefault()
