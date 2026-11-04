@@ -202,7 +202,10 @@ test.describe('G2 ⟲ (AC-801, FR-805, X76, A11Y-2b) keyboard range fill · cind
     await tasks.addBlockerInPanel(UAT)
     const grid = new GridPage(page)
     await grid.openTab(POS)
-    const badge = grid.rowHeader(ROLLOUT, 'Mint').getByText(th.tasks.blockers.badgeWaiting(1), { exact: true })
+    // v3.9: the default 240 px column has no room for "รอ 1 งาน": the chip is icon-only, same name and same tooltip
+    const badge = grid
+      .rowHeader(ROLLOUT, 'Mint')
+      .getByRole('img', { name: th.tasks.blockers.badgeWaiting(1), exact: true })
     await expect(badge).toBeVisible()
     await badge.hover()
     await expect(page.getByRole('tooltip')).toContainText(UAT)
@@ -452,6 +455,9 @@ test.describe('G7 ⟲ (§4.8 การลบ, KEY-05, ? help) task rows in the g
     await answered
     await expectValue(grid, await grid.rowKeyOf('งาน G7', 'Ivy'), '2026-11-16', d1(200))
 
+    // v3.9: selecting the row opened the panel beside the grid, which leaves too few week columns to reach 28/9
+    await tasks.panel().getByRole('button', { name: th.tasks.panel.close, exact: true }).click()
+    await expect(tasks.panel()).toHaveCount(0)
     await grid.cell(await grid.rowKeyOf(R1, 'Cindy'), '2026-09-28').click()
     await grid.press('Shift+Slash')
     const help = tasks.helpDialog()

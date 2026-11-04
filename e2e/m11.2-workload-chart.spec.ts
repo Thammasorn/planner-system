@@ -22,7 +22,8 @@ import { WorkloadPage } from './pages/workload'
 
 const TOL = 2
 /** 26 weeks from 28/9 (≤ 53, M9-D4): wide enough to scroll horizontally at 1280 and 1920. */
-const WIDE = '?from=2026-09-28&to=2027-03-29'
+/** 39 weeks: wider than the table's area at 1920 px with the 52 px week columns (FR-822), so it scrolls sideways. */
+const WIDE = '?from=2026-09-28&to=2027-06-28'
 const HIDDEN_FROM_IVY = ['Mobile App Revamp', 'Data Warehouse', 'Store Analytics Dashboard']
 
 const isTable = (r: Response) =>
@@ -312,7 +313,9 @@ test.describe('WC1 ⟲ F2+F3 (FR-1001 v3.5, FR-1011, AC-1003/AC-1004) month head
     await reopened
   })
 
-  test('axis title and the 100 % label never overlap (390–1920 px, % and วัน)', async ({ page }) => {
+  test('unit in the panel head; it, the ticks and the 100 % label never overlap (390–1920 px, % and วัน)', async ({
+    page,
+  }) => {
     const { chart } = await openWide(page, 'manager', { width: 1920, height: 1080 })
     const boxes = () =>
       chart.lineChart().evaluate((c) => {
@@ -322,12 +325,12 @@ test.describe('WC1 ⟲ F2+F3 (FR-1001 v3.5, FR-1011, AC-1003/AC-1004) month head
           return { l: b.left, r: b.right, t: b.top, b: b.bottom }
         }
         const ticks = [...c.querySelectorAll('[class*="yTick"]')].map(r)
-        return {
-          title: r(c.querySelector('[data-axis-title]')),
-          label: r(c.querySelector('[data-ref-label]')),
-          ticks,
-        }
+        return { label: r(c.querySelector('[data-ref-label]')), ticks }
       })
+    const unitBox = async (unit: string) => {
+      const b = (await chart.panel().getByText(unit, { exact: true }).boundingBox())!
+      return { l: b.x, r: b.x + b.width, t: b.y, b: b.y + b.height }
+    }
     type B = { l: number; r: number; t: number; b: number }
     const hit = (a: B, b: B) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b
     for (const width of [1920, 1280, 390]) {
@@ -341,10 +344,12 @@ test.describe('WC1 ⟲ F2+F3 (FR-1001 v3.5, FR-1011, AC-1003/AC-1004) month head
           })
           .click()
         await expect(chart.lineChart().locator('[data-ref-label]')).toHaveCount(display === 'PERCENT' ? 1 : 0)
+        // v3.8: no y-axis title inside the chart any more; the unit is the hint in the panel's header row
+        const unit = await unitBox(display === 'PERCENT' ? th.loadChart.unitPercent : th.loadChart.unitDays)
         const b = await boxes()
-        for (const t of b.ticks) expect(hit(b.title!, t!), `${width} ${display}: title × tick`).toBe(false)
+        for (const t of b.ticks) expect(hit(unit, t!), `${width} ${display}: unit × tick`).toBe(false)
         if (b.label) {
-          expect(hit(b.title!, b.label), `${width} ${display}: title × 100 % label`).toBe(false)
+          expect(hit(unit, b.label), `${width} ${display}: unit × 100 % label`).toBe(false)
           for (const t of b.ticks) expect(hit(b.label, t!), `${width} ${display}: label × tick`).toBe(false)
         }
       }
