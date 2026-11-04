@@ -369,6 +369,11 @@
   min-width: min(60px, 100%);
 }
 
+/* below the last level only the name gives way (task-chips.ts): it ellipsizes under its ~60 px */
+.taskMain[data-chip-level='2'] > .name {
+  min-width: 0;
+}
+
 /* icon-only blocker chip (⊘ + count): same outline as BlockerBadge, never colour alone (icon + aria-label + tooltip) */
 .chipIcon {
   flex: none;
@@ -1595,6 +1600,13 @@
   color: var(--load-over-fg);
   font-size: var(--font-xs);
   white-space: nowrap;
+}
+
+/* a collapsed chip is already its smallest form: it never shrinks further (with the flex-shrink weights above "◆" went
+   to 0 px and the ⚠ chip to an empty box beside a name that kept ~60 px) */
+.msTaskLink[data-chip-compact],
+.msLateChip[data-chip-compact] {
+  flex: none;
 }
 
 .msPopover {
