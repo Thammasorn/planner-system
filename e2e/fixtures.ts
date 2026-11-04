@@ -11,7 +11,7 @@
 import { rmSync } from 'node:fs'
 import path from 'node:path'
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { createScriptDb, truncateAll } from '../scripts/lib/db'
 import {
   addDayExample,
@@ -132,6 +132,19 @@ export const LIVE_PAGES = { dw: 'หน้า DW ทดสอบ', wiki: 'หน
 export async function resetDb(fixture?: FixtureId, opts: ResetDbOptions = {}): Promise<void> {
   const { db, close } = createScriptDb(E2E.databaseUrl)
   try {
+    // A request the previous test left in flight holds row locks while TRUNCATE takes table locks in its own order:
+    // Postgres answers "deadlock detected" (seen in m11 E1). Let those transactions finish first.
+    await expect
+      .poll(
+        async () => {
+          const open = await db.execute(sql`
+            select count(*)::int as n from pg_stat_activity
+            where datname = current_database() and pid <> pg_backend_pid() and xact_start is not null`)
+          return (open[0] as { n: number }).n
+        },
+        { message: 'server transactions still open before resetDb', intervals: [20] },
+      )
+      .toBe(0)
     await db.transaction(async (tx) => {
       await truncateAll(tx)
       await seedGolden(tx)

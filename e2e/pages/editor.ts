@@ -51,7 +51,22 @@ export class EditorPage {
     }
     await inline.last().click()
     await this.page.keyboard.press('End')
+    await this.settle()
     return false
+  }
+  /**
+   * Lets ProseMirror catch up with the DOM. A native caret move only reaches it through the next `selectionchange`
+   * task, and typed text through a flush up to 20 ms later (DOMObserver.flushSoon). Keys sent faster than that act on
+   * the old selection: an Enter right after End split the block at the clicked position, and a range set during a
+   * pending flush was overwritten by the caret. Two animation frames are past both.
+   */
+  private async settle(): Promise<void> {
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve))),
+        ),
+    )
   }
   /**
    * Selects from the start of the block whose text starts with `fromText` to the start of the block whose text starts
@@ -93,6 +108,7 @@ export class EditorPage {
    * start of the document, and the first Shift+ArrowLeft after typing may be swallowed.
    */
   async selectText(text: string): Promise<void> {
+    await this.settle()
     await this.content().evaluate((root, word) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
       let hit: { node: Node; at: number } | null = null
