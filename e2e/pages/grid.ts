@@ -102,7 +102,7 @@ export class GridPage {
    */
   async selectRow(taskName: string, personName?: string): Promise<void> {
     const header = this.rowHeader(taskName, personName)
-    const name = header.locator('[data-task-cell] span[title]')
+    const name = header.locator('[data-task-cell] [data-task-name]')
     const label = (await name.count()) > 0 ? name : header.locator('[data-assignee-cell] span').first()
     await label.click()
     await expect(header).toHaveAttribute('aria-selected', 'true')
@@ -128,6 +128,48 @@ export class GridPage {
   async openPanelByClick(taskName: string, personName?: string): Promise<void> {
     await this.rowHeader(taskName, personName).getByText(taskName, { exact: true }).first().click()
     await this.page.waitForURL((u) => u.searchParams.has('task'))
+  }
+
+  // v3.9 row header (FR-823, FR-821): inline rename, ☐ multi-select and the selection bar
+  /** The input that replaces the name while a row is being renamed. */
+  renameInput(): Locator {
+    return this.root().getByTestId('grid-rename-input')
+  }
+  /** The ☐ of a row; it only shows on hover / focus until a selection is under way, so hover the row first. */
+  rowCheckbox(taskName: string, personName?: string): Locator {
+    return this.rowHeader(taskName, personName).getByRole('checkbox', {
+      name: th.grid.row.selectLabel(taskName),
+      exact: true,
+    })
+  }
+  async checkRow(taskName: string, personName?: string): Promise<void> {
+    await this.rowHeader(taskName, personName).hover()
+    await this.rowCheckbox(taskName, personName).click()
+    await expect(this.rowCheckbox(taskName, personName)).toBeChecked()
+  }
+  /** "เลือก N งาน · ลบ · ยกเลิก" */
+  selectionBar(): Locator {
+    return this.page.getByRole('toolbar', { name: th.grid.row.selBarLabel })
+  }
+  selectionBarButton(name: string): Locator {
+    return this.selectionBar().getByRole('button', { name, exact: true })
+  }
+
+  // v3.8 density (FR-822)
+  densityButton(d: 'NORMAL' | 'COMPACT', scope: Locator = this.toolbar()): Locator {
+    return scope
+      .getByRole('group', { name: th.grid.toolbar.density })
+      .getByRole('button', {
+        name: d === 'NORMAL' ? th.grid.toolbar.densityNormal : th.grid.toolbar.densityCompact,
+        exact: true,
+      })
+  }
+  /** Clicks `d` in the toolbar and waits for the saved `grid.density` preference. */
+  async setDensity(d: 'NORMAL' | 'COMPACT'): Promise<void> {
+    const saved = waitForServerActionWith(this.page, 'grid.density')
+    await this.densityButton(d).click()
+    await saved
+    await expect(this.densityButton(d)).toHaveAttribute('aria-pressed', 'true')
   }
 
   /** ★ The row key ('t:…' | 'a:…') of the row named '<task>' or '<task> · <person>'. */
@@ -638,24 +680,44 @@ export class GridPage {
     return this.root().getByTestId('drop-indicator')
   }
   /**
-   * Drags the ⠿ of `name` onto the top edge of the row `to` (the drop line sits above that row), `indent` px to the
-   * right (= nest under the row above); waits for the indicator before the drop and for the move action after it.
+   * Presses the ⠿ of `from` and moves to the upper (default) or lower half of the row `to`, `indent` px to the right
+   * (v3.9: the half picks before / after the row, the offset picks the depth). The mouse stays down: drop with
+   * `mouse.up()`, cancel with Escape.
    */
-  async dragRow(
+  async startRowDrag(
     from: { task: string; person?: string },
     to: { task: string; person?: string },
-    o: { indent?: number } = {},
+    o: { indent?: number; half?: 'upper' | 'lower' } = {},
   ): Promise<void> {
     const handle = this.dragHandle(from.task, from.person)
     await this.rowHeader(from.task, from.person).hover()
     const hb = (await handle.boundingBox())!
     const tb = (await this.rowHeader(to.task, to.person).boundingBox())!
     const start = { x: hb.x + hb.width / 2, y: hb.y + hb.height / 2 }
-    const target = { x: start.x + (o.indent ?? 0), y: tb.y + 4 }
+    const target = {
+      x: start.x + (o.indent ?? 0),
+      y: o.half === 'lower' ? tb.y + tb.height - 4 : tb.y + 4,
+    }
     await this.page.mouse.move(start.x, start.y)
     await this.page.mouse.down()
     await this.page.mouse.move(start.x, start.y - 6, { steps: 3 })
     await this.page.mouse.move(target.x, target.y, { steps: 10 })
+  }
+  /** The lifted copy of the dragged row (a portal on body). */
+  dragGhost(): Locator {
+    return this.page.getByTestId('row-drag-ghost')
+  }
+  /**
+   * Drags the ⠿ of `name` onto the top edge of the row `to` (the drop line sits above that row), or its lower half,
+   * `indent` px to the right (= nest under the row above); waits for the indicator before the drop and for the move
+   * action after it.
+   */
+  async dragRow(
+    from: { task: string; person?: string },
+    to: { task: string; person?: string },
+    o: { indent?: number; half?: 'upper' | 'lower' } = {},
+  ): Promise<void> {
+    await this.startRowDrag(from, to, o)
     await expect(this.dropIndicator()).toBeVisible()
     await expect(this.dropIndicator()).toHaveAttribute('data-valid', 'true')
     const moved = waitForServerAction(this.page)
