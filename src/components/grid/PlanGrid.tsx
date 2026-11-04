@@ -40,6 +40,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { viewLoad } from '@/domain/certainty'
 import { addWeeks, isoWeekday, weekStart } from '@/domain/dates'
 import { formatCd } from '@/domain/units'
@@ -172,7 +173,6 @@ import { loadDisplay as loadDisplayOf } from '@/lib/load/display'
 import { VirtualGrid, type VirtualGridHandle } from './VirtualGrid'
 import styles from './grid.module.css'
 
-
 /** v3.9: the dragged row's ghost is at most this wide (it carries the task name only). */
 const GHOST_MAX_W = 320
 /** M6 props. Later milestones only ADD optional props (C37): M7 `initialZoom?: GridZoom`; M9 `label?: string`
@@ -193,6 +193,8 @@ export interface PlanGridProps {
   initialChartOpen?: boolean
   /** M7.1 (FR-810): first child of the toolbar row (the plan page's view switch) */
   toolbarStart?: ReactNode
+  /** FR-823: render the toolbar into this element (the plan tab, above the grid and the task panel); null = in place */
+  toolbarSlot?: HTMLElement | null
   /** M9: aria-label override of the grid (th.people.grid.label(name)) */
   label?: string
   /** M9 (M9-D28): `?week=` — the grid opens with this week as the first column and marks its header */
@@ -1728,6 +1730,31 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
     return [collapse]
   }, [menu, onMenuCollapse])
 
+  const toolbar = (
+    <GridToolbar
+      start={props.toolbarStart}
+      view={view}
+      unit={unit}
+      showCompleted={showCompleted}
+      saveState={save.state}
+      onPrev={() => scrollToColumn((gridRef.current?.firstVisibleColumn() ?? initialIdx) - 4)}
+      onNext={() => scrollToColumn((gridRef.current?.firstVisibleColumn() ?? initialIdx) + 4)}
+      onToday={() => scrollToColumn(todayIdx)}
+      zoom={zoom}
+      onZoom={onZoom}
+      density={density}
+      onDensity={onDensity}
+      onView={(v) => setPreference('load.view', v)}
+      onUnit={(u) => setPreference('grid.unit', u)}
+      onShowCompleted={(on) => setPreference('tasks.showCompleted', on)}
+      showAssignees={showAssignees}
+      {...(isPerson ? {} : { onShowAssignees: (on: boolean) => setShowAssignees(on) })}
+      chartOpen={chartOpen}
+      {...(isPerson ? { loadDisplayToggle: <LoadDisplayToggle /> } : { onChart })}
+      {...(gm.canManage ? { onAddMilestone: (anchor: HTMLElement) => gm.openCreate(anchor) } : {})}
+    />
+  )
+
   return (
     <div
       id={rootId}
@@ -1736,28 +1763,7 @@ export function PlanGrid(props: PlanGridProps): JSX.Element {
       data-chart-open={chartOpen ? 'true' : undefined}
       data-density={density}
     >
-      <GridToolbar
-        start={props.toolbarStart}
-        view={view}
-        unit={unit}
-        showCompleted={showCompleted}
-        saveState={save.state}
-        onPrev={() => scrollToColumn((gridRef.current?.firstVisibleColumn() ?? initialIdx) - 4)}
-        onNext={() => scrollToColumn((gridRef.current?.firstVisibleColumn() ?? initialIdx) + 4)}
-        onToday={() => scrollToColumn(todayIdx)}
-        zoom={zoom}
-        onZoom={onZoom}
-        density={density}
-        onDensity={onDensity}
-        onView={(v) => setPreference('load.view', v)}
-        onUnit={(u) => setPreference('grid.unit', u)}
-        onShowCompleted={(on) => setPreference('tasks.showCompleted', on)}
-        showAssignees={showAssignees}
-        {...(isPerson ? {} : { onShowAssignees: (on: boolean) => setShowAssignees(on) })}
-        chartOpen={chartOpen}
-        {...(isPerson ? { loadDisplayToggle: <LoadDisplayToggle /> } : { onChart })}
-        {...(gm.canManage ? { onAddMilestone: (anchor: HTMLElement) => gm.openCreate(anchor) } : {})}
-      />
+      {props.toolbarSlot ? createPortal(toolbar, props.toolbarSlot) : toolbar}
       {archived ? (
         <Alert severity="info" sx={{ mb: 1 }}>
           {th.projects.archivedBanner}

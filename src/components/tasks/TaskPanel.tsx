@@ -109,7 +109,8 @@ export function TaskPanel({ projectId, adaptive = false }: { projectId: string; 
         zIndex: { xs: 'appBar', md: overlay ? 'drawer' : 'auto' },
         boxShadow: overlay ? 8 : undefined,
         top: { md: 'calc(var(--header-height) + var(--space-2))' },
-        maxHeight: { md: 'calc(100vh - var(--header-height) - var(--space-6))' },
+        // beside the plan grid it starts below the toolbar: as tall as the row it shares with the grid
+        maxHeight: { md: resizable ? '100%' : 'calc(100vh - var(--header-height) - var(--space-6))' },
         overflowY: 'auto',
         overscrollBehavior: 'contain',
         border: { xs: 0, md: '1px solid var(--border-subtle)' },

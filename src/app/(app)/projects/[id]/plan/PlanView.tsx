@@ -58,6 +58,7 @@ export function PlanView({
   const [top, setTop] = useState(0)
   const [view, setView] = useState<PlanViewKind>(initialView)
   const [gridMounted, setGridMounted] = useState(initialView === 'GRID')
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
   const { setPreference } = usePreferences()
   useLayoutEffect(() => {
     const measure = () => {
@@ -85,45 +86,51 @@ export function PlanView({
       data-view={view}
       sx={{
         display: 'flex',
-        gap: 2,
-        alignItems: 'stretch',
+        flexDirection: 'column',
         height: `max(${MIN_HEIGHT}px, calc(100dvh - ${top + BOTTOM_GAP}px))`,
         minWidth: 0,
       }}
     >
-      <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {gridMounted ? (
-          <Box
-            hidden={!showGrid}
-            data-testid="plan-grid-slot"
-            sx={{ flex: 1, minHeight: 0, display: showGrid ? 'flex' : 'none', flexDirection: 'column' }}
-          >
-            <PlanGrid
-              context={{ kind: 'project', id: projectId }}
-              projectName={projectName}
-              archived={archived}
-              canEdit={canEdit}
-              onOpenTask={(taskId) => openTaskPanel(taskId, { switchInPlace: true })}
-              {...(initialZoom ? { initialZoom } : {})}
-              {...(initialTaskColumnWidth !== undefined ? { initialTaskColumnWidth } : {})}
-              {...(initialShowAssignees !== undefined ? { initialShowAssignees } : {})}
-              {...(initialChartOpen !== undefined ? { initialChartOpen } : {})}
-              toolbarStart={viewSwitch}
-            />
-          </Box>
-        ) : null}
-        {showGrid ? null : (
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <PlanCalendar
-              projectId={projectId}
-              projectColor={projectColor}
-              toolbarStart={viewSwitch}
-              onOpenTask={(taskId) => openTaskPanel(taskId)}
-            />
-          </Box>
-        )}
+      {/* FR-823: the grid's toolbar spans the tab above [grid | panel]. Inside the narrowed grid column it wrapped onto
+          one more line when the panel opened, moving the rows 38 px under the pointer: the second click of a double-click
+          landed on another row and renamed the wrong task. */}
+      <Box ref={setToolbarSlot} data-testid="plan-toolbar-slot" sx={{ flex: 'none', minWidth: 0 }} />
+      <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', gap: 2, alignItems: 'stretch' }}>
+        <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {gridMounted ? (
+            <Box
+              hidden={!showGrid}
+              data-testid="plan-grid-slot"
+              sx={{ flex: 1, minHeight: 0, display: showGrid ? 'flex' : 'none', flexDirection: 'column' }}
+            >
+              <PlanGrid
+                context={{ kind: 'project', id: projectId }}
+                projectName={projectName}
+                archived={archived}
+                canEdit={canEdit}
+                onOpenTask={(taskId) => openTaskPanel(taskId, { switchInPlace: true })}
+                {...(initialZoom ? { initialZoom } : {})}
+                {...(initialTaskColumnWidth !== undefined ? { initialTaskColumnWidth } : {})}
+                {...(initialShowAssignees !== undefined ? { initialShowAssignees } : {})}
+                {...(initialChartOpen !== undefined ? { initialChartOpen } : {})}
+                toolbarStart={viewSwitch}
+                toolbarSlot={showGrid ? toolbarSlot : null}
+              />
+            </Box>
+          ) : null}
+          {showGrid ? null : (
+            <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              <PlanCalendar
+                projectId={projectId}
+                projectColor={projectColor}
+                toolbarStart={viewSwitch}
+                onOpenTask={(taskId) => openTaskPanel(taskId)}
+              />
+            </Box>
+          )}
+        </Box>
+        <TaskPanel projectId={projectId} adaptive />
       </Box>
-      <TaskPanel projectId={projectId} adaptive />
     </Box>
   )
 }
